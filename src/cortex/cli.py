@@ -12,6 +12,7 @@ import sys
 import click
 
 from cortex import SUPPORTED_PROTOCOL_VERSIONS, SUPPORTED_SPEC_VERSIONS, __version__
+from cortex.commands.init import init_command
 
 
 def _detect_install_method() -> str:
@@ -57,6 +58,9 @@ def version_command() -> None:
     click.echo(f"  supported spec versions:     {supported_spec}")
     click.echo(f"  supported protocol versions: {supported_protocol}")
     click.echo(f"  install method:              {install}")
+
+
+cli.add_command(init_command)
 
 
 if __name__ == "__main__":

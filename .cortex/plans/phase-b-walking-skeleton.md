@@ -8,6 +8,7 @@ Updated-by:
   - 2026-04-17T23:45 claude-session-2026-04-17 (updated for v0.2.0 scope — Protocol, promotion queue, seven-field metadata contract)
   - 2026-04-17T23:59 claude-session-2026-04-17 (refreshed for v0.3.1-dev scope — adds manifest, grep, expanded doctor checks, T1.9 audit, Goal-hash verification, interactive flow, Load-priority validation)
   - 2026-04-17T15:45 claude-session-2026-04-17 (Phase B Work items: Python scaffold + `cortex version` shipped; first two items checked)
+  - 2026-04-17T16:20 claude-session-2026-04-17 (`cortex init` shipped; templates + protocol.md bundled as package data; third work item checked)
 Cites: ../../SPEC.md, ../../.cortex/protocol.md, ../../PLAN.md § Phase B, doctrine/0003-spec-is-the-artifact, doctrine/0005-scope-boundaries-v2
 ---
 
@@ -75,7 +76,7 @@ Brew formula mirrors Touchstone's: `url` points at a tagged GitHub release tarba
 
 ### Init + structural commands
 
-- [ ] **`cortex init`** — scaffolds `.cortex/` per SPEC.md § 2. Copies `protocol.md` + full `templates/` tree from package data. Idempotent (refuses to overwrite existing `.cortex/SPEC_VERSION` unless `--force`). Stubs `map.md`/`state.md` with seven-field `(pending)` headers. Seeds one Doctrine 0001 stub (`# 0001 — Why this project exists`).
+- [x] **`cortex init`** — scaffolds `.cortex/` per SPEC.md § 2. Copies `protocol.md` + full `templates/` tree from package data under `src/cortex/_data/` (single source of truth kept in sync with `.cortex/` via `tests/test_data_sync.py`). Idempotent (refuses to overwrite existing `.cortex/SPEC_VERSION` unless `--force`; doctrine/plan/journal/procedure user content is never deleted even with `--force`). Stubs `map.md`/`state.md` with seven-field `(pending Phase C synthesis)` headers. Seeding a Doctrine 0001 stub deferred — the project-specific content would be wrong for most projects; users pick their own title.
 - [ ] **`cortex status` / `cortex --status-only`** — parses `Generated:` timestamps and plan statuses; prints compact freshness table + promotion-queue depth.
 - [ ] **`cortex grep <pattern>`** — frontmatter-aware ripgrep wrapper over `.cortex/**/*.md`.
 - [ ] **`cortex manifest --budget <N>`** — emits session-start slice per Protocol § 1 defaults; seven-field metadata header; Markdown output. `--format json` for programmatic consumers.
