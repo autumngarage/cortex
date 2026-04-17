@@ -6,13 +6,13 @@ Goal-hash: 1f10782a
 Updated-by:
   - 2026-04-17T07:00 human (created; targeted v0.1.0)
   - 2026-04-17T23:45 claude-session-2026-04-17 (updated for v0.2.0 scope — Protocol, promotion queue, seven-field metadata contract)
-  - 2026-04-17T23:59 claude-session-2026-04-17 (refreshed for v0.3.0-dev scope — adds manifest, grep, expanded doctor checks, T1.9 audit, Goal-hash verification, interactive flow, Load-priority validation)
+  - 2026-04-17T23:59 claude-session-2026-04-17 (refreshed for v0.3.1-dev scope — adds manifest, grep, expanded doctor checks, T1.9 audit, Goal-hash verification, interactive flow, Load-priority validation)
 Cites: ../../SPEC.md, ../../.cortex/protocol.md, ../../PLAN.md § Phase B, doctrine/0003-spec-is-the-artifact, doctrine/0005-scope-boundaries-v2
 ---
 
 # Phase B — Walking-skeleton CLI
 
-> Ship a Cortex CLI that manipulates `.cortex/` structure without any LLM calls. End-state: `brew install cortex && cortex init` produces a SPEC.md v0.3.0-dev-conformant scaffold (including `protocol.md` + `templates/`) in a fresh repo; `cortex doctor` validates every SPEC.md § 4 rule against it; the interactive `cortex` entrypoint surfaces the promotion queue and overdue digests per the README UX example. No synthesis yet — that's Phase C.
+> Ship a Cortex CLI that manipulates `.cortex/` structure without any LLM calls. End-state: `brew install cortex && cortex init` produces a SPEC.md v0.3.1-dev-conformant scaffold (including `protocol.md` + `templates/`) in a fresh repo; `cortex doctor` validates every SPEC.md § 4 rule against it; the interactive `cortex` entrypoint surfaces the promotion queue and overdue digests per the README UX example. No synthesis yet — that's Phase C.
 
 ## Why (grounding)
 
@@ -32,7 +32,7 @@ This plan is done when all of the following hold on a fresh macOS install:
 
 1. `brew tap autumngarage/cortex && brew install cortex` succeeds.
 2. In an empty git repo: `cortex init` creates `.cortex/SPEC_VERSION` (`0.3.0-dev`), copies `.cortex/protocol.md` and the full `.cortex/templates/` tree, scaffolds `doctrine/`, `plans/`, `journal/`, `procedures/`, and stubs `map.md` + `state.md` with seven-field `Generated:` headers in `(pending Phase C synthesis)` state.
-3. `cortex doctor` on that fresh `.cortex/` prints "spec v0.3.0 conformant" and exits 0.
+3. `cortex doctor` on that fresh `.cortex/` prints "spec v0.3.1 conformant" and exits 0.
 4. `cortex doctor` on **this repo's** `.cortex/` also exits 0. Dogfood gate.
 5. `cortex doctor` detects and reports each seeded violation: orphan deferral in a Plan; missing Success Criteria; unknown spec major version in `SPEC_VERSION`; Doctrine entry without `Load-priority:`; Plan with a `Goal-hash:` that doesn't match SPEC § 4.9 normalization; two Plans with colliding `Goal-hash:` values; Journal entry edited in place (append-only violation); Doctrine entry modified with Status still `Accepted`; root-file (`AGENTS.md`/`CLAUDE.md`) content duplicating Doctrine without `grounds-in:`.
 6. `cortex doctor --audit` detects a missing Journal entry for each Tier 1 trigger fired in the git-log window (T1.1–T1.9). Seeded test: commit a dependency-manifest change (T1.5) without a journal entry → doctor flags it.
@@ -41,10 +41,10 @@ This plan is done when all of the following hold on a fresh macOS install:
 9. `cortex grep <pattern>` returns matches from `.cortex/` with frontmatter-aware highlighting (entry title, Date, Type surfaced per match). Falls back to ripgrep output on flag.
 10. Interactive `cortex` (no subcommand) prints the README-example output: status line + Journal counts since last check + promotion candidates with `[trivial]`/`[editorial]`/`[stale]` tags and y/n/view/defer/skip prompts + overdue-digest prompt + "Anything else?" tail. Works against this repo's `.cortex/`.
 11. `cortex --status-only` emits the status line alone for scripting.
-12. `cortex --promote <candidate-id>` performs a flag-style promotion end-to-end (adds a new Doctrine entry from the `doctrine/candidate.md` template, sets `Promoted-from:` on the new entry and `Promoted-to:` on the source Journal entry).
+12. `cortex --promote <candidate-id>` performs a flag-style promotion end-to-end (adds a new Doctrine entry from the `doctrine/candidate.md` template with `Promoted-from: journal/<date>-<slug>`; updates `.cortex/.index.json` reverse-link cache; optionally appends a `Type: promotion` Journal entry). **Does not modify the source Journal entry** — append-only per SPEC § 4.4/§ 3.5.
 13. `cortex version` prints CLI version, supported SPEC versions (reads `SUPPORTED_SPEC_VERSIONS`), supported Protocol versions, install method.
 14. All tests pass (`uv run pytest`) — temp-dir fixtures, no mocked filesystem.
-15. A git-tagged v0.1.0 release exists at `github.com/autumngarage/cortex`, with the Homebrew formula at `autumngarage/homebrew-cortex` pointing at it with the correct SHA. CLI v0.1.0 targets spec v0.3.0-dev (versions are independent per Doctrine 0003).
+15. A git-tagged v0.1.0 release exists at `github.com/autumngarage/cortex`, with the Homebrew formula at `autumngarage/homebrew-cortex` pointing at it with the correct SHA. CLI v0.1.0 targets spec v0.3.1-dev (versions are independent per Doctrine 0003).
 
 ## Approach
 

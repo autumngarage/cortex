@@ -2,7 +2,7 @@
 
 > **Cortex is a file-format protocol for project memory.** Six layers of documents per project, each with a mechanical, authoring, and retrieval contract. Consumed by humans and AI coding agents. The CLI named `cortex` is one implementation; other tools (Sentinel, Touchstone, Claude Code sessions, humans) read and write the same files by the same rules.
 
-**Spec version:** 0.3.0-dev (draft)
+**Spec version:** 0.3.1-dev (draft)
 **Status:** Proposed
 **Protocol companion:** [`.cortex/protocol.md`](./.cortex/protocol.md) defines when and how agents write; SPEC.md defines what the files look like.
 
@@ -61,7 +61,7 @@ Seven rules, each inherited from prior art (sources in `docs/PRIOR_ART.md`):
   .index.json               # auto-maintained cross-reference + freshness index
 ```
 
-**`SPEC_VERSION`** — a single line, e.g. `0.3.0-dev`. Tools that read `.cortex/` must check this and bail or warn on unknown major versions.
+**`SPEC_VERSION`** — a single line, e.g. `0.3.1-dev`. Tools that read `.cortex/` must check this and bail or warn on unknown major versions.
 
 **`protocol.md`** — the write contract for agents. See [`.cortex/protocol.md`](./.cortex/protocol.md) and § 8 below.
 
@@ -119,7 +119,7 @@ We will...
 ```yaml
 ---
 Generated: 2026-04-17T14:22:00-04:00
-Generator: cortex refresh-map v0.3.0
+Generator: cortex refresh-map v0.3.1
 Sources:
   - HEAD sha: abc1234
   - .cortex/doctrine/0001-0006
@@ -128,7 +128,7 @@ Corpus: 143 Python files, 6 packages, 6 Doctrine entries
 Omitted: src/experiments/* (marked experimental)
 Incomplete: []
 Conflicts-preserved: []
-Spec: 0.3.0
+Spec: 0.3.1
 ---
 
 # Project Map
@@ -149,7 +149,7 @@ Spec: 0.3.0
 ```yaml
 ---
 Generated: 2026-04-17T14:22:00-04:00
-Generator: cortex refresh-state v0.3.0
+Generator: cortex refresh-state v0.3.1
 Sources:
   - .cortex/journal/ (hot: 23 entries last 30d)
   - .cortex/plans/*.md (5 active, 2 blocked)
@@ -159,7 +159,7 @@ Omitted: journal/2026-04-13-wip-debugging (marked noisy)
 Incomplete: []
 Conflicts-preserved:
   - "retry backoff" — journal/2026-04-10 argues exponential; journal/2026-04-15 argues fixed
-Spec: 0.3.0
+Spec: 0.3.1
 ---
 
 # Project State
@@ -407,7 +407,7 @@ Universal across layers:
 
 Tools must declare which spec major versions they support. Readers encountering an unknown major version should refuse to write and warn on read.
 
-**Pre-1.0 exception.** Per standard semver 0.x convention, during `0.x.y` development minor bumps may include breaking changes. The strict major-for-breaking rule above applies from `1.0.0` onward. This is why v0.2.0-dev introduced breaking frontmatter changes (seven-field metadata contract on generated layers; `Author`/`Goal-hash`/`Updated-by` on Plans) under a minor bump, and why v0.3.0-dev adds `Load-priority:` to Doctrine, concretizes `Goal-hash:` normalization (§ 4.9), and adds T1.9 to the Protocol — also under a minor bump.
+**Pre-1.0 exception.** Per standard semver 0.x convention, during `0.x.y` development minor bumps may include breaking changes. The strict major-for-breaking rule above applies from `1.0.0` onward. This is why v0.2.0-dev introduced breaking frontmatter changes (seven-field metadata contract on generated layers; `Author`/`Goal-hash`/`Updated-by` on Plans) under a minor bump; why v0.3.0-dev adds `Load-priority:` to Doctrine, concretizes `Goal-hash:` normalization (§ 4.9), and adds T1.9 to the Protocol — also under a minor bump; and why v0.3.1-dev rewrites § 4.4 promotion semantics (removes retroactive `Promoted-to:` on source Journal entries; introduces `.index.json`-backed reverse traversal) and removes `promoted-to` from the § 4.6 typed-links list. The 0.3.1 patch bump tracks a behavior change that resolves an internal contradiction between § 4.4 and § 3.5; the 0.3.x draft is not released, so no migration tooling is required.
 
 **Protocol version relationship.** [`.cortex/protocol.md`](./.cortex/protocol.md) carries its own version. A Protocol version is compatible with one or more SPEC.md versions, declared in the Protocol's header. A major SPEC bump always requires a Protocol review; a minor SPEC bump may or may not trigger a Protocol bump depending on whether new triggers are needed.
 

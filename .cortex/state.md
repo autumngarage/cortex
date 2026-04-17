@@ -7,7 +7,7 @@ Sources:
   - .cortex/plans/ (1 active: phase-b-walking-skeleton — refreshed this PR; vision-sharpening shipped)
   - .cortex/journal/ (8 entries for 2026-04-17)
   - .cortex/templates/ (8 files)
-  - SPEC.md v0.3.0-dev
+  - SPEC.md v0.3.1-dev
   - PLAN.md phase-A-complete, phase-B-pending
 Corpus: 5 Doctrine entries, 1 active Plan, 8 Journal entries, 8 Templates
 Omitted: []
@@ -16,7 +16,7 @@ Incomplete:
   - Automated metric aggregation (Phase C); State is hand-authored
   - Sentinel run journals (no integration yet; Phase E)
 Conflicts-preserved: []
-Spec: 0.3.0-dev
+Spec: 0.3.1-dev
 ---
 
 # Project State
@@ -27,13 +27,13 @@ Spec: 0.3.0-dev
 
 Build the CLI structure and non-synthesizing commands so there's something to `brew install`, so later phases have something to extend, and so the Protocol's Tier 1 triggers have a `cortex doctor --audit` to enforce them.
 
-Full plan: [`plans/phase-b-walking-skeleton.md`](./plans/phase-b-walking-skeleton.md) — refreshed 2026-04-18 to cover the v0.3.0-dev scope (manifest, grep, expanded doctor checks, T1.9 audit, Goal-hash verification, Load-priority, interactive flow).
+Full plan: [`plans/phase-b-walking-skeleton.md`](./plans/phase-b-walking-skeleton.md) — refreshed 2026-04-18 to cover the v0.3.1-dev scope (manifest, grep, expanded doctor checks, T1.9 audit, Goal-hash verification, Load-priority, interactive flow).
 
-**Success signal:** `brew tap autumngarage/cortex && brew install cortex && cortex init` works in a fresh repo and produces a SPEC-v0.3.0-conformant `.cortex/` scaffold including `.cortex/protocol.md` and `.cortex/templates/`, validated by `cortex doctor`.
+**Success signal:** `brew tap autumngarage/cortex && brew install cortex && cortex init` works in a fresh repo and produces a SPEC-v0.3.1-conformant `.cortex/` scaffold including `.cortex/protocol.md` and `.cortex/templates/`, validated by `cortex doctor`.
 
 - [ ] Python package scaffold (`pyproject.toml`, `src/cortex/`, `uv`-managed)
 - [ ] `cortex` (interactive entry point) — status + promotion queue + digest prompts (per README example)
-- [ ] `cortex init` — scaffolds `.cortex/` per SPEC.md v0.3.0, copying this repo's `.cortex/protocol.md` and `.cortex/templates/` into the target project
+- [ ] `cortex init` — scaffolds `.cortex/` per SPEC.md v0.3.1, copying this repo's `.cortex/protocol.md` and `.cortex/templates/` into the target project
 - [ ] `cortex manifest --budget <N>` — token-budgeted session-start slice per Protocol § 1; default recency-based Doctrine loading plus `Load-priority: always` pins
 - [ ] `cortex grep <pattern>` — frontmatter-aware wrapper over ripgrep; primary mid-session retrieval path per Protocol § 1
 - [ ] `cortex --status-only` — equivalent of status summary, for scripting
@@ -45,7 +45,7 @@ Full plan: [`plans/phase-b-walking-skeleton.md`](./plans/phase-b-walking-skeleto
 - [ ] `cortex version` — prints CLI version + supported spec + protocol versions
 - [ ] Tests for each command (temp-dir fixtures, no mocked filesystem)
 - [ ] `autumngarage/homebrew-cortex` tap repo created
-- [ ] v0.1.0 release via Homebrew formula pointing at the source tarball (first CLI release per PLAN.md Phase B; ships targeting spec v0.3.0-dev)
+- [ ] v0.1.0 release via Homebrew formula pointing at the source tarball (first CLI release per PLAN.md Phase B; ships targeting spec v0.3.1-dev)
 
 ## P1 — Phase C: first synthesis (`cortex refresh-map`, `cortex refresh-state`)
 
@@ -74,7 +74,7 @@ Gated on P0–D. Critical integrations: Sentinel end-of-cycle → Journal entry 
 
 ## Known stale-now / handle-later
 
-- **Spec freshness:** SPEC.md v0.3.0-dev is draft and has not yet been validated against a real external project. Expect at least one amendment (minor bump) during Phase C–D dogfood on Sentinel's repo.
+- **Spec freshness:** SPEC.md v0.3.1-dev is draft and has not yet been validated against a real external project. Expect at least one amendment (minor bump) during Phase C–D dogfood on Sentinel's repo.
 - **Gemini round-2 critique is missing.** Google capacity was exhausted during v2 → v3 iteration; v3 went to promotion on Codex critique + user direction alone. Re-running Gemini when capacity returns is optional; v3 is defensible without it.
 - **No Map layer in this repo's own `.cortex/` yet.** Map requires regeneration, which Phase C provides.
 - **Competitive landscape re-assessment due ~2026-07-17** (quarterly cadence set in [`journal/2026-04-17-competitive-positioning-and-claude-code-risk.md`](./journal/2026-04-17-competitive-positioning-and-claude-code-risk.md)). Watch-items: Letta trigger-discipline features, Anthropic memory-roadmap signals.

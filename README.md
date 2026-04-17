@@ -2,7 +2,7 @@
 
 > **A protocol for agents to continuously journal what's happening on a project, and for humans to promote what matters.** The reflective layer of the autumngarage composition — Touchstone is the foundation (universal policy), Sentinel is the loop (autonomous execution), Cortex is the memory (project-local reasoning).
 
-**Status:** spec-stage. [SPEC.md](./SPEC.md) v0.3.0-dev (draft). [`.cortex/protocol.md`](./.cortex/protocol.md) specifies the agent contract. The CLI is Phase B ([PLAN.md](./PLAN.md)).
+**Status:** spec-stage. [SPEC.md](./SPEC.md) v0.3.1-dev (draft). [`.cortex/protocol.md`](./.cortex/protocol.md) specifies the agent contract. The CLI is Phase B ([PLAN.md](./PLAN.md)).
 
 ---
 
@@ -54,7 +54,7 @@ Running `cortex` is the entire human-facing interface:
 
 ```
 $ cortex
-Cortex — your-project   spec v0.3.0-dev   state: fresh (regenerated 2h ago)
+Cortex — your-project   spec v0.3.1-dev   state: fresh (regenerated 2h ago)
 
 ▸ 7 Journal entries since last check
 ▸ 3 promotion candidates (1 stale, 2 proposed)
@@ -137,7 +137,7 @@ Meanwhile, `.cortex/` is hand-authorable by following [SPEC.md](./SPEC.md), and 
 
 See [PLAN.md](./PLAN.md). Phase A (foundation + spec) shipped. **Phase B** is the walking-skeleton CLI: `cortex init`, `cortex status`, `cortex doctor`, the interactive `cortex` entry point, and initial templates under `.cortex/templates/`. Phase C adds regeneration (`refresh-map`, `refresh-state`). Phase D adds authoring helpers (`journal draft`, `plan spawn`). Phase E wires integration with Sentinel and Touchstone.
 
-The spec at v0.3.0-dev is a draft. See [`docs/PRIOR_ART.md`](./docs/PRIOR_ART.md) for the research synthesis behind the design, and the `.cortex/journal/` directory in this repo for a dogfood trail of the design decisions (especially `2026-04-17-vision-v3-promoted.md` for the full provenance).
+The spec at v0.3.1-dev is a draft. See [`docs/PRIOR_ART.md`](./docs/PRIOR_ART.md) for the research synthesis behind the design, and the `.cortex/journal/` directory in this repo for a dogfood trail of the design decisions (especially `2026-04-17-vision-v3-promoted.md` for the full provenance).
 
 ---
 
