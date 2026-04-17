@@ -2,7 +2,7 @@
 
 > The set of rules an agent follows to read and write `.cortex/`. Projects import this file into `AGENTS.md` (or `CLAUDE.md`) so every agent working on the project follows the same contract.
 
-**Protocol version:** 0.2.0 (draft, ships with SPEC.md v0.3.0-dev)
+**Protocol version:** 0.2.0 (draft, ships with SPEC.md v0.3.1-dev)
 **Status:** Proposed
 **Imports:** this file is imported into `AGENTS.md` via `@.cortex/protocol.md`
 
@@ -105,7 +105,7 @@ Every generated file (`map.md`, `state.md`, digests) declares seven metadata fie
 ```yaml
 ---
 Generated: 2026-04-17T14:22:00-04:00
-Generator: cortex refresh-state v0.3.0
+Generator: cortex refresh-state v0.3.1
 Sources:
   - HEAD sha: abc1234
   - .cortex/journal/2026-04-01..2026-04-17 (23 entries)

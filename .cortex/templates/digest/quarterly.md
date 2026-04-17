@@ -10,7 +10,7 @@ Omitted: []
 Incomplete: []
 Conflicts-preserved:
   - {{ "<topic>" — digest/<month-a> concluded X; digest/<month-b> concluded Y; resolution: ... }}
-Spec: 0.3.0
+Spec: 0.3.1
 Depth: 1   # quarterly digests may cite monthly digests (depth 1 max per SPEC § 5.3)
 ---
 

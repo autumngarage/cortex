@@ -11,7 +11,7 @@ Omitted:
 Incomplete: []
 Conflicts-preserved:
   - {{ "<topic>" — journal/<date-a> argues X; journal/<date-b> argues Y }}
-Spec: 0.3.0
+Spec: 0.3.1
 Depth: 0   # monthly digests cite raw Journal only, never other digests
 ---
 

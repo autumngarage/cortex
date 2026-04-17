@@ -2,7 +2,7 @@
 
 > **A protocol for agents to continuously journal what's happening on a project, and for humans to promote what matters.** The reflective layer of the autumngarage composition — Touchstone is the foundation (universal policy), Sentinel is the loop (autonomous execution), Cortex is the memory (project-local reasoning).
 
-**Status:** spec-stage. [SPEC.md](./SPEC.md) v0.3.0-dev (draft). [`.cortex/protocol.md`](./.cortex/protocol.md) specifies the agent contract. The CLI is Phase B ([PLAN.md](./PLAN.md)).
+**Status:** spec-stage. [SPEC.md](./SPEC.md) v0.3.1-dev (draft). [`.cortex/protocol.md`](./.cortex/protocol.md) specifies the agent contract. The CLI is Phase B ([PLAN.md](./PLAN.md)).
 
 ---
 
@@ -54,7 +54,7 @@ Running `cortex` is the entire human-facing interface:
 
 ```
 $ cortex
-Cortex — your-project   spec v0.3.0-dev   state: fresh (regenerated 2h ago)
+Cortex — your-project   spec v0.3.1-dev   state: fresh (regenerated 2h ago)
 
 ▸ 7 Journal entries since last check
 ▸ 3 promotion candidates (1 stale, 2 proposed)
@@ -74,7 +74,7 @@ Generate March 2026 digest now?  [y/n]:
 Anything else? (enter to exit, or type a request)
 ```
 
-Everything surfaces at every invocation. You can't miss the queue; you can't miss an overdue digest; you can't miss staleness. Power users can pass flags for scripting (`cortex --status-only`, `cortex --promote j-xxx`, `cortex --audit`) but the primary surface is `cortex`.
+Everything surfaces at every invocation. You can't miss the queue; you can't miss an overdue digest; you can't miss staleness. Power users can pass flags for scripting (`cortex --status-only`, `cortex --promote j-xxx`, `cortex doctor --audit`) but the primary surface is `cortex`.
 
 ---
 
@@ -102,7 +102,7 @@ Solo Cortex is *good notes with conventions*. Triad Cortex is *enforced institut
 
 Cortex is append-only at write, **tiered at read**. Nothing is deleted; everything stays in git. The default read surface stays lean regardless of corpus age:
 
-- **Doctrine**: never archived; superseded entries stay with pointer; top-K loaded by relevance.
+- **Doctrine**: never archived; superseded entries stay with pointer; default session-start loading is `Load-priority: always` pins plus recency (see [`.cortex/protocol.md`](./.cortex/protocol.md) § 1).
 - **Journal**: hot (0–30d) → warm (30–365d) → cold (>365d, `journal/archive/<year>/`). Default load is hot + monthly digests.
 - **Plans**: auto-moved to `plans/archive/` after 30d in `shipped` or `cancelled` status.
 - **Map / State**: always regenerated; old versions are git history.
@@ -137,7 +137,7 @@ Meanwhile, `.cortex/` is hand-authorable by following [SPEC.md](./SPEC.md), and 
 
 See [PLAN.md](./PLAN.md). Phase A (foundation + spec) shipped. **Phase B** is the walking-skeleton CLI: `cortex init`, `cortex status`, `cortex doctor`, the interactive `cortex` entry point, and initial templates under `.cortex/templates/`. Phase C adds regeneration (`refresh-map`, `refresh-state`). Phase D adds authoring helpers (`journal draft`, `plan spawn`). Phase E wires integration with Sentinel and Touchstone.
 
-The spec at v0.3.0-dev is a draft. See [`docs/PRIOR_ART.md`](./docs/PRIOR_ART.md) for the research synthesis behind the design, and the `.cortex/journal/` directory in this repo for a dogfood trail of the design decisions (especially `2026-04-17-vision-v3-promoted.md` for the full provenance).
+The spec at v0.3.1-dev is a draft. See [`docs/PRIOR_ART.md`](./docs/PRIOR_ART.md) for the research synthesis behind the design, and the `.cortex/journal/` directory in this repo for a dogfood trail of the design decisions (especially `2026-04-17-vision-v3-promoted.md` for the full provenance).
 
 ---
 
