@@ -1,18 +1,20 @@
 ---
-Generated: 2026-04-18T00:35:00-04:00
+Generated: 2026-04-18T01:20:00-04:00
 Generator: hand-authored (regeneration infrastructure ships in Phase C)
 Sources:
   - HEAD of branch chore/refresh-phase-b-plan (targeting main at 866be57)
   - .cortex/doctrine/ (5 entries: 0001–0003 + 0005 active with Load-priority: always; 0004 Superseded-by 0005)
   - .cortex/plans/ (1 active: phase-b-walking-skeleton — refreshed this PR; vision-sharpening shipped)
-  - .cortex/journal/ (8 entries for 2026-04-17)
+  - .cortex/journal/ (9 entries: 8 for 2026-04-17, 1 for 2026-04-18)
   - .cortex/templates/ (8 files)
+  - .cortex/map.md (stub, pending Phase C)
+  - .cortex/procedures/ (empty; .gitkeep only)
   - SPEC.md v0.3.1-dev
   - PLAN.md phase-A-complete, phase-B-pending
-Corpus: 5 Doctrine entries, 1 active Plan, 8 Journal entries, 8 Templates
+Corpus: 5 Doctrine entries, 1 active Plan, 9 Journal entries, 8 Templates
 Omitted: []
 Incomplete:
-  - Map regeneration (Phase C); no Map layer yet
+  - Map regeneration (Phase C); map.md is a stub with Incomplete: [all sources]
   - Automated metric aggregation (Phase C); State is hand-authored
   - Sentinel run journals (no integration yet; Phase E)
 Conflicts-preserved: []

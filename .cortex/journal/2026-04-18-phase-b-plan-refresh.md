@@ -9,7 +9,7 @@
 
 ## Context
 
-Phase A shipped the spec and repo this morning (2026-04-17). Vision v3 promoted in the afternoon. The protocol was sharpened this evening (journal/2026-04-17-protocol-sharpened-and-drafts-archived.md). The Phase B plan — authored before those amendments — had fallen behind the spec. The refresh PR (`chore/refresh-phase-b-plan`, merged 2026-04-18) brings the plan up to v0.3.1-dev's command surface and doctor check catalog.
+Phase A shipped the spec and repo on 2026-04-17. Vision v3 was promoted later that day. The Protocol was sharpened the same evening (see `journal/2026-04-17-protocol-sharpened-and-drafts-archived.md`). The Phase B plan — authored before those amendments — had fallen behind the spec. The refresh PR (`chore/refresh-phase-b-plan`) brings the plan up to v0.3.1-dev's command surface and doctor check catalog. This entry is written during the PR cycle; the PR's merge is not yet recorded here because Journal is append-only and a pre-merge claim that "this merged" could become false.
 
 ## Key decisions captured in the plan
 
