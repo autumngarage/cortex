@@ -1,5 +1,5 @@
 ---
-Generated: 2026-04-18T01:15:00-04:00
+Generated: 2026-04-17T15:30:00-07:00
 Generator: hand-authored (regeneration infrastructure ships in Phase C via `cortex refresh-map`)
 Sources:
   - (none — pending Phase C synthesis)

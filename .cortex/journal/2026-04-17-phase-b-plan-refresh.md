@@ -1,6 +1,6 @@
 # Phase B plan refreshed for v0.3.1-dev scope
 
-**Date:** 2026-04-18
+**Date:** 2026-04-17
 **Type:** decision
 **Trigger:** T1.1 (diff touches `.cortex/plans/phase-b-walking-skeleton.md`, `SPEC.md`, and related canonical files)
 **Cites:** plans/phase-b-walking-skeleton, doctrine/0003-spec-is-the-artifact, doctrine/0005-scope-boundaries-v2, journal/2026-04-17-protocol-sharpened-and-drafts-archived, journal/2026-04-17-vision-v3-promoted

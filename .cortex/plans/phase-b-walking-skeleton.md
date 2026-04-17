@@ -91,7 +91,7 @@ Brew formula mirrors Touchstone's: `url` points at a tagged GitHub release tarba
 - [ ] **Single authority rule** — SPEC § 4.8 detect Cortex-claim duplication in `AGENTS.md`/`CLAUDE.md`/`.cursor/rules/*` without `grounds-in:` back-citation.
 - [ ] **Goal-hash verification** — SPEC § 4.9 recompute each Plan's `Goal-hash:` from its H1 title; flag mismatches and collisions.
 - [ ] **Load-priority validation** — SPEC § 3.1 every Doctrine entry with `Status: Accepted` has `Load-priority:` (`always` or `default`). Superseded entries are exempt because they are immutable (SPEC § 3.1) and may predate the field's introduction; warn if `always` set exceeds default Doctrine budget.
-- [ ] **Append-only Journal** — git-log walks for in-place edits of `journal/*.md` files (SPEC § 3.5). Under `cortex doctor`: warning. Under `cortex doctor --strict`: **error** (non-zero exit). Without this severity escalation, `--strict` could pass a § 3.5 contract violation — exactly the failure mode that Codex caught on this plan's own refresh PR (see `journal/2026-04-18-journal-append-only-self-test.md`).
+- [ ] **Append-only Journal** — git-log walks for in-place edits of `journal/*.md` files (SPEC § 3.5). Under `cortex doctor`: warning. Under `cortex doctor --strict`: **error** (non-zero exit). Without this severity escalation, `--strict` could pass a § 3.5 contract violation — exactly the failure mode that Codex caught on this plan's own refresh PR (see `journal/2026-04-17-journal-append-only-self-test.md`).
 - [ ] **Immutable Doctrine** — git-log walks for in-place content edits of `doctrine/*.md` files. For each modifying commit, the check evaluates the file's `Status:` **at the parent commit** (before the edit): if it was `Accepted`, any body change beyond the Status-field transition to `Superseded-by <n>` is a violation. This prevents the escape hatch of editing the body and flipping Status in the same commit — the edit is still illegal because the entry was Accepted at the time it was modified.
 - [ ] **CLI-less fallback warning** — detect `AGENTS.md` imports of `@.cortex/state.md` without `cortex` CLI presence; warn if corpus >20 Doctrine or >100 Journal.
 
@@ -115,7 +115,7 @@ Brew formula mirrors Touchstone's: `url` points at a tagged GitHub release tarba
 
 ## Follow-ups (deferred)
 
-Every deferral below resolves to [`journal/2026-04-18-phase-b-plan-refresh.md`](../journal/2026-04-18-phase-b-plan-refresh.md), which captures the context and triggering condition for each. This satisfies SPEC § 4.2 (no orphan deferrals) within the same commit that introduced them.
+Every deferral below resolves to [`journal/2026-04-17-phase-b-plan-refresh.md`](../journal/2026-04-17-phase-b-plan-refresh.md), which captures the context and triggering condition for each. This satisfies SPEC § 4.2 (no orphan deferrals) within the same commit that introduced them.
 
 - **Map and State regeneration** — Phase C. See journal entry § "Deferred Follow-ups" for trigger.
 - **`cortex plan spawn`, `cortex journal draft`** — Phase D. See journal entry.

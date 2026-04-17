@@ -1,19 +1,19 @@
 ---
-Generated: 2026-04-18T01:20:00-04:00
+Generated: 2026-04-17T15:30:00-07:00
 Generator: hand-authored (regeneration infrastructure ships in Phase C)
 Sources:
   - HEAD of branch chore/refresh-phase-b-plan (targeting main at 866be57)
   - .cortex/doctrine/ (5 entries: 0001–0003 + 0005 active with Load-priority: always; 0004 Superseded-by 0005)
   - .cortex/plans/ (1 active: phase-b-walking-skeleton — refreshed this PR; vision-sharpening shipped)
-  - .cortex/journal/ (9 entries: 8 for 2026-04-17, 1 for 2026-04-18)
+  - .cortex/journal/ (10 entries, all for 2026-04-17)
   - .cortex/templates/ (8 files)
   - .cortex/map.md (stub, pending Phase C)
   - .cortex/procedures/ (empty; .gitkeep only)
-  - .cortex/.index.json (hand-authored stub, pre-CLI)
   - SPEC.md v0.3.1-dev
   - PLAN.md phase-A-complete, phase-B-pending
-Corpus: 5 Doctrine entries, 1 active Plan, 9 Journal entries, 8 Templates
-Omitted: []
+Corpus: 5 Doctrine entries, 1 active Plan, 10 Journal entries, 8 Templates
+Omitted:
+  - .cortex/.index.json — not present pre-CLI; per SPEC § 2 the file is auto-maintained by the Cortex CLI and its absence is the expected state before Phase B ships.
 Incomplete:
   - Map regeneration (Phase C); map.md is a stub with Incomplete: [all sources]
   - Automated metric aggregation (Phase C); State is hand-authored
@@ -30,7 +30,7 @@ Spec: 0.3.1-dev
 
 Build the CLI structure and non-synthesizing commands so there's something to `brew install`, so later phases have something to extend, and so the Protocol's Tier 1 triggers have a `cortex doctor --audit` to enforce them.
 
-Full plan: [`plans/phase-b-walking-skeleton.md`](./plans/phase-b-walking-skeleton.md) — refreshed 2026-04-18 to cover the v0.3.1-dev scope (manifest, grep, expanded doctor checks, T1.9 audit, Goal-hash verification, Load-priority, interactive flow).
+Full plan: [`plans/phase-b-walking-skeleton.md`](./plans/phase-b-walking-skeleton.md) — refreshed 2026-04-17 to cover the v0.3.1-dev scope (manifest, grep, expanded doctor checks, T1.9 audit, Goal-hash verification, Load-priority, interactive flow).
 
 **Success signal:** `brew tap autumngarage/cortex && brew install cortex && cortex init` works in a fresh repo and produces a SPEC-v0.3.1-conformant `.cortex/` scaffold including `.cortex/protocol.md` and `.cortex/templates/`, validated by `cortex doctor`.
 
