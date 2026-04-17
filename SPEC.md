@@ -1,22 +1,24 @@
 # Cortex Specification
 
-> **Cortex is a file-format protocol for project memory.** Six layers of documents per project, each with a mechanical, authoring, and retrieval contract. Consumed by humans and AI coding agents. The CLI named `cortex` is one implementation of the protocol; other tools (Sentinel, Touchstone, Claude Code sessions, humans) read and write the same files by the same rules.
+> **Cortex is a file-format protocol for project memory.** Six layers of documents per project, each with a mechanical, authoring, and retrieval contract. Consumed by humans and AI coding agents. The CLI named `cortex` is one implementation; other tools (Sentinel, Touchstone, Claude Code sessions, humans) read and write the same files by the same rules.
 
-**Spec version:** 0.1.0 (draft)
+**Spec version:** 0.2.0-dev (draft)
 **Status:** Proposed
+**Protocol companion:** [`.cortex/protocol.md`](./.cortex/protocol.md) defines when and how agents write; SPEC.md defines what the files look like.
 
 ---
 
 ## 1. Design principles
 
-Six rules, each inherited from prior art (sources in `docs/PRIOR_ART.md`):
+Seven rules, each inherited from prior art (sources in `docs/PRIOR_ART.md`):
 
-1. **Journal is append-only; Map is derived.** Write-ahead log + checkpoint semantics, from ext4 / PostgreSQL. Journal entries are timestamped immutable facts. Map is a regenerated projection — no independent authority.
+1. **Journal is append-only; Map is derived.** Write-ahead log + checkpoint semantics from ext4 / PostgreSQL. Journal entries are timestamped immutable facts. Map is a regenerated projection — no independent authority.
 2. **Immutable-with-supersede, never delete.** ADR discipline (Nygard). A superseded Doctrine entry stays in the repo with a link forward. Preserved reasoning prevents silent reversal.
 3. **One authoring mode per layer.** Diataxis discipline. Doctrine is Explanation, Procedures are How-to, Map/State are Reference, Plans are a named trail (Memex), Journal is timestamped facts. Don't mix.
-4. **Atomic entries with explicit triggers.** Zettelkasten atomicity + SRE postmortem triggers. One decision per Doctrine entry; one incident/decision per Journal entry; no trigger → no entry.
-5. **Promotion pipeline, not free-form.** Ahrens' graduation from fleeting → permanent. Journal entries earn promotion to Doctrine when they generalize. Plans earn promotion to Procedures when they stabilize. Promotion is deliberate, linked back to the originator.
-6. **Regeneration is first-class, staleness is surfaced.** The hole every PKM tradition leaves unsolved. Map and State regenerate from primary sources (code, git, recent Journal, Sentinel run logs). Each carries a visible `Generated: <ISO8601>` header. Stale-beyond-threshold regeneration is warned, not silently tolerated.
+4. **Atomic entries with explicit triggers.** Zettelkasten atomicity + SRE postmortem triggers. One decision per Doctrine entry; one event per Journal entry; no trigger → no entry. Agent-driven writes follow a declared trigger set ([`.cortex/protocol.md`](./.cortex/protocol.md)) — silent discretionary background writes are forbidden.
+5. **Promotion pipeline, not free-form.** Ahrens' graduation from fleeting → permanent. Journal entries earn promotion to Doctrine when they generalize. Plans earn promotion to Procedures when they stabilize. Promotion is deliberate, linked back to the originator, and surfaced as a managed queue with operational rules (§ 4.7).
+6. **Regeneration is first-class, staleness is surfaced.** Map and State regenerate from primary sources. Every generated layer declares seven metadata fields (§ 3.2, § 3.3, § 5) — Generated, Generator, Sources, Corpus, Omitted, Incomplete, Conflicts-preserved. Stale-beyond-threshold regeneration surfaces a warning. Missing or incomplete inputs are declared, not hidden.
+7. **The Protocol is the write contract.** Agent writes to `.cortex/` happen under one of two authorities: explicit human invocation, or a declared Tier 1 Protocol trigger ([`.cortex/protocol.md`](./.cortex/protocol.md) § 2). Both are auditable. No third path exists.
 
 ---
 
@@ -24,7 +26,19 @@ Six rules, each inherited from prior art (sources in `docs/PRIOR_ART.md`):
 
 ```
 .cortex/
-  SPEC_VERSION              # this file: which Cortex spec version the project conforms to
+  SPEC_VERSION              # the Cortex spec version the project conforms to
+  protocol.md               # the agent write contract — imported into AGENTS.md
+  templates/                # write templates per trigger (journal/, doctrine/, digest/)
+    journal/
+      decision.md
+      incident.md
+      plan-transition.md
+      sentinel-cycle.md
+    doctrine/
+      candidate.md
+    digest/
+      monthly.md
+      quarterly.md
   doctrine/
     0001-<slug>.md          # numbered, ADR-style; never deleted
     0002-<slug>.md
@@ -33,18 +47,26 @@ Six rules, each inherited from prior art (sources in `docs/PRIOR_ART.md`):
   state.md                  # current operational state — metrics, priorities (regenerated)
   plans/
     <slug>.md               # one file per active effort (active trail)
-    archive/
-      <slug>.md             # shipped/cancelled plans (moved, not deleted)
+    archive/                # shipped/cancelled plans (moved, not deleted)
+      <slug>.md
   journal/
     YYYY-MM-DD-<slug>.md    # append-only, dated, one event per entry
+    archive/                # auto-moved after 1 year (see § 5)
+      <year>/
+        YYYY-MM-DD-<slug>.md
   procedures/
     <slug>.md               # stable interfaces, how-tos, checklists (versioned)
+    archive/                # deprecated procedures (moved, not deleted)
   .index.json               # auto-maintained cross-reference + freshness index
 ```
 
-**`SPEC_VERSION`** — a single line, e.g. `0.1.0`. Tools that read `.cortex/` must check this and bail or warn on unknown major versions.
+**`SPEC_VERSION`** — a single line, e.g. `0.2.0-dev`. Tools that read `.cortex/` must check this and bail or warn on unknown major versions.
 
-**`.index.json`** — machine-generated. Cross-reference graph, last-regen timestamps per layer, open plan status. Never hand-edited. Regenerated by any Cortex-spec-aware tool.
+**`protocol.md`** — the write contract for agents. See [`.cortex/protocol.md`](./.cortex/protocol.md) and § 8 below.
+
+**`templates/`** — write templates referenced by Protocol triggers. Each template specifies required frontmatter and prose sections. Projects may add custom templates.
+
+**`.index.json`** — machine-generated. Cross-reference graph, last-regen timestamps per layer, open plan status, promotion queue state. Never hand-edited.
 
 ---
 
@@ -58,7 +80,7 @@ Each layer defines: **mechanical contract** (mutable/immutable, derived/authorit
 |---|---|
 | Mechanical | Immutable-with-supersede; numbered; never deleted |
 | Authoring | Diataxis **Explanation**; one decision/claim per entry; ADR sections: Context, Decision, Consequences, Status (Proposed / Accepted / Superseded-by `<n>`) |
-| Trigger | Architecturally significant or strategically significant (kill criteria, edge claims, deliberate non-goals). Not every decision — only those whose reversal would be expensive. |
+| Trigger | Architecturally or strategically significant decisions (kill criteria, edge claims, deliberate non-goals). Promotion from Journal (§ 4.7) is the primary authoring path; direct human authoring is allowed. |
 | Retrieval | Agent semantic memory: *"why does this project exist / what's in or out of scope?"* |
 
 **Header convention:**
@@ -69,6 +91,8 @@ Each layer defines: **mechanical contract** (mutable/immutable, derived/authorit
 
 **Status:** Accepted   (or: Proposed | Superseded-by 0057)
 **Date:** 2026-04-17   (written, not renewed)
+**Promoted-from:** journal/2026-04-10-auth-retry-lesson  (if promoted)
+**Grounds-in:** touchstone/principles/engineering-principles.md#no-band-aids  (if applicable)
 
 ## Context
 ...
@@ -88,12 +112,22 @@ We will...
 | Retrieval | Agent working memory: *"where does X live, what are the boundaries?"* |
 
 **Header convention:**
-```markdown
-# Project Map
+```yaml
+---
+Generated: 2026-04-17T14:22:00-04:00
+Generator: cortex refresh-map v0.2.0
+Sources:
+  - HEAD sha: abc1234
+  - .cortex/doctrine/0001-0006
+  - pyproject.toml, package.json
+Corpus: 143 Python files, 6 packages, 6 Doctrine entries
+Omitted: src/experiments/* (marked experimental)
+Incomplete: []
+Conflicts-preserved: []
+Spec: 0.2.0
+---
 
-**Generated:** 2026-04-17T14:22:00-04:00
-**From:** HEAD sha <abc1234>, .cortex/doctrine/0001-0006
-**Spec:** 0.1.0
+# Project Map
 
 > <one-sentence structural summary>
 ```
@@ -103,17 +137,28 @@ We will...
 | Contract | Value |
 |---|---|
 | Mechanical | Derived; regenerated from metrics + recent Journal + open Plans + Sentinel journals (if present) |
-| Authoring | Diataxis **Reference**; dashboard-like; priorities ranked P0-P4; shipped items last N days; open blockers |
-| Trigger | Session start, significant metric change, Plan status change, end of Sentinel cycle. |
+| Authoring | Diataxis **Reference**; dashboard-like; priorities ranked P0-P4; shipped items last 90d (auto-ages); open blockers |
+| Trigger | Session start, significant metric change, Plan status change, end of Sentinel cycle |
 | Retrieval | Agent working/core memory: *"what's the single most important thing right now?"* |
 
 **Header convention:**
-```markdown
-# Project State
+```yaml
+---
+Generated: 2026-04-17T14:22:00-04:00
+Generator: cortex refresh-state v0.2.0
+Sources:
+  - .cortex/journal/ (hot: 23 entries last 30d)
+  - .cortex/plans/*.md (5 active, 2 blocked)
+  - .sentinel/runs/2026-04-17-1430.md
+Corpus: 23 Journal entries, 5 active Plans, 1 Sentinel cycle
+Omitted: journal/2026-04-13-wip-debugging (marked noisy)
+Incomplete: []
+Conflicts-preserved:
+  - "retry backoff" — journal/2026-04-10 argues exponential; journal/2026-04-15 argues fixed
+Spec: 0.2.0
+---
 
-**Generated:** 2026-04-17T14:22:00-04:00
-**As-of data:** 2026-04-17 (metrics), 2026-04-16 (last Sentinel cycle)
-**Spec:** 0.1.0
+# Project State
 
 > <one-sentence where-we-are>
 
@@ -128,22 +173,28 @@ Staleness rule: if `Generated` is older than N hours (configurable, default 24),
 
 | Contract | Value |
 |---|---|
-| Mechanical | Mutable for status updates; new files for new plans; completed plans move to `plans/archive/` |
+| Mechanical | Mutable for status updates; new files for new plans; completed plans auto-move to `plans/archive/` after 30 days in `shipped`/`cancelled` status |
 | Authoring | Memex **named trail**; a structured path through Doctrine, Map, and State; defines success criteria |
 | Trigger | Multi-step work that outlives a single session and whose completion is non-obvious |
 | Retrieval | Agent episodic memory (active): *"what am I trying to accomplish, and what's the plan?"* |
 
-**Required sections** (enforced by tools):
+**Required frontmatter and sections** (enforced by tools):
 
 ```markdown
+---
+Status: active                  # active | shipped | cancelled | deferred | blocked
+Written: 2026-04-17
+Author: human                   # human | sentinel-coder | claude-session-<iso> | <other>
+Goal-hash: a1b2c3                # normalized hash of the goal statement (§ 4.9)
+Updated-by:                     # append-only history of writers
+  - 2026-04-17T10:00 human
+  - 2026-04-17T14:22 claude-session-2026-04-17T09:00
+Cites: doctrine/0003, state.md § P0-calibration
+---
+
 # <Title>
 
 > <one-paragraph summary: what problem, what approach, why now>
-
-**Status:** active   (or: deferred | shipped | cancelled)
-**Written:** 2026-04-17
-**Owner:** <name or "sentinel-coder" or "unassigned">
-**Cites:** doctrine/0003, state.md § P0-calibration
 
 ## Why (grounding)
 Link to the triggering metric or decision — never invent context; always cite.
@@ -157,21 +208,20 @@ Link to the triggering metric or decision — never invent context; always cite.
 ## Work items
 - [x] <done> — PR #NN
 - [ ] <pending>
-  - Known limitation: deferred to follow-up, tracked in [follow-up plan or journal entry]
 
 ## Follow-ups (deferred)
-Items moved out of scope during execution — each with an owner or "inherited by follow-up plan".
+Items moved out of scope during execution — each resolved to another plan or journal entry per § 4.2.
 ```
 
-**Cross-plan rule:** any item marked "deferred" must appear either in another plan or in a Journal entry. Tools verify this — orphaned deferrals are a spec violation.
+**Multi-writer collisions** (§ 4.9) are made visible via `Goal-hash:` matching, not prevented.
 
 ### 3.5 Journal — *what happened, write-ahead log*
 
 | Contract | Value |
 |---|---|
-| Mechanical | Append-only; immutable once written; one event per file; filename is `YYYY-MM-DD-<slug>.md` |
+| Mechanical | Append-only; immutable once written; one event per file; filename is `YYYY-MM-DD-<slug>.md`; auto-moved to `journal/archive/<year>/` after 365 days |
 | Authoring | Timestamped facts; mirrors SRE postmortem shape for incidents, otherwise a decision record |
-| Trigger | Shipped material change (plan completed/deferred, policy reversed, incident observed, migration complete). Objective triggers + subjective escape hatch ("any stakeholder may request one"). |
+| Trigger | Protocol-driven (see [`.cortex/protocol.md`](./.cortex/protocol.md)) — Tier 1 machine-observable events (mandatory) or Tier 2 advisory heuristics (judgment). Human-authored entries are always allowed. |
 | Retrieval | Agent episodic memory (archived): *"have we tried this before? what did we learn?"* |
 
 **Header convention:**
@@ -179,7 +229,8 @@ Items moved out of scope during execution — each with an owner or "inherited b
 # <Title>
 
 **Date:** 2026-04-17
-**Type:** decision | incident | migration | reversal | promotion
+**Type:** decision | incident | migration | reversal | promotion | plan-transition | sentinel-cycle | digest
+**Trigger:** T1.3 (Plan status changed)   # for Protocol-triggered entries only
 **Cites:** plans/anti-chase.md, doctrine/0003
 
 > <one-sentence summary>
@@ -199,7 +250,7 @@ Items moved out of scope during execution — each with an owner or "inherited b
 
 | Contract | Value |
 |---|---|
-| Mechanical | Mutable in place; breaking changes bump the doc's own version; non-breaking additions append |
+| Mechanical | Mutable in place; breaking changes bump the doc's own version; non-breaking additions append; deprecated procedures move to `procedures/archive/` |
 | Authoring | Diataxis **How-to** (checklist) or **Reference** (interface spec) |
 | Trigger | API/interface change, integration discovery, new operational checklist |
 | Retrieval | Agent procedural memory: *"how do I do X safely?"* |
@@ -210,7 +261,7 @@ Items moved out of scope during execution — each with an owner or "inherited b
 
 **Doc version:** 1.2.0
 **Last change:** 2026-04-17 — added rate-limit step
-**Spec:** 0.1.0
+**Spec:** 0.2.0
 
 > <one-sentence purpose>
 
@@ -226,16 +277,87 @@ Items moved out of scope during execution — each with an owner or "inherited b
 
 Enforced by any Cortex-spec-aware tool. Violations surface as warnings or (for tight rules) errors.
 
-1. **Plans cite their grounding.** Every Plan's `Why (grounding)` section must link to a Doctrine entry, a State priority, or a Journal item. Unlinked plans are a smell.
-2. **Deferrals are tracked end-to-end.** Any item moved out of a Plan's scope must resolve to another Plan or a Journal entry within the same commit. No orphan deferrals.
-3. **Success criteria are measurable.** Plan `Success Criteria` must name a concrete signal (metric, test, dashboard). Prose-only criteria fail the check.
-4. **Promotion links both ways.** Journal-to-Doctrine promotions set the Doctrine entry's `Derived-from:` and the Journal entry's `Promoted-to:`. Plans-to-Procedures promotions likewise.
-5. **Regenerated layers carry a `Generated:` timestamp and source list.** Stale-beyond-threshold regeneration surfaces a warning.
-6. **Typed links, not free links.** Cross-layer links use named relations in front-matter or inline annotations: `supersedes`, `implements`, `derives-from`, `blocked-by`, `verifies`. Raw markdown links are allowed but discouraged for contractual connections.
+### 4.1 Plans cite their grounding
+Every Plan's `Why (grounding)` section must link to a Doctrine entry, a State priority, or a Journal item. Unlinked plans are a smell.
+
+### 4.2 Deferrals are tracked end-to-end
+Any item moved out of a Plan's scope must resolve to another Plan or a Journal entry within the same commit. No orphan deferrals.
+
+### 4.3 Success criteria are measurable
+Plan `Success Criteria` must name a concrete signal (metric, test, dashboard). Prose-only criteria fail the check.
+
+### 4.4 Promotion links both ways
+Journal-to-Doctrine promotions set the Doctrine entry's `Promoted-from:` and the Journal entry's `Promoted-to:`. Plans-to-Procedures promotions likewise.
+
+### 4.5 Generated layers declare seven metadata fields
+`Generated`, `Generator`, `Sources`, `Corpus`, `Omitted`, `Incomplete`, `Conflicts-preserved`. Missing fields fail `cortex doctor`. See § 3.2, § 3.3, and § 5 for details.
+
+### 4.6 Typed links, not free links
+Cross-layer links use named relations in frontmatter or inline annotations: `supersedes`, `supersded-by`, `promoted-from`, `promoted-to`, `grounds-in`, `implements`, `blocked-by`, `verifies`, `derives-from`, `cites`. Raw markdown links are allowed but discouraged for contractual connections.
+
+### 4.7 Promotion queue operational rules
+
+Candidates for promotion are surfaced at every `cortex` invocation and persisted in `.index.json`. Each candidate has a state:
+
+| State | Meaning |
+|---|---|
+| `proposed` | Fresh candidate, not yet reviewed |
+| `approved` | Promotion happens on next `cortex` invocation |
+| `not-yet` | Real candidate but needs more evidence; re-surfaces in 30d with any new supporting entries |
+| `duplicate-of: doctrine/<n>` | Existing Doctrine already covers this; archived with pointer |
+| `skip-forever` | Explicitly rejected; won't re-surface |
+| `needs-more-evidence` | Requires N+ supporting entries before re-proposal |
+
+**Queue health rules:**
+- **WIP limit.** Default 10 candidates in `proposed` state. Cortex stops generating new candidates when the limit is hit — forces the human to clear the queue.
+- **Candidate aging.** A candidate in `proposed` for >14 days auto-transitions to `stale-proposed` and surfaces as a `cortex doctor` warning.
+- **Promotion debt in the manifest.** The agent manifest declares `Promotion-queue: <n> proposed, <k> stale`. The agent sees the backlog at session start.
+- **Review-complexity split.** Candidates are marked `review-complexity: trivial` (bulk-approvable, e.g. 3+ entries say the same thing) or `review-complexity: editorial` (requires human judgment). Trivial ones can be batch-approved; editorial ones require individual review.
+
+### 4.8 Single authority rule for reads
+Root agent files (`AGENTS.md`, `CLAUDE.md`, `.cursor/rules/*`) **may route** to `.cortex/` (via `@path` imports or text references) but **must not duplicate** Cortex claims without a `grounds-in:` citation to the source Doctrine or State entry. `cortex doctor` detects and flags drift — content in root agent files that restates Cortex claims without linking back.
+
+### 4.9 Multi-writer Plan visibility
+Plans carry `Author:`, `Goal-hash:`, and `Updated-by:` frontmatter fields (§ 3.4). Two Plans sharing a `Goal-hash:` are flagged as a collision by `cortex doctor`. Resolution is human — merge, supersede, or distinct — not automatic. Cortex makes collisions visible; it does not prevent them.
 
 ---
 
-## 5. File format conventions
+## 5. Retention and consolidation
+
+Cortex is **append-only at write and tiered at read**. Nothing is ever deleted; everything stays in git. "Pruning" means moving entries from hot → warm → cold → digest-represented, never removing them.
+
+### 5.1 Tiered retention per layer
+
+| Layer | Mechanic |
+|---|---|
+| Doctrine | Never archived. Superseded entries stay with `Status: Superseded-by <n>` pointer; dropped from default load. Top-K by semantic relevance loads at session start. |
+| Journal | Hot (0–30d) → Warm (30–365d) → Cold (>365d, auto-moved to `journal/archive/<year>/`). Default load is hot + digests, not warm or cold. |
+| Plans | `active` → hot. `shipped` / `cancelled` → auto-moved to `plans/archive/` after 30d. |
+| Map | Always regenerated. Old versions in git history. |
+| State | Always regenerated. "Shipped recently" section auto-ages at 90d. |
+| Procedures | `cortex doctor` flags dead code references; human moves to `procedures/archive/` if appropriate. |
+
+### 5.2 Consolidation — digests
+
+**Monthly digest.** On a configurable cadence (default monthly), `cortex` proposes a Journal digest — a summary of the period's key decisions and learnings, with citations to the originals. Human approves in the `cortex` interactive flow. Digest lives in `journal/` with `Type: digest`. Originals stay in warm/cold.
+
+**Digests obey the seven-field metadata contract** (§ 3.2, § 3.3, § 4.5) plus two digest-specific rules:
+
+### 5.3 Digest depth cap
+A digest may cite other digests at most **one level deep**. Quarterly digests may cite monthly digests, but must **also cite ≥5 raw Journal entries directly**. Digest-of-digest-of-digest is forbidden — this bounds drift under repeated consolidation.
+
+### 5.4 Digest audit sampling
+`cortex doctor --audit-digests` picks N random claims from each digest and verifies each traces back to at least one source entry. Failures surface as warnings. This guards against the "plausibly wrong" false-freshness failure mode that timestamps alone don't prevent.
+
+### 5.5 Failure modes the spec prevents
+1. Unbounded hot load — hard cap on session manifest; semantic retrieval beyond.
+2. Unreviewed promotion candidates piling up — WIP limit (§ 4.7) + candidate aging + promotion debt in manifest.
+3. Silent digest drift — depth cap (§ 5.3) + audit sampling (§ 5.4) + Corpus/Omitted/Conflicts-preserved (§ 4.5).
+4. Consolidation skipped entirely — missing monthly digests surface in `cortex` interactive flow as overdue.
+
+---
+
+## 6. File format conventions
 
 Universal across layers:
 
@@ -244,23 +366,47 @@ Universal across layers:
 - **Status tags where specified** (see layer contracts). Parseable, not decorative.
 - **Markdown, single `#` title, `##` sections.** `###` allowed for subsections; deeper nesting is a smell.
 - **Checkbox syntax** `- [ ]` / `- [x]` for work items in Plans and Journal.
-- **§ Section references** in cross-links: `state.md § P0-calibration`.
+- **§ Section references** in cross-links: `state.md § P0-calibration`, `spec.md § 4.7`.
+- **YAML frontmatter** is required for layers carrying list-valued metadata (Map, State, Plans, digests). Bold-inline scalar fields are the canonical format for Doctrine, Journal, and Procedures; YAML frontmatter is also permitted. Parsers must accept either form.
 
 ---
 
-## 6. Versioning
+## 7. Versioning
 
 - **Major bump**: breaking format changes (directory layout, required fields, semantics of existing tags).
-- **Minor bump**: additive changes compatible with existing readers (new optional fields, new layer types, new link relations).
+- **Minor bump**: additive changes compatible with existing readers (new optional fields, new layer types, new link relations, new Protocol triggers).
 - **Patch bump**: clarifications, typo fixes, tightened wording without behavior change.
 
 Tools must declare which spec major versions they support. Readers encountering an unknown major version should refuse to write and warn on read.
 
+**Pre-1.0 exception.** Per standard semver 0.x convention, during `0.x.y` development minor bumps may include breaking changes. The strict major-for-breaking rule above applies from `1.0.0` onward. This is why v0.2.0-dev introduces breaking frontmatter changes (seven-field metadata contract on generated layers; `Author`/`Goal-hash`/`Updated-by` on Plans) under a minor bump.
+
+**Protocol version relationship.** [`.cortex/protocol.md`](./.cortex/protocol.md) carries its own version. A Protocol version is compatible with one or more SPEC.md versions, declared in the Protocol's header. A major SPEC bump always requires a Protocol review; a minor SPEC bump may or may not trigger a Protocol bump depending on whether new triggers are needed.
+
 ---
 
-## 7. What Cortex explicitly does not do
+## 8. Relationship to the Cortex Protocol
+
+SPEC.md specifies *what the files look like* — the directory layout (§ 2), layer contracts (§ 3), cross-layer rules (§ 4), retention mechanics (§ 5), field conventions (§ 6).
+
+[`.cortex/protocol.md`](./.cortex/protocol.md) specifies *when and how agents write* — the trigger set (Tier 1 machine-observable + Tier 2 advisory), template references, enforcement story.
+
+**The relationship:**
+- A project can hand-author `.cortex/` following SPEC.md without the Protocol, though it loses enforcement.
+- A project using the Protocol must also follow SPEC.md (the Protocol writes files in the formats SPEC.md specifies).
+- `AGENTS.md` imports `@.cortex/protocol.md` as the agent-facing entry point to the Protocol. `.cortex/state.md` is the agent-facing entry point to current project state.
+- `cortex doctor` validates both SPEC.md compliance (file format, invariants, cross-layer rules) and Protocol compliance (Tier 1 triggers fired produced entries).
+
+---
+
+## 9. What Cortex explicitly does not do
+
+The boundaries that keep Cortex composable rather than all-encompassing. Rationale for each category is in [Doctrine 0004](./.cortex/doctrine/0004-scope-boundaries.md).
 
 - **Does not execute work.** That's Sentinel. Cortex is state + memory only.
-- **Does not enforce engineering standards.** That's Touchstone. Cortex reads Doctrine entries that may reference standards; it doesn't define them.
+- **Does not enforce engineering standards.** That's Touchstone. Cortex Doctrine may cite Touchstone principles via `grounds-in:` but doesn't define them.
 - **Does not replace git.** Git is authoritative for code state; Cortex is authoritative for the *reasoning layer* around the code. Cortex reads git; git doesn't read Cortex.
-- **Does not synthesize without permission.** An agent writing to `.cortex/` must be explicitly invoked (`cortex refresh-map`, `cortex journal draft`), not silent background behavior.
+- **Does not synthesize without permission.** An agent writing to `.cortex/` must be either (a) explicitly invoked by a human, or (b) acting on a declared Tier 1 Protocol trigger. Silent discretionary background writes are forbidden. The Protocol IS the permission because it's a visible, versioned, declared contract.
+- **Does not maintain a vector store, database, or knowledge graph.** See Doctrine 0004.
+- **Does not aggregate across projects.** One project per `.cortex/`. Portfolio views are deliberately out of scope for v0.x.
+- **Does not host anything in the cloud.** Local files, git, nothing else. Synthesis commands may call external LLM CLIs (`claude -p`, etc.) as implementation details of regeneration; storage is always local.

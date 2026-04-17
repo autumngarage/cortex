@@ -4,6 +4,10 @@ You are reviewing pull requests for **Cortex**, a file-format protocol for proje
 
 This file is the source of truth for how AI reviewers (Codex, Claude, etc.) should think about a PR. The companion file `CLAUDE.md` is for the *author* writing the code; this file is for the *reviewer*.
 
+## Cortex Protocol (context for spec-aware review)
+
+@.cortex/protocol.md
+
 ---
 
 ## What to prioritize (in order)
