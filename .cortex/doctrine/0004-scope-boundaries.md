@@ -17,7 +17,7 @@ The resolution isn't to contest each adjacent claim. It's to state clearly what 
 
 Cortex explicitly is not:
 
-1. **Not a vector store.** No embeddings, no ANN indexes, no similarity search at the storage layer. Markdown + git + grep. Semantic retrieval used by `cortex manifest` for top-K Doctrine is a read-side concern, built over the file store; it is not the file store. If a project wants deep semantic search, it can index `.cortex/` externally — that's not Cortex's job.
+1. **Not a vector store.** No embeddings, no ANN indexes, no similarity search at the storage layer. Markdown + git + grep. The default session manifest (`cortex manifest`) loads Doctrine by `Load-priority: always` pins plus recency, never by embedding similarity (see `.cortex/protocol.md` § 1). Mid-session retrieval is grep. A project that wants semantic retrieval can index `.cortex/` externally — that external layer is out of scope for Cortex itself.
 2. **Not a database.** `.cortex/.index.json` is a cache, regeneratable from the files. Removing `.index.json` loses nothing that isn't recoverable from `.cortex/` contents. Git is the durable store.
 3. **Not a knowledge graph.** Cross-references between files use typed links (`supersedes`, `implements`, `derives-from`, `grounds-in`, `blocked-by`, `verifies`). Cortex does not construct a graph as a primary artifact. Projects wanting a graph view can build one from the links; graph semantics are not load-bearing for retrieval.
 4. **Not a portfolio tool.** One project per `.cortex/`. Cross-project aggregation (the "Lighthouse" conversation from Phase-A discussion) is deliberately out of scope for v0.x. Per-user or per-org baselines could inform a future cross-project story; v0.x is one project at a time.

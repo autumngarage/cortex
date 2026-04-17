@@ -2,7 +2,7 @@
 Status: active
 Written: 2026-04-17
 Author: human
-Goal-hash: phase-b-walking-skeleton-cli-v02
+Goal-hash: 1f10782a
 Updated-by:
   - 2026-04-17T07:00 human (created; targeted v0.1.0)
   - 2026-04-17T23:45 claude-session-2026-04-17 (updated for v0.2.0 scope — Protocol, promotion queue, seven-field metadata contract)
@@ -11,7 +11,7 @@ Cites: ../../SPEC.md, ../../PLAN.md § Phase B, doctrine/0003-spec-is-the-artifa
 
 # Phase B — Walking-skeleton CLI
 
-> Ship a Cortex CLI that manipulates `.cortex/` structure without any LLM calls. End-state: `brew install cortex && cortex init` produces a SPEC.md v0.2.0-dev-conformant scaffold (including `protocol.md` + `templates/`) in a fresh repo, and `cortex doctor` validates it. No synthesis yet — that's Phase C.
+> Ship a Cortex CLI that manipulates `.cortex/` structure without any LLM calls. End-state: `brew install cortex && cortex init` produces a SPEC.md v0.3.0-dev-conformant scaffold (including `protocol.md` + `templates/`) in a fresh repo, and `cortex doctor` validates it. No synthesis yet — that's Phase C.
 
 ## Why (grounding)
 

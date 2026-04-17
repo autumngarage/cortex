@@ -74,7 +74,22 @@ Doctrine 0004's `Promoted-from:` field updated to point at the new path (`drafts
 - [ ] Phase B plan (`.cortex/plans/phase-b-walking-skeleton.md`) needs an update: add `cortex manifest`, `cortex grep`, `cortex doctor --verify-goal-hash`, the templates-shipped-with-init requirement. Deferred to next session when we formally open Phase B.
 - [ ] First external-project dogfood (Sentinel or Touchstone) will stress-test the new T1.9 trigger and the manifest fallback path. Expect at least one follow-up spec bump.
 
+## Codex pre-merge review round (same PR)
+
+Pre-merge Codex review on branch `feat/sharpen-protocol-and-archive-drafts` caught seven concrete issues on the first iteration; all fixed in the follow-up commit before the PR landed:
+
+1. **Version bumps missing.** Layer contract + validation rule changes required a SPEC bump and a Protocol bump. Fixed: SPEC 0.2.0-dev → **0.3.0-dev** (`.cortex/SPEC_VERSION` updated; all example frontmatter `Spec: 0.2.0` → `Spec: 0.3.0`); Protocol 0.1.0 → **0.2.0**. README, state.md, PLAN.md, phase-b plan all updated accordingly.
+2. **SPEC § 5.1 retention table stale.** Still said "Top-K by semantic relevance loads at session start." Rewrote to `Load-priority: always` pins + recency; cross-referenced Protocol § 1 and Doctrine 0004.
+3. **SPEC § 5.5 failure-modes list stale.** "Semantic retrieval beyond" → "grep (or an optional external index) beyond."
+4. **Doctrine 0004 #1 not updated.** Still claimed `cortex manifest` does semantic top-K. This was the actual contradiction the PR claimed to fix. Rewrote to state the manifest uses recency + `Load-priority` pins; semantic retrieval is an optional external layer.
+5. **Goal-hash example didn't match the spec.** SPEC § 4.9 showed `Goal-hash: 6f2d9a1c` but `sha256("sharpen cortexs vision")[:8]` is `1cc12b25`. Fixed and verified with Python.
+6. **`phase-b-walking-skeleton.md` Goal-hash was still a slug** (`phase-b-walking-skeleton-cli-v02`). Recomputed: `1f10782a`.
+7. **`vision-sharpening.md` Goal-hash was still a slug** (`sharpen-cortex-vision-2026-04-17`). Recomputed: `adf7ee92`.
+
+Lesson embedded: **when adding a validation rule, audit every existing artifact against the new rule in the same PR** — Codex caught two plans that would have failed `cortex doctor --verify-goal-hash` on their first run. This is an application of the audit-weak-points principle (`principles/audit-weak-points.md`) to spec amendments: find all instances of the pattern, not just the one you added.
+
 ## What we'd do differently
 
 - **The Doctrine 0004 / Protocol § 1 contradiction was visible in v3 before promotion** — "not a vector store" and "semantic relevance to current task" co-existed in the same document and neither reviewer (Codex round 2, user read-through) caught it. Future critique prompts should explicitly ask *"does any rule in this document contradict the scope boundaries?"* That's a cheap high-value check.
 - **Shipping the templates-directory as part of v0.2.0 promotion would have been better** than needing a same-day follow-up PR. Lesson: when the spec references a directory of files, populating at least one stub of each is part of the promotion, not a later-phase task.
+- **Pre-merge code review caught seven issues the author missed.** The Codex round produced a better spec in one review iteration than the entire drafting session produced. This is direct evidence for the Phase E value proposition — Touchstone pre-merge Codex review is not ceremony, it's load-bearing quality. When Cortex integrates with Touchstone (Phase E, T1.7), Doctrine candidates drafted inline at review time will ride this same mechanism. See [journal/2026-04-17-competitive-positioning-and-claude-code-risk.md](./2026-04-17-competitive-positioning-and-claude-code-risk.md) for why "enforced institutional memory" depends on this seam.
