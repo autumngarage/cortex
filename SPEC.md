@@ -265,7 +265,7 @@ Items moved out of scope during execution — each resolved to another plan or j
 
 **Doc version:** 1.2.0
 **Last change:** 2026-04-17 — added rate-limit step
-**Spec:** 0.3.0
+**Spec:** 0.3.1
 
 > <one-sentence purpose>
 
@@ -299,7 +299,7 @@ Reverse traversal (source Journal → the Doctrine entries that promoted from it
 1. **Derived index.** `.cortex/.index.json` caches a reverse map built by scanning `Promoted-from:` across Doctrine. Regeneratable from the files; not authoritative.
 2. **Promotion-event Journal entry (optional).** A new Journal entry with `Type: promotion` may be written to record the event, citing both the source Journal entry and the new Doctrine entry. Append-only — it's a new entry, not a modification.
 
-Plans-to-Procedures promotions follow the same rule: the new Procedure's `Promoted-from:` is authoritative; the source Plan may be superseded or marked `Status: shipped` (both are already-mutable Plan operations per § 3.4), but it is not retrofitted with a `Promoted-to:` field.
+Plans-to-Procedures promotions follow the same rule: the new Procedure's `Promoted-from:` is authoritative; the source Plan transitions to `Status: shipped` per § 3.4 (an already-mutable Plan operation), but it is not retrofitted with a `Promoted-to:` field.
 
 **Summary:** *promoted-from* is the one canonical link. Everything pointing the other direction is derived or newly authored; nothing is retroactively edited.
 
@@ -309,7 +309,7 @@ Plans-to-Procedures promotions follow the same rule: the new Procedure's `Promot
 ### 4.6 Typed links, not free links
 Cross-layer links use named relations in frontmatter or inline annotations: `supersedes`, `superseded-by`, `promoted-from`, `grounds-in`, `implements`, `blocked-by`, `verifies`, `derives-from`, `cites`. Raw markdown links are allowed but discouraged for contractual connections.
 
-Note that `promoted-to` is **not** in this list — per § 4.4, promotion is authored one-way (`promoted-from` on the new entry) and reverse traversal is derived. Prior drafts listed `promoted-to` and `supersded-by` (typo); both are removed in v0.3.0-dev.
+Note that `promoted-to` is **not** in this list — per § 4.4, promotion is authored one-way (`promoted-from` on the new entry) and reverse traversal is derived. Prior drafts listed `promoted-to` and `supersded-by` (typo); both are removed in v0.3.1-dev.
 
 ### 4.7 Promotion queue operational rules
 
@@ -407,7 +407,9 @@ Universal across layers:
 
 Tools must declare which spec major versions they support. Readers encountering an unknown major version should refuse to write and warn on read.
 
-**Pre-1.0 exception.** Per standard semver 0.x convention, during `0.x.y` development minor bumps may include breaking changes. The strict major-for-breaking rule above applies from `1.0.0` onward. This is why v0.2.0-dev introduced breaking frontmatter changes (seven-field metadata contract on generated layers; `Author`/`Goal-hash`/`Updated-by` on Plans) under a minor bump; why v0.3.0-dev adds `Load-priority:` to Doctrine, concretizes `Goal-hash:` normalization (§ 4.9), and adds T1.9 to the Protocol — also under a minor bump; and why v0.3.1-dev rewrites § 4.4 promotion semantics (removes retroactive `Promoted-to:` on source Journal entries; introduces `.index.json`-backed reverse traversal) and removes `promoted-to` from the § 4.6 typed-links list. The 0.3.1 patch bump tracks a behavior change that resolves an internal contradiction between § 4.4 and § 3.5; the 0.3.x draft is not released, so no migration tooling is required.
+**Pre-1.0 exception.** Per standard semver 0.x convention, during `0.x.y` development minor bumps may include breaking changes. The strict major-for-breaking rule above applies from `1.0.0` onward. This is why v0.2.0-dev introduced breaking frontmatter changes (seven-field metadata contract on generated layers; `Author`/`Goal-hash`/`Updated-by` on Plans) under a minor bump, and why v0.3.0-dev adds `Load-priority:` to Doctrine, concretizes `Goal-hash:` normalization (§ 4.9), and adds T1.9 to the Protocol — also under a minor bump.
+
+**v0.3.1-dev is a pure clarification patch.** It rewrites § 4.4 promotion semantics and removes `promoted-to`/`supersded-by` from the § 4.6 typed-links list. No behavior change is introduced: the prior § 4.4 text (requiring retroactive `Promoted-to:` on source Journal entries) contradicted § 3.5 (Journal is append-only). No conforming tool could have satisfied both simultaneously, so the prior spec was ambiguous at best and unimplementable at worst. v0.3.1-dev states which of the two contradictory rules is correct (§ 3.5 append-only wins) and aligns the typed-link list accordingly. Because nothing implementable changes, this stays a patch bump under the § 7 rule that patch = clarification without behavior change.
 
 **Protocol version relationship.** [`.cortex/protocol.md`](./.cortex/protocol.md) carries its own version. A Protocol version is compatible with one or more SPEC.md versions, declared in the Protocol's header. A major SPEC bump always requires a Protocol review; a minor SPEC bump may or may not trigger a Protocol bump depending on whether new triggers are needed.
 

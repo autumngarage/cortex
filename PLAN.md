@@ -3,7 +3,7 @@
 > **Status:** active
 > **Written:** 2026-04-17
 > **Owner:** henrymodisett
-> **Spec:** [SPEC.md](./SPEC.md) v0.1.0
+> **Spec:** [SPEC.md](./SPEC.md) v0.3.1-dev (current draft)
 
 This plan tracks Cortex from empty repo to first useful release. Each phase ships a coherent slice; nothing is half-done.
 
@@ -27,7 +27,7 @@ Cortex automates the layer taxonomy, enforces the cross-layer rules, and regener
 
 Cortex v1.0 is done when, on sigint or sentinel:
 
-1. `cortex init` produces a `.cortex/` scaffold that matches [SPEC.md](./SPEC.md) v0.1.0.
+1. `cortex init` produces a `.cortex/` scaffold that matches [SPEC.md](./SPEC.md) v0.3.1-dev.
 2. `cortex refresh-map` regenerates `map.md` from the repo's code + git state in under 60s, using the `claude` CLI for synthesis.
 3. `cortex refresh-state` regenerates `state.md` from Sentinel run journals + open Plans + current metrics, surfacing stale-beyond-threshold metrics.
 4. `cortex journal draft <type>` emits a draft journal entry from PR context (diff + description + commit messages), ready for human edit.
@@ -95,7 +95,7 @@ The first command that actually thinks.
 
 The two layers where humans and agents both write.
 
-- [ ] `cortex plan spawn <name>` — creates `plans/<name>.md` with the Required Sections from spec v0.1.0, prompts for grounding citation (Doctrine/State ref), fills in a template skeleton from LLM suggestion
+- [ ] `cortex plan spawn <name>` — creates `plans/<name>.md` with the Required Sections from spec v0.3.1-dev, prompts for grounding citation (Doctrine/State ref), fills in a template skeleton from LLM suggestion
 - [ ] `cortex journal draft <type>` — generates a draft journal entry from PR/commit context. Types: decision, incident, migration, reversal, promotion. Human edits before landing.
 - [ ] `cortex plan status` — parses checkboxes, reports per-plan completion %, surfaces stalled plans (no updates in N days with open items)
 - [ ] Tests for each command against mocked and real repos

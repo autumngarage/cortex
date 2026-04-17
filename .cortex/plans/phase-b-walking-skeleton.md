@@ -31,7 +31,7 @@ Synthesis stays out of Phase B because it's expensive and variable; a walking sk
 This plan is done when all of the following hold on a fresh macOS install:
 
 1. `brew tap autumngarage/cortex && brew install cortex` succeeds.
-2. In an empty git repo: `cortex init` creates `.cortex/SPEC_VERSION` (`0.3.0-dev`), copies `.cortex/protocol.md` and the full `.cortex/templates/` tree, scaffolds `doctrine/`, `plans/`, `journal/`, `procedures/`, and stubs `map.md` + `state.md` with seven-field `Generated:` headers in `(pending Phase C synthesis)` state.
+2. In an empty git repo: `cortex init` creates `.cortex/SPEC_VERSION` (`0.3.1-dev`), copies `.cortex/protocol.md` and the full `.cortex/templates/` tree, scaffolds `doctrine/`, `plans/`, `journal/`, `procedures/`, and stubs `map.md` + `state.md` with seven-field `Generated:` headers in `(pending Phase C synthesis)` state.
 3. `cortex doctor` on that fresh `.cortex/` prints "spec v0.3.1 conformant" and exits 0.
 4. `cortex doctor` on **this repo's** `.cortex/` also exits 0. Dogfood gate.
 5. `cortex doctor` detects and reports each seeded violation: orphan deferral in a Plan; missing Success Criteria; unknown spec major version in `SPEC_VERSION`; Doctrine entry without `Load-priority:`; Plan with a `Goal-hash:` that doesn't match SPEC § 4.9 normalization; two Plans with colliding `Goal-hash:` values; Journal entry edited in place (append-only violation); Doctrine entry modified with Status still `Accepted`; root-file (`AGENTS.md`/`CLAUDE.md`) content duplicating Doctrine without `grounds-in:`.
@@ -70,7 +70,7 @@ Brew formula mirrors Touchstone's: `url` points at a tagged GitHub release tarba
 
 - [ ] **Python project scaffold** — `pyproject.toml` with `click`, `prompt_toolkit` (or click-prompt), `pytest`, `ruff`, `mypy` as dev deps; `src/cortex/__init__.py` with `__version__`; `src/cortex/cli.py` click entrypoint; package data for `.cortex/protocol.md` + `.cortex/templates/`; `uv.lock` committed.
 - [ ] **Ruff + mypy configuration** — match Sentinel's `pyproject.toml` settings; add to `touchstone-run.sh validate` flow.
-- [ ] **`cortex version`** — prints CLI version, `SUPPORTED_SPEC_VERSIONS` (currently `['0.3']` — accepts any `0.3.x` including pre-release qualifiers like `-dev`), `SUPPORTED_PROTOCOL_VERSIONS` (currently `['0.2']`), install method. Matching rule: major.minor match; the CLI warns on unknown major and accepts any minor/patch within a supported major.
+- [ ] **`cortex version`** — prints CLI version, `SUPPORTED_SPEC_VERSIONS` (currently `['0.3']`), `SUPPORTED_PROTOCOL_VERSIONS` (currently `['0.2']`), install method. Matching rule: a supported `major.minor` pair accepts **any patch or pre-release qualifier** within that major.minor (so `['0.3']` accepts `0.3.0`, `0.3.1`, `0.3.1-dev`, `0.3.2`, but NOT `0.4.0` or `0.2.9`). Unknown majors warn; unknown minors within a known major also warn.
 
 ### Init + structural commands
 
@@ -90,7 +90,7 @@ Brew formula mirrors Touchstone's: `url` points at a tagged GitHub release tarba
 - [ ] **Promotion-queue invariants** — SPEC § 4.7 WIP limit, candidate aging, state enum validity.
 - [ ] **Single authority rule** — SPEC § 4.8 detect Cortex-claim duplication in `AGENTS.md`/`CLAUDE.md`/`.cursor/rules/*` without `grounds-in:` back-citation.
 - [ ] **Goal-hash verification** — SPEC § 4.9 recompute each Plan's `Goal-hash:` from its H1 title; flag mismatches and collisions.
-- [ ] **Load-priority validation** — SPEC § 3.1 every Doctrine entry has `Load-priority:` (`always` or `default`); warn if `always` set exceeds default Doctrine budget.
+- [ ] **Load-priority validation** — SPEC § 3.1 every Doctrine entry with `Status: Accepted` has `Load-priority:` (`always` or `default`). Superseded entries are exempt because they are immutable (SPEC § 3.1) and may predate the field's introduction; warn if `always` set exceeds default Doctrine budget.
 - [ ] **Append-only Journal** — git-log walks for in-place edits of `journal/*.md` files (SPEC § 3.5); warn.
 - [ ] **Immutable Doctrine** — git-log walks for in-place content edits of `doctrine/*.md` files whose Status is `Accepted` and whose Status field is not the only changed line (the only mutable field per SPEC § 3.1).
 - [ ] **CLI-less fallback warning** — detect `AGENTS.md` imports of `@.cortex/state.md` without `cortex` CLI presence; warn if corpus >20 Doctrine or >100 Journal.
