@@ -70,7 +70,7 @@ Gated on P0–D. Critical integrations: Sentinel end-of-cycle → Journal entry 
 - **Brew formula placement:** `autumngarage/homebrew-cortex` tap needs creating before v0.1.0 release.
 - **`cortex doctor` cadence:** CI-only? Pre-commit? Periodic? Decide in Phase B.
 - **Interactive-flow UX:** terminal rendering of the prompt-per-candidate flow; pager interaction; keybindings. Sketch in Phase B.
-- **Phase B plan refresh:** `plans/phase-b-walking-skeleton.md` predates today's Protocol/SPEC amendments. Update pass needed to add `cortex manifest`, `cortex grep`, T1.9 handling, `Goal-hash:` verification, and templates-shipped-with-init before Phase B opens.
+- **Click vs prompt_toolkit for the interactive flow:** the refreshed Phase B plan lists both as candidates. Decide during scaffold.
 
 ## Known stale-now / handle-later
 
