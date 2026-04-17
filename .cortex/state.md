@@ -1,18 +1,18 @@
 ---
-Generated: 2026-04-17T15:45:00-07:00
+Generated: 2026-04-17T16:20:00-07:00
 Generator: hand-authored (regeneration infrastructure ships in Phase C)
 Sources:
-  - HEAD of branch feat/phase-b-scaffold-and-version (targeting main at 3c23ae9)
+  - HEAD of branch feat/phase-b-cortex-init (targeting main at 5b22977)
   - .cortex/doctrine/ (5 entries: 0001–0003 + 0005 active with Load-priority: always; 0004 Superseded-by 0005)
   - .cortex/plans/ (1 active: phase-b-walking-skeleton — first Work item checked; vision-sharpening shipped)
-  - .cortex/journal/ (11 entries, all for 2026-04-17)
+  - .cortex/journal/ (12 entries, all for 2026-04-17)
   - .cortex/templates/ (8 files)
   - .cortex/map.md (stub, pending Phase C)
   - .cortex/procedures/ (empty; .gitkeep only)
   - SPEC.md v0.3.1-dev
   - pyproject.toml, src/cortex/ (scaffold + version command)
   - PLAN.md phase-A-complete, phase-B-started
-Corpus: 5 Doctrine entries, 1 active Plan, 11 Journal entries, 8 Templates, 1 Python package (cortex 0.1.0.dev0)
+Corpus: 5 Doctrine entries, 1 active Plan, 12 Journal entries, 8 Templates, 1 Python package (cortex 0.1.0.dev0 with `version` + `init` commands)
 Omitted:
   - .cortex/.index.json — not present pre-CLI; per SPEC § 2 the file is auto-maintained by the Cortex CLI and its absence is the expected state before Phase B ships.
 Incomplete:
@@ -37,7 +37,7 @@ Full plan: [`plans/phase-b-walking-skeleton.md`](./plans/phase-b-walking-skeleto
 
 - [x] Python package scaffold (`pyproject.toml`, `src/cortex/`, `uv`-managed) — shipped with `cortex version` as first command
 - [ ] `cortex` (interactive entry point) — status + promotion queue + digest prompts (per README example)
-- [ ] `cortex init` — scaffolds `.cortex/` per SPEC.md v0.3.1, copying this repo's `.cortex/protocol.md` and `.cortex/templates/` into the target project
+- [x] `cortex init` — scaffolds `.cortex/` per SPEC.md v0.3.1, copying bundled `protocol.md` + `templates/` into the target project; idempotent; `--force` preserves user content
 - [ ] `cortex manifest --budget <N>` — token-budgeted session-start slice per Protocol § 1; default recency-based Doctrine loading plus `Load-priority: always` pins
 - [ ] `cortex grep <pattern>` — frontmatter-aware wrapper over ripgrep; primary mid-session retrieval path per Protocol § 1
 - [ ] `cortex --status-only` — equivalent of status summary, for scripting
@@ -63,6 +63,7 @@ Gated on P0–D. Critical integrations: Sentinel end-of-cycle → Journal entry 
 
 ## Shipped recently
 
+- **2026-04-17 (late afternoon)** — **Phase B second slice: `cortex init`.** Scaffolds `.cortex/` per SPEC v0.3.1-dev: SPEC_VERSION, protocol.md, full templates/ tree, doctrine/plans/journal/procedures/ subdirs with .gitkeep, seven-field map.md + state.md stubs. Idempotent with `--force` escape hatch that preserves user content. Bundles `.cortex/protocol.md` + `templates/` into `src/cortex/_data/` via hatchling force-include; `tests/test_data_sync.py` enforces the _data/ copies stay in sync with canonical `.cortex/`. 17 tests green.
 - **2026-04-17 (late afternoon)** — **Phase B kicked off: Python scaffold + `cortex version`.** `pyproject.toml` with click/pytest/ruff/mypy; `src/cortex/` package with `__version__` + supported-version constants; click CLI with `version` subcommand; 5 passing tests; ruff + mypy clean. Entry point wired (`uv run cortex version` works).
 - **2026-04-17 (evening)** — **Protocol sharpened, templates shipped, drafts archived.** Three Protocol/SPEC amendments resolved live contradictions and hand-waves: Protocol § 1 rewritten to use `Load-priority: always` + recency (removing the "semantic relevance" contradiction with Doctrine 0004); Protocol § 1 fallback specified for CLI-less projects; T1.9 (PR merged) added to Tier 1; SPEC § 4.9 Goal-hash normalization concretized (lowercase title → sha256[:8]); SPEC § 3.1 Doctrine gains `Load-priority:` field; all four existing Doctrine entries backfilled. Eight templates shipped under `.cortex/templates/` (five journal, one doctrine, two digest). Vision drafts v1/v2/v3 moved to `drafts/` with supersede banners. Strategic content preserved in [`journal/2026-04-17-competitive-positioning-and-claude-code-risk.md`](./journal/2026-04-17-competitive-positioning-and-claude-code-risk.md). Full details in [`journal/2026-04-17-protocol-sharpened-and-drafts-archived.md`](./journal/2026-04-17-protocol-sharpened-and-drafts-archived.md).
 - **2026-04-17 (afternoon)** — **Vision v3 promoted.** Cortex Protocol shipped as `.cortex/protocol.md` (two-tier triggers, three invariants, template references). SPEC.md bumped to v0.2.0-dev with seven-field metadata contract, promotion queue operational rules, single authority rule for reads, multi-writer Plan visibility, retention and consolidation section. Doctrine 0004 (scope boundaries) landed. README rewritten. Full provenance in [`journal/2026-04-17-vision-v3-promoted.md`](./journal/2026-04-17-vision-v3-promoted.md).
