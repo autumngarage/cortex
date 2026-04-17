@@ -70,7 +70,7 @@ Ship the repo and the spec, not the tool. Nothing calls an LLM yet.
 
 Commands that manipulate `.cortex/` structure but don't synthesize.
 
-- [ ] `cortex init` — creates `.cortex/` scaffolding in the CWD per spec v0.1.0 (doctrine/, empty map.md + state.md stubs with headers, plans/, journal/, procedures/, SPEC_VERSION file)
+- [ ] `cortex init` — creates `.cortex/` scaffolding in the CWD per spec v0.3.0-dev (doctrine/, empty map.md + state.md stubs with headers, plans/, journal/, procedures/, templates/, protocol.md, SPEC_VERSION file)
 - [ ] `cortex status` — reports freshness per layer (by parsing `Generated:` headers), flags orphan deferrals and unlinked plans (reads and validates, no synthesis)
 - [ ] `cortex version` — prints Cortex CLI version and spec version supported
 - [ ] `cortex doctor` — health check (valid .cortex? spec version match? required files present?)

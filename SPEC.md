@@ -2,7 +2,7 @@
 
 > **Cortex is a file-format protocol for project memory.** Six layers of documents per project, each with a mechanical, authoring, and retrieval contract. Consumed by humans and AI coding agents. The CLI named `cortex` is one implementation; other tools (Sentinel, Touchstone, Claude Code sessions, humans) read and write the same files by the same rules.
 
-**Spec version:** 0.2.0-dev (draft)
+**Spec version:** 0.3.0-dev (draft)
 **Status:** Proposed
 **Protocol companion:** [`.cortex/protocol.md`](./.cortex/protocol.md) defines when and how agents write; SPEC.md defines what the files look like.
 
@@ -34,6 +34,7 @@ Seven rules, each inherited from prior art (sources in `docs/PRIOR_ART.md`):
       incident.md
       plan-transition.md
       sentinel-cycle.md
+      pr-merged.md
     doctrine/
       candidate.md
     digest/
@@ -60,7 +61,7 @@ Seven rules, each inherited from prior art (sources in `docs/PRIOR_ART.md`):
   .index.json               # auto-maintained cross-reference + freshness index
 ```
 
-**`SPEC_VERSION`** — a single line, e.g. `0.2.0-dev`. Tools that read `.cortex/` must check this and bail or warn on unknown major versions.
+**`SPEC_VERSION`** — a single line, e.g. `0.3.0-dev`. Tools that read `.cortex/` must check this and bail or warn on unknown major versions.
 
 **`protocol.md`** — the write contract for agents. See [`.cortex/protocol.md`](./.cortex/protocol.md) and § 8 below.
 
@@ -93,6 +94,7 @@ Each layer defines: **mechanical contract** (mutable/immutable, derived/authorit
 **Date:** 2026-04-17   (written, not renewed)
 **Promoted-from:** journal/2026-04-10-auth-retry-lesson  (if promoted)
 **Grounds-in:** touchstone/principles/engineering-principles.md#no-band-aids  (if applicable)
+**Load-priority:** default   (or: always — pins this entry into every session manifest; see .cortex/protocol.md § 1)
 
 ## Context
 ...
@@ -101,6 +103,8 @@ We will...
 ## Consequences
 ...
 ```
+
+**`Load-priority:`** controls session-start loading. `default` entries load by recency until the Doctrine budget is exhausted (Protocol § 1). `always` entries pin into every manifest regardless of recency, within the budget — reserve for load-bearing claims that every future session needs to see (e.g., scope boundaries, fundamental invariants). If the `always` set exceeds the Doctrine budget, `cortex doctor` flags over-pinning.
 
 ### 3.2 Map — *what exists, structurally*
 
@@ -115,7 +119,7 @@ We will...
 ```yaml
 ---
 Generated: 2026-04-17T14:22:00-04:00
-Generator: cortex refresh-map v0.2.0
+Generator: cortex refresh-map v0.3.0
 Sources:
   - HEAD sha: abc1234
   - .cortex/doctrine/0001-0006
@@ -124,7 +128,7 @@ Corpus: 143 Python files, 6 packages, 6 Doctrine entries
 Omitted: src/experiments/* (marked experimental)
 Incomplete: []
 Conflicts-preserved: []
-Spec: 0.2.0
+Spec: 0.3.0
 ---
 
 # Project Map
@@ -145,7 +149,7 @@ Spec: 0.2.0
 ```yaml
 ---
 Generated: 2026-04-17T14:22:00-04:00
-Generator: cortex refresh-state v0.2.0
+Generator: cortex refresh-state v0.3.0
 Sources:
   - .cortex/journal/ (hot: 23 entries last 30d)
   - .cortex/plans/*.md (5 active, 2 blocked)
@@ -155,7 +159,7 @@ Omitted: journal/2026-04-13-wip-debugging (marked noisy)
 Incomplete: []
 Conflicts-preserved:
   - "retry backoff" — journal/2026-04-10 argues exponential; journal/2026-04-15 argues fixed
-Spec: 0.2.0
+Spec: 0.3.0
 ---
 
 # Project State
@@ -229,7 +233,7 @@ Items moved out of scope during execution — each resolved to another plan or j
 # <Title>
 
 **Date:** 2026-04-17
-**Type:** decision | incident | migration | reversal | promotion | plan-transition | sentinel-cycle | digest
+**Type:** decision | incident | migration | reversal | promotion | plan-transition | sentinel-cycle | pr-merged | digest
 **Trigger:** T1.3 (Plan status changed)   # for Protocol-triggered entries only
 **Cites:** plans/anti-chase.md, doctrine/0003
 
@@ -261,7 +265,7 @@ Items moved out of scope during execution — each resolved to another plan or j
 
 **Doc version:** 1.2.0
 **Last change:** 2026-04-17 — added rate-limit step
-**Spec:** 0.2.0
+**Spec:** 0.3.0
 
 > <one-sentence purpose>
 
@@ -320,6 +324,18 @@ Root agent files (`AGENTS.md`, `CLAUDE.md`, `.cursor/rules/*`) **may route** to 
 ### 4.9 Multi-writer Plan visibility
 Plans carry `Author:`, `Goal-hash:`, and `Updated-by:` frontmatter fields (§ 3.4). Two Plans sharing a `Goal-hash:` are flagged as a collision by `cortex doctor`. Resolution is human — merge, supersede, or distinct — not automatic. Cortex makes collisions visible; it does not prevent them.
 
+**Goal-hash normalization** (required; `cortex doctor` recomputes and verifies):
+
+1. Take the Plan's H1 title (`# <Title>`).
+2. Lowercase it.
+3. Strip everything that is not `[a-z0-9 ]` (drop punctuation, collapse diacritics via NFKD → ASCII).
+4. Collapse runs of whitespace to a single space; trim leading/trailing whitespace.
+5. Compute `sha256(utf8-bytes)` and take the first 8 hex characters.
+
+Example: `# Sharpen Cortex's Vision` → normalized string `"sharpen cortexs vision"` → `Goal-hash: 1cc12b25`.
+
+Rationale: title is the stablest signal of intent across writers, and the normalization is conservative enough that two independent writers describing the same effort tend to converge while genuinely distinct efforts diverge. The normalization is deliberately not semantic (no embeddings, no synonym expansion) — that would require a vector store (out of scope per Doctrine 0005). Collisions under this rule are the floor, not the ceiling; two plans with distinct hashes may still collide semantically, and human review is the backstop.
+
 ---
 
 ## 5. Retention and consolidation
@@ -330,7 +346,7 @@ Cortex is **append-only at write and tiered at read**. Nothing is ever deleted; 
 
 | Layer | Mechanic |
 |---|---|
-| Doctrine | Never archived. Superseded entries stay with `Status: Superseded-by <n>` pointer; dropped from default load. Top-K by semantic relevance loads at session start. |
+| Doctrine | Never archived. Superseded entries stay with `Status: Superseded-by <n>` pointer; dropped from default load. Default session-start loading is `Load-priority: always` pins plus recency by `Date:` until budget exhausted (see [`.cortex/protocol.md`](./.cortex/protocol.md) § 1). Semantic retrieval over Doctrine is an optional external read-side layer; it is not part of the storage or default manifest (see Doctrine 0005 #1). |
 | Journal | Hot (0–30d) → Warm (30–365d) → Cold (>365d, auto-moved to `journal/archive/<year>/`). Default load is hot + digests, not warm or cold. |
 | Plans | `active` → hot. `shipped` / `cancelled` → auto-moved to `plans/archive/` after 30d. |
 | Map | Always regenerated. Old versions in git history. |
@@ -350,7 +366,7 @@ A digest may cite other digests at most **one level deep**. Quarterly digests ma
 `cortex doctor --audit-digests` picks N random claims from each digest and verifies each traces back to at least one source entry. Failures surface as warnings. This guards against the "plausibly wrong" false-freshness failure mode that timestamps alone don't prevent.
 
 ### 5.5 Failure modes the spec prevents
-1. Unbounded hot load — hard cap on session manifest; semantic retrieval beyond.
+1. Unbounded hot load — hard cap on session manifest; grep (or an optional external index) beyond (Protocol § 1).
 2. Unreviewed promotion candidates piling up — WIP limit (§ 4.7) + candidate aging + promotion debt in manifest.
 3. Silent digest drift — depth cap (§ 5.3) + audit sampling (§ 5.4) + Corpus/Omitted/Conflicts-preserved (§ 4.5).
 4. Consolidation skipped entirely — missing monthly digests surface in `cortex` interactive flow as overdue.
@@ -379,7 +395,7 @@ Universal across layers:
 
 Tools must declare which spec major versions they support. Readers encountering an unknown major version should refuse to write and warn on read.
 
-**Pre-1.0 exception.** Per standard semver 0.x convention, during `0.x.y` development minor bumps may include breaking changes. The strict major-for-breaking rule above applies from `1.0.0` onward. This is why v0.2.0-dev introduces breaking frontmatter changes (seven-field metadata contract on generated layers; `Author`/`Goal-hash`/`Updated-by` on Plans) under a minor bump.
+**Pre-1.0 exception.** Per standard semver 0.x convention, during `0.x.y` development minor bumps may include breaking changes. The strict major-for-breaking rule above applies from `1.0.0` onward. This is why v0.2.0-dev introduced breaking frontmatter changes (seven-field metadata contract on generated layers; `Author`/`Goal-hash`/`Updated-by` on Plans) under a minor bump, and why v0.3.0-dev adds `Load-priority:` to Doctrine, concretizes `Goal-hash:` normalization (§ 4.9), and adds T1.9 to the Protocol — also under a minor bump.
 
 **Protocol version relationship.** [`.cortex/protocol.md`](./.cortex/protocol.md) carries its own version. A Protocol version is compatible with one or more SPEC.md versions, declared in the Protocol's header. A major SPEC bump always requires a Protocol review; a minor SPEC bump may or may not trigger a Protocol bump depending on whether new triggers are needed.
 
@@ -401,12 +417,12 @@ SPEC.md specifies *what the files look like* — the directory layout (§ 2), la
 
 ## 9. What Cortex explicitly does not do
 
-The boundaries that keep Cortex composable rather than all-encompassing. Rationale for each category is in [Doctrine 0004](./.cortex/doctrine/0004-scope-boundaries.md).
+The boundaries that keep Cortex composable rather than all-encompassing. Rationale for each category is in [Doctrine 0005](./.cortex/doctrine/0005-scope-boundaries-v2.md) (supersedes 0004).
 
 - **Does not execute work.** That's Sentinel. Cortex is state + memory only.
 - **Does not enforce engineering standards.** That's Touchstone. Cortex Doctrine may cite Touchstone principles via `grounds-in:` but doesn't define them.
 - **Does not replace git.** Git is authoritative for code state; Cortex is authoritative for the *reasoning layer* around the code. Cortex reads git; git doesn't read Cortex.
 - **Does not synthesize without permission.** An agent writing to `.cortex/` must be either (a) explicitly invoked by a human, or (b) acting on a declared Tier 1 Protocol trigger. Silent discretionary background writes are forbidden. The Protocol IS the permission because it's a visible, versioned, declared contract.
-- **Does not maintain a vector store, database, or knowledge graph.** See Doctrine 0004.
+- **Does not maintain a vector store, database, or knowledge graph.** See Doctrine 0005.
 - **Does not aggregate across projects.** One project per `.cortex/`. Portfolio views are deliberately out of scope for v0.x.
 - **Does not host anything in the cloud.** Local files, git, nothing else. Synthesis commands may call external LLM CLIs (`claude -p`, etc.) as implementation details of regeneration; storage is always local.

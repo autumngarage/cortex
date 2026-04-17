@@ -2,7 +2,7 @@
 
 > The set of rules an agent follows to read and write `.cortex/`. Projects import this file into `AGENTS.md` (or `CLAUDE.md`) so every agent working on the project follows the same contract.
 
-**Protocol version:** 0.1.0 (draft, ships with SPEC.md v0.2.0-dev)
+**Protocol version:** 0.2.0 (draft, ships with SPEC.md v0.3.0-dev)
 **Status:** Proposed
 **Imports:** this file is imported into `AGENTS.md` via `@.cortex/protocol.md`
 
@@ -18,17 +18,31 @@ cortex manifest --budget <N>
 
 The manifest is a token-budgeted slice of `.cortex/`, not the whole store. Default load:
 
-| Component | Budget share |
-|---|---|
-| `state.md` (full) | ~1.5k |
-| Top-K Doctrine by semantic relevance to current task | ~3k |
-| Active Plans (status = `active`) | ~2k |
-| Journal entries from last 72h + latest digest | ~1.5k |
-| Promotion-queue depth summary | ~100t |
+| Component | Budget share | Selection |
+|---|---|---|
+| `state.md` (full) | ~1.5k | Always loaded |
+| Doctrine | ~3k | All entries marked `Load-priority: always`, then most recent by `Date:` until budget exhausted |
+| Active Plans (status = `active`) | ~2k | All |
+| Journal entries from last 72h + latest digest | ~1.5k | By date |
+| Promotion-queue depth summary | ~100t | Count only |
+
+**No semantic retrieval at session start.** Cortex storage is markdown + git + grep — not a vector store (Doctrine 0005 #1, supersedes 0004). The default manifest loads Doctrine by `Load-priority: always` pins plus recency, never by embedding similarity. Projects that want semantic retrieval wire up their own index over `.cortex/` as a read-side layer; that index is out of scope for the Protocol.
+
+**Mid-session retrieval is grep.** When the agent needs Doctrine or Journal content not in the manifest, it greps `.cortex/` directly or uses `cortex grep` (a frontmatter-aware wrapper shipping in Phase B). Protocol-aware tooling may provide typed-link traversal; the primitive is ripgrep.
 
 **Graceful degradation.** At 32k context, the manifest falls back to State only. At 100k+, it may include Journal from last 7d. The CLI computes the slice; the agent receives the output.
 
-**The agent does not read `.cortex/` directory contents directly unless the user asks.** All session-start context comes through the manifest. This keeps Time To First Token bounded and prevents accidental full-directory loads on large corpora.
+**Fallback when the CLI is unavailable.** A Cortex project without the `cortex` CLI installed (or in an environment where shelling out is blocked) MUST still be loadable. The minimum viable manifest is:
+
+```
+# In AGENTS.md or CLAUDE.md:
+@.cortex/protocol.md
+@.cortex/state.md
+```
+
+The agent imports those two files at session start via the host's `@path` mechanism. This yields Protocol + State without the budgeted Doctrine/Journal/Plans slice — degraded but correct. The rest of `.cortex/` remains available via grep. `cortex doctor` warns when a project ships this fallback-only configuration against a corpus large enough that recency-by-grep is insufficient (default threshold: >20 Doctrine entries or >100 Journal entries).
+
+**The agent does not read `.cortex/` directory contents directly at session start unless the user asks or the fallback configuration is in use.** Post-session-start, grep and targeted reads are expected. This keeps Time To First Token bounded and prevents accidental full-directory loads on large corpora.
 
 ---
 
@@ -46,10 +60,13 @@ These triggers are **deterministic, auditable, and enforceable**. When any of th
 | T1.6 | Sentinel cycle ended (`.sentinel/runs/<timestamp>.md` written) | `journal/sentinel-cycle.md` |
 | T1.7 | Touchstone pre-merge ran on architecturally significant diff (touches `principles/`, `.cortex/doctrine/`, `SPEC.md`, or matches configured patterns) | `doctrine/candidate.md` (draft, awaits promotion) |
 | T1.8 | Commit message matches patterns: `fix: ... regression`, `refactor: ... (removes|introduces)`, `feat: ... (breaking|replaces)` | `journal/decision.md` |
+| T1.9 | Pull request merged to the default branch (main/master) | `journal/pr-merged.md` |
+
+**Why T1.9 matters.** The merge is the canonical "this shipped" event for team-shared memory. T1.3 (plan transition) and T1.8 (commit-message pattern) are near-misses: a PR can merge without a plan-status change, and commit-pattern matching is fuzzy. A post-merge summary closes the loop — it is the durable record that ties Plans, Journal entries written during the branch, and the final diff together at the moment ratification happened. Authored by whichever agent/human runs the merge command (or by a post-merge hook when present).
 
 **Enforcement.** Tier 1 triggers are machine-detectable; `cortex doctor --audit` walks the git log for the session period and verifies that every qualifying event has a corresponding Journal entry. Missing entries are warnings in solo mode, errors in triad mode (where Touchstone's pre-push hook blocks the push).
 
-**Trigger thresholds are project-configurable.** `.cortex/protocol.md` in a project can override: `N` for T1.4 file-deletion threshold; regex patterns for T1.7 architecturally-significant detection; commit-message patterns for T1.8.
+**Trigger thresholds are project-configurable.** `.cortex/protocol.md` in a project can override: `N` for T1.4 file-deletion threshold; regex patterns for T1.7 architecturally-significant detection; commit-message patterns for T1.8; whether T1.9 fires on every merge or only on merges matching architecturally-significant patterns (default: every merge).
 
 ---
 
@@ -88,7 +105,7 @@ Every generated file (`map.md`, `state.md`, digests) declares seven metadata fie
 ```yaml
 ---
 Generated: 2026-04-17T14:22:00-04:00
-Generator: cortex refresh-state v0.2.0
+Generator: cortex refresh-state v0.3.0
 Sources:
   - HEAD sha: abc1234
   - .cortex/journal/2026-04-01..2026-04-17 (23 entries)
@@ -121,6 +138,7 @@ Templates shipped with the Protocol (filenames):
 - `journal/incident.md` — SRE-postmortem shape (context, impact, timeline, action items, what-went-well / what-went-poorly)
 - `journal/plan-transition.md` — Plan status change
 - `journal/sentinel-cycle.md` — end-of-cycle summary
+- `journal/pr-merged.md` — post-merge summary (T1.9)
 - `doctrine/candidate.md` — Doctrine draft pending promotion
 - `digest/monthly.md` — monthly Journal digest
 - `digest/quarterly.md` — quarterly digest

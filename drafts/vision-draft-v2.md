@@ -1,5 +1,9 @@
 # Cortex — Vision (draft v2)
 
+> **⚠ ARCHIVED — SUPERSEDED 2026-04-17.** Superseded by draft v3 (`drafts/vision-draft-v3.md`), then by the canonical artifacts v3 drove: [README.md](../README.md), [SPEC.md](../SPEC.md) v0.2.0-dev, [`.cortex/protocol.md`](../.cortex/protocol.md), and [`.cortex/doctrine/0004-scope-boundaries.md`](../.cortex/doctrine/0004-scope-boundaries.md). Strategic content not carried into canonical files is preserved in [`journal/2026-04-17-competitive-positioning-and-claude-code-risk.md`](../.cortex/journal/2026-04-17-competitive-positioning-and-claude-code-risk.md). Retained here as reasoning trail; do not treat as current.
+
+---
+
 > **Status:** working draft, not the README. v1 at `vision-draft.md` preserved for comparison. This v2 folds in the round-1 critiques from `codex exec` and `gemini`, the user's vision correction ("Cortex is the brain; the agent takes notes as changes happen"), the deeper research on LLM memory tools (Mem0, Letta, Claude Code, Cursor's retreat), and the scale/consolidation design.
 >
 > **Date:** 2026-04-17

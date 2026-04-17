@@ -1,22 +1,24 @@
-# 0004 — Scope boundaries: what Cortex deliberately is not
+# 0005 — Scope boundaries (v2, supersedes 0004)
 
-> Cortex is a file-format protocol + reference CLI for per-project memory. Multiple adjacent categories (vector stores, agent frameworks, cloud memory services, knowledge graphs, portfolio tools, observability platforms) solve adjacent problems; Cortex composes with them but does not become them. This entry names the boundaries so future scope drift is catchable.
+> Cortex is a file-format protocol + reference CLI for per-project memory. Multiple adjacent categories (vector stores, agent frameworks, cloud memory services, knowledge graphs, portfolio tools, observability platforms) solve adjacent problems; Cortex composes with them but does not become them. This entry names the boundaries so future scope drift is catchable. **v2 differs from 0004 only on #1** — it corrects a factual claim about `cortex manifest`'s default read behavior that contradicted the Protocol when Protocol § 1 was rewritten to eliminate semantic retrieval at session start.
 
-**Status:** Superseded-by 0005
+**Status:** Accepted
 **Date:** 2026-04-17
-**Promoted-from:** vision-draft-v3.md § 9
+**Supersedes:** 0004
+**Promoted-from:** drafts/vision-draft-v3.md § 9 (original promotion); supersede driven by `.cortex/protocol.md` § 1 rewrite in the same PR
+**Load-priority:** always
 
 ## Context
 
-Project memory for AI-assisted teams is a crowded design space. Letta, Cursor Memories (retreated), Mem0, Graphiti/Zep, LangChain/LangGraph, Claude Code auto-memory, Obsidian/Dendron, MetaGPT, AGENTS.md, and ~dozen MCP memory servers all claim some piece of it. The first vision draft was vulnerable to *"isn't this just X?"* pushback from peer-agent critics precisely because Cortex's shape touched many of them.
+Doctrine 0004 was drafted the same day it was superseded. The original #1 stated that `cortex manifest` uses *"semantic retrieval ... for top-K Doctrine"* as a read-side concern. When Protocol § 1 was rewritten in the follow-up PR to remove session-start semantic retrieval (because at session start there is no "current task" yet, and because semantic retrieval requires infrastructure Cortex deliberately does not include), 0004 #1 became factually inconsistent with the Protocol. Pre-merge Codex review caught the attempted in-place fix as an immutability violation; the correct response is to supersede 0004 with a v2 that restates the boundaries with #1 corrected.
 
-The resolution isn't to contest each adjacent claim. It's to state clearly what Cortex *is not* doing, so the scope stays defensible and each adjacent tool can compose with Cortex instead of being compared to it.
+The remaining seven boundaries (database, knowledge graph, portfolio tool, agent framework, AGENTS.md replacement, cloud host, git replacement) are unchanged from 0004. This entry does not re-litigate any of them.
 
 ## Decision
 
 Cortex explicitly is not:
 
-1. **Not a vector store.** No embeddings, no ANN indexes, no similarity search at the storage layer. Markdown + git + grep. Semantic retrieval used by `cortex manifest` for top-K Doctrine is a read-side concern, built over the file store; it is not the file store. If a project wants deep semantic search, it can index `.cortex/` externally — that's not Cortex's job.
+1. **Not a vector store.** No embeddings, no ANN indexes, no similarity search at the storage layer. Markdown + git + grep. The default session manifest (`cortex manifest`) loads Doctrine by `Load-priority: always` pins plus recency, never by embedding similarity (see `.cortex/protocol.md` § 1). Mid-session retrieval is grep. A project that wants semantic retrieval can index `.cortex/` externally — that external layer is out of scope for Cortex itself.
 2. **Not a database.** `.cortex/.index.json` is a cache, regeneratable from the files. Removing `.index.json` loses nothing that isn't recoverable from `.cortex/` contents. Git is the durable store.
 3. **Not a knowledge graph.** Cross-references between files use typed links (`supersedes`, `implements`, `derives-from`, `grounds-in`, `blocked-by`, `verifies`). Cortex does not construct a graph as a primary artifact. Projects wanting a graph view can build one from the links; graph semantics are not load-bearing for retrieval.
 4. **Not a portfolio tool.** One project per `.cortex/`. Cross-project aggregation (the "Lighthouse" conversation from Phase-A discussion) is deliberately out of scope for v0.x. Per-user or per-org baselines could inform a future cross-project story; v0.x is one project at a time.
@@ -27,7 +29,11 @@ Cortex explicitly is not:
 
 ## Consequences
 
+Same as 0004's Consequences section, reproduced for completeness so the current-authority Doctrine stands alone:
+
 - Adjacent tools (Letta, Mem0, Graphiti, Cursor Rules, Claude Code memory, AGENTS.md) **compose** with Cortex rather than compete with it. A project can use Mem0 as an embedding layer over `.cortex/`; can use Graphiti for retrieval-latency-sensitive agent flows; can use AGENTS.md as the agent-facing entry that imports `.cortex/`. Nothing in this list is an either/or.
 - Feature requests that would push Cortex into one of these categories get declined or spun out. Example: *"add a built-in vector index"* → declined; external indexing is fine, storing vectors inside `.cortex/` is not. Example: *"add per-org aggregation"* → deferred to the Lighthouse conversation, not added to v0.x.
 - The "explicitly not" list is the primary defense against scope creep. Contributors who propose features inconsistent with this Doctrine are expected to argue why the boundary should move — which requires superseding this Doctrine entry with a new one, not silently expanding scope.
 - Decisions that *would* move a boundary are load-bearing enough to warrant full Doctrine treatment (new entry that supersedes this one). Example: if a future Cortex version decides cross-project baseline Doctrine is in scope, this entry gets superseded by a new one explaining why the boundary moved.
+
+**Procedural note on this supersede.** The supersede happened within hours of 0004's acceptance because Protocol § 1 was rewritten in the same working session that authored 0004, exposing an inconsistency that neither round-2 critique caught. Future sessions should verify new Doctrine against concurrently-in-flight Protocol/SPEC changes before marking Accepted — a lesson captured in `journal/2026-04-17-protocol-sharpened-and-drafts-archived.md`.

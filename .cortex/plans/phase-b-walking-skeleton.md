@@ -2,7 +2,7 @@
 Status: active
 Written: 2026-04-17
 Author: human
-Goal-hash: phase-b-walking-skeleton-cli-v02
+Goal-hash: 1f10782a
 Updated-by:
   - 2026-04-17T07:00 human (created; targeted v0.1.0)
   - 2026-04-17T23:45 claude-session-2026-04-17 (updated for v0.2.0 scope — Protocol, promotion queue, seven-field metadata contract)
@@ -11,7 +11,7 @@ Cites: ../../SPEC.md, ../../PLAN.md § Phase B, doctrine/0003-spec-is-the-artifa
 
 # Phase B — Walking-skeleton CLI
 
-> Ship a Cortex CLI that manipulates `.cortex/` structure without any LLM calls. End-state: `brew install cortex && cortex init` produces a SPEC.md v0.2.0-dev-conformant scaffold (including `protocol.md` + `templates/`) in a fresh repo, and `cortex doctor` validates it. No synthesis yet — that's Phase C.
+> Ship a Cortex CLI that manipulates `.cortex/` structure without any LLM calls. End-state: `brew install cortex && cortex init` produces a SPEC.md v0.3.0-dev-conformant scaffold (including `protocol.md` + `templates/`) in a fresh repo, and `cortex doctor` validates it. No synthesis yet — that's Phase C.
 
 ## Why (grounding)
 
@@ -23,7 +23,7 @@ This plan is done when all of the following hold on a fresh macOS install:
 
 1. `brew tap autumngarage/cortex && brew install cortex` succeeds.
 2. In an empty git repo: `cortex init` creates `.cortex/SPEC_VERSION`, `.cortex/doctrine/`, `.cortex/plans/`, `.cortex/journal/`, `.cortex/procedures/`, and stubs for `map.md` and `state.md` with proper `Generated:` headers and "(pending Phase C synthesis)" placeholders.
-3. `cortex doctor` on that fresh `.cortex/` returns zero and prints "spec v0.1.0 conformant."
+3. `cortex doctor` on that fresh `.cortex/` returns zero and prints "spec v0.3.0 conformant."
 4. `cortex status` reports per-layer freshness from parsed `Generated:` headers.
 5. `cortex doctor` detects and reports each of these seeded violations: orphan deferral in a Plan, missing Success Criteria, unknown spec major version in `SPEC_VERSION`.
 6. All tests pass (`uv run pytest`) — temp-dir fixtures, no mocked filesystem.
