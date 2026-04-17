@@ -257,7 +257,15 @@ run_python_action() {
       ;;
     test)
       if python_bin="$(find_python_bin)"; then
-        run_shell_command "$python_bin -m pytest"
+        local pytest_rc=0
+        info "$python_bin -m pytest"
+        bash -c "$python_bin -m pytest" || pytest_rc=$?
+        # pytest exit 5 = no tests collected. Treat like absent linters — skip, don't fail.
+        if [ "$pytest_rc" -eq 5 ]; then
+          ok "pytest found no tests; skipped"
+        elif [ "$pytest_rc" -ne 0 ]; then
+          return "$pytest_rc"
+        fi
       else
         ok "python not found; skipped"
       fi
