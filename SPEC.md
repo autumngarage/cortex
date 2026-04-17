@@ -290,26 +290,24 @@ Any item moved out of a Plan's scope must resolve to another Plan or a Journal e
 ### 4.3 Success criteria are measurable
 Plan `Success Criteria` must name a concrete signal (metric, test, dashboard). Prose-only criteria fail the check.
 
-### 4.4 Promotion links traversable both ways, authored one way
+### 4.4 Promotion links traversable both ways; authoring respects layer mutability
 
-Journal-to-Doctrine promotions set the **new Doctrine entry's** `Promoted-from: journal/<date>-<slug>`. The source Journal entry is **not modified** — Journal is append-only (§ 3.5), and retroactive `Promoted-to:` writes would violate that invariant.
+Every promotion sets `Promoted-from:` on the **new** entry (the promotee). Whether the source also gets a `Promoted-to:` depends on the source layer's mutability:
 
-Reverse traversal (source Journal → the Doctrine entries that promoted from it) happens two ways, neither requiring Journal mutation:
+- **Journal source (append-only per § 3.5):** the source entry is **never modified** to add `Promoted-to:`. Reverse traversal is derived — `.cortex/.index.json` caches a reverse map built by scanning `Promoted-from:` across Doctrine. Optionally, a new Journal entry with `Type: promotion` records the event (append-only: new entry, not a modification).
+- **Doctrine source (immutable-with-supersede per § 3.1):** never retrofitted with `Promoted-to:`. Doctrine isn't a typical promotion source, but in rare cases (e.g., Doctrine → Procedure extraction) the rule is the same — new entry gets `Promoted-from:`; source is untouched except via supersede.
+- **Plan source (mutable per § 3.4):** `Promoted-to:` MAY be added retroactively. Plans already undergo `Status:` and `Updated-by:` mutations; a forward-pointing `Promoted-to:` is a permitted mutable-layer annotation. Not required — the canonical link is still `Promoted-from:` on the new entry — but allowed.
+- **Procedure source (mutable per § 3.6):** same as Plans; `Promoted-to:` MAY be added.
 
-1. **Derived index.** `.cortex/.index.json` caches a reverse map built by scanning `Promoted-from:` across Doctrine. Regeneratable from the files; not authoritative.
-2. **Promotion-event Journal entry (optional).** A new Journal entry with `Type: promotion` may be written to record the event, citing both the source Journal entry and the new Doctrine entry. Append-only — it's a new entry, not a modification.
-
-Plans-to-Procedures promotions follow the same rule: the new Procedure's `Promoted-from:` is authoritative; the source Plan transitions to `Status: shipped` per § 3.4 (an already-mutable Plan operation), but it is not retrofitted with a `Promoted-to:` field.
-
-**Summary:** *promoted-from* is the one canonical link. Everything pointing the other direction is derived or newly authored; nothing is retroactively edited.
+**Summary:** `Promoted-from:` on the new entry is the one invariant canonical link. `Promoted-to:` on the source is authored only where the source layer is mutable. On append-only and immutable layers it must not appear; reverse traversal there is derived.
 
 ### 4.5 Generated layers declare seven metadata fields
 `Generated`, `Generator`, `Sources`, `Corpus`, `Omitted`, `Incomplete`, `Conflicts-preserved`. Missing fields fail `cortex doctor`. See § 3.2, § 3.3, and § 5 for details.
 
 ### 4.6 Typed links, not free links
-Cross-layer links use named relations in frontmatter or inline annotations: `supersedes`, `superseded-by`, `promoted-from`, `grounds-in`, `implements`, `blocked-by`, `verifies`, `derives-from`, `cites`. Raw markdown links are allowed but discouraged for contractual connections.
+Cross-layer links use named relations in frontmatter or inline annotations: `supersedes`, `superseded-by`, `promoted-from`, `promoted-to`, `grounds-in`, `implements`, `blocked-by`, `verifies`, `derives-from`, `cites`. Raw markdown links are allowed but discouraged for contractual connections.
 
-Note that `promoted-to` is **not** in this list — per § 4.4, promotion is authored one-way (`promoted-from` on the new entry) and reverse traversal is derived. Prior drafts listed `promoted-to` and `supersded-by` (typo); both are removed in v0.3.1-dev.
+Per § 4.4, `promoted-to` is valid only on mutable-layer sources (Plans, Procedures). On append-only (Journal) and immutable (Doctrine) sources it must not appear. `cortex doctor` enforces this distinction. Prior drafts used the typo `supersded-by`; the correct spelling is `superseded-by` and is the form enforced from v0.3.1-dev onward.
 
 ### 4.7 Promotion queue operational rules
 
@@ -409,7 +407,7 @@ Tools must declare which spec major versions they support. Readers encountering 
 
 **Pre-1.0 exception.** Per standard semver 0.x convention, during `0.x.y` development minor bumps may include breaking changes. The strict major-for-breaking rule above applies from `1.0.0` onward. This is why v0.2.0-dev introduced breaking frontmatter changes (seven-field metadata contract on generated layers; `Author`/`Goal-hash`/`Updated-by` on Plans) under a minor bump, and why v0.3.0-dev adds `Load-priority:` to Doctrine, concretizes `Goal-hash:` normalization (§ 4.9), and adds T1.9 to the Protocol — also under a minor bump.
 
-**v0.3.1-dev is a pure clarification patch.** It rewrites § 4.4 promotion semantics and removes `promoted-to`/`supersded-by` from the § 4.6 typed-links list. No behavior change is introduced: the prior § 4.4 text (requiring retroactive `Promoted-to:` on source Journal entries) contradicted § 3.5 (Journal is append-only). No conforming tool could have satisfied both simultaneously, so the prior spec was ambiguous at best and unimplementable at worst. v0.3.1-dev states which of the two contradictory rules is correct (§ 3.5 append-only wins) and aligns the typed-link list accordingly. Because nothing implementable changes, this stays a patch bump under the § 7 rule that patch = clarification without behavior change.
+**v0.3.1-dev is a clarification patch.** It rewrites § 4.4 promotion semantics and tightens § 4.6 typed-links usage. No implementable behavior changes: the prior § 4.4 text required retroactive `Promoted-to:` writes on source Journal entries, which contradicted § 3.5 (Journal is append-only); no conforming tool could have satisfied both. v0.3.1-dev resolves the contradiction by layer-mutability: `Promoted-to:` is allowed on mutable sources (Plans, Procedures) where retroactive writes were already permitted, and forbidden on append-only/immutable sources (Journal, Doctrine) where retroactive writes violate existing invariants. The § 4.6 list keeps `promoted-to` but clarifies its scope. Also fixes the `supersded-by` typo (now `superseded-by`). Because the implementable surface for each layer is unchanged, this stays a patch bump under the § 7 rule that patch = clarification without behavior change.
 
 **Protocol version relationship.** [`.cortex/protocol.md`](./.cortex/protocol.md) carries its own version. A Protocol version is compatible with one or more SPEC.md versions, declared in the Protocol's header. A major SPEC bump always requires a Protocol review; a minor SPEC bump may or may not trigger a Protocol bump depending on whether new triggers are needed.
 
