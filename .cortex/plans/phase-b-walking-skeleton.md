@@ -70,7 +70,7 @@ Brew formula mirrors Touchstone's: `url` points at a tagged GitHub release tarba
 
 - [ ] **Python project scaffold** — `pyproject.toml` with `click`, `prompt_toolkit` (or click-prompt), `pytest`, `ruff`, `mypy` as dev deps; `src/cortex/__init__.py` with `__version__`; `src/cortex/cli.py` click entrypoint; package data for `.cortex/protocol.md` + `.cortex/templates/`; `uv.lock` committed.
 - [ ] **Ruff + mypy configuration** — match Sentinel's `pyproject.toml` settings; add to `touchstone-run.sh validate` flow.
-- [ ] **`cortex version`** — prints CLI version, `SUPPORTED_SPEC_VERSIONS` (currently `['0.3.0']`), `SUPPORTED_PROTOCOL_VERSIONS` (currently `['0.2.0']`), install method.
+- [ ] **`cortex version`** — prints CLI version, `SUPPORTED_SPEC_VERSIONS` (currently `['0.3']` — accepts any `0.3.x` including pre-release qualifiers like `-dev`), `SUPPORTED_PROTOCOL_VERSIONS` (currently `['0.2']`), install method. Matching rule: major.minor match; the CLI warns on unknown major and accepts any minor/patch within a supported major.
 
 ### Init + structural commands
 
@@ -97,14 +97,14 @@ Brew formula mirrors Touchstone's: `url` points at a tagged GitHub release tarba
 
 ### Audits (require git-log walks)
 
-- [ ] **`cortex doctor --audit`** — walks git log for the session window (default: HEAD..HEAD~N, configurable); for each qualifying Tier 1 event (T1.1–T1.9) verifies a corresponding Journal entry was written with matching `Trigger:` frontmatter. Missing = warning (solo) or error (triad).
+- [ ] **`cortex doctor --audit`** — walks git log for the session window (default: `HEAD~N..HEAD`, configurable; N defaults to 20); for each qualifying Tier 1 event (T1.1–T1.9) verifies a corresponding Journal entry was written with matching `Trigger:` frontmatter. Missing = warning (solo) or error (triad).
 - [ ] **`cortex doctor --audit-digests`** — picks N random claims from each digest, verifies each traces to at least one source entry named in `Sources:`. N default = 5.
 - [ ] **`cortex doctor --strict`** — aggregates all checks with errors (not warnings) as exit-nonzero. Target for Touchstone pre-push integration in Phase E.
 
 ### Interactive entry + promotion
 
 - [ ] **Interactive `cortex` (no subcommand)** — matches README UX block: status line, counts, candidate list with `[trivial]`/`[editorial]`/`[stale]` tags, y/n/view/defer/skip prompts, overdue-digest prompt, free-form tail. State persists to `.cortex/.index.json` promotion-queue section.
-- [ ] **`cortex --promote <id>`** — scripted equivalent of the interactive flow's promotion step; writes new Doctrine entry from `doctrine/candidate.md` template; sets promotion-link frontmatter on both sides.
+- [ ] **`cortex --promote <id>`** — scripted equivalent of the interactive flow's promotion step. Writes a **new** Doctrine entry from `doctrine/candidate.md` with `Promoted-from: journal/<date>-<slug>`. Optionally writes a new Journal entry with `Type: promotion` citing both the source and the new Doctrine entry (records the promotion *event* without editing the source). Updates `.cortex/.index.json` to cache the reverse lookup (source Journal → promoted-to Doctrine) — derived, regeneratable. **Never writes `Promoted-to:` into an existing Journal entry** — that would violate SPEC § 3.5 append-only Journal. The canonical promotion link is `Promoted-from:` on the new Doctrine entry; reverse traversal is a read-side concern.
 
 ### Distribution
 

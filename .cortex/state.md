@@ -1,12 +1,12 @@
 ---
-Generated: 2026-04-17T23:55:00-04:00
+Generated: 2026-04-18T00:35:00-04:00
 Generator: hand-authored (regeneration infrastructure ships in Phase C)
 Sources:
-  - HEAD of branch feat/sharpen-protocol-and-archive-drafts
+  - HEAD of branch chore/refresh-phase-b-plan (targeting main at 866be57)
   - .cortex/doctrine/ (5 entries: 0001–0003 + 0005 active with Load-priority: always; 0004 Superseded-by 0005)
-  - .cortex/plans/ (1 active: phase-b-walking-skeleton; vision-sharpening shipped)
+  - .cortex/plans/ (1 active: phase-b-walking-skeleton — refreshed this PR; vision-sharpening shipped)
   - .cortex/journal/ (8 entries for 2026-04-17)
-  - .cortex/templates/ (8 files shipped today)
+  - .cortex/templates/ (8 files)
   - SPEC.md v0.3.0-dev
   - PLAN.md phase-A-complete, phase-B-pending
 Corpus: 5 Doctrine entries, 1 active Plan, 8 Journal entries, 8 Templates
@@ -27,7 +27,7 @@ Spec: 0.3.0-dev
 
 Build the CLI structure and non-synthesizing commands so there's something to `brew install`, so later phases have something to extend, and so the Protocol's Tier 1 triggers have a `cortex doctor --audit` to enforce them.
 
-Full plan: [`plans/phase-b-walking-skeleton.md`](./plans/phase-b-walking-skeleton.md) (needs an update pass to reflect new commands below).
+Full plan: [`plans/phase-b-walking-skeleton.md`](./plans/phase-b-walking-skeleton.md) — refreshed 2026-04-18 to cover the v0.3.0-dev scope (manifest, grep, expanded doctor checks, T1.9 audit, Goal-hash verification, Load-priority, interactive flow).
 
 **Success signal:** `brew tap autumngarage/cortex && brew install cortex && cortex init` works in a fresh repo and produces a SPEC-v0.3.0-conformant `.cortex/` scaffold including `.cortex/protocol.md` and `.cortex/templates/`, validated by `cortex doctor`.
 

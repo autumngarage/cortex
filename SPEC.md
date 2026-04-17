@@ -290,14 +290,26 @@ Any item moved out of a Plan's scope must resolve to another Plan or a Journal e
 ### 4.3 Success criteria are measurable
 Plan `Success Criteria` must name a concrete signal (metric, test, dashboard). Prose-only criteria fail the check.
 
-### 4.4 Promotion links both ways
-Journal-to-Doctrine promotions set the Doctrine entry's `Promoted-from:` and the Journal entry's `Promoted-to:`. Plans-to-Procedures promotions likewise.
+### 4.4 Promotion links traversable both ways, authored one way
+
+Journal-to-Doctrine promotions set the **new Doctrine entry's** `Promoted-from: journal/<date>-<slug>`. The source Journal entry is **not modified** — Journal is append-only (§ 3.5), and retroactive `Promoted-to:` writes would violate that invariant.
+
+Reverse traversal (source Journal → the Doctrine entries that promoted from it) happens two ways, neither requiring Journal mutation:
+
+1. **Derived index.** `.cortex/.index.json` caches a reverse map built by scanning `Promoted-from:` across Doctrine. Regeneratable from the files; not authoritative.
+2. **Promotion-event Journal entry (optional).** A new Journal entry with `Type: promotion` may be written to record the event, citing both the source Journal entry and the new Doctrine entry. Append-only — it's a new entry, not a modification.
+
+Plans-to-Procedures promotions follow the same rule: the new Procedure's `Promoted-from:` is authoritative; the source Plan may be superseded or marked `Status: shipped` (both are already-mutable Plan operations per § 3.4), but it is not retrofitted with a `Promoted-to:` field.
+
+**Summary:** *promoted-from* is the one canonical link. Everything pointing the other direction is derived or newly authored; nothing is retroactively edited.
 
 ### 4.5 Generated layers declare seven metadata fields
 `Generated`, `Generator`, `Sources`, `Corpus`, `Omitted`, `Incomplete`, `Conflicts-preserved`. Missing fields fail `cortex doctor`. See § 3.2, § 3.3, and § 5 for details.
 
 ### 4.6 Typed links, not free links
-Cross-layer links use named relations in frontmatter or inline annotations: `supersedes`, `supersded-by`, `promoted-from`, `promoted-to`, `grounds-in`, `implements`, `blocked-by`, `verifies`, `derives-from`, `cites`. Raw markdown links are allowed but discouraged for contractual connections.
+Cross-layer links use named relations in frontmatter or inline annotations: `supersedes`, `superseded-by`, `promoted-from`, `grounds-in`, `implements`, `blocked-by`, `verifies`, `derives-from`, `cites`. Raw markdown links are allowed but discouraged for contractual connections.
+
+Note that `promoted-to` is **not** in this list — per § 4.4, promotion is authored one-way (`promoted-from` on the new entry) and reverse traversal is derived. Prior drafts listed `promoted-to` and `supersded-by` (typo); both are removed in v0.3.0-dev.
 
 ### 4.7 Promotion queue operational rules
 
