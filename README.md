@@ -74,7 +74,7 @@ Generate March 2026 digest now?  [y/n]:
 Anything else? (enter to exit, or type a request)
 ```
 
-Everything surfaces at every invocation. You can't miss the queue; you can't miss an overdue digest; you can't miss staleness. Power users can pass flags for scripting (`cortex --status-only`, `cortex --promote j-xxx`, `cortex --audit`) but the primary surface is `cortex`.
+Everything surfaces at every invocation. You can't miss the queue; you can't miss an overdue digest; you can't miss staleness. Power users can pass flags for scripting (`cortex --status-only`, `cortex --promote j-xxx`, `cortex doctor --audit`) but the primary surface is `cortex`.
 
 ---
 
@@ -102,7 +102,7 @@ Solo Cortex is *good notes with conventions*. Triad Cortex is *enforced institut
 
 Cortex is append-only at write, **tiered at read**. Nothing is deleted; everything stays in git. The default read surface stays lean regardless of corpus age:
 
-- **Doctrine**: never archived; superseded entries stay with pointer; top-K loaded by relevance.
+- **Doctrine**: never archived; superseded entries stay with pointer; default session-start loading is `Load-priority: always` pins plus recency (see [`.cortex/protocol.md`](./.cortex/protocol.md) § 1).
 - **Journal**: hot (0–30d) → warm (30–365d) → cold (>365d, `journal/archive/<year>/`). Default load is hot + monthly digests.
 - **Plans**: auto-moved to `plans/archive/` after 30d in `shipped` or `cancelled` status.
 - **Map / State**: always regenerated; old versions are git history.

@@ -115,14 +115,13 @@ Brew formula mirrors Touchstone's: `url` points at a tagged GitHub release tarba
 
 ## Follow-ups (deferred)
 
-All items below resolve to either a named future plan, a journal entry, or an explicit out-of-scope reason — per SPEC § 4.2.
+Every deferral below resolves to [`journal/2026-04-18-phase-b-plan-refresh.md`](../journal/2026-04-18-phase-b-plan-refresh.md), which captures the context and triggering condition for each. This satisfies SPEC § 4.2 (no orphan deferrals) within the same commit that introduced them.
 
-- **Map and State regeneration** → Phase C plan (to be written once Phase B ships). Requires `claude` CLI integration.
-- **`cortex plan spawn`, `cortex journal draft`** → Phase D plan. Requires synthesis.
-- **Sentinel / Touchstone integration hooks** → Phase E plan. Requires stable synthesis + triad composition design.
-- **Auto-update check** → deferred to post-v0.1.0; journal note to be filed when the first out-of-band CLI bug appears and manual `brew upgrade` becomes a friction point.
-- **Spec-version migration tooling (`cortex migrate-spec`)** → deferred to the first spec-major-bump trigger event. Until then, single-major-version assumption is fine; the CLI warns on unknown major versions per SPEC § 7 already.
-- **`cortex grep` semantic mode** → out of scope. Semantic retrieval is an optional external layer per Doctrine 0005 #1; adding it inside Cortex would violate the boundary.
+- **Map and State regeneration** — Phase C. See journal entry § "Deferred Follow-ups" for trigger.
+- **`cortex plan spawn`, `cortex journal draft`** — Phase D. See journal entry.
+- **Sentinel / Touchstone integration hooks** — Phase E. See journal entry.
+- **Auto-update check** — out-of-scope for v0.1.0; re-evaluated on first out-of-band CLI bug. See journal entry.
+- **`cortex migrate-spec`** — out-of-scope until a `1.0.0` (or later) spec-major-bump event. See journal entry.
 
 ## Known limitations at exit
 
