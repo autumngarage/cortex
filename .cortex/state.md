@@ -9,6 +9,7 @@ Sources:
   - .cortex/templates/ (8 files)
   - .cortex/map.md (stub, pending Phase C)
   - .cortex/procedures/ (empty; .gitkeep only)
+  - .cortex/.index.json (hand-authored stub, pre-CLI)
   - SPEC.md v0.3.1-dev
   - PLAN.md phase-A-complete, phase-B-pending
 Corpus: 5 Doctrine entries, 1 active Plan, 9 Journal entries, 8 Templates
@@ -78,5 +79,5 @@ Gated on P0–D. Critical integrations: Sentinel end-of-cycle → Journal entry 
 
 - **Spec freshness:** SPEC.md v0.3.1-dev is draft and has not yet been validated against a real external project. Expect at least one amendment (minor bump) during Phase C–D dogfood on Sentinel's repo.
 - **Gemini round-2 critique is missing.** Google capacity was exhausted during v2 → v3 iteration; v3 went to promotion on Codex critique + user direction alone. Re-running Gemini when capacity returns is optional; v3 is defensible without it.
-- **No Map layer in this repo's own `.cortex/` yet.** Map requires regeneration, which Phase C provides.
+- **Map layer is a stub.** `.cortex/map.md` exists with a seven-field header and `Incomplete: [all sources]`; real synthesis ships in Phase C via `cortex refresh-map`.
 - **Competitive landscape re-assessment due ~2026-07-17** (quarterly cadence set in [`journal/2026-04-17-competitive-positioning-and-claude-code-risk.md`](./journal/2026-04-17-competitive-positioning-and-claude-code-risk.md)). Watch-items: Letta trigger-discipline features, Anthropic memory-roadmap signals.

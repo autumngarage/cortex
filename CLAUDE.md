@@ -87,7 +87,7 @@ Currently **spec-only**. The planned implementation (per [PLAN.md](./PLAN.md)) i
 
 | File | Purpose |
 |------|---------|
-| `SPEC.md` | The `.cortex/` file-format protocol, versioned (currently v0.1.0 draft) |
+| `SPEC.md` | The `.cortex/` file-format protocol, versioned (currently v0.3.1-dev draft) |
 | `PLAN.md` | Build plan, phases A–E with exit criteria and success criteria |
 | `README.md` | The story and composition narrative |
 | `docs/PRIOR_ART.md` | Research synthesis behind the spec's design rules (ADRs, Diataxis, WAL, Zettelkasten, MemGPT, Voyager) |
