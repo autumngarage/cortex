@@ -233,7 +233,7 @@ Items moved out of scope during execution — each resolved to another plan or j
 # <Title>
 
 **Date:** 2026-04-17
-**Type:** decision | incident | migration | reversal | promotion | plan-transition | sentinel-cycle | digest
+**Type:** decision | incident | migration | reversal | promotion | plan-transition | sentinel-cycle | pr-merged | digest
 **Trigger:** T1.3 (Plan status changed)   # for Protocol-triggered entries only
 **Cites:** plans/anti-chase.md, doctrine/0003
 
@@ -334,7 +334,7 @@ Plans carry `Author:`, `Goal-hash:`, and `Updated-by:` frontmatter fields (§ 3.
 
 Example: `# Sharpen Cortex's Vision` → normalized string `"sharpen cortexs vision"` → `Goal-hash: 1cc12b25`.
 
-Rationale: title is the stablest signal of intent across writers, and the normalization is conservative enough that two independent writers describing the same effort tend to converge while genuinely distinct efforts diverge. The normalization is deliberately not semantic (no embeddings, no synonym expansion) — that would require a vector store (out of scope per Doctrine 0004). Collisions under this rule are the floor, not the ceiling; two plans with distinct hashes may still collide semantically, and human review is the backstop.
+Rationale: title is the stablest signal of intent across writers, and the normalization is conservative enough that two independent writers describing the same effort tend to converge while genuinely distinct efforts diverge. The normalization is deliberately not semantic (no embeddings, no synonym expansion) — that would require a vector store (out of scope per Doctrine 0005). Collisions under this rule are the floor, not the ceiling; two plans with distinct hashes may still collide semantically, and human review is the backstop.
 
 ---
 
@@ -346,7 +346,7 @@ Cortex is **append-only at write and tiered at read**. Nothing is ever deleted; 
 
 | Layer | Mechanic |
 |---|---|
-| Doctrine | Never archived. Superseded entries stay with `Status: Superseded-by <n>` pointer; dropped from default load. Default session-start loading is `Load-priority: always` pins plus recency by `Date:` until budget exhausted (see [`.cortex/protocol.md`](./.cortex/protocol.md) § 1). Semantic retrieval over Doctrine is an optional external read-side layer; it is not part of the storage or default manifest (see Doctrine 0004 #1). |
+| Doctrine | Never archived. Superseded entries stay with `Status: Superseded-by <n>` pointer; dropped from default load. Default session-start loading is `Load-priority: always` pins plus recency by `Date:` until budget exhausted (see [`.cortex/protocol.md`](./.cortex/protocol.md) § 1). Semantic retrieval over Doctrine is an optional external read-side layer; it is not part of the storage or default manifest (see Doctrine 0005 #1). |
 | Journal | Hot (0–30d) → Warm (30–365d) → Cold (>365d, auto-moved to `journal/archive/<year>/`). Default load is hot + digests, not warm or cold. |
 | Plans | `active` → hot. `shipped` / `cancelled` → auto-moved to `plans/archive/` after 30d. |
 | Map | Always regenerated. Old versions in git history. |
@@ -417,12 +417,12 @@ SPEC.md specifies *what the files look like* — the directory layout (§ 2), la
 
 ## 9. What Cortex explicitly does not do
 
-The boundaries that keep Cortex composable rather than all-encompassing. Rationale for each category is in [Doctrine 0004](./.cortex/doctrine/0004-scope-boundaries.md).
+The boundaries that keep Cortex composable rather than all-encompassing. Rationale for each category is in [Doctrine 0005](./.cortex/doctrine/0005-scope-boundaries-v2.md) (supersedes 0004).
 
 - **Does not execute work.** That's Sentinel. Cortex is state + memory only.
 - **Does not enforce engineering standards.** That's Touchstone. Cortex Doctrine may cite Touchstone principles via `grounds-in:` but doesn't define them.
 - **Does not replace git.** Git is authoritative for code state; Cortex is authoritative for the *reasoning layer* around the code. Cortex reads git; git doesn't read Cortex.
 - **Does not synthesize without permission.** An agent writing to `.cortex/` must be either (a) explicitly invoked by a human, or (b) acting on a declared Tier 1 Protocol trigger. Silent discretionary background writes are forbidden. The Protocol IS the permission because it's a visible, versioned, declared contract.
-- **Does not maintain a vector store, database, or knowledge graph.** See Doctrine 0004.
+- **Does not maintain a vector store, database, or knowledge graph.** See Doctrine 0005.
 - **Does not aggregate across projects.** One project per `.cortex/`. Portfolio views are deliberately out of scope for v0.x.
 - **Does not host anything in the cloud.** Local files, git, nothing else. Synthesis commands may call external LLM CLIs (`claude -p`, etc.) as implementation details of regeneration; storage is always local.

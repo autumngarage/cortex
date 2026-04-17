@@ -26,7 +26,7 @@ The manifest is a token-budgeted slice of `.cortex/`, not the whole store. Defau
 | Journal entries from last 72h + latest digest | ~1.5k | By date |
 | Promotion-queue depth summary | ~100t | Count only |
 
-**No semantic retrieval at session start.** Cortex storage is markdown + git + grep — not a vector store (Doctrine 0004 #1). The default manifest loads Doctrine by `Load-priority: always` pins plus recency, never by embedding similarity. Projects that want semantic retrieval wire up their own index over `.cortex/` as a read-side layer; that index is out of scope for the Protocol.
+**No semantic retrieval at session start.** Cortex storage is markdown + git + grep — not a vector store (Doctrine 0005 #1, supersedes 0004). The default manifest loads Doctrine by `Load-priority: always` pins plus recency, never by embedding similarity. Projects that want semantic retrieval wire up their own index over `.cortex/` as a read-side layer; that index is out of scope for the Protocol.
 
 **Mid-session retrieval is grep.** When the agent needs Doctrine or Journal content not in the manifest, it greps `.cortex/` directly or uses `cortex grep` (a frontmatter-aware wrapper shipping in Phase B). Protocol-aware tooling may provide typed-link traversal; the primitive is ripgrep.
 

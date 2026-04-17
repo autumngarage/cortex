@@ -88,6 +88,18 @@ Pre-merge Codex review on branch `feat/sharpen-protocol-and-archive-drafts` caug
 
 Lesson embedded: **when adding a validation rule, audit every existing artifact against the new rule in the same PR** — Codex caught two plans that would have failed `cortex doctor --verify-goal-hash` on their first run. This is an application of the audit-weak-points principle (`principles/audit-weak-points.md`) to spec amendments: find all instances of the pattern, not just the one you added.
 
+### Codex round 2 (same PR, second iteration)
+
+After the first fix commit, Codex found five more issues — including one that was the exact invariant the PR claimed to be reinforcing:
+
+1. **Doctrine 0004 content changed in place.** The first fix commit edited 0004 #1's body text. Doctrine is immutable-with-supersede ([SPEC § 3.1](../../SPEC.md) + Protocol § 4.2). Correct response: revert 0004 to its on-main state, write **Doctrine 0005** (`doctrine/0005-scope-boundaries-v2.md`) that supersedes 0004 with the corrected #1 language, flip 0004's Status to `Superseded-by 0005`, and update Protocol/SPEC/README references to point at 0005. This is the disciplined supersede path; the PR now demonstrates it rather than bypassing it.
+2. **SPEC § 3.5 Journal `Type:` enum didn't include `pr-merged`.** The new `journal/pr-merged.md` template uses `Type: pr-merged` but a spec-aware validator would reject it. Fixed by adding `pr-merged` to the enum.
+3. **State.md corpus count wrong.** Said 9 Journal entries; actual count is 8. Generated-layer provenance (even hand-authored during Phase A/B) must match reality or the seven-field contract is a lie. Fixed corpus count and doctrine count (5 now: 0001–0003, 0004 superseded, 0005 active).
+4. **PLAN.md and `phase-b-walking-skeleton.md` still referenced spec v0.1.0.** The Phase B plan instructed `cortex init` to scaffold spec v0.1.0, and the plan's success criteria required "spec v0.1.0 conformant." Both contradicted the bumped SPEC. Fixed to v0.3.0-dev / v0.3.0.
+5. **CLI release-tag churn.** First fix bumped state.md's "v0.2.0 release" → "v0.3.0 release" to match the spec. But PLAN.md separately tracks CLI releases (Phase B → v0.1.0, Phase C → v0.2.0, etc.) independent of spec version, per Doctrine 0003. Reverted state.md to "v0.1.0 release (targets spec v0.3.0-dev)" to match PLAN.md's CLI progression and to reinforce that CLI and spec versioning are explicitly independent.
+
+The invariant-violation catch (#1) is the important one: even the PR shipping the sharpened Protocol violated the invariants the Protocol enforces. This is exactly what `cortex doctor --strict` will catch in the triad configuration (Protocol § 1 + SPEC § 3.1 + SPEC § 4.2). Until then, Codex pre-merge review is the enforcement layer — and it works.
+
 ## What we'd do differently
 
 - **The Doctrine 0004 / Protocol § 1 contradiction was visible in v3 before promotion** — "not a vector store" and "semantic relevance to current task" co-existed in the same document and neither reviewer (Codex round 2, user read-through) caught it. Future critique prompts should explicitly ask *"does any rule in this document contradict the scope boundaries?"* That's a cheap high-value check.

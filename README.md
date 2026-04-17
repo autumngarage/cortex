@@ -115,7 +115,7 @@ The claim: at year 10, the default manifest is still ~7k tokens. Doctrine grew b
 
 ## What Cortex is not
 
-Cortex is deliberately **not** a vector store, a database, a knowledge graph, a portfolio tool, an agent framework, a replacement for `AGENTS.md` / `CLAUDE.md`, or cloud-hosted. See [Doctrine 0004](./.cortex/doctrine/0004-scope-boundaries.md) for the rationale per category. Adjacent tools compose with Cortex; none are replaced by it.
+Cortex is deliberately **not** a vector store, a database, a knowledge graph, a portfolio tool, an agent framework, a replacement for `AGENTS.md` / `CLAUDE.md`, or cloud-hosted. See [Doctrine 0005](./.cortex/doctrine/0005-scope-boundaries-v2.md) (supersedes 0004) for the rationale per category. Adjacent tools compose with Cortex; none are replaced by it.
 
 ---
 

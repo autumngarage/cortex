@@ -23,7 +23,7 @@ This plan is done when all of the following hold on a fresh macOS install:
 
 1. `brew tap autumngarage/cortex && brew install cortex` succeeds.
 2. In an empty git repo: `cortex init` creates `.cortex/SPEC_VERSION`, `.cortex/doctrine/`, `.cortex/plans/`, `.cortex/journal/`, `.cortex/procedures/`, and stubs for `map.md` and `state.md` with proper `Generated:` headers and "(pending Phase C synthesis)" placeholders.
-3. `cortex doctor` on that fresh `.cortex/` returns zero and prints "spec v0.1.0 conformant."
+3. `cortex doctor` on that fresh `.cortex/` returns zero and prints "spec v0.3.0 conformant."
 4. `cortex status` reports per-layer freshness from parsed `Generated:` headers.
 5. `cortex doctor` detects and reports each of these seeded violations: orphan deferral in a Plan, missing Success Criteria, unknown spec major version in `SPEC_VERSION`.
 6. All tests pass (`uv run pytest`) — temp-dir fixtures, no mocked filesystem.

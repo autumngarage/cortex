@@ -3,13 +3,13 @@ Generated: 2026-04-17T23:55:00-04:00
 Generator: hand-authored (regeneration infrastructure ships in Phase C)
 Sources:
   - HEAD of branch feat/sharpen-protocol-and-archive-drafts
-  - .cortex/doctrine/ (4 entries: 0001–0004, all Load-priority: always)
+  - .cortex/doctrine/ (5 entries: 0001–0003 + 0005 active with Load-priority: always; 0004 Superseded-by 0005)
   - .cortex/plans/ (1 active: phase-b-walking-skeleton; vision-sharpening shipped)
-  - .cortex/journal/ (9 entries for 2026-04-17)
+  - .cortex/journal/ (8 entries for 2026-04-17)
   - .cortex/templates/ (8 files shipped today)
   - SPEC.md v0.3.0-dev
   - PLAN.md phase-A-complete, phase-B-pending
-Corpus: 4 Doctrine, 1 active Plan, 9 Journal entries, 8 Templates
+Corpus: 5 Doctrine entries, 1 active Plan, 8 Journal entries, 8 Templates
 Omitted: []
 Incomplete:
   - Map regeneration (Phase C); no Map layer yet
@@ -45,7 +45,7 @@ Full plan: [`plans/phase-b-walking-skeleton.md`](./plans/phase-b-walking-skeleto
 - [ ] `cortex version` — prints CLI version + supported spec + protocol versions
 - [ ] Tests for each command (temp-dir fixtures, no mocked filesystem)
 - [ ] `autumngarage/homebrew-cortex` tap repo created
-- [ ] v0.3.0 release via Homebrew formula pointing at the source tarball
+- [ ] v0.1.0 release via Homebrew formula pointing at the source tarball (first CLI release per PLAN.md Phase B; ships targeting spec v0.3.0-dev)
 
 ## P1 — Phase C: first synthesis (`cortex refresh-map`, `cortex refresh-state`)
 
@@ -67,7 +67,7 @@ Gated on P0–D. Critical integrations: Sentinel end-of-cycle → Journal entry 
 
 - **Python project structure:** src-layout vs. flat? Lean toward `src/cortex/` (matches Sentinel). Confirm.
 - **Testing framework:** pytest (matches Sentinel). Agreed; decide `typer.testing.CliRunner` vs. shell-out.
-- **Brew formula placement:** `autumngarage/homebrew-cortex` tap needs creating before v0.3.0 release.
+- **Brew formula placement:** `autumngarage/homebrew-cortex` tap needs creating before v0.1.0 release.
 - **`cortex doctor` cadence:** CI-only? Pre-commit? Periodic? Decide in Phase B.
 - **Interactive-flow UX:** terminal rendering of the prompt-per-candidate flow; pager interaction; keybindings. Sketch in Phase B.
 - **Phase B plan refresh:** `plans/phase-b-walking-skeleton.md` predates today's Protocol/SPEC amendments. Update pass needed to add `cortex manifest`, `cortex grep`, T1.9 handling, `Goal-hash:` verification, and templates-shipped-with-init before Phase B opens.
