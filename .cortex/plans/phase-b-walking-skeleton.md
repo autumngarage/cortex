@@ -86,13 +86,13 @@ Brew formula mirrors Touchstone's: `url` points at a tagged GitHub release tarba
 - [ ] **Plan grounding** — SPEC § 4.1 every Plan's `Why (grounding)` cites Doctrine/State/Journal.
 - [ ] **Deferral tracking** — SPEC § 4.2 no orphan deferrals.
 - [ ] **Measurable success criteria** — SPEC § 4.3 Plan Success Criteria names a signal.
-- [ ] **Typed-link checks** — SPEC § 4.6 supersede/promoted-from/grounds-in presence on entries that need them.
+- [ ] **Typed-link checks** — SPEC § 4.6 supersede/promoted-from/grounds-in presence on entries that need them. Also enforces § 4.4: reject `Promoted-to:` on Journal or Doctrine entries (append-only/immutable sources — retroactive write would violate invariants); permit on Plans and Procedures. `superseded-by` must use the correct spelling (not the pre-v0.3.1 typo `supersded-by`).
 - [ ] **Promotion-queue invariants** — SPEC § 4.7 WIP limit, candidate aging, state enum validity.
 - [ ] **Single authority rule** — SPEC § 4.8 detect Cortex-claim duplication in `AGENTS.md`/`CLAUDE.md`/`.cursor/rules/*` without `grounds-in:` back-citation.
 - [ ] **Goal-hash verification** — SPEC § 4.9 recompute each Plan's `Goal-hash:` from its H1 title; flag mismatches and collisions.
 - [ ] **Load-priority validation** — SPEC § 3.1 every Doctrine entry with `Status: Accepted` has `Load-priority:` (`always` or `default`). Superseded entries are exempt because they are immutable (SPEC § 3.1) and may predate the field's introduction; warn if `always` set exceeds default Doctrine budget.
 - [ ] **Append-only Journal** — git-log walks for in-place edits of `journal/*.md` files (SPEC § 3.5); warn.
-- [ ] **Immutable Doctrine** — git-log walks for in-place content edits of `doctrine/*.md` files whose Status is `Accepted` and whose Status field is not the only changed line (the only mutable field per SPEC § 3.1).
+- [ ] **Immutable Doctrine** — git-log walks for in-place content edits of `doctrine/*.md` files. For each modifying commit, the check evaluates the file's `Status:` **at the parent commit** (before the edit): if it was `Accepted`, any body change beyond the Status-field transition to `Superseded-by <n>` is a violation. This prevents the escape hatch of editing the body and flipping Status in the same commit — the edit is still illegal because the entry was Accepted at the time it was modified.
 - [ ] **CLI-less fallback warning** — detect `AGENTS.md` imports of `@.cortex/state.md` without `cortex` CLI presence; warn if corpus >20 Doctrine or >100 Journal.
 
 ### Audits (require git-log walks)
