@@ -4,6 +4,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-17
+**Load-priority:** always
 
 ## Context
 

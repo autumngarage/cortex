@@ -1,5 +1,9 @@
 # Cortex — Vision (draft v3)
 
+> **⚠ ARCHIVED — PROMOTED 2026-04-17.** This draft was the source material for the canonical artifacts: [README.md](../README.md) (§§ 0, 1, 3.1, 3.3, 5, 6, 7), [SPEC.md](../SPEC.md) v0.2.0-dev (§§ 3.4, 4.5, 4.7, 4.8, 4.9, 5, 9), [`.cortex/protocol.md`](../.cortex/protocol.md) (whole file, from §§ 3.1 + 4), and [`.cortex/doctrine/0004-scope-boundaries.md`](../.cortex/doctrine/0004-scope-boundaries.md) (from § 9). Strategic content not promoted into the spec — the competitive matrix (§ 8) and the Claude Code existential-risk framing (§ 10.4) — is preserved in [`journal/2026-04-17-competitive-positioning-and-claude-code-risk.md`](../.cortex/journal/2026-04-17-competitive-positioning-and-claude-code-risk.md). Full provenance of the promotion is in [`journal/2026-04-17-vision-v3-promoted.md`](../.cortex/journal/2026-04-17-vision-v3-promoted.md). Retained here as the reasoning trail; do not treat as current — canonical artifacts are authoritative.
+
+---
+
 > **Status:** working draft. v1 and v2 preserved at `vision-draft.md` and `vision-draft-v2.md`. This v3 folds in Codex's round-2 critique (5 load-bearing issues), the user's Touchstone-as-universal-baseline clarification, and the one-command UX simplification. Gemini round 2 was unavailable (Google capacity exhaustion); if Gemini capacity returns, v3 can take another critique pass before promotion.
 >
 > **Date:** 2026-04-17

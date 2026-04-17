@@ -34,6 +34,7 @@ Seven rules, each inherited from prior art (sources in `docs/PRIOR_ART.md`):
       incident.md
       plan-transition.md
       sentinel-cycle.md
+      pr-merged.md
     doctrine/
       candidate.md
     digest/
@@ -93,6 +94,7 @@ Each layer defines: **mechanical contract** (mutable/immutable, derived/authorit
 **Date:** 2026-04-17   (written, not renewed)
 **Promoted-from:** journal/2026-04-10-auth-retry-lesson  (if promoted)
 **Grounds-in:** touchstone/principles/engineering-principles.md#no-band-aids  (if applicable)
+**Load-priority:** default   (or: always — pins this entry into every session manifest; see .cortex/protocol.md § 1)
 
 ## Context
 ...
@@ -101,6 +103,8 @@ We will...
 ## Consequences
 ...
 ```
+
+**`Load-priority:`** controls session-start loading. `default` entries load by recency until the Doctrine budget is exhausted (Protocol § 1). `always` entries pin into every manifest regardless of recency, within the budget — reserve for load-bearing claims that every future session needs to see (e.g., scope boundaries, fundamental invariants). If the `always` set exceeds the Doctrine budget, `cortex doctor` flags over-pinning.
 
 ### 3.2 Map — *what exists, structurally*
 
@@ -319,6 +323,18 @@ Root agent files (`AGENTS.md`, `CLAUDE.md`, `.cursor/rules/*`) **may route** to 
 
 ### 4.9 Multi-writer Plan visibility
 Plans carry `Author:`, `Goal-hash:`, and `Updated-by:` frontmatter fields (§ 3.4). Two Plans sharing a `Goal-hash:` are flagged as a collision by `cortex doctor`. Resolution is human — merge, supersede, or distinct — not automatic. Cortex makes collisions visible; it does not prevent them.
+
+**Goal-hash normalization** (required; `cortex doctor` recomputes and verifies):
+
+1. Take the Plan's H1 title (`# <Title>`).
+2. Lowercase it.
+3. Strip everything that is not `[a-z0-9 ]` (drop punctuation, collapse diacritics via NFKD → ASCII).
+4. Collapse runs of whitespace to a single space; trim leading/trailing whitespace.
+5. Compute `sha256(utf8-bytes)` and take the first 8 hex characters.
+
+Example: `# Sharpen Cortex's Vision` → normalized string `"sharpen cortexs vision"` → `Goal-hash: 6f2d9a1c` (illustrative).
+
+Rationale: title is the stablest signal of intent across writers, and the normalization is conservative enough that two independent writers describing the same effort tend to converge while genuinely distinct efforts diverge. The normalization is deliberately not semantic (no embeddings, no synonym expansion) — that would require a vector store (out of scope per Doctrine 0004). Collisions under this rule are the floor, not the ceiling; two plans with distinct hashes may still collide semantically, and human review is the backstop.
 
 ---
 

@@ -4,7 +4,8 @@
 
 **Status:** Accepted
 **Date:** 2026-04-17
-**Promoted-from:** vision-draft-v3.md § 9
+**Promoted-from:** drafts/vision-draft-v3.md § 9
+**Load-priority:** always
 
 ## Context
 

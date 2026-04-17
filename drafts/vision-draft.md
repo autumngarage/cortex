@@ -1,5 +1,9 @@
 # Cortex — Vision (draft)
 
+> **⚠ ARCHIVED — SUPERSEDED 2026-04-17.** Superseded by draft v2 (`drafts/vision-draft-v2.md`), then v3 (`drafts/vision-draft-v3.md`), then by the canonical artifacts it drove: [README.md](../README.md), [SPEC.md](../SPEC.md) v0.2.0-dev, [`.cortex/protocol.md`](../.cortex/protocol.md), and [`.cortex/doctrine/0004-scope-boundaries.md`](../.cortex/doctrine/0004-scope-boundaries.md). Strategic content not carried into canonical files is preserved in [`journal/2026-04-17-competitive-positioning-and-claude-code-risk.md`](../.cortex/journal/2026-04-17-competitive-positioning-and-claude-code-risk.md). Retained here as reasoning trail; do not treat as current.
+
+---
+
 > **Status:** working draft, not the README. This file exists to be torn apart by `codex` and `gemini`, then folded back into `README.md` / Doctrine / Journal once it survives both critiques.
 >
 > **Date:** 2026-04-17
