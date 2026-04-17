@@ -5,14 +5,14 @@ Sources:
   - HEAD of branch feat/phase-b-scaffold-and-version (targeting main at 3c23ae9)
   - .cortex/doctrine/ (5 entries: 0001–0003 + 0005 active with Load-priority: always; 0004 Superseded-by 0005)
   - .cortex/plans/ (1 active: phase-b-walking-skeleton — first Work item checked; vision-sharpening shipped)
-  - .cortex/journal/ (10 entries, all for 2026-04-17)
+  - .cortex/journal/ (11 entries, all for 2026-04-17)
   - .cortex/templates/ (8 files)
   - .cortex/map.md (stub, pending Phase C)
   - .cortex/procedures/ (empty; .gitkeep only)
   - SPEC.md v0.3.1-dev
   - pyproject.toml, src/cortex/ (scaffold + version command)
   - PLAN.md phase-A-complete, phase-B-started
-Corpus: 5 Doctrine entries, 1 active Plan, 10 Journal entries, 8 Templates, 1 Python package (cortex 0.1.0.dev0)
+Corpus: 5 Doctrine entries, 1 active Plan, 11 Journal entries, 8 Templates, 1 Python package (cortex 0.1.0.dev0)
 Omitted:
   - .cortex/.index.json — not present pre-CLI; per SPEC § 2 the file is auto-maintained by the Cortex CLI and its absence is the expected state before Phase B ships.
 Incomplete:
