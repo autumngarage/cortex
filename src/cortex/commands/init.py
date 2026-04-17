@@ -131,6 +131,8 @@ def init_command(*, force: bool, target_path: Path) -> None:
     cortex_dir = target_path / ".cortex"
     spec_version_file = cortex_dir / "SPEC_VERSION"
 
+    cortex_has_any_content = cortex_dir.exists() and any(cortex_dir.iterdir())
+
     if spec_version_file.exists() and not force:
         existing = spec_version_file.read_text().strip()
         click.echo(
@@ -141,9 +143,29 @@ def init_command(*, force: bool, target_path: Path) -> None:
         )
         sys.exit(1)
 
+    if cortex_has_any_content and not spec_version_file.exists() and not force:
+        # `.cortex/` exists with files but no SPEC_VERSION — ambiguous state.
+        # Writing a fresh scaffold on top would leave a mix of shipped files and
+        # pre-existing content under a "conformant" SPEC_VERSION marker. Refuse.
+        click.echo(
+            f"error: {cortex_dir} already contains content but has no `SPEC_VERSION` marker. "
+            "This looks like an incomplete or hand-authored Cortex directory. "
+            "Use `--force` to write the scaffold over any scaffold-level files "
+            "(SPEC_VERSION, protocol.md, templates/, map.md, state.md); "
+            "doctrine/plan/journal/procedure content is preserved either way.",
+            err=True,
+        )
+        sys.exit(1)
+
     data_root = _package_data_root()
 
     cortex_dir.mkdir(exist_ok=True)
+
+    # When we get here, either the directory is fresh/empty, or --force is set.
+    # In both cases the scaffold-level files are written/overwritten so the
+    # advertised "spec v{CURRENT_SPEC_VERSION} conformant" marker is truthful.
+    # Non-scaffold files (doctrine/, plans/, journal/, procedures/ contents) are
+    # never touched because we never write into those subdirs except .gitkeep.
 
     # 1. SPEC_VERSION
     spec_version_file.write_text(CURRENT_SPEC_VERSION + "\n")
@@ -151,29 +173,23 @@ def init_command(*, force: bool, target_path: Path) -> None:
     # 2. protocol.md
     protocol_src = data_root / "protocol.md"
     protocol_dst = cortex_dir / "protocol.md"
-    if protocol_dst.exists() and not force:
-        click.echo(f"warning: {protocol_dst} already exists; skipped (use --force to overwrite)", err=True)
-    else:
-        shutil.copyfile(protocol_src, protocol_dst)
+    shutil.copyfile(protocol_src, protocol_dst)
 
-    # 3. templates/ tree
+    # 3. templates/ tree (overwrite scaffold template files; we're past the guard)
     templates_src = data_root / "templates"
     templates_dst = cortex_dir / "templates"
-    _copy_tree(templates_src, templates_dst, overwrite=force)
+    _copy_tree(templates_src, templates_dst, overwrite=True)
 
-    # 4. subdirectories with .gitkeep
+    # 4. subdirectories with .gitkeep (.gitkeep is scaffold; empty dirs stay empty)
     for sub in SCAFFOLD_SUBDIRS:
         _ensure_subdir(cortex_dir / sub)
 
-    # 5. map.md and state.md stubs
+    # 5. map.md and state.md stubs (scaffold files; overwrite)
     for layer, title, generator in (
         ("map", "Project Map", "cortex init v0.1.0.dev0"),
         ("state", "Project State", "cortex init v0.1.0.dev0"),
     ):
-        layer_file = cortex_dir / f"{layer}.md"
-        if layer_file.exists() and not force:
-            continue
-        layer_file.write_text(_derived_stub(title, layer, generator))
+        (cortex_dir / f"{layer}.md").write_text(_derived_stub(title, layer, generator))
 
     click.echo(f"Scaffolded {cortex_dir} (spec v{CURRENT_SPEC_VERSION}).")
     click.echo("Next steps:")

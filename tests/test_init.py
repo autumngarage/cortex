@@ -102,6 +102,37 @@ def test_init_fails_for_nonexistent_target(tmp_path: Path) -> None:
     assert "does not exist" in result.output
 
 
+def test_init_refuses_when_cortex_has_content_but_no_spec_version(tmp_path: Path) -> None:
+    """Partial/hand-authored .cortex/ without SPEC_VERSION is ambiguous state.
+
+    Writing a fresh scaffold on top would leave a mix of shipped files and
+    pre-existing content under a 'conformant' SPEC_VERSION marker — false
+    advertising. init refuses unless --force is passed.
+    """
+    cortex = tmp_path / ".cortex"
+    cortex.mkdir()
+    (cortex / "some-preexisting-file.md").write_text("# not a scaffold file")
+
+    result = CliRunner().invoke(cli, ["init", "--path", str(tmp_path)])
+    assert result.exit_code != 0
+    assert "already contains content" in result.output
+    # The preexisting file is untouched.
+    assert (cortex / "some-preexisting-file.md").read_text() == "# not a scaffold file"
+
+
+def test_init_force_proceeds_when_cortex_has_content_but_no_spec_version(tmp_path: Path) -> None:
+    cortex = tmp_path / ".cortex"
+    cortex.mkdir()
+    preexisting = cortex / "some-preexisting-file.md"
+    preexisting.write_text("# not a scaffold file")
+
+    _run_init(tmp_path, "--force")
+    # Scaffold is now populated.
+    assert (cortex / "SPEC_VERSION").read_text().strip() == CURRENT_SPEC_VERSION
+    # Preexisting non-scaffold content at the top level is left alone.
+    assert preexisting.read_text() == "# not a scaffold file"
+
+
 def test_init_is_listed_as_subcommand(tmp_path: Path) -> None:
     result = CliRunner().invoke(cli, ["--help"])
     assert result.exit_code == 0
