@@ -8,6 +8,10 @@ At this stage the repo is **spec-first**: the protocol in [SPEC.md](./SPEC.md) i
 
 "Good" looks like: a spec that survives real projects (sigint, sentinel, touchstone) as dogfood targets; a CLI that's small and legible, synthesizing via the `claude` CLI the same way Sentinel does; layer contracts that hold when consumed by both humans and agents; staleness that's visible instead of tolerated.
 
+## Current state (read this first)
+
+@.cortex/state.md
+
 ## Engineering Principles
 
 @principles/engineering-principles.md
