@@ -50,7 +50,7 @@ Python CLI, same distribution model as Sentinel (uv tool install + brew via `aut
 
 ## Phases
 
-### Phase A — Foundation ✅ (in progress)
+### Phase A — Foundation ✅ (complete, 2026-04-17)
 
 Ship the repo and the spec, not the tool. Nothing calls an LLM yet.
 
@@ -58,12 +58,13 @@ Ship the repo and the spec, not the tool. Nothing calls an LLM yet.
 - [x] Bootstrapped with `touchstone new --type python` (dogfoods Touchstone)
 - [x] [SPEC.md](./SPEC.md) v0.1.0 — the file-format protocol
 - [x] This build plan
-- [ ] README.md — story, composition, install path (once Phase B ships)
-- [ ] `docs/PRIOR_ART.md` — the research notes backing the spec's design rules
-- [ ] `CLAUDE.md` / `AGENTS.md` tailored for this project (beyond the Touchstone placeholder)
-- [ ] Initial commit, push to `autumngarage/cortex`
+- [x] README.md — story, composition, install-pending posture
+- [x] `docs/PRIOR_ART.md` — research synthesis backing the spec's design rules
+- [x] `CLAUDE.md` / `AGENTS.md` tailored for this project
+- [x] Dogfood `.cortex/` inside this repo — Doctrine 0001–0003 + one Journal entry
+- [x] Initial commit, pushed to `autumngarage/cortex` main
 
-**Exit criterion:** spec is readable standalone, plan doc captures next-session work, repo is on GitHub.
+**Exit criterion met:** spec is readable standalone, plan doc captures Phase B work, repo is on GitHub with the dogfood `.cortex/` validating the spec against a real project.
 
 ### Phase B — Walking skeleton
 
@@ -133,11 +134,8 @@ Cross-tool composition via file contracts (no code coupling).
 
 ---
 
-## Work items (Phase A remaining)
+## Where to start next session
 
-- [ ] Add `docs/PRIOR_ART.md` summarizing the two research reports this plan is built on
-- [ ] Customize `CLAUDE.md` beyond Touchstone placeholder
-- [ ] Customize `AGENTS.md` beyond Touchstone placeholder
-- [ ] Write README.md (defer content about CLI commands until Phase B — just story + composition + "spec-first" posture for now)
-- [ ] Dogfood: populate `.cortex/` inside the cortex repo itself with `doctrine/0001-why-cortex-exists.md` and a copy of this file as `plans/v0.1.0-foundation.md`
-- [ ] Initial commit with a clear message; push to `autumngarage/cortex`
+**Phase A shipped.** Current P0 is **Phase B — walking-skeleton CLI**, tracked as a full Cortex Plan at [`.cortex/plans/phase-b-walking-skeleton.md`](./.cortex/plans/phase-b-walking-skeleton.md). See also [`.cortex/state.md`](./.cortex/state.md) for the live operational view.
+
+First concrete task in Phase B: scaffold the Python package (`pyproject.toml`, `src/cortex/__init__.py`, `src/cortex/cli.py` entrypoint) and implement `cortex version` + `cortex init`. Tests and release wiring follow. No LLM calls in Phase B — synthesis starts in Phase C.
