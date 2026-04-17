@@ -12,6 +12,10 @@ At this stage the repo is **spec-first**: the protocol in [SPEC.md](./SPEC.md) i
 
 @.cortex/state.md
 
+## Cortex Protocol (how agents write to .cortex/)
+
+@.cortex/protocol.md
+
 ## Engineering Principles
 
 @principles/engineering-principles.md

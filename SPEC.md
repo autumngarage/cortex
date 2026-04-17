@@ -367,7 +367,7 @@ Universal across layers:
 - **Markdown, single `#` title, `##` sections.** `###` allowed for subsections; deeper nesting is a smell.
 - **Checkbox syntax** `- [ ]` / `- [x]` for work items in Plans and Journal.
 - **§ Section references** in cross-links: `state.md § P0-calibration`, `spec.md § 4.7`.
-- **YAML frontmatter** for structured fields on all layers. Parsed by tools for index generation and validation.
+- **YAML frontmatter** is required for layers carrying list-valued metadata (Map, State, Plans, digests). Bold-inline scalar fields are the canonical format for Doctrine, Journal, and Procedures; YAML frontmatter is also permitted. Parsers must accept either form.
 
 ---
 
@@ -378,6 +378,8 @@ Universal across layers:
 - **Patch bump**: clarifications, typo fixes, tightened wording without behavior change.
 
 Tools must declare which spec major versions they support. Readers encountering an unknown major version should refuse to write and warn on read.
+
+**Pre-1.0 exception.** Per standard semver 0.x convention, during `0.x.y` development minor bumps may include breaking changes. The strict major-for-breaking rule above applies from `1.0.0` onward. This is why v0.2.0-dev introduces breaking frontmatter changes (seven-field metadata contract on generated layers; `Author`/`Goal-hash`/`Updated-by` on Plans) under a minor bump.
 
 **Protocol version relationship.** [`.cortex/protocol.md`](./.cortex/protocol.md) carries its own version. A Protocol version is compatible with one or more SPEC.md versions, declared in the Protocol's header. A major SPEC bump always requires a Protocol review; a minor SPEC bump may or may not trigger a Protocol bump depending on whether new triggers are needed.
 

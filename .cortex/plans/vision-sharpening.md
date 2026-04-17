@@ -1,10 +1,19 @@
-# Plan: sharpen Cortex's vision
+---
+Status: shipped
+Written: 2026-04-17
+Shipped: 2026-04-17
+Author: human
+Goal-hash: sharpen-cortex-vision-2026-04-17
+Updated-by:
+  - 2026-04-17T10:00 human (created after crash — second attempt at vision sharpening)
+  - 2026-04-17T14:00 claude-session-2026-04-17 (three research summaries added after round-1 explorer agents)
+  - 2026-04-17T17:00 claude-session-2026-04-17 (round-1 critique outcomes, Cursor-retreat research, user clarifications)
+  - 2026-04-17T23:45 claude-session-2026-04-17 (marked shipped; v3 promoted to README/SPEC/Doctrine 0004/protocol.md/journal)
+Promoted-to: README.md, SPEC.md v0.2.0-dev, .cortex/protocol.md, doctrine/0004-scope-boundaries, journal/2026-04-17-vision-v3-promoted
+Cites: doctrine/0001-why-cortex-exists, doctrine/0003-spec-is-the-artifact, journal/2026-04-17-vision-session-lost-to-crash
+---
 
-**Status:** shipped
-**Opened:** 2026-04-17
-**Shipped:** 2026-04-17 (same day, via three-draft + two-critique-round iteration)
-**Promoted-to:** README.md, SPEC.md v0.2.0-dev, `.cortex/protocol.md`, doctrine/0004-scope-boundaries, journal/2026-04-17-vision-v3-promoted
-**Grounds in:** doctrine/0001-why-cortex-exists, doctrine/0003-spec-is-the-artifact, journal/2026-04-17-vision-session-lost-to-crash
+# Plan: sharpen Cortex's vision
 
 > The first attempt at this plan was lost in a Claude Code crash (see journal). This second attempt is checkpointed at each phase so it survives the next one. The goal is a sharpened vision that (a) names what Cortex uniquely does, (b) survives direct comparison with Letta, Claude Code's own memory, AGENTS.md, Zep/Graphiti, and the PKM lineage, and (c) describes the seam with Touchstone and Sentinel crisply enough that the three tools compose without overlap.
 
