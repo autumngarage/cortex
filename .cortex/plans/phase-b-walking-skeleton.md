@@ -7,6 +7,7 @@ Updated-by:
   - 2026-04-17T07:00 human (created; targeted v0.1.0)
   - 2026-04-17T23:45 claude-session-2026-04-17 (updated for v0.2.0 scope — Protocol, promotion queue, seven-field metadata contract)
   - 2026-04-17T23:59 claude-session-2026-04-17 (refreshed for v0.3.1-dev scope — adds manifest, grep, expanded doctor checks, T1.9 audit, Goal-hash verification, interactive flow, Load-priority validation)
+  - 2026-04-17T15:45 claude-session-2026-04-17 (Phase B Work items: Python scaffold + `cortex version` shipped; first two items checked)
 Cites: ../../SPEC.md, ../../.cortex/protocol.md, ../../PLAN.md § Phase B, doctrine/0003-spec-is-the-artifact, doctrine/0005-scope-boundaries-v2
 ---
 
@@ -68,9 +69,9 @@ Brew formula mirrors Touchstone's: `url` points at a tagged GitHub release tarba
 
 ### Scaffold + plumbing
 
-- [ ] **Python project scaffold** — `pyproject.toml` with `click`, `prompt_toolkit` (or click-prompt), `pytest`, `ruff`, `mypy` as dev deps; `src/cortex/__init__.py` with `__version__`; `src/cortex/cli.py` click entrypoint; package data for `.cortex/protocol.md` + `.cortex/templates/`; `uv.lock` committed.
-- [ ] **Ruff + mypy configuration** — match Sentinel's `pyproject.toml` settings; add to `touchstone-run.sh validate` flow.
-- [ ] **`cortex version`** — prints CLI version, `SUPPORTED_SPEC_VERSIONS` (currently `['0.3']`), `SUPPORTED_PROTOCOL_VERSIONS` (currently `['0.2']`), install method. Matching rule: a supported `major.minor` pair accepts **any patch or pre-release qualifier** within that major.minor (so `['0.3']` accepts `0.3.0`, `0.3.1`, `0.3.1-dev`, `0.3.2`, but NOT `0.4.0` or `0.2.9`). Unknown majors warn; unknown minors within a known major also warn.
+- [x] **Python project scaffold** — `pyproject.toml` with `click`, `pytest`, `pytest-cov`, `ruff`, `mypy`; `src/cortex/__init__.py` with `__version__` + `SUPPORTED_SPEC_VERSIONS` + `SUPPORTED_PROTOCOL_VERSIONS`; `src/cortex/cli.py` click entrypoint; `.python-version` (3.12); `uv.lock` committed. Package data for `.cortex/protocol.md` + `.cortex/templates/` deferred to the `cortex init` slice.
+- [x] **Ruff + mypy configuration** — `[tool.ruff]` and `[tool.mypy]` in `pyproject.toml`; `uv run ruff check` and `uv run mypy src` pass clean. Integration with `touchstone-run.sh validate` is picked up automatically via touchstone's python-profile detection.
+- [x] **`cortex version`** — prints CLI version, `SUPPORTED_SPEC_VERSIONS` (currently `('0.3',)`), `SUPPORTED_PROTOCOL_VERSIONS` (currently `('0.2',)`), install method (homebrew | source | unknown). Matching-rule enforcement (a supported `major.minor` pair accepts any patch or pre-release within it; unknown majors or minors warn) is deferred to the `cortex doctor` slice that actually parses `SPEC_VERSION`.
 
 ### Init + structural commands
 
