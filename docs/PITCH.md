@@ -47,7 +47,7 @@ It also defines a **protocol** — rules any AI agent follows: when to write to 
 - **Humans stay in the loop.** AI proposes; humans promote. The memory improves by deliberate review, not drift.
 - **It's a protocol, not a product.** Any tool can implement it. If one vendor ships multi-layer memory natively, the spec is what they converge on.
 
-**Status, honestly.** Spec-stage. The protocol is defined (v0.3.1-dev), dogfooded in its own repo, and survives two rounds of multi-agent critique. The reference CLI is mid-build — you can't `brew install` it yet. But any project can adopt the pattern today by hand-authoring the files and telling its AI to follow the protocol, and more tools will learn to read and write it the same way over time.
+**Status, honestly.** CLI v0.1.0 ships — `brew tap autumngarage/cortex && brew install cortex && cortex init` works today. The protocol is defined (SPEC v0.3.1-dev), dogfooded in its own repo, and survives two rounds of multi-agent critique. Regeneration commands (`refresh-map`, `refresh-state`) and the fully interactive promotion flow are Phase C. Any project can adopt the pattern by running the CLI or by hand-authoring the files and telling its AI to follow the protocol, and more tools will learn to read and write it the same way over time.
 
 **The bet:** that the answer to "AI projects lose memory" is a shared file-format standard, not another proprietary memory feature.
 

@@ -69,13 +69,13 @@ Fix failing tests before pushing. Phase A has no code to test; test infrastructu
 
 ## Release & Distribution
 
-Not yet released. Target distribution (Phase B and later): uv tool install for source installs, Homebrew tap `autumngarage/cortex` for brew installs. Release flow mirrors Sentinel: version bump in `__init__.py`, tag, push, `gh release create`, update formula SHA.
+v0.1.0 shipped. Distribution: the Homebrew tap `autumngarage/homebrew-cortex` hosts the formula (`brew tap autumngarage/cortex && brew install cortex`); `uv tool install git+...` works for source installs. Release flow mirrors Sentinel: version bump in `__init__.py` + `pyproject.toml`, tag, push, `gh release create`, update the formula's `url` + `sha256` in `autumngarage/homebrew-cortex`.
 
-Each release must also declare which spec version it supports (in `SPEC_VERSION` handling). A minor CLI release cannot change the spec's major version; those travel together.
+Each release must also declare which spec version it supports (in `SUPPORTED_SPEC_VERSIONS` in `src/cortex/__init__.py`). A minor CLI release cannot change the spec's major version; those travel together.
 
 ## Architecture
 
-Currently **spec-only**. The planned implementation (per [PLAN.md](./PLAN.md)) is a Python CLI organized around layer commands:
+Python CLI (click + uv-managed venv) organized around layer commands. v0.1.0 ships the non-synthesizing surface; regeneration is Phase C.
 
 - `cortex init` — scaffold `.cortex/` per SPEC.md
 - `cortex status` / `cortex doctor` — validate and report
