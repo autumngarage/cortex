@@ -198,6 +198,22 @@ def test_spec_version_guard_warns_on_missing(
     assert "SPEC_VERSION" in combined
 
 
+def test_unreadable_file_surfaces_warning_and_still_emits_matches(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Simulate a match against a file that can't be read by pointing rg at a
+    # non-existent path — `_summarize_file` must not silently drop the match.
+    phantom = scaffolded_project / ".cortex" / "doctrine" / "ghost.md"
+    fake_stdout = _rg_match_record(str(phantom), 1, "ghost line\n") + "\n"
+    _install_fake_rg(monkeypatch, fake_stdout)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["grep", "ghost", "--path", str(scaffolded_project)])
+    assert result.exit_code == 0
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "could not read" in combined
+    assert "ghost line" in result.output
+
+
 def test_pattern_with_leading_dash_not_parsed_as_flag(
     scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

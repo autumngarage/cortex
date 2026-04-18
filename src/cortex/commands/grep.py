@@ -66,11 +66,24 @@ def _parse_rg_json(stdout: str) -> tuple[dict[str, list[tuple[str, int, str]]], 
 
 
 def _summarize_file(path: Path, project_root: Path) -> str:
-    """One-line metadata summary extracted from ``path``'s frontmatter."""
+    """One-line metadata summary extracted from ``path``'s frontmatter.
+
+    On read failure we still emit a header line (so match lines are not
+    orphaned) and surface the error on stderr — silent failure would
+    violate the "No silent failures" principle.
+    """
     try:
         text = path.read_text()
-    except OSError:
-        return ""
+    except OSError as exc:
+        try:
+            rel_path = path.relative_to(project_root)
+        except ValueError:
+            rel_path = path
+        click.echo(
+            f"warning: could not read {rel_path} for metadata summary: {exc}",
+            err=True,
+        )
+        return f"{rel_path}  [metadata unavailable: {exc.__class__.__name__}]"
     rel = path.relative_to(project_root)
     frontmatter, _body = parse_frontmatter(text)
 
