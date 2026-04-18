@@ -48,7 +48,7 @@ Full plan: [`plans/phase-b-walking-skeleton.md`](./plans/phase-b-walking-skeleto
 - [~] `cortex promote <id>` — stub subcommand. Validates `.cortex/.index.json` presence and candidate id; exits 3 with a clear "not yet implemented" note when the candidate is found, pending Phase C's index writer.
 - [x] `cortex version` — prints CLI version + supported spec + protocol versions + install method
 - [ ] Tests for each command (temp-dir fixtures, no mocked filesystem)
-- [ ] `autumngarage/homebrew-cortex` tap repo created
+- [ ] `autumngarage/homebrew-cortex` tap repo created (in progress — follows the per-tool tap pattern established by `homebrew-sentinel` and `homebrew-touchstone` so each tool stands alone while composing as a trio)
 - [ ] v0.1.0 release via Homebrew formula pointing at the source tarball (first CLI release per PLAN.md Phase B; ships targeting spec v0.3.1-dev)
 
 ## P1 — Phase C: first synthesis (`cortex refresh-map`, `cortex refresh-state`)

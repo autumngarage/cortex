@@ -2,7 +2,7 @@
 
 > **A protocol for agents to continuously journal what's happening on a project, and for humans to promote what matters.** The reflective layer of the autumngarage composition — Touchstone is the foundation (universal policy), Sentinel is the loop (autonomous execution), Cortex is the memory (project-local reasoning).
 
-**Status:** spec-stage. [SPEC.md](./SPEC.md) v0.3.1-dev (draft). [`.cortex/protocol.md`](./.cortex/protocol.md) specifies the agent contract. The CLI is Phase B ([PLAN.md](./PLAN.md)).
+**Status:** CLI v0.1.0. [SPEC.md](./SPEC.md) v0.3.1-dev (draft). [`.cortex/protocol.md`](./.cortex/protocol.md) specifies the agent contract. The CLI ships the non-synthesizing commands (`init`, `status`, `doctor`, `manifest`, `grep`, `promote` stub); regeneration (`refresh-map`, `refresh-state`) is Phase C ([PLAN.md](./PLAN.md)).
 
 **New here?** Start with [`docs/PITCH.md`](./docs/PITCH.md) — plain-language one-liner, vision, and day-in-the-life walkthrough.
 
@@ -50,11 +50,25 @@ Projects import `.cortex/protocol.md` into `AGENTS.md`. Any agent that reads `AG
 
 ---
 
-## UX — one command (planned)
+## UX — one command
 
-> **Status:** Phase B in progress. Currently only `cortex init` and `cortex version` ship; the interactive flow below is the target UX and is not yet runnable. Track progress in [`.cortex/state.md`](./.cortex/state.md).
+> **Status:** v0.1.0 ships status, structural validation, audit, and retrieval. The fully interactive per-candidate promotion prompts shown below land with Phase C's index writer. Track progress in [`.cortex/state.md`](./.cortex/state.md).
 
-Running `cortex` is the entire human-facing interface:
+What ships today:
+
+```bash
+cortex                      # status summary — active plans, journal activity, digest age, queue counts
+cortex init                 # scaffold .cortex/ in a project (idempotent)
+cortex manifest --budget N  # token-budgeted session-start slice per Protocol § 1
+cortex grep <pattern>       # frontmatter-aware ripgrep wrapper
+cortex doctor               # validate .cortex/ against SPEC
+cortex doctor --audit       # check Tier-1 Protocol triggers have matching Journal entries
+cortex doctor --audit-digests
+cortex promote <id>         # stub pending Phase C .index.json
+cortex version
+```
+
+What the full interactive flow will look like once Phase C lands the promotion-queue writer:
 
 ```
 $ cortex
@@ -78,7 +92,7 @@ Generate March 2026 digest now?  [y/n]:
 Anything else? (enter to exit, or type a request)
 ```
 
-Everything surfaces at every invocation. You can't miss the queue; you can't miss an overdue digest; you can't miss staleness. Power users will be able to pass flags for scripting (`cortex --status-only`, `cortex --promote j-xxx`, `cortex doctor --audit`) but the primary surface is `cortex`. These flag-driven modes ship alongside the interactive flow in Phase B.
+Everything surfaces at every invocation. You can't miss the queue; you can't miss an overdue digest; you can't miss staleness. For scripting use `cortex --status-only` or `cortex status --json`; the full interactive prompts are Phase C.
 
 ---
 
@@ -125,15 +139,38 @@ Cortex is deliberately **not** a vector store, a database, a knowledge graph, a 
 
 ## Install
 
-Not yet. The CLI ships in Phase B per [PLAN.md](./PLAN.md). When it does:
-
 ```bash
 brew tap autumngarage/cortex
 brew install cortex
-cortex init     # in any project
+cortex init        # in any project
+cortex doctor      # verify the scaffold
 ```
 
-Meanwhile, `.cortex/` is hand-authorable by following [SPEC.md](./SPEC.md), and the Protocol at [`.cortex/protocol.md`](./.cortex/protocol.md) works with any agent that reads `AGENTS.md`.
+Or from source with [`uv`](https://docs.astral.sh/uv/):
+
+```bash
+uv tool install git+https://github.com/autumngarage/cortex
+```
+
+### Installing the full autumngarage trio
+
+Cortex stands alone. It also composes with its two siblings — install all three when you want the full loop:
+
+```bash
+# Foundation: engineering standards, principles, pre-push Codex review
+brew tap autumngarage/touchstone
+brew install touchstone
+
+# Loop: autonomous multi-provider agent cycles
+brew tap autumngarage/sentinel
+brew install sentinel
+
+# Memory: project-local reasoning (this repo)
+brew tap autumngarage/cortex
+brew install cortex
+```
+
+Each tool writes to its own files and reads the others only as best-effort. Nothing breaks if one is missing — Cortex works without Sentinel and without Touchstone; it just can't enforce invariants at push-time (Touchstone) or receive end-of-cycle journal entries (Sentinel). See the [Composition](#composition-with-touchstone-and-sentinel) section above for the file-contract details.
 
 ---
 
