@@ -69,7 +69,7 @@ Fix failing tests before pushing. Phase A has no code to test; test infrastructu
 
 ## Release & Distribution
 
-v0.1.0 shipped. Distribution: the Homebrew tap `autumngarage/homebrew-cortex` hosts the formula (`brew tap autumngarage/cortex && brew install cortex`); `uv tool install git+...` works for source installs. Release flow mirrors Sentinel: version bump in `__init__.py` + `pyproject.toml`, tag, push, `gh release create`, update the formula's `url` + `sha256` in `autumngarage/homebrew-cortex`.
+v0.1.0 shipped. Distribution: the Homebrew tap `autumngarage/homebrew-cortex` hosts the formula (`brew tap autumngarage/cortex && brew install autumngarage/cortex/cortex` — fully qualified to side-step the unrelated Prometheus `cortex` in homebrew-core); `uv tool install git+...` works for source installs. Release flow mirrors Sentinel: version bump in `__init__.py` + `pyproject.toml`, tag, push, `gh release create`, update the formula's `url` + `sha256` in `autumngarage/homebrew-cortex`.
 
 Each release must also declare which spec version it supports (in `SUPPORTED_SPEC_VERSIONS` in `src/cortex/__init__.py`). A minor CLI release cannot change the spec's major version; those travel together.
 
