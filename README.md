@@ -50,7 +50,9 @@ Projects import `.cortex/protocol.md` into `AGENTS.md`. Any agent that reads `AG
 
 ---
 
-## UX — one command
+## UX — one command (planned)
+
+> **Status:** Phase B in progress. Currently only `cortex init` and `cortex version` ship; the interactive flow below is the target UX and is not yet runnable. Track progress in [`.cortex/state.md`](./.cortex/state.md).
 
 Running `cortex` is the entire human-facing interface:
 
@@ -76,7 +78,7 @@ Generate March 2026 digest now?  [y/n]:
 Anything else? (enter to exit, or type a request)
 ```
 
-Everything surfaces at every invocation. You can't miss the queue; you can't miss an overdue digest; you can't miss staleness. Power users can pass flags for scripting (`cortex --status-only`, `cortex --promote j-xxx`, `cortex doctor --audit`) but the primary surface is `cortex`.
+Everything surfaces at every invocation. You can't miss the queue; you can't miss an overdue digest; you can't miss staleness. Power users will be able to pass flags for scripting (`cortex --status-only`, `cortex --promote j-xxx`, `cortex doctor --audit`) but the primary surface is `cortex`. These flag-driven modes ship alongside the interactive flow in Phase B.
 
 ---
 
