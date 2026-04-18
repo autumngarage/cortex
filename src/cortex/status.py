@@ -52,8 +52,20 @@ class Status:
     promotion_proposed: int | None = None
     promotion_stale: int | None = None
     promotion_index_present: bool = False
+    promotion_index_error: str | None = None
 
     def to_dict(self) -> dict[str, object]:
+        queue: dict[str, object]
+        if not self.promotion_index_present:
+            queue = {"index_present": False}
+        elif self.promotion_index_error:
+            queue = {"index_present": True, "error": self.promotion_index_error}
+        else:
+            queue = {
+                "proposed": self.promotion_proposed,
+                "stale": self.promotion_stale,
+                "index_present": True,
+            }
         return {
             "project_root": str(self.project_root),
             "spec_version": self.spec_version,
@@ -73,15 +85,7 @@ class Status:
                 if self.latest_digest_path
                 else None
             ),
-            "promotion_queue": (
-                {
-                    "proposed": self.promotion_proposed,
-                    "stale": self.promotion_stale,
-                    "index_present": True,
-                }
-                if self.promotion_index_present
-                else {"index_present": False}
-            ),
+            "promotion_queue": queue,
         }
 
 
@@ -155,18 +159,28 @@ def _latest_digest(project_root: Path, now: datetime) -> tuple[Path, int] | None
     return latest_path, age_days
 
 
-def _read_promotion_index(cortex_dir: Path) -> tuple[int | None, int | None, bool]:
+@dataclass(frozen=True)
+class _PromotionIndexRead:
+    present: bool
+    proposed: int | None
+    stale: int | None
+    error: str | None
+
+
+def _read_promotion_index(cortex_dir: Path) -> _PromotionIndexRead:
     index_path = cortex_dir / ".index.json"
     if not index_path.exists():
-        return None, None, False
+        return _PromotionIndexRead(present=False, proposed=None, stale=None, error=None)
     try:
         data = json.loads(index_path.read_text())
-    except json.JSONDecodeError:
-        return None, None, True
+    except json.JSONDecodeError as exc:
+        return _PromotionIndexRead(
+            present=True, proposed=None, stale=None, error=f"JSON decode error: {exc}"
+        )
     queue = data.get("promotion_queue", [])
     proposed = sum(1 for c in queue if c.get("state") == "proposed")
     stale = sum(1 for c in queue if c.get("state") == "stale-proposed")
-    return proposed, stale, True
+    return _PromotionIndexRead(present=True, proposed=proposed, stale=stale, error=None)
 
 
 def compute_status(project_root: Path, *, now: datetime | None = None) -> Status:
@@ -177,7 +191,7 @@ def compute_status(project_root: Path, *, now: datetime | None = None) -> Status
     active_plans = _collect_active_plans(cortex_dir)
     recent = _count_recent_journal(cortex_dir, RECENT_JOURNAL_DAYS, now)
     digest = _latest_digest(project_root, now)
-    proposed, stale, index_present = _read_promotion_index(cortex_dir)
+    index = _read_promotion_index(cortex_dir)
 
     status = Status(
         project_root=project_root,
@@ -185,9 +199,10 @@ def compute_status(project_root: Path, *, now: datetime | None = None) -> Status
         protocol_version=protocol_version,
         active_plans=active_plans,
         recent_journal_count=recent,
-        promotion_proposed=proposed,
-        promotion_stale=stale,
-        promotion_index_present=index_present,
+        promotion_proposed=index.proposed,
+        promotion_stale=index.stale,
+        promotion_index_present=index.present,
+        promotion_index_error=index.error,
     )
     if digest is not None:
         status.latest_digest_path = digest[0]
@@ -229,14 +244,20 @@ def format_status(status: Status) -> str:
     else:
         lines.append("Latest digest: none")
 
-    if status.promotion_index_present:
-        lines.append(
-            f"Promotion queue: {status.promotion_proposed} proposed, "
-            f"{status.promotion_stale} stale"
-        )
-    else:
+    if not status.promotion_index_present:
         lines.append(
             "Promotion queue: not yet initialised (`.cortex/.index.json` absent; "
             "populated by Phase C refresh commands)"
+        )
+    elif status.promotion_index_error:
+        lines.append(
+            f"Promotion queue: UNREADABLE (`.cortex/.index.json` is present but "
+            f"cannot be parsed — {status.promotion_index_error}). "
+            "Repair or remove the file before trusting the counts."
+        )
+    else:
+        lines.append(
+            f"Promotion queue: {status.promotion_proposed} proposed, "
+            f"{status.promotion_stale} stale"
         )
     return "\n".join(lines) + "\n"

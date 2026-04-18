@@ -123,6 +123,18 @@ def test_cli_status_missing_cortex(tmp_path: Path) -> None:
     assert result.exit_code == 2
 
 
+def test_status_reports_unreadable_index(scaffolded: Path) -> None:
+    (scaffolded / ".cortex" / ".index.json").write_text("{not: valid json")
+    status = compute_status(scaffolded)
+    assert status.promotion_index_present is True
+    assert status.promotion_index_error is not None
+    # format_status should surface the error, not silently show zeroed counts.
+    runner = CliRunner()
+    result = runner.invoke(cli, ["status", "--path", str(scaffolded)])
+    assert result.exit_code == 0
+    assert "UNREADABLE" in result.output
+
+
 def test_promote_without_index_errors(scaffolded: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["promote", "j-abc", "--path", str(scaffolded)])
