@@ -136,6 +136,71 @@ def test_audit_warns_when_no_matching_journal(git_project: Path) -> None:
     assert any(f.trigger == Trigger.T1_8 for f in unmatched)
 
 
+def test_mismatched_trigger_does_not_satisfy_fire(git_project: Path) -> None:
+    # A Journal entry declares Trigger: T1.8 but the fire is a T1.1 fire.
+    # Entry should not satisfy the T1.1 fire even though Type matches.
+    _commit(
+        git_project,
+        "feat: add doctrine entry",
+        {".cortex/doctrine/0001-why.md": "# 0001\n\n**Status:** Accepted\n**Date:** 2026-04-17\n**Load-priority:** default\n"},
+    )
+    commits = load_commits(git_project, since_days=30)
+    date = commits[0].date.date().isoformat()
+    (git_project / ".cortex" / "journal" / f"{date}-wrong-trigger.md").write_text(
+        f"# Wrong trigger\n\n**Date:** {date}\n**Type:** decision\n"
+        "**Trigger:** T1.8 (commit message pattern)\n\nbody\n"
+    )
+    report = audit(git_project, since_days=30)
+    t1_1_fires = [f for f in report.fires if f.trigger == Trigger.T1_1]
+    matched = [f for f in t1_1_fires if f.matched]
+    assert not matched, "Trigger T1.8 journal entry must not satisfy a T1.1 fire"
+
+
+def test_human_authored_entry_without_trigger_still_matches(git_project: Path) -> None:
+    _commit(
+        git_project,
+        "feat: add doctrine entry",
+        {".cortex/doctrine/0001-why.md": "# 0001\n\n**Status:** Accepted\n**Date:** 2026-04-17\n**Load-priority:** default\n"},
+    )
+    commits = load_commits(git_project, since_days=30)
+    date = commits[0].date.date().isoformat()
+    journal_dir = git_project / ".cortex" / "journal"
+    # Two decision entries without Trigger: both fires (scaffold + doctrine)
+    # should match.
+    (journal_dir / f"{date}-decision-a.md").write_text(
+        f"# Decision A\n\n**Date:** {date}\n**Type:** decision\n\nbody\n"
+    )
+    (journal_dir / f"{date}-decision-b.md").write_text(
+        f"# Decision B\n\n**Date:** {date}\n**Type:** decision\n\nbody\n"
+    )
+    report = audit(git_project, since_days=30)
+    t1_1_fires = [f for f in report.fires if f.trigger == Trigger.T1_1]
+    assert t1_1_fires
+    assert all(f.matched for f in t1_1_fires)
+
+
+def test_audit_digests_ignores_frontmatter_lists(git_project: Path) -> None:
+    # Digest has uncited body bullets but its frontmatter Sources list has
+    # journal/... references. The fix excludes frontmatter list items from
+    # the sample so the body claims alone drive the warning.
+    date = "2026-04-17"
+    (git_project / ".cortex" / "journal" / f"{date}-digest.md").write_text(
+        "---\n"
+        f"Date: {date}\n"
+        "Type: digest\n"
+        "Sources:\n"
+        "  - journal/2026-04-01-foo.md\n"
+        "  - journal/2026-04-02-bar.md\n"
+        "---\n\n"
+        "# Digest\n\n"
+        "- uncited claim one\n"
+        "- uncited claim two\n"
+        "- uncited claim three\n"
+    )
+    warnings = audit_digests(git_project)
+    assert any("digest.md" in w for w in warnings)
+
+
 def test_audit_digests_flags_missing_citations(git_project: Path) -> None:
     date = "2026-04-17"
     (git_project / ".cortex" / "journal" / f"{date}-march-digest.md").write_text(

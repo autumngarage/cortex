@@ -84,6 +84,7 @@ class JournalEntry:
     path: Path
     date: datetime
     type_: str | None
+    trigger: str | None
 
 
 @dataclass(frozen=True)
@@ -206,41 +207,72 @@ def load_journal_entries(project_root: Path) -> list[JournalEntry]:
         if not match:
             continue
         entry_date = datetime.fromisoformat(match.group(1)).replace(tzinfo=UTC)
+        type_, trigger = _journal_header_fields(path)
         entries.append(
             JournalEntry(
                 path=path,
                 date=entry_date,
-                type_=_journal_type(path),
+                type_=type_,
+                trigger=trigger,
             )
         )
     return entries
 
 
-def _journal_type(path: Path) -> str | None:
+def _journal_header_fields(path: Path) -> tuple[str | None, str | None]:
+    """Return ``(Type, Trigger)`` for a Journal entry.
+
+    Both fields accept YAML frontmatter or bold-inline (SPEC § 6). Missing
+    fields return None. ``Trigger`` only appears on Protocol-triggered
+    entries; human-authored entries leave it unset.
+    """
     try:
         text = path.read_text()
     except OSError:
-        return None
+        return None, None
     frontmatter, _body = parse_frontmatter(text)
-    value = frontmatter.get("Type")
-    if isinstance(value, str) and value.strip():
-        return value.strip()
     header = "\n".join(text.splitlines()[:40])
-    m = re.search(r"\*\*Type:\*\*\s*([^\n]+)", header)
-    if m:
-        return m.group(1).strip()
-    return None
+
+    def _from_either(field: str) -> str | None:
+        fm_value = frontmatter.get(field)
+        if isinstance(fm_value, str) and fm_value.strip():
+            return fm_value.strip()
+        m = re.search(rf"\*\*{re.escape(field)}:\*\*\s*([^\n]+)", header)
+        if m:
+            return m.group(1).strip()
+        return None
+
+    type_ = _from_either("Type")
+    raw_trigger = _from_either("Trigger")
+    trigger: str | None = None
+    if raw_trigger:
+        # Allow values like "T1.3 (Plan status changed)" or a bare "T1.3".
+        t_match = re.match(r"(T\d+\.\d+)", raw_trigger)
+        trigger = t_match.group(1) if t_match else raw_trigger
+    return type_, trigger
 
 
 def _best_matching_entry(
-    commit: Commit, expected_type: str, candidates: Iterable[JournalEntry]
+    commit: Commit,
+    trigger: Trigger,
+    expected_type: str,
+    candidates: Iterable[JournalEntry],
 ) -> JournalEntry | None:
-    """Return the nearest in-window candidate of the expected type, or None."""
+    """Return the nearest in-window candidate for this fire, or None.
+
+    A candidate matches only if its ``Type:`` matches the expected value and,
+    when it declares a ``Trigger:`` field, that trigger equals the fire's
+    trigger. Human-authored Protocol entries without a ``Trigger:`` still
+    count as valid matches (Type-only) so teams aren't forced to retrofit
+    the field.
+    """
     window = timedelta(hours=JOURNAL_MATCH_WINDOW_HOURS)
     best: JournalEntry | None = None
     best_delta = window
     for entry in candidates:
         if entry.type_ != expected_type:
+            continue
+        if entry.trigger is not None and entry.trigger != trigger.value:
             continue
         delta = abs(entry.date - commit.date)
         if delta <= best_delta:
@@ -272,7 +304,7 @@ def audit(
             ordered_fires.append((commit, trigger))
     for commit, trigger in ordered_fires:
         available = [e for e in journal if e.path not in consumed]
-        entry = _best_matching_entry(commit, EXPECTED_TYPE[trigger], available)
+        entry = _best_matching_entry(commit, trigger, EXPECTED_TYPE[trigger], available)
         if entry is not None:
             consumed.add(entry.path)
         report.fires.append(
@@ -304,7 +336,14 @@ def audit_digests(project_root: Path, sample_per_digest: int = 5) -> list[str]:
         if entry.type_ != "digest":
             continue
         text = entry.path.read_text()
-        claims = [line for line in text.splitlines() if line.strip().startswith(("- ", "* "))]
+        _frontmatter, body = parse_frontmatter(text)
+        # Only sample body bullets; YAML frontmatter list items (e.g.
+        # `Sources`, `Omitted`) are metadata, not digest claims.
+        claims = [
+            line
+            for line in body.splitlines()
+            if line.lstrip().startswith(("- ", "* "))
+        ]
         if not claims:
             warnings.append(
                 f"{entry.path.relative_to(project_root)}: digest has no bulleted claims to sample."
