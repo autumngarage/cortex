@@ -157,7 +157,9 @@ def grep_command(*, pattern: str, layer: str | None, target_path: Path, rg_args:
     # ``--json`` gives newline-delimited records with ``{type: match|context|...}``
     # so context lines (emitted by ``-C/-A/-B``) are unambiguous instead of
     # being line-noise-separated from match lines.
-    cmd = [rg, "--json", *rg_args, pattern, str(search_root)]
+    # ``--`` terminator so patterns beginning with `-` (e.g. ``- [ ]`` for
+    # Markdown checkboxes) are not parsed as ripgrep flags.
+    cmd = [rg, "--json", *rg_args, "--", pattern, str(search_root)]
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
 
     if result.returncode == 2:

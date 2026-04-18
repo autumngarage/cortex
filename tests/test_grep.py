@@ -198,6 +198,20 @@ def test_spec_version_guard_warns_on_missing(
     assert "SPEC_VERSION" in combined
 
 
+def test_pattern_with_leading_dash_not_parsed_as_flag(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _install_fake_rg(monkeypatch, "")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["grep", "- [ ]", "--path", str(scaffolded_project)])
+    assert result.exit_code == 0
+    assert calls
+    invoked = calls[0]
+    # The `--` terminator must appear immediately before the pattern.
+    dash_dash_idx = invoked.index("--")
+    assert invoked[dash_dash_idx + 1] == "- [ ]"
+
+
 def test_rg_error_returncode_propagates(scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _install_fake_rg(monkeypatch, "", returncode=2, stderr="rg: bad pattern\n")
     runner = CliRunner()
