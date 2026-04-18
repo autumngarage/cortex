@@ -17,7 +17,22 @@ Cites: doctrine/0001-why-cortex-exists, doctrine/0003-spec-is-the-artifact, jour
 
 > The first attempt at this plan was lost in a Claude Code crash (see journal). This second attempt is checkpointed at each phase so it survives the next one. The goal is a sharpened vision that (a) names what Cortex uniquely does, (b) survives direct comparison with Letta, Claude Code's own memory, AGENTS.md, Zep/Graphiti, and the PKM lineage, and (c) describes the seam with Touchstone and Sentinel crisply enough that the three tools compose without overlap.
 
-## Success criteria
+## Why (grounding)
+
+Grounded in [`doctrine/0001-why-cortex-exists`](../doctrine/0001-why-cortex-exists.md) and [`doctrine/0003-spec-is-the-artifact`](../doctrine/0003-spec-is-the-artifact.md). Trigger: vision draft v1 was vulnerable to peer-agent "isn't this just X?" pushback ([`journal/2026-04-17-vision-session-lost-to-crash`](../journal/2026-04-17-vision-session-lost-to-crash.md)).
+
+## Approach
+
+Research in parallel via Explore agents, critique via `codex exec` + `gemini`, decide what lands in README/SPEC/Doctrine/Journal, ship v3 with checkpointed drafts surviving each iteration. Full approach in "Research checkpoints" and subsequent sections.
+
+## Work items
+
+- [x] Round-1 research (three Explore agents) — see "Research checkpoints" below.
+- [x] Round-1 critique (Codex + Gemini) — see subsequent sections.
+- [x] Round-2 revision & promotion — see [`journal/2026-04-17-vision-v3-promoted`](../journal/2026-04-17-vision-v3-promoted.md).
+- [x] Plan marked shipped 2026-04-17.
+
+## Success Criteria
 
 - A `vision-draft.md` in the repo that passes two independent critiques (`codex exec`, `gemini`) without either agent identifying a load-bearing claim that's overclaimed, wrong, or already done better elsewhere.
 - A decision, post-critique, about which parts of the vision land in `README.md`, which become new Doctrine entries, and which are filed as open questions.
