@@ -130,6 +130,26 @@ def test_promotion_summary_with_index(scaffolded_project: Path) -> None:
     assert "Promotion-queue: 1 proposed, 1 stale." in output
 
 
+def test_unsupported_spec_version_warns(scaffolded_project: Path) -> None:
+    (scaffolded_project / ".cortex" / "SPEC_VERSION").write_text("9.9.0\n")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["manifest", "--path", str(scaffolded_project), "--budget", "8000"])
+    assert result.exit_code == 0
+    stderr = getattr(result, "stderr", "") or ""
+    combined = result.output + stderr
+    assert "9.9.0" in combined
+
+
+def test_missing_spec_version_warns(scaffolded_project: Path) -> None:
+    (scaffolded_project / ".cortex" / "SPEC_VERSION").unlink()
+    runner = CliRunner()
+    result = runner.invoke(cli, ["manifest", "--path", str(scaffolded_project), "--budget", "8000"])
+    assert result.exit_code == 0
+    stderr = getattr(result, "stderr", "") or ""
+    combined = result.output + stderr
+    assert "SPEC_VERSION" in combined
+
+
 def test_missing_cortex_dir_errors(tmp_path: Path) -> None:
     exit_code, output = _run_manifest(tmp_path, 8000)
     assert exit_code == 2

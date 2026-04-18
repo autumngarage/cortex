@@ -7,6 +7,7 @@ from pathlib import Path
 
 import click
 
+from cortex import SUPPORTED_SPEC_VERSIONS
 from cortex.manifest import build_manifest
 
 
@@ -42,6 +43,25 @@ def manifest_command(*, budget: int, target_path: Path) -> None:
             err=True,
         )
         sys.exit(2)
+
+    # SPEC § 7: readers warn when the store declares an unsupported major.
+    spec_version_file = cortex_dir / "SPEC_VERSION"
+    if not spec_version_file.exists():
+        click.echo(
+            f"warning: {spec_version_file} missing; reading without compatibility check. "
+            "Run `cortex doctor` for details.",
+            err=True,
+        )
+    else:
+        declared = spec_version_file.read_text().strip()
+        declared_major_minor = ".".join(declared.split("-", 1)[0].split(".")[:2])
+        if declared_major_minor not in SUPPORTED_SPEC_VERSIONS:
+            click.echo(
+                f"warning: `.cortex/SPEC_VERSION` is {declared!r}; this CLI supports "
+                f"{', '.join(SUPPORTED_SPEC_VERSIONS)}. Manifest may miss or misparse "
+                "fields introduced or removed in other versions.",
+                err=True,
+            )
 
     manifest = build_manifest(target_path, budget)
     click.echo(manifest.render(), nl=False)
