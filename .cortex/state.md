@@ -2,7 +2,7 @@
 Generated: 2026-04-17T22:45:00-07:00
 Generator: hand-authored (regeneration infrastructure ships in Phase C)
 Sources:
-  - HEAD of branch feat/cortex-doctor-audit (targeting main at 89f0658)
+  - HEAD of branch feat/cortex-status (targeting main at e55487d)
   - .cortex/doctrine/ (5 entries: 0001–0003 + 0005 active with Load-priority: always; 0004 Superseded-by 0005)
   - .cortex/plans/ (1 active: phase-b-walking-skeleton; vision-sharpening shipped)
   - .cortex/journal/ (12 entries, all for 2026-04-17)
@@ -10,9 +10,9 @@ Sources:
   - .cortex/map.md (stub, pending Phase C)
   - .cortex/procedures/ (empty; .gitkeep only)
   - SPEC.md v0.3.1-dev
-  - pyproject.toml, src/cortex/ (scaffold + version + init + doctor (incl. `--audit`/`--audit-digests`) + manifest + grep commands)
+  - pyproject.toml, src/cortex/ (scaffold + version + init + doctor (incl. `--audit`/`--audit-digests`) + manifest + grep + status + promote commands)
   - PLAN.md phase-A-complete, phase-B-started
-Corpus: 5 Doctrine entries, 1 active Plan, 12 Journal entries, 8 Templates, 1 Python package (cortex 0.1.0.dev0 with `version` + `init` + `doctor` (incl. `--audit` / `--audit-digests`) + `manifest` + `grep` commands)
+Corpus: 5 Doctrine entries, 1 active Plan, 12 Journal entries, 8 Templates, 1 Python package (cortex 0.1.0.dev0 with `version` + `init` + `doctor` (incl. `--audit` / `--audit-digests`) + `manifest` + `grep` + `status` + `promote` commands)
 Omitted:
   - .cortex/.index.json — not present pre-CLI; per SPEC § 2 the file is auto-maintained by the Cortex CLI and its absence is the expected state before Phase B ships.
 Incomplete:
@@ -36,16 +36,16 @@ Full plan: [`plans/phase-b-walking-skeleton.md`](./plans/phase-b-walking-skeleto
 **Success signal:** `brew tap autumngarage/cortex && brew install cortex && cortex init` works in a fresh repo and produces a SPEC-v0.3.1-conformant `.cortex/` scaffold including `.cortex/protocol.md` and `.cortex/templates/`, validated by `cortex doctor`.
 
 - [x] Python package scaffold (`pyproject.toml`, `src/cortex/`, `uv`-managed) — shipped with `cortex version` as first command
-- [ ] `cortex` (interactive entry point) — status + promotion queue + digest prompts (per README example)
+- [~] `cortex` (interactive entry point) — bare `cortex` now runs the status summary (project, versions, active plans, recent journal, digest age + overdue flag at >45 days, promotion-queue counts from `.cortex/.index.json`). Per-candidate review and digest-generation prompts remain deferred to Phase C when `.index.json` gets populated.
 - [x] `cortex init` — scaffolds `.cortex/` per SPEC.md v0.3.1, copying bundled `protocol.md` + `templates/` into the target project; idempotent; `--force` preserves user content
 - [x] `cortex manifest --budget <N>` — token-budgeted session-start slice per Protocol § 1; `Load-priority: always` Doctrine pinned first, then recency; degrades to state-only below 2000 tokens; widens Journal to 7 days at 15000+
 - [x] `cortex grep <pattern>` — frontmatter-aware wrapper over ripgrep; shells out to `rg`, groups matches per file, prepends a metadata summary line (Status/Type/Date/Load-priority) extracted from YAML frontmatter or bold-inline fields per SPEC § 6. `--layer` restricts to one subdirectory; extra flags pass through to `rg`.
-- [ ] `cortex --status-only` — equivalent of status summary, for scripting
+- [x] `cortex --status-only` — top-level flag + `cortex status` subcommand with `--json`, suitable for scripting.
 - [x] `cortex doctor` (first slice) — scaffold structure, seven-field metadata on derived layers, Doctrine frontmatter (Status/Date/Load-priority), Plan frontmatter + sections + Goal-hash recomputation (SPEC § 4.9), Journal filename pattern. Promotion-queue invariants and single-authority-rule drift defer to the `.index.json`-enabled slice.
 - [x] `cortex doctor --audit` (first slice) — walks `git log` for the configurable window (default 7 days) and classifies Tier-1 triggers T1.1 (doctrine/plans/principles/SPEC.md diff), T1.5 (dep manifest change), T1.8 (commit-msg patterns), and T1.9 (every main-branch commit). Each fire is matched against a Journal entry of the expected `Type:` within 72 h. Unmatched fires warn but never fail exit. T1.2/T1.3/T1.4/T1.6/T1.7 deferred (need runtime session state or per-commit diff parsing).
 - [x] `cortex doctor --audit-digests` (first slice) — for every Journal entry with `Type: digest`, samples the first 5 bulleted claims and warns when most lack a `journal/...` citation (SPEC § 5.4 shape; not yet a full claim-trace audit).
 - [ ] `cortex doctor` warning when the CLI-less fallback manifest (per Protocol § 1) is used against a corpus exceeding default thresholds
-- [ ] `cortex --promote <id>` — flag-style promotion (interactive flow is the default)
+- [~] `cortex promote <id>` — stub subcommand. Validates `.cortex/.index.json` presence and candidate id; exits 3 with a clear "not yet implemented" note when the candidate is found, pending Phase C's index writer.
 - [x] `cortex version` — prints CLI version + supported spec + protocol versions + install method
 - [ ] Tests for each command (temp-dir fixtures, no mocked filesystem)
 - [ ] `autumngarage/homebrew-cortex` tap repo created
@@ -63,6 +63,7 @@ Gated on P0–D. Critical integrations: Sentinel end-of-cycle → Journal entry 
 
 ## Shipped recently
 
+- **2026-04-18 (early morning)** — **Phase B seventh slice: `cortex status` + bare `cortex` + `cortex promote` stub.** Bare `cortex` now prints a structured status summary (project name, spec/protocol versions, active plans, journal entries in the last 7 days, latest digest with age + overdue flag at >45 days per SPEC § 5.2 cadence, promotion-queue counts from `.cortex/.index.json` with a clear "not yet initialised" message when absent). `cortex status --json` emits a machine-readable payload for scripting. `cortex status --path` targets arbitrary projects. `cortex --status-only` is a top-level flag that does the same thing (README-promised shape). `cortex promote <id>` is a honest stub: it validates `.index.json` presence and candidate id but exits 3 with a clear "not yet implemented" note pending Phase C's index writer, so the contract is truthful instead of silently no-op'ing. SPEC_VERSION reader-contract warnings go through the shared `cortex.compat.warn_if_incompatible` helper. 11 new tests; 106 total.
 - **2026-04-18 (late evening)** — **Phase B sixth slice: `cortex doctor --audit` and `--audit-digests` (first-slice Tier-1 coverage).** Walks recent `git log` (default window 7 days) and classifies Tier-1 Protocol triggers against every commit: T1.1 (diff touches doctrine/plans/principles/SPEC.md → `Type: decision`), T1.5 (dep manifest change → `Type: decision`), T1.8 (commit subject matches `fix: *regression`, `refactor: *(removes|introduces)`, `feat: *(breaking|replaces)` → `Type: decision`), and T1.9 (every main-branch commit → `Type: pr-merged`). Each fire is matched against a Journal entry of the expected Type within 72 h; unmatched fires print WARNING lines on stderr but never escalate the exit code. `--audit-digests` samples bulleted claims from each `Type: digest` entry and warns when most lack a `journal/…` citation (SPEC § 5.4 shape). T1.2/T1.3/T1.4/T1.6/T1.7 deferred — they need runtime session state or per-commit diff parsing that's out of scope for this slice. 9 new audit tests (89 total) run against real `git init`'d temp repos, not mocks. On this repo, `--audit` surfaces 14 unmatched T1.9 fires — expected, since the `pr-merged` template shipped after most of those merges; retrofit is a follow-up.
 - **2026-04-17 (late evening)** — **Phase B fifth slice: `cortex grep`.** Frontmatter-aware ripgrep wrapper — the primary mid-session retrieval path per Protocol § 1 (Doctrine 0005 #1 rules out vector retrieval at the storage layer). Shells out to `rg --json` and parses the NDJSON stream so match vs. context records are unambiguous (`-C`/`-A`/`-B` context now renders with the ripgrep `-` separator instead of being mangled by a `:` splitter). Groups matches per file and prepends a one-line metadata summary pulled from YAML frontmatter or bold-inline fields (SPEC § 6) covering Status/Type/Date/Written/Load-priority. `--layer {doctrine,plans,journal,procedures,templates}` restricts the search root; extra flags pass through to `rg`; patterns are terminated with `--` so leading-dash patterns like `- [ ]` work. Exits 2 when `.cortex/` is missing, 3 when `rg` is not on PATH, 2 on an `rg` error (bad pattern). Reader-contract warnings on missing or unsupported `.cortex/SPEC_VERSION` go through a shared `cortex.compat.warn_if_incompatible` helper also wired into `cortex manifest`. Malformed JSON records surface a stderr warning instead of masquerading as "no matches". 11 new grep tests; 79 total (monkeypatch `subprocess.run`, so tests don't require ripgrep on PATH).
 - **2026-04-17 (late evening)** — **Phase B fourth slice: `cortex manifest --budget`.** Assembles the session-start manifest per Protocol § 1: full `state.md` always loaded, Doctrine ordered by `Load-priority: always` first then `Date:` recency, only `Status: active` Plans, Journal entries from the last 72 h plus the latest digest, and a promotion-queue summary from `.cortex/.index.json` (or an explicit "unavailable" line when the index does not exist). Graceful degradation: `--budget < 2000` → state-only, `--budget >= 15000` → Journal window widens from 72 h to 7 d. Token estimates use a conservative ~4 chars/token ratio; the exact tokenizer belongs with whichever agent consumes the manifest. 10 new tests (63 total).

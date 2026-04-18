@@ -8,6 +8,7 @@ in follow-up PRs per .cortex/plans/phase-b-walking-skeleton.md.
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import click
 
@@ -16,6 +17,8 @@ from cortex.commands.doctor import doctor_command
 from cortex.commands.grep import grep_command
 from cortex.commands.init import init_command
 from cortex.commands.manifest import manifest_command
+from cortex.commands.promote import promote_command
+from cortex.commands.status import run_status, status_command
 
 
 def _detect_install_method() -> str:
@@ -38,16 +41,28 @@ def _detect_install_method() -> str:
     context_settings={"help_option_names": ["-h", "--help"]},
     invoke_without_command=True,
 )
+@click.option(
+    "--status-only",
+    is_flag=True,
+    default=False,
+    help="Print the status summary non-interactively and exit. Suitable for scripting.",
+)
 @click.pass_context
-def cli(ctx: click.Context) -> None:
+def cli(ctx: click.Context, status_only: bool) -> None:
     """Cortex — project memory protocol and reference CLI.
 
-    The interactive `cortex` entrypoint (status + promotion queue + digest
-    prompts) is not yet implemented; see .cortex/plans/phase-b-walking-skeleton.md.
-    Run `cortex --help` to list subcommands.
+    Running ``cortex`` with no subcommand prints the status summary (active
+    plans, recent journal activity, digest age, promotion-queue counts).
+    The fully interactive flow described in the README (per-candidate
+    review prompts, digest-generation prompts) depends on
+    ``.cortex/.index.json`` which is populated by the Phase C refresh
+    commands; until then the bare invocation is effectively
+    ``cortex status``. Use ``--status-only`` or ``cortex status --json``
+    for scripting.
     """
     if ctx.invoked_subcommand is None:
-        click.echo(ctx.get_help())
+        run_status(Path.cwd(), as_json=False)
+        _ = status_only  # flag currently redundant since the default is already non-interactive
 
 
 @cli.command("version")
@@ -67,6 +82,8 @@ cli.add_command(init_command)
 cli.add_command(doctor_command)
 cli.add_command(manifest_command)
 cli.add_command(grep_command)
+cli.add_command(status_command)
+cli.add_command(promote_command)
 
 
 if __name__ == "__main__":
