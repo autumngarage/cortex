@@ -40,6 +40,8 @@ from pathlib import Path
 
 import click
 
+from cortex import __version__ as CORTEX_VERSION
+
 CURRENT_SPEC_VERSION = "0.3.1-dev"
 
 SCAFFOLD_SUBDIRS = ("doctrine", "plans", "journal", "procedures")
@@ -440,12 +442,15 @@ def init_command(
     for sub in SCAFFOLD_SUBDIRS:
         _ensure_subdir(cortex_dir / sub)
 
-    # 5. map.md and state.md stubs (scaffold files; overwrite)
-    for layer, title, generator in (
-        ("map", "Project Map", "cortex init v0.1.0"),
-        ("state", "Project State", "cortex init v0.1.0"),
+    # 5. map.md and state.md stubs (scaffold files; overwrite). Generator
+    # string is derived from `cortex.__version__` so the stubs' seven-field
+    # metadata stays truthful across releases (no hand-bump to remember).
+    init_generator = f"cortex init v{CORTEX_VERSION}"
+    for layer, title in (
+        ("map", "Project Map"),
+        ("state", "Project State"),
     ):
-        (cortex_dir / f"{layer}.md").write_text(_derived_stub(title, layer, generator))
+        (cortex_dir / f"{layer}.md").write_text(_derived_stub(title, layer, init_generator))
 
     click.echo(f"Scaffolded {cortex_dir} (spec v{CURRENT_SPEC_VERSION}).")
 
