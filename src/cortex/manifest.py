@@ -89,7 +89,8 @@ class Manifest:
             if not section.body.endswith("\n"):
                 out += "\n"
             out += "\n---\n\n"
-        out += self.promotion_summary + "\n"
+        if self.promotion_summary:
+            out += self.promotion_summary + "\n"
         return out
 
 
@@ -265,7 +266,8 @@ def build_manifest(project_root: Path, budget_tokens: int, *, now: datetime | No
     )
 
     if degraded:
-        manifest.promotion_summary = _promotion_summary(cortex_dir)
+        # Protocol § 1 degraded fallback is state-only; do not append the
+        # promotion-queue summary even though it's small.
         return manifest
 
     remaining_chars = max(0, budget_tokens * CHARS_PER_TOKEN - estimate_tokens(state_body) * CHARS_PER_TOKEN)

@@ -78,6 +78,8 @@ def test_degraded_mode_state_only(scaffolded_project: Path) -> None:
     assert exit_code == 0
     assert "degraded (state-only)" in output
     assert "## Doctrine" not in output
+    # Protocol § 1: degraded fallback is state-only — no promotion summary.
+    assert "Promotion-queue" not in output
 
 
 def test_load_priority_always_listed_first(scaffolded_project: Path) -> None:
