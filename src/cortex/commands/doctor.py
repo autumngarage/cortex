@@ -20,6 +20,7 @@ from pathlib import Path
 import click
 
 from cortex.audit import DEFAULT_WINDOW_DAYS, EXPECTED_TYPE, audit, audit_digests
+from cortex.siblings import detect_siblings, format_sibling_block
 from cortex.validation import Issue, Severity, run_all_checks
 
 
@@ -101,8 +102,21 @@ def doctor_command(
     if run_audit_digests:
         _print_audit_digests(target_path)
 
+    _print_siblings(target_path)
+
     if errors:
         sys.exit(1)
+
+
+def _print_siblings(project_root: Path) -> None:
+    """Surface Autumn Garage sibling tools (Doctrine 0002 composition).
+
+    Informational only — presence/absence never escalates exit code or
+    warn-severity. See `cortex.siblings` for the detection contract.
+    """
+    statuses = detect_siblings(project_root)
+    click.echo("")
+    click.echo(format_sibling_block(statuses))
 
 
 def _print_audit(project_root: Path, since_days: int) -> None:
