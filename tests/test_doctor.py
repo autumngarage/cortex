@@ -145,6 +145,68 @@ def test_prose_mention_does_not_satisfy_required_section(scaffolded_project: Pat
     assert "Success Criteria" in stderr
 
 
+def test_empty_plan_frontmatter_value_rejected(scaffolded_project: Path) -> None:
+    plans_dir = scaffolded_project / ".cortex" / "plans"
+    plans_dir.mkdir(parents=True, exist_ok=True)
+    plan = plans_dir / "empty-field.md"
+    plan.write_text(
+        "---\n"
+        "Status: \n"
+        "Written: 2026-04-17\n"
+        "Author: human\n"
+        f"Goal-hash: {normalize_goal_hash('Empty Plan')}\n"
+        "Updated-by:\n"
+        "  - 2026-04-17T10:00 human\n"
+        "---\n\n"
+        "# Empty Plan\n\n## Why (grounding)\ndoctrine/0001.\n\n"
+        "## Success Criteria\nyes\n\n## Approach\n.\n\n## Work items\n- [ ] a\n"
+    )
+    exit_code, _stdout, stderr = _run_doctor(scaffolded_project)
+    assert exit_code == 1
+    assert "Status" in stderr
+
+
+def test_invalid_doctrine_status_rejected(scaffolded_project: Path) -> None:
+    entry = scaffolded_project / ".cortex" / "doctrine" / "0002-weird.md"
+    entry.write_text(
+        "# 0002 — Weird\n\n"
+        "**Status:** Draft\n"
+        "**Date:** 2026-04-17\n"
+        "**Load-priority:** default\n\n"
+        "## Context\nx\n## Decision\ny\n## Consequences\nz\n"
+    )
+    exit_code, _stdout, stderr = _run_doctor(scaffolded_project)
+    assert exit_code == 1
+    assert "Status" in stderr
+
+
+def test_fenced_success_criteria_does_not_satisfy_empty_check(scaffolded_project: Path) -> None:
+    # Plan has a real `## Success Criteria` heading but its body is empty; a
+    # fenced `## Success Criteria` earlier in the file must not satisfy the
+    # empty-section check.
+    plans_dir = scaffolded_project / ".cortex" / "plans"
+    plans_dir.mkdir(parents=True, exist_ok=True)
+    plan = plans_dir / "fenced-empty.md"
+    plan.write_text(
+        "---\n"
+        "Status: active\n"
+        "Written: 2026-04-17\n"
+        "Author: human\n"
+        f"Goal-hash: {normalize_goal_hash('Fenced Empty')}\n"
+        "Updated-by:\n"
+        "  - 2026-04-17T10:00 human\n"
+        "---\n\n"
+        "# Fenced Empty\n\n"
+        "## Why (grounding)\ndoctrine/0001.\n\n"
+        "## Approach\n```\n## Success Criteria\nfilled (fenced)\n```\n\n"
+        "## Success Criteria\n\n"
+        "## Work items\n- [ ] item\n"
+    )
+    exit_code, _stdout, stderr = _run_doctor(scaffolded_project)
+    assert exit_code == 1
+    assert "Success Criteria" in stderr
+
+
 def test_superseded_doctrine_exempt_from_load_priority(scaffolded_project: Path) -> None:
     # Doctrine is immutable-with-supersede; entries already marked
     # Superseded-by cannot be retrofitted with Load-priority, so doctor must

@@ -44,6 +44,7 @@ SCAFFOLD_SUBDIRS = ("doctrine", "plans", "journal", "procedures")
 
 DOCTRINE_REQUIRED_FIELDS = ("Status", "Date", "Load-priority")
 DOCTRINE_LOAD_PRIORITY_VALUES = ("default", "always")
+DOCTRINE_STATUS_RE = re.compile(r"^(Proposed|Accepted|Superseded-by\s+\d+)\s*$")
 
 PLAN_REQUIRED_FIELDS = ("Status", "Written", "Author", "Goal-hash", "Updated-by")
 PLAN_STATUS_VALUES = ("active", "shipped", "cancelled", "deferred", "blocked")
@@ -261,6 +262,15 @@ def _check_doctrine_entry_body(rel: str, text: str) -> list[Issue]:
 
     status = _read_doctrine_field("Status", frontmatter, header)
     is_superseded = bool(status and status.lower().startswith("superseded-by"))
+    if status and not DOCTRINE_STATUS_RE.match(status):
+        issues.append(
+            Issue(
+                Severity.ERROR,
+                rel,
+                f"Doctrine `Status: {status}` is invalid; SPEC § 3.1 requires "
+                "`Proposed`, `Accepted`, or `Superseded-by <n>`.",
+            )
+        )
 
     for field in DOCTRINE_REQUIRED_FIELDS:
         if field == "Load-priority" and is_superseded:
@@ -311,8 +321,10 @@ def check_plans(project_root: Path) -> list[Issue]:
             )
             continue
 
-        for field in PLAN_REQUIRED_FIELDS:
-            if field not in frontmatter:
+        scalar_plan_fields = tuple(f for f in PLAN_REQUIRED_FIELDS if f != "Updated-by")
+        for field in scalar_plan_fields:
+            value = frontmatter.get(field)
+            if value is None:
                 issues.append(
                     Issue(
                         Severity.ERROR,
@@ -320,9 +332,18 @@ def check_plans(project_root: Path) -> list[Issue]:
                         f"Plan missing required frontmatter field `{field}` (SPEC § 3.4).",
                     )
                 )
+                continue
+            if not isinstance(value, str) or not value.strip():
+                issues.append(
+                    Issue(
+                        Severity.ERROR,
+                        rel,
+                        f"Plan frontmatter field `{field}` must be a non-empty scalar (SPEC § 3.4).",
+                    )
+                )
 
         status = frontmatter.get("Status")
-        if isinstance(status, str) and status not in PLAN_STATUS_VALUES:
+        if isinstance(status, str) and status.strip() and status.strip() not in PLAN_STATUS_VALUES:
             issues.append(
                 Issue(
                     Severity.ERROR,
@@ -333,7 +354,7 @@ def check_plans(project_root: Path) -> list[Issue]:
 
         declared_hash = frontmatter.get("Goal-hash")
         title = _extract_h1(body)
-        if isinstance(declared_hash, str) and title:
+        if isinstance(declared_hash, str) and declared_hash.strip() and title:
             expected = normalize_goal_hash(title)
             if declared_hash.strip() != expected:
                 issues.append(
@@ -420,16 +441,43 @@ def _collect_h2_headings(body: str) -> set[str]:
 
 
 def _extract_section(body: str, heading: str) -> str | None:
-    """Return the text between ``heading`` and the next ``## `` heading, or None."""
+    """Return the text between ``heading`` and the next ``## `` heading, or None.
+
+    Fence-aware: ignores ``## `` lines that appear inside ```` ``` ```` or
+    ``~~~`` fenced code blocks, so a fenced mention of ``heading`` does not
+    register as the start of a section and a fenced ``## X`` inside the
+    target section does not terminate it early.
+    """
     lines = body.splitlines()
-    try:
-        start = next(i for i, line in enumerate(lines) if line.strip() == heading)
-    except StopIteration:
+    start: int | None = None
+    fence: str | None = None
+    for i, line in enumerate(lines):
+        stripped = line.lstrip()
+        if fence is None:
+            if stripped.startswith("```") or stripped.startswith("~~~"):
+                fence = stripped[:3]
+                continue
+            if line.strip() == heading:
+                start = i
+                break
+        elif stripped.startswith(fence):
+            fence = None
+    if start is None:
         return None
+
     collected: list[str] = []
+    fence = None
     for line in lines[start + 1 :]:
-        if line.startswith("## "):
-            break
+        stripped = line.lstrip()
+        if fence is None:
+            if stripped.startswith("```") or stripped.startswith("~~~"):
+                fence = stripped[:3]
+                collected.append(line)
+                continue
+            if line.startswith("## "):
+                break
+        elif stripped.startswith(fence):
+            fence = None
         collected.append(line)
     return "\n".join(collected)
 
