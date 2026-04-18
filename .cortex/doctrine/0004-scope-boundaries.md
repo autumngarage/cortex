@@ -4,7 +4,6 @@
 
 **Status:** Superseded-by 0005
 **Date:** 2026-04-17
-**Load-priority:** default
 **Promoted-from:** vision-draft-v3.md § 9
 
 ## Context

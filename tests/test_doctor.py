@@ -137,12 +137,27 @@ def test_prose_mention_does_not_satisfy_required_section(scaffolded_project: Pat
         "# Prose Mention Plan\n\n"
         "> Summary.\n\n"
         "## Why (grounding)\ndoctrine/0001.\n\n"
-        "## Approach\nnotes about ## Success Criteria as prose\n\n"
+        "## Approach\n```\n## Success Criteria\nthis is inside a fence\n```\n\n"
         "## Work items\n- [ ] item\n"
     )
     exit_code, _stdout, stderr = _run_doctor(scaffolded_project)
     assert exit_code == 1
     assert "Success Criteria" in stderr
+
+
+def test_superseded_doctrine_exempt_from_load_priority(scaffolded_project: Path) -> None:
+    # Doctrine is immutable-with-supersede; entries already marked
+    # Superseded-by cannot be retrofitted with Load-priority, so doctor must
+    # not require it for them.
+    entry = scaffolded_project / ".cortex" / "doctrine" / "0001-legacy.md"
+    entry.write_text(
+        "# 0001 — Legacy\n\n"
+        "**Status:** Superseded-by 0005\n"
+        "**Date:** 2026-04-17\n\n"
+        "## Context\nx\n## Decision\ny\n## Consequences\nz\n"
+    )
+    exit_code, stdout, _ = _run_doctor(scaffolded_project)
+    assert exit_code == 0, stdout
 
 
 def test_plan_without_grounding_link_warns(scaffolded_project: Path) -> None:

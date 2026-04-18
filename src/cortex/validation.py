@@ -230,30 +230,43 @@ def check_doctrine(project_root: Path) -> list[Issue]:
     return issues
 
 
-def _check_doctrine_entry_body(rel: str, text: str) -> list[Issue]:
-    """Validate the Status / Date / Load-priority fields of a Doctrine entry.
+def _read_doctrine_field(field: str, frontmatter: dict[str, FrontmatterValue], header: str) -> str | None:
+    """Return the value of ``field`` from YAML frontmatter or bold-inline markup.
 
-    Per SPEC § 6: Doctrine, Journal, and Procedures take their scalar fields
-    as **either** bold-inline markdown (``**Status:** Accepted``) **or** YAML
-    frontmatter. Parsers MUST accept either form. YAML frontmatter is checked
-    first because it's structurally unambiguous; if absent we fall back to
-    scanning for bold-inline patterns.
+    Per SPEC § 6: Doctrine parsers must accept either form. YAML is checked
+    first; bold-inline falls back.
+    """
+    if field in frontmatter:
+        fm_value = frontmatter[field]
+        if isinstance(fm_value, str):
+            return fm_value.strip()
+    match = re.search(rf"\*\*{re.escape(field)}:\*\*\s*(.+)", header)
+    if match:
+        return match.group(1).strip()
+    return None
+
+
+def _check_doctrine_entry_body(rel: str, text: str) -> list[Issue]:
+    """Validate Status / Date / Load-priority on a Doctrine entry.
+
+    Doctrine is immutable-with-supersede (SPEC § 3.1). Historical entries
+    whose Status is ``Superseded-by <n>`` predate any post-hoc requirement
+    such as ``Load-priority:`` (added in v0.3.1-dev); retrofitting them would
+    violate immutability. The validator therefore exempts superseded entries
+    from ``Load-priority`` but still requires Status and Date.
     """
     issues: list[Issue] = []
     frontmatter, _body = parse_frontmatter(text)
     header = "\n".join(text.splitlines()[:40])
 
-    for field in DOCTRINE_REQUIRED_FIELDS:
-        value: str | None = None
-        if field in frontmatter:
-            fm_value = frontmatter[field]
-            if isinstance(fm_value, str):
-                value = fm_value.strip()
-        if value is None:
-            match = re.search(rf"\*\*{re.escape(field)}:\*\*\s*(.+)", header)
-            if match:
-                value = match.group(1).strip()
+    status = _read_doctrine_field("Status", frontmatter, header)
+    is_superseded = bool(status and status.lower().startswith("superseded-by"))
 
+    for field in DOCTRINE_REQUIRED_FIELDS:
+        if field == "Load-priority" and is_superseded:
+            continue
+
+        value = _read_doctrine_field(field, frontmatter, header)
         if value is None:
             issues.append(
                 Issue(
@@ -343,7 +356,7 @@ def check_plans(project_root: Path) -> list[Issue]:
                 )
             )
 
-        heading_lines = {line.strip() for line in body.splitlines() if line.startswith("## ")}
+        heading_lines = _collect_h2_headings(body)
         for section in PLAN_REQUIRED_SECTIONS:
             if section not in heading_lines:
                 issues.append(
@@ -385,6 +398,25 @@ def check_plans(project_root: Path) -> list[Issue]:
                 )
             )
     return issues
+
+
+def _collect_h2_headings(body: str) -> set[str]:
+    """Return the set of ``## `` headings in ``body``, excluding lines inside
+    fenced code blocks (```` ``` ```` or ``~~~``). Matches CommonMark fences.
+    """
+    headings: set[str] = set()
+    fence: str | None = None
+    for raw_line in body.splitlines():
+        stripped = raw_line.lstrip()
+        if fence is None:
+            if stripped.startswith("```") or stripped.startswith("~~~"):
+                fence = stripped[:3]
+                continue
+            if raw_line.startswith("## "):
+                headings.add(raw_line.strip())
+        elif stripped.startswith(fence):
+            fence = None
+    return headings
 
 
 def _extract_section(body: str, heading: str) -> str | None:
