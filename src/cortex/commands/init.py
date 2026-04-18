@@ -186,8 +186,8 @@ def init_command(*, force: bool, target_path: Path) -> None:
 
     # 5. map.md and state.md stubs (scaffold files; overwrite)
     for layer, title, generator in (
-        ("map", "Project Map", "cortex init v0.1.0.dev0"),
-        ("state", "Project State", "cortex init v0.1.0.dev0"),
+        ("map", "Project Map", "cortex init v0.1.0"),
+        ("state", "Project State", "cortex init v0.1.0"),
     ):
         (cortex_dir / f"{layer}.md").write_text(_derived_stub(title, layer, generator))
 
@@ -195,4 +195,4 @@ def init_command(*, force: bool, target_path: Path) -> None:
     click.echo("Next steps:")
     click.echo("  1. Author doctrine/0001-why-<project>-exists.md (see templates/doctrine/candidate.md for shape).")
     click.echo("  2. Import `@.cortex/protocol.md` and `@.cortex/state.md` into your AGENTS.md or CLAUDE.md.")
-    click.echo("  3. Run `cortex doctor` to validate the scaffold (Phase B — coming soon).")
+    click.echo("  3. Run `cortex doctor` to validate the scaffold against SPEC.md.")

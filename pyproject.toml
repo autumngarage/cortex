@@ -1,6 +1,6 @@
 [project]
 name = "cortex"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "A file-format protocol for per-project memory, and the reference CLI."
 readme = "README.md"
 license = { text = "MIT" }

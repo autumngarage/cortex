@@ -1,8 +1,8 @@
 ---
-Generated: 2026-04-17T22:45:00-07:00
+Generated: 2026-04-18T10:15:00-07:00
 Generator: hand-authored (regeneration infrastructure ships in Phase C)
 Sources:
-  - HEAD of branch feat/cortex-status (targeting main at e55487d)
+  - HEAD of branch chore/v0.1.0-release (targeting main at f0c899e); version bumped 0.1.0.dev0 → 0.1.0 in this PR
   - .cortex/doctrine/ (5 entries: 0001–0003 + 0005 active with Load-priority: always; 0004 Superseded-by 0005)
   - .cortex/plans/ (1 active: phase-b-walking-skeleton; vision-sharpening shipped)
   - .cortex/journal/ (12 entries, all for 2026-04-17)
@@ -12,9 +12,9 @@ Sources:
   - SPEC.md v0.3.1-dev
   - pyproject.toml, src/cortex/ (scaffold + version + init + doctor (incl. `--audit`/`--audit-digests`) + manifest + grep + status + promote commands)
   - PLAN.md phase-A-complete, phase-B-started
-Corpus: 5 Doctrine entries, 1 active Plan, 12 Journal entries, 8 Templates, 1 Python package (cortex 0.1.0.dev0 with `version` + `init` + `doctor` (incl. `--audit` / `--audit-digests`) + `manifest` + `grep` + `status` + `promote` commands)
+Corpus: 5 Doctrine entries, 1 active Plan, 12 Journal entries, 8 Templates, 1 Python package (cortex 0.1.0 with `version` + `init` + `doctor` (incl. `--audit` / `--audit-digests`) + `manifest` + `grep` + `status` + `promote` commands)
 Omitted:
-  - .cortex/.index.json — not present pre-CLI; per SPEC § 2 the file is auto-maintained by the Cortex CLI and its absence is the expected state before Phase B ships.
+  - .cortex/.index.json — per SPEC § 2 the file is auto-maintained by the Cortex CLI and its absence is expected until Phase C's `cortex refresh-*` commands (which populate the promotion queue) ship. `cortex status` and `cortex promote` already handle this state gracefully.
 Incomplete:
   - Map regeneration (Phase C); map.md is a stub with Incomplete: [all sources]
   - Automated metric aggregation (Phase C); State is hand-authored
@@ -48,8 +48,7 @@ Full plan: [`plans/phase-b-walking-skeleton.md`](./plans/phase-b-walking-skeleto
 - [~] `cortex promote <id>` — stub subcommand. Validates `.cortex/.index.json` presence and candidate id; exits 3 with a clear "not yet implemented" note when the candidate is found, pending Phase C's index writer.
 - [x] `cortex version` — prints CLI version + supported spec + protocol versions + install method
 - [ ] Tests for each command (temp-dir fixtures, no mocked filesystem)
-- [ ] `autumngarage/homebrew-cortex` tap repo created
-- [ ] v0.1.0 release via Homebrew formula pointing at the source tarball (first CLI release per PLAN.md Phase B; ships targeting spec v0.3.1-dev)
+- [~] `autumngarage/homebrew-cortex` tap + v0.1.0 release — PR aligns README / PITCH / CLAUDE.md / `__version__` / `pyproject.toml` to v0.1.0. Tag, `gh release create`, tap repo creation, and formula publication happen in immediate follow-up steps on `main` after this PR merges; that's the "release workflow" side of the Phase B exit criterion. Follows the per-tool tap pattern established by `homebrew-sentinel` and `homebrew-touchstone` so each tool stands alone while composing as a trio.
 
 ## P1 — Phase C: first synthesis (`cortex refresh-map`, `cortex refresh-state`)
 
