@@ -19,6 +19,7 @@ from pathlib import Path
 
 import click
 
+from cortex.audit import DEFAULT_WINDOW_DAYS, EXPECTED_TYPE, audit, audit_digests
 from cortex.validation import Issue, Severity, run_all_checks
 
 
@@ -39,19 +40,48 @@ def _format_issue(issue: Issue) -> str:
     show_default="current directory",
     help="Project root containing `.cortex/`.",
 )
-def doctor_command(*, target_path: Path) -> None:
+@click.option(
+    "--audit",
+    "run_audit",
+    is_flag=True,
+    default=False,
+    help="Also walk recent git history and check that every Tier-1 Protocol "
+    "trigger has a matching Journal entry (Protocol § 2).",
+)
+@click.option(
+    "--audit-digests",
+    "run_audit_digests",
+    is_flag=True,
+    default=False,
+    help="Also sample each Journal digest and warn when its claims lack "
+    "`journal/...` citations (SPEC § 5.4).",
+)
+@click.option(
+    "--since-days",
+    type=int,
+    default=DEFAULT_WINDOW_DAYS,
+    show_default=True,
+    help="Audit window in days (only used with --audit).",
+)
+def doctor_command(
+    *,
+    target_path: Path,
+    run_audit: bool,
+    run_audit_digests: bool,
+    since_days: int,
+) -> None:
     """Validate a project's `.cortex/` directory against SPEC.md.
 
     Exits 0 on clean, 1 if any issue has severity ``error``. Warnings are
-    surfaced but do not fail the exit code — use ``--strict`` in CI scripts
-    to treat warnings as errors (Phase B follow-up; not implemented yet).
+    surfaced but do not fail the exit code.
+
+    ``--audit`` and ``--audit-digests`` run independent Protocol checks on
+    top of the structural validation; neither currently escalates exit
+    codes on failure — they are informational so you can retrofit Journal
+    entries without being blocked from shipping.
     """
     target_path = Path(target_path).resolve()
     issues = run_all_checks(target_path)
-
-    if not issues:
-        click.echo(f"cortex doctor: .cortex/ looks healthy ({target_path})")
-        return
 
     errors = [i for i in issues if i.severity is Severity.ERROR]
     warnings = [i for i in issues if i.severity is Severity.WARNING]
@@ -60,8 +90,43 @@ def doctor_command(*, target_path: Path) -> None:
         stream = sys.stderr if issue.severity is Severity.ERROR else sys.stdout
         click.echo(_format_issue(issue), file=stream)
 
-    summary = f"{len(errors)} error{'s' if len(errors) != 1 else ''}, {len(warnings)} warning{'s' if len(warnings) != 1 else ''}"
-    click.echo(f"\ncortex doctor: {summary}", err=bool(errors))
+    if issues:
+        summary = f"{len(errors)} error{'s' if len(errors) != 1 else ''}, {len(warnings)} warning{'s' if len(warnings) != 1 else ''}"
+        click.echo(f"\ncortex doctor: {summary}", err=bool(errors))
+    else:
+        click.echo(f"cortex doctor: .cortex/ looks healthy ({target_path})")
+
+    if run_audit:
+        _print_audit(target_path, since_days)
+    if run_audit_digests:
+        _print_audit_digests(target_path)
 
     if errors:
         sys.exit(1)
+
+
+def _print_audit(project_root: Path, since_days: int) -> None:
+    report = audit(project_root, since_days=since_days)
+    click.echo(
+        f"\ncortex doctor --audit: {report.commits_examined} commit(s) in the last "
+        f"{since_days} days; {len(report.fires)} trigger fires, "
+        f"{len(report.unmatched)} unmatched."
+    )
+    for fire in report.unmatched:
+        click.echo(
+            f"WARNING  {fire.trigger} {fire.commit.sha[:8]} "
+            f"({fire.commit.date.date()}) — no Journal entry "
+            f"of Type `{EXPECTED_TYPE[fire.trigger]}` within 72h. "
+            f"Subject: {fire.commit.subject}",
+            err=True,
+        )
+
+
+def _print_audit_digests(project_root: Path) -> None:
+    warnings = audit_digests(project_root)
+    if not warnings:
+        click.echo("\ncortex doctor --audit-digests: all digests appear to cite their sources.")
+        return
+    click.echo("\ncortex doctor --audit-digests:")
+    for line in warnings:
+        click.echo(f"WARNING  {line}", err=True)
