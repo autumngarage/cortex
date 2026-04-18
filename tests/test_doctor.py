@@ -89,7 +89,7 @@ def _write_valid_plan(project: Path, title: str, *, goal_hash: str | None = None
         "## Why (grounding)\n"
         "Links to doctrine/0001.\n\n"
         "## Success Criteria\n"
-        "Specific signal: tests pass.\n\n"
+        "All `tests/test_doctor.py` pass (signal: `pytest -q` exit 0).\n\n"
         "## Approach\n"
         "Do the thing.\n\n"
         "## Work items\n"
@@ -113,7 +113,12 @@ def test_goal_hash_mismatch_reports_error(scaffolded_project: Path) -> None:
 
 def test_plan_missing_success_criteria_reports_error(scaffolded_project: Path) -> None:
     plan = _write_valid_plan(scaffolded_project, "Ship the Thing")
-    plan.write_text(plan.read_text().replace("## Success Criteria\nSpecific signal: tests pass.\n\n", ""))
+    plan.write_text(
+        plan.read_text().replace(
+            "## Success Criteria\nAll `tests/test_doctor.py` pass (signal: `pytest -q` exit 0).\n\n",
+            "",
+        )
+    )
     exit_code, _stdout, stderr = _run_doctor(scaffolded_project)
     assert exit_code == 1
     assert "Success Criteria" in stderr
@@ -207,6 +212,19 @@ def test_fenced_success_criteria_does_not_satisfy_empty_check(scaffolded_project
     assert "Success Criteria" in stderr
 
 
+def test_prose_only_success_criteria_rejected(scaffolded_project: Path) -> None:
+    plan = _write_valid_plan(scaffolded_project, "Prose Criteria Plan")
+    plan.write_text(
+        plan.read_text().replace(
+            "All `tests/test_doctor.py` pass (signal: `pytest -q` exit 0).",
+            "It works well and feels good.",
+        )
+    )
+    exit_code, _stdout, stderr = _run_doctor(scaffolded_project)
+    assert exit_code == 1
+    assert "concrete signal" in stderr
+
+
 def test_plan_missing_cites_rejected(scaffolded_project: Path) -> None:
     plan = _write_valid_plan(scaffolded_project, "No Cites Plan")
     plan.write_text(plan.read_text().replace("Cites: doctrine/0001\n", ""))
@@ -231,6 +249,31 @@ def test_plan_missing_updated_by_rejected(scaffolded_project: Path) -> None:
 def test_plan_missing_h1_title_rejected(scaffolded_project: Path) -> None:
     plan = _write_valid_plan(scaffolded_project, "Has Title")
     plan.write_text(plan.read_text().replace("# Has Title\n", ""))
+    exit_code, _stdout, stderr = _run_doctor(scaffolded_project)
+    assert exit_code == 1
+    assert "H1 title" in stderr
+
+
+def test_fenced_h1_does_not_satisfy_title_check(scaffolded_project: Path) -> None:
+    # A fenced `# Title` inside a code block must not satisfy the H1
+    # requirement — otherwise Goal-hash is never actually verified.
+    plans_dir = scaffolded_project / ".cortex" / "plans"
+    plans_dir.mkdir(parents=True, exist_ok=True)
+    plan = plans_dir / "fenced-h1.md"
+    plan.write_text(
+        "---\n"
+        "Status: active\n"
+        "Written: 2026-04-17\n"
+        "Author: human\n"
+        "Goal-hash: deadbeef\n"
+        "Updated-by:\n  - 2026-04-17T10:00 human\n"
+        "Cites: doctrine/0001\n"
+        "---\n\n"
+        "```\n# Fake Title\n```\n\n"
+        "## Why (grounding)\ndoctrine/0001.\n\n"
+        "## Success Criteria\nSignal: `tests/` pass.\n\n"
+        "## Approach\nx\n\n## Work items\n- [ ] y\n"
+    )
     exit_code, _stdout, stderr = _run_doctor(scaffolded_project)
     assert exit_code == 1
     assert "H1 title" in stderr

@@ -98,10 +98,18 @@ def _list_field(data: dict[str, FrontmatterValue], key: str) -> list[str] | None
 
 
 def _extract_h1(body: str) -> str | None:
+    """Return the body's first real ``# Title`` heading, skipping fenced code."""
+    fence: str | None = None
     for line in body.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("# "):
-            return stripped[2:].strip()
+        stripped = line.lstrip()
+        if fence is None:
+            if stripped.startswith("```") or stripped.startswith("~~~"):
+                fence = stripped[:3]
+                continue
+            if line.startswith("# "):
+                return line[2:].strip()
+        elif stripped.startswith(fence):
+            fence = None
     return None
 
 
@@ -424,14 +432,25 @@ def check_plans(project_root: Path) -> list[Issue]:
             )
 
         success = _extract_section(body, "## Success Criteria")
-        if success is not None and not success.strip():
-            issues.append(
-                Issue(
-                    Severity.ERROR,
-                    rel,
-                    "Plan `Success Criteria` is empty; must name a concrete signal (SPEC § 4.3).",
+        if success is not None:
+            if not success.strip():
+                issues.append(
+                    Issue(
+                        Severity.ERROR,
+                        rel,
+                        "Plan `Success Criteria` is empty; must name a concrete signal (SPEC § 4.3).",
+                    )
                 )
-            )
+            elif not _success_criteria_is_measurable(success):
+                issues.append(
+                    Issue(
+                        Severity.ERROR,
+                        rel,
+                        "Plan `Success Criteria` lacks a concrete signal — needs a numeric "
+                        "threshold, a link to a test/dashboard, or a code/path reference "
+                        "(SPEC § 4.3).",
+                    )
+                )
 
     for goal_hash, plans in goal_hashes.items():
         if len(plans) > 1:
@@ -444,6 +463,30 @@ def check_plans(project_root: Path) -> list[Issue]:
                 )
             )
     return issues
+
+
+_MEASURABLE_SIGNAL_RE = re.compile(
+    r"""
+    (?:\[[^\]]+\]\([^)]+\))       # markdown link [text](url) — citation of a test/dashboard
+    | `[^`]+`                     # inline code / file reference
+    | \b\d+                       # any numeric value (thresholds, counts, durations, %)
+    | \b(?:PR|pr)\s*\#\s*\d+      # PR reference
+    | (?:doctrine|journal|tests?|scripts?|plans)/[A-Za-z0-9._-]+
+    """,
+    re.VERBOSE,
+)
+
+
+def _success_criteria_is_measurable(section: str) -> bool:
+    """Heuristic for SPEC § 4.3's "concrete signal" requirement.
+
+    Accepts the section if it contains at least one of: a markdown link, an
+    inline code reference, a numeric value, a ``PR #<n>`` reference, or a
+    path into a durable directory (``doctrine/``, ``journal/``, ``tests/``,
+    ``scripts/``, ``plans/``). This is deliberately lenient — the goal is to
+    reject prose-only "it works well" criteria, not to police wording.
+    """
+    return bool(_MEASURABLE_SIGNAL_RE.search(section))
 
 
 def _collect_h2_headings(body: str) -> set[str]:
