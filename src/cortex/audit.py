@@ -105,8 +105,43 @@ class AuditReport:
         return [f for f in self.fires if not f.matched]
 
 
-def load_commits(project_root: Path, since_days: int) -> list[Commit]:
-    """Parse ``git log`` output for commits newer than ``since_days`` days."""
+def _resolve_default_branch(project_root: Path) -> str:
+    """Best-effort default-branch detection.
+
+    Tries ``refs/remotes/origin/HEAD`` first (set by ``git clone``), then
+    falls back to common names (``main``, ``master``). Returns the first
+    branch that resolves.
+    """
+    for candidate_cmd in (
+        ["rev-parse", "--abbrev-ref", "origin/HEAD"],
+        ["rev-parse", "--verify", "--quiet", "refs/heads/main"],
+        ["rev-parse", "--verify", "--quiet", "refs/heads/master"],
+    ):
+        result = subprocess.run(
+            ["git", "-C", str(project_root), *candidate_cmd],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            ref = result.stdout.strip()
+            return ref.removeprefix("origin/")
+    return "main"
+
+
+def load_commits(
+    project_root: Path,
+    since_days: int,
+    branch: str | None = None,
+) -> list[Commit]:
+    """Parse ``git log`` output for commits on the default branch.
+
+    Restricting to the default branch matters for T1.9 classification:
+    feature-branch work-in-progress commits haven't been merged yet, so they
+    do not fire the ``pr-merged`` trigger. Callers can override ``branch``
+    to audit a different line of history.
+    """
+    ref = branch or _resolve_default_branch(project_root)
     since_iso = (datetime.now(UTC) - timedelta(days=since_days)).isoformat()
     result = subprocess.run(
         [
@@ -114,6 +149,7 @@ def load_commits(project_root: Path, since_days: int) -> list[Commit]:
             "-C",
             str(project_root),
             "log",
+            ref,
             f"--since={since_iso}",
             "--name-only",
             "--pretty=format:--commit--%n%H%n%cI%n%s",
@@ -196,36 +232,57 @@ def _journal_type(path: Path) -> str | None:
     return None
 
 
-def _match_entry(
-    commit: Commit, expected_type: str, entries: Iterable[JournalEntry]
+def _best_matching_entry(
+    commit: Commit, expected_type: str, candidates: Iterable[JournalEntry]
 ) -> JournalEntry | None:
+    """Return the nearest in-window candidate of the expected type, or None."""
     window = timedelta(hours=JOURNAL_MATCH_WINDOW_HOURS)
-    for entry in entries:
+    best: JournalEntry | None = None
+    best_delta = window
+    for entry in candidates:
         if entry.type_ != expected_type:
             continue
-        if abs((entry.date - commit.date).total_seconds()) <= window.total_seconds():
-            return entry
-    return None
+        delta = abs(entry.date - commit.date)
+        if delta <= best_delta:
+            best = entry
+            best_delta = delta
+    return best
 
 
-def audit(project_root: Path, since_days: int = DEFAULT_WINDOW_DAYS) -> AuditReport:
-    commits = load_commits(project_root, since_days)
+def audit(
+    project_root: Path,
+    since_days: int = DEFAULT_WINDOW_DAYS,
+    *,
+    branch: str | None = None,
+) -> AuditReport:
+    commits = load_commits(project_root, since_days, branch=branch)
     journal = load_journal_entries(project_root)
     report = AuditReport(
         since=datetime.now(UTC) - timedelta(days=since_days),
         commits_examined=len(commits),
     )
-    for commit in commits:
+    # A Journal entry is one event per file (SPEC § 3.5) — each entry can
+    # satisfy at most one trigger fire. Process fires oldest-first so the
+    # earliest trigger wins the entry; later fires needing the same type
+    # must find their own unconsumed entry or remain unmatched.
+    consumed: set[Path] = set()
+    ordered_fires: list[tuple[Commit, Trigger]] = []
+    for commit in sorted(commits, key=lambda c: c.date):
         for trigger in classify(commit):
-            entry = _match_entry(commit, EXPECTED_TYPE[trigger], journal)
-            report.fires.append(
-                TriggerFire(
-                    commit=commit,
-                    trigger=trigger,
-                    matched=entry is not None,
-                    matched_entry=entry.path if entry else None,
-                )
+            ordered_fires.append((commit, trigger))
+    for commit, trigger in ordered_fires:
+        available = [e for e in journal if e.path not in consumed]
+        entry = _best_matching_entry(commit, EXPECTED_TYPE[trigger], available)
+        if entry is not None:
+            consumed.add(entry.path)
+        report.fires.append(
+            TriggerFire(
+                commit=commit,
+                trigger=trigger,
+                matched=entry is not None,
+                matched_entry=entry.path if entry else None,
             )
+        )
     return report
 
 

@@ -76,7 +76,9 @@ def test_t1_8_fires_on_regression_fix(git_project: Path) -> None:
 
 
 def test_audit_matches_when_journal_has_matching_type(git_project: Path) -> None:
-    # Doctrine touch + same-day journal entry of Type: decision.
+    # Doctrine touch + one decision entry per firing commit. The scaffold
+    # commit also touches .cortex/doctrine/.gitkeep and fires T1.1, so both
+    # fires need their own Journal entry under the one-entry-per-fire rule.
     _commit(
         git_project,
         "feat: add doctrine entry",
@@ -84,13 +86,43 @@ def test_audit_matches_when_journal_has_matching_type(git_project: Path) -> None
     )
     commits = load_commits(git_project, since_days=30)
     date = commits[0].date.date().isoformat()
-    (git_project / ".cortex" / "journal" / f"{date}-add-doctrine.md").write_text(
-        f"# Add doctrine\n\n**Date:** {date}\n**Type:** decision\n\nbody\n"
+    journal_dir = git_project / ".cortex" / "journal"
+    (journal_dir / f"{date}-scaffold-decision.md").write_text(
+        f"# Scaffold decision\n\n**Date:** {date}\n**Type:** decision\n\nbody\n"
+    )
+    (journal_dir / f"{date}-add-doctrine-decision.md").write_text(
+        f"# Add doctrine decision\n\n**Date:** {date}\n**Type:** decision\n\nbody\n"
     )
     report = audit(git_project, since_days=30)
     t1_1_fires = [f for f in report.fires if f.trigger == Trigger.T1_1]
     assert t1_1_fires
     assert all(f.matched for f in t1_1_fires)
+
+
+def test_journal_entry_satisfies_at_most_one_fire(git_project: Path) -> None:
+    # Two doctrine-touching commits, only one decision entry — exactly one
+    # T1.1 fire should match; the other must remain unmatched.
+    _commit(
+        git_project,
+        "feat: first doctrine entry",
+        {".cortex/doctrine/0001-one.md": "# 0001\n\n**Status:** Accepted\n**Date:** 2026-04-17\n**Load-priority:** default\n"},
+    )
+    _commit(
+        git_project,
+        "feat: second doctrine entry",
+        {".cortex/doctrine/0002-two.md": "# 0002\n\n**Status:** Accepted\n**Date:** 2026-04-17\n**Load-priority:** default\n"},
+    )
+    commits = load_commits(git_project, since_days=30)
+    date = commits[0].date.date().isoformat()
+    (git_project / ".cortex" / "journal" / f"{date}-one-decision.md").write_text(
+        f"# Only decision\n\n**Date:** {date}\n**Type:** decision\n\nbody\n"
+    )
+    report = audit(git_project, since_days=30)
+    t1_1_fires = [f for f in report.fires if f.trigger == Trigger.T1_1]
+    matched = [f for f in t1_1_fires if f.matched]
+    unmatched = [f for f in t1_1_fires if not f.matched]
+    assert len(matched) == 1, (matched, unmatched)
+    assert len(unmatched) >= 1
 
 
 def test_audit_warns_when_no_matching_journal(git_project: Path) -> None:
@@ -126,6 +158,17 @@ def test_audit_digests_clean_when_citations_present(git_project: Path) -> None:
     )
     warnings = audit_digests(git_project)
     assert not any("clean-digest" in w for w in warnings)
+
+
+def test_t1_9_does_not_fire_on_feature_branch_commits(git_project: Path) -> None:
+    # Create a commit on a feature branch; T1.9 should not fire against it
+    # because the feature-branch commit isn't reachable from main's history.
+    _run(git_project, "checkout", "-b", "feat/x")
+    _commit(git_project, "docs: feature branch wip", {"notes.md": "wip\n"})
+    feature_sha = _run(git_project, "rev-parse", "HEAD").stdout.strip()
+    _run(git_project, "checkout", "main")
+    commits = load_commits(git_project, since_days=30)
+    assert all(c.sha != feature_sha for c in commits), "feature-branch commit must not be audited"
 
 
 def test_cli_audit_flag_runs_without_error(git_project: Path) -> None:
