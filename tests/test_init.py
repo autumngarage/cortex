@@ -37,6 +37,7 @@ def test_init_copies_full_templates_tree(tmp_path: Path) -> None:
     _run_init(tmp_path)
     templates_dir = tmp_path / ".cortex" / "templates"
     expected = {
+        "README.md",
         "journal/decision.md",
         "journal/incident.md",
         "journal/plan-transition.md",
@@ -45,9 +46,67 @@ def test_init_copies_full_templates_tree(tmp_path: Path) -> None:
         "doctrine/candidate.md",
         "digest/monthly.md",
         "digest/quarterly.md",
+        "plans/template.md",
     }
     found = {str(p.relative_to(templates_dir)) for p in templates_dir.rglob("*.md")}
     assert expected == found
+
+
+def test_init_scaffolds_plans_template(tmp_path: Path) -> None:
+    """A first-class plan template ships under templates/plans/ so authors
+    don't have to infer required frontmatter (Goal-hash, Updated-by, Cites)
+    and required sections (Why grounding / Approach / Success Criteria /
+    Work items) from SPEC.md or other plans by reading."""
+    _run_init(tmp_path)
+    template_path = tmp_path / ".cortex" / "templates" / "plans" / "template.md"
+    assert template_path.is_file()
+    text = template_path.read_text()
+    # Required Plan frontmatter fields (SPEC § 3.4) are present as placeholders.
+    for field in ("Status:", "Written:", "Author:", "Goal-hash:", "Updated-by:", "Cites:"):
+        assert field in text, f"plan template missing frontmatter field {field}"
+    # Required section headings (SPEC § 3.4) — exact literals, since
+    # `cortex doctor`'s section check is exact-match.
+    for heading in (
+        "## Why (grounding)",
+        "## Approach",
+        "## Success Criteria",
+        "## Work items",
+        "## Follow-ups (deferred)",
+        "## Known limitations at exit",
+    ):
+        assert heading in text, f"plan template missing section heading {heading!r}"
+
+
+def test_init_plans_template_frontmatter_parses(tmp_path: Path) -> None:
+    """The plan template's YAML-ish frontmatter is valid input for the
+    in-repo frontmatter parser used by `cortex doctor`."""
+    from cortex.frontmatter import parse_frontmatter
+
+    _run_init(tmp_path)
+    text = (tmp_path / ".cortex" / "templates" / "plans" / "template.md").read_text()
+    frontmatter, body = parse_frontmatter(text)
+    assert frontmatter is not None, "plan template frontmatter failed to parse"
+    # Frontmatter must be non-empty and contain the Plan-required scalars.
+    for field in ("Status", "Written", "Author", "Goal-hash", "Updated-by", "Cites"):
+        assert field in frontmatter, f"parsed frontmatter missing {field}"
+    # And the body must carry an H1 title so `cortex doctor`'s Goal-hash
+    # recompute has something to hash.
+    assert body.lstrip().startswith("#"), "plan template body missing H1"
+
+
+def test_init_creates_cortex_readme(tmp_path: Path) -> None:
+    """The `.cortex/README.md` orientation doc lands at the top level so
+    humans arriving via a file browser have a map of the six layers and
+    the hand-edit rules before they need to open SPEC.md."""
+    _run_init(tmp_path)
+    readme = tmp_path / ".cortex" / "README.md"
+    assert readme.is_file()
+    text = readme.read_text()
+    # It names each of the six layers and points at the Protocol + doctor.
+    for layer in ("doctrine/", "journal/", "plans/", "map.md", "state.md", "procedures/", "templates/"):
+        assert layer in text, f"README missing reference to {layer}"
+    assert "@.cortex/protocol.md" in text
+    assert "cortex doctor" in text
 
 
 def test_init_creates_all_required_subdirs(tmp_path: Path) -> None:

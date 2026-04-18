@@ -4,6 +4,7 @@ Creates:
 
 - `.cortex/SPEC_VERSION`            → current spec version (major.minor.patch[-dev])
 - `.cortex/protocol.md`             → copy of the Cortex Protocol shipped with this CLI
+- `.cortex/README.md`               → human-facing orientation doc (layer map, edit rules)
 - `.cortex/templates/...`           → copy of the template tree shipped with this CLI
 - `.cortex/doctrine/`               → empty; seeded with `.gitkeep`
 - `.cortex/plans/`                  → empty; seeded with `.gitkeep`
@@ -179,6 +180,13 @@ def init_command(*, force: bool, target_path: Path) -> None:
     templates_src = data_root / "templates"
     templates_dst = cortex_dir / "templates"
     _copy_tree(templates_src, templates_dst, overwrite=True)
+
+    # 3b. Human-facing README at the top of `.cortex/`. The canonical source
+    # lives at `templates/README.md` in the bundled tree so the sync test keeps
+    # downstream projects in lockstep with this repo's own orientation doc.
+    readme_src = data_root / "templates" / "README.md"
+    readme_dst = cortex_dir / "README.md"
+    shutil.copyfile(readme_src, readme_dst)
 
     # 4. subdirectories with .gitkeep (.gitkeep is scaffold; empty dirs stay empty)
     for sub in SCAFFOLD_SUBDIRS:
