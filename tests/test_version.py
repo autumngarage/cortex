@@ -38,8 +38,9 @@ def test_version_prints_install_method() -> None:
     assert "install method:" in result.output
 
 
-def test_invoking_cortex_without_subcommand_prints_help() -> None:
-    result = CliRunner().invoke(cli, [])
+def test_help_flag_lists_subcommands() -> None:
+    result = CliRunner().invoke(cli, ["--help"])
     assert result.exit_code == 0
     assert "Usage:" in result.output
     assert "version" in result.output
+    assert "status" in result.output
