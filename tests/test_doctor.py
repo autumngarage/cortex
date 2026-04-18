@@ -119,6 +119,32 @@ def test_plan_missing_success_criteria_reports_error(scaffolded_project: Path) -
     assert "Success Criteria" in stderr
 
 
+def test_prose_mention_does_not_satisfy_required_section(scaffolded_project: Path) -> None:
+    # Plan mentions "## Success Criteria" in a code fence / bullet list but
+    # has no actual heading; doctor must reject it.
+    plans_dir = scaffolded_project / ".cortex" / "plans"
+    plans_dir.mkdir(parents=True, exist_ok=True)
+    plan = plans_dir / "prose-mention.md"
+    plan.write_text(
+        "---\n"
+        "Status: active\n"
+        "Written: 2026-04-17\n"
+        "Author: human\n"
+        f"Goal-hash: {normalize_goal_hash('Prose Mention Plan')}\n"
+        "Updated-by:\n"
+        "  - 2026-04-17T10:00 human\n"
+        "---\n\n"
+        "# Prose Mention Plan\n\n"
+        "> Summary.\n\n"
+        "## Why (grounding)\ndoctrine/0001.\n\n"
+        "## Approach\nnotes about ## Success Criteria as prose\n\n"
+        "## Work items\n- [ ] item\n"
+    )
+    exit_code, _stdout, stderr = _run_doctor(scaffolded_project)
+    assert exit_code == 1
+    assert "Success Criteria" in stderr
+
+
 def test_plan_without_grounding_link_warns(scaffolded_project: Path) -> None:
     plan = _write_valid_plan(scaffolded_project, "Ship the Thing")
     plan.write_text(plan.read_text().replace("Links to doctrine/0001.", "Prose-only grounding."))

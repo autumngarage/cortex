@@ -343,8 +343,9 @@ def check_plans(project_root: Path) -> list[Issue]:
                 )
             )
 
+        heading_lines = {line.strip() for line in body.splitlines() if line.startswith("## ")}
         for section in PLAN_REQUIRED_SECTIONS:
-            if section not in body:
+            if section not in heading_lines:
                 issues.append(
                     Issue(
                         Severity.ERROR,
