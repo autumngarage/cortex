@@ -13,6 +13,7 @@ import click
 
 from cortex import SUPPORTED_PROTOCOL_VERSIONS, SUPPORTED_SPEC_VERSIONS, __version__
 from cortex.commands.doctor import doctor_command
+from cortex.commands.grep import grep_command
 from cortex.commands.init import init_command
 from cortex.commands.manifest import manifest_command
 
@@ -65,6 +66,7 @@ def version_command() -> None:
 cli.add_command(init_command)
 cli.add_command(doctor_command)
 cli.add_command(manifest_command)
+cli.add_command(grep_command)
 
 
 if __name__ == "__main__":
