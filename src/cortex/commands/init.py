@@ -17,10 +17,21 @@ Refuses to overwrite an existing `.cortex/SPEC_VERSION` unless `--force` is
 passed. With `--force`, the scaffold files (SPEC_VERSION, protocol.md,
 templates/, map.md/state.md stubs) are overwritten; existing doctrine, plan,
 journal, and procedure content is never deleted.
+
+Interactive first-run follow-ups (per Doctrine 0002 — interactive-by-default):
+when run on a TTY against a project that already has `CLAUDE.md` / `AGENTS.md`,
+`cortex init` offers to append `@.cortex/protocol.md` + `@.cortex/state.md`
+imports, and offers to add `.cortex/.index.json` + `.cortex/pending/` entries
+to `.gitignore`. Each prompt defaults to Yes. Flags (`--add-imports-claude`,
+`--add-imports-agents`, `--gitignore`, and their `--no-*` counterparts) skip
+the corresponding prompt. `--yes`/`-y` accepts all defaults without prompting.
+Non-TTY invocations without `--yes` skip all three follow-ups silently,
+preserving the pre-interactive scaffolding behavior.
 """
 
 from __future__ import annotations
 
+import re
 import shutil
 import sys
 from datetime import UTC, datetime
@@ -106,6 +117,173 @@ def _ensure_subdir(path: Path) -> None:
         gitkeep.touch()
 
 
+# Import block the interactive wizard appends to CLAUDE.md / AGENTS.md. The
+# exact literal strings below are also how the idempotency check works:
+# if `@.cortex/protocol.md` already appears in the target file we skip the
+# append entirely and print a note. This mirrors how doctrine-0002 defines
+# the user contract ("running the wizard twice must be a no-op").
+_CORTEX_IMPORT_BLOCK = """\
+## Current state (read this first)
+
+@.cortex/state.md
+
+## Cortex Protocol
+
+@.cortex/protocol.md
+"""
+
+_PROTOCOL_IMPORT_MARKER = "@.cortex/protocol.md"
+_STATE_IMPORT_MARKER = "@.cortex/state.md"
+
+_GITIGNORE_ENTRIES: tuple[str, ...] = (
+    # Auto-maintained Cortex index; transient per SPEC § 2 — never committed.
+    ".cortex/.index.json",
+    # Placeholder for the Phase E write path; present pre-emptively so the
+    # directory never leaks into commits once consumers start dropping files.
+    ".cortex/pending/",
+)
+
+
+def _append_imports(target_file: Path) -> bool:
+    """Append the Cortex import block to `target_file` if not already present.
+
+    Returns True when the file was modified, False when the imports were
+    already present (idempotent path). The append is placed after the last
+    `@<path>` import line if one exists in the file; otherwise at the end of
+    the file separated by a blank line. Existing content is never rewritten.
+    """
+    text = target_file.read_text()
+    if _PROTOCOL_IMPORT_MARKER in text and _STATE_IMPORT_MARKER in text:
+        # Both imports already present — no-op. Do not duplicate.
+        return False
+
+    # Find the last existing `@<path>` import line so new imports cluster with
+    # the existing ones instead of landing at the bottom of a long file.
+    import_line_pattern = re.compile(r"^@\S+\s*$", re.MULTILINE)
+    matches = list(import_line_pattern.finditer(text))
+
+    if matches:
+        last = matches[-1]
+        # Insert after the last import line (which ends at `last.end()`), with
+        # a blank line separator. If the file already has content after the
+        # last import line it stays untouched below the insertion.
+        insertion = "\n\n" + _CORTEX_IMPORT_BLOCK
+        new_text = text[: last.end()] + insertion + text[last.end():]
+    else:
+        # No existing imports — append at end of file with a blank-line guard
+        # (exactly one blank line separating prior content from the block).
+        if text.endswith("\n\n"):
+            new_text = text + _CORTEX_IMPORT_BLOCK
+        elif text.endswith("\n"):
+            new_text = text + "\n" + _CORTEX_IMPORT_BLOCK
+        elif text == "":
+            new_text = _CORTEX_IMPORT_BLOCK
+        else:
+            new_text = text + "\n\n" + _CORTEX_IMPORT_BLOCK
+
+    target_file.write_text(new_text)
+    return True
+
+
+def _append_gitignore_entries(gitignore: Path) -> bool:
+    """Append Cortex-specific entries to `.gitignore` if missing.
+
+    Idempotent: each entry is only appended when not already present as its
+    own line. Returns True when at least one entry was appended.
+    """
+    existing_lines: set[str] = set()
+    prior_text = ""
+    if gitignore.exists():
+        prior_text = gitignore.read_text()
+        existing_lines = {line.strip() for line in prior_text.splitlines()}
+
+    to_add = [entry for entry in _GITIGNORE_ENTRIES if entry not in existing_lines]
+    if not to_add:
+        return False
+
+    # Ensure a trailing newline before the appended block so entries land on
+    # their own lines even if the user's .gitignore didn't end with one.
+    if prior_text and not prior_text.endswith("\n"):
+        prior_text = prior_text + "\n"
+
+    new_text = prior_text + "\n".join(to_add) + "\n"
+    gitignore.write_text(new_text)
+    return True
+
+
+def _should_prompt(yes: bool) -> bool:
+    """Return True iff we should run interactive prompts.
+
+    The rule (doctrine 0002): prompt only on a TTY. Non-TTY invocations
+    without `--yes` skip all interactive follow-ups entirely — the pre-
+    interactive scaffolding behavior is preserved for CI, hooks, and piped
+    stdin. `--yes` means "accept defaults without prompting" regardless of
+    TTY state, and is the only way to opt into the follow-ups non-interactively.
+    """
+    if yes:
+        return False
+    try:
+        return bool(sys.stdin.isatty())
+    except (AttributeError, ValueError):  # pragma: no cover - defensive
+        # sys.stdin closed or unavailable — treat as non-TTY.
+        return False
+
+
+def _resolve_flag(
+    *,
+    flag_value: bool | None,
+    yes: bool,
+    prompt_text: str,
+    target_exists: bool,
+) -> bool:
+    """Resolve whether an interactive step should execute.
+
+    Precedence (doctrine 0002 § 3):
+      1. Explicit flag (`--foo` or `--no-foo`) always wins.
+      2. `--yes` accepts the default (True).
+      3. TTY → prompt with default=True.
+      4. Non-TTY without `--yes` → skip silently (return False).
+
+    `target_exists` lets the caller gate a step on a file existing first — if
+    the target doesn't exist, we never prompt about it.
+    """
+    if not target_exists:
+        return False
+    if flag_value is not None:
+        return flag_value
+    if yes:
+        return True
+    if _should_prompt(yes=yes):
+        return click.confirm(prompt_text, default=True)
+    # Non-TTY, no flag, no --yes → preserve silent-scaffold behavior.
+    return False
+
+
+def _format_equivalent_command(
+    *,
+    did_claude: bool,
+    did_agents: bool,
+    did_gitignore: bool,
+    force: bool,
+    path_arg: str | None,
+) -> str:
+    """Return the single-line flag-form command that reproduces this run.
+
+    Teach-by-doing (doctrine 0002 § 5): after every successful wizard, print
+    the command that would produce the same result non-interactively.
+    """
+    parts = ["cortex init"]
+    if path_arg is not None:
+        parts.append(f"--path {path_arg}")
+    parts.append("--add-imports-claude" if did_claude else "--no-add-imports-claude")
+    parts.append("--add-imports-agents" if did_agents else "--no-add-imports-agents")
+    parts.append("--gitignore" if did_gitignore else "--no-gitignore")
+    parts.append("--yes")
+    if force:
+        parts.append("--force")
+    return " ".join(parts)
+
+
 @click.command("init")
 @click.option(
     "--force",
@@ -122,8 +300,50 @@ def _ensure_subdir(path: Path) -> None:
     show_default="current directory",
     help="Project root where `.cortex/` will be created.",
 )
-def init_command(*, force: bool, target_path: Path) -> None:
+@click.option(
+    "--add-imports-claude/--no-add-imports-claude",
+    "add_imports_claude",
+    default=None,
+    help="Append `@.cortex/protocol.md` + `@.cortex/state.md` imports to CLAUDE.md. "
+    "On a TTY without this flag, `cortex init` prompts (default Yes). "
+    "Non-TTY without `--yes` skips. Idempotent when imports are already present.",
+)
+@click.option(
+    "--add-imports-agents/--no-add-imports-agents",
+    "add_imports_agents",
+    default=None,
+    help="Same as --add-imports-claude, but for AGENTS.md.",
+)
+@click.option(
+    "--gitignore/--no-gitignore",
+    "add_gitignore",
+    default=None,
+    help="Append `.cortex/.index.json` and `.cortex/pending/` to the project `.gitignore`. "
+    "Idempotent; existing entries are never duplicated. On a TTY without this flag, "
+    "`cortex init` prompts (default Yes).",
+)
+@click.option(
+    "--yes",
+    "-y",
+    "assume_yes",
+    is_flag=True,
+    default=False,
+    help="Accept all interactive defaults without prompting (doctrine 0002 § 4). "
+    "Equivalent to running the wizard and pressing Enter at every step.",
+)
+def init_command(
+    *,
+    force: bool,
+    target_path: Path,
+    add_imports_claude: bool | None,
+    add_imports_agents: bool | None,
+    add_gitignore: bool | None,
+    assume_yes: bool,
+) -> None:
     """Scaffold a SPEC-v0.3.1-dev-conformant `.cortex/` directory in the target project."""
+    # Capture whether the target differs from cwd so the printed equivalent
+    # command at the end reproduces the invocation faithfully.
+    path_differs_from_cwd = Path(target_path).resolve() != Path.cwd().resolve()
     target_path = Path(target_path).resolve()
     if not target_path.exists():
         click.echo(f"error: target path does not exist: {target_path}", err=True)
@@ -200,7 +420,71 @@ def init_command(*, force: bool, target_path: Path) -> None:
         (cortex_dir / f"{layer}.md").write_text(_derived_stub(title, layer, generator))
 
     click.echo(f"Scaffolded {cortex_dir} (spec v{CURRENT_SPEC_VERSION}).")
+
+    # Interactive follow-ups (doctrine 0002). Each step is gated on the
+    # relevant target file existing — if CLAUDE.md / AGENTS.md / .gitignore
+    # doesn't exist we don't prompt about it. Flags override prompts; `--yes`
+    # accepts defaults; non-TTY without `--yes` skips silently.
+    claude_md = target_path / "CLAUDE.md"
+    agents_md = target_path / "AGENTS.md"
+    gitignore_path = target_path / ".gitignore"
+
+    # Resolve what each step will do. We record the effective decision for
+    # each step so the printed equivalent-command reflects reality even
+    # when a step was a no-op because imports were already present.
+    want_claude = _resolve_flag(
+        flag_value=add_imports_claude,
+        yes=assume_yes,
+        prompt_text=f"Add @.cortex/protocol.md and @.cortex/state.md imports to {claude_md.name}?",
+        target_exists=claude_md.exists(),
+    )
+    want_agents = _resolve_flag(
+        flag_value=add_imports_agents,
+        yes=assume_yes,
+        prompt_text=f"Add @.cortex/protocol.md and @.cortex/state.md imports to {agents_md.name}?",
+        target_exists=agents_md.exists(),
+    )
+    # .gitignore gets prompted even if the file doesn't exist yet — we'll
+    # create it. Most projects already have one; pass True unconditionally.
+    want_gitignore = _resolve_flag(
+        flag_value=add_gitignore,
+        yes=assume_yes,
+        prompt_text="Add .cortex/ entries to project .gitignore?",
+        target_exists=True,
+    )
+
+    if want_claude and claude_md.exists():
+        if _append_imports(claude_md):
+            click.echo(f"  Appended Cortex imports to {claude_md.name}.")
+        else:
+            click.echo(f"  {claude_md.name} already imports Cortex protocol.")
+    if want_agents and agents_md.exists():
+        if _append_imports(agents_md):
+            click.echo(f"  Appended Cortex imports to {agents_md.name}.")
+        else:
+            click.echo(f"  {agents_md.name} already imports Cortex protocol.")
+    if want_gitignore:
+        if _append_gitignore_entries(gitignore_path):
+            click.echo(f"  Updated {gitignore_path.name} with Cortex entries.")
+        else:
+            click.echo(f"  {gitignore_path.name} already ignores Cortex transient paths.")
+
     click.echo("Next steps:")
     click.echo("  1. Author doctrine/0001-why-<project>-exists.md (see templates/doctrine/candidate.md for shape).")
-    click.echo("  2. Import `@.cortex/protocol.md` and `@.cortex/state.md` into your AGENTS.md or CLAUDE.md.")
+    if not want_claude and not want_agents:
+        click.echo("  2. Import `@.cortex/protocol.md` and `@.cortex/state.md` into your AGENTS.md or CLAUDE.md.")
     click.echo("  3. Run `cortex doctor` to validate the scaffold against SPEC.md.")
+
+    # Teach-by-doing (doctrine 0002 § 5): print the exact flag-form command
+    # that reproduces this invocation non-interactively. Scripters learn the
+    # flags by seeing them after a hand-run wizard.
+    equivalent = _format_equivalent_command(
+        did_claude=want_claude,
+        did_agents=want_agents,
+        did_gitignore=want_gitignore,
+        force=force,
+        path_arg=str(target_path) if path_differs_from_cwd else None,
+    )
+    click.echo("")
+    click.echo("==> Equivalent to rerun:")
+    click.echo(f"    {equivalent}")
