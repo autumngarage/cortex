@@ -1,18 +1,18 @@
 ---
-Generated: 2026-04-17T22:30:00-07:00
+Generated: 2026-04-17T22:45:00-07:00
 Generator: hand-authored (regeneration infrastructure ships in Phase C)
 Sources:
-  - HEAD of branch feat/cortex-doctor (targeting main at 676e56b)
+  - HEAD of branch feat/cortex-manifest (targeting main at de80b4c)
   - .cortex/doctrine/ (5 entries: 0001–0003 + 0005 active with Load-priority: always; 0004 Superseded-by 0005)
-  - .cortex/plans/ (1 active: phase-b-walking-skeleton — doctor slice shipped; vision-sharpening shipped)
+  - .cortex/plans/ (1 active: phase-b-walking-skeleton; vision-sharpening shipped)
   - .cortex/journal/ (12 entries, all for 2026-04-17)
   - .cortex/templates/ (8 files)
   - .cortex/map.md (stub, pending Phase C)
   - .cortex/procedures/ (empty; .gitkeep only)
   - SPEC.md v0.3.1-dev
-  - pyproject.toml, src/cortex/ (scaffold + version + init + doctor commands)
+  - pyproject.toml, src/cortex/ (scaffold + version + init + doctor + manifest commands)
   - PLAN.md phase-A-complete, phase-B-started
-Corpus: 5 Doctrine entries, 1 active Plan, 12 Journal entries, 8 Templates, 1 Python package (cortex 0.1.0.dev0 with `version` + `init` + `doctor` commands)
+Corpus: 5 Doctrine entries, 1 active Plan, 12 Journal entries, 8 Templates, 1 Python package (cortex 0.1.0.dev0 with `version` + `init` + `doctor` + `manifest` commands)
 Omitted:
   - .cortex/.index.json — not present pre-CLI; per SPEC § 2 the file is auto-maintained by the Cortex CLI and its absence is the expected state before Phase B ships.
 Incomplete:
@@ -38,7 +38,7 @@ Full plan: [`plans/phase-b-walking-skeleton.md`](./plans/phase-b-walking-skeleto
 - [x] Python package scaffold (`pyproject.toml`, `src/cortex/`, `uv`-managed) — shipped with `cortex version` as first command
 - [ ] `cortex` (interactive entry point) — status + promotion queue + digest prompts (per README example)
 - [x] `cortex init` — scaffolds `.cortex/` per SPEC.md v0.3.1, copying bundled `protocol.md` + `templates/` into the target project; idempotent; `--force` preserves user content
-- [ ] `cortex manifest --budget <N>` — token-budgeted session-start slice per Protocol § 1; default recency-based Doctrine loading plus `Load-priority: always` pins
+- [x] `cortex manifest --budget <N>` — token-budgeted session-start slice per Protocol § 1; `Load-priority: always` Doctrine pinned first, then recency; degrades to state-only below 2000 tokens; widens Journal to 7 days at 15000+
 - [ ] `cortex grep <pattern>` — frontmatter-aware wrapper over ripgrep; primary mid-session retrieval path per Protocol § 1
 - [ ] `cortex --status-only` — equivalent of status summary, for scripting
 - [x] `cortex doctor` (first slice) — scaffold structure, seven-field metadata on derived layers, Doctrine frontmatter (Status/Date/Load-priority), Plan frontmatter + sections + Goal-hash recomputation (SPEC § 4.9), Journal filename pattern. Promotion-queue invariants and single-authority-rule drift defer to the `.index.json`-enabled slice.
@@ -63,6 +63,7 @@ Gated on P0–D. Critical integrations: Sentinel end-of-cycle → Journal entry 
 
 ## Shipped recently
 
+- **2026-04-17 (late evening)** — **Phase B fourth slice: `cortex manifest --budget`.** Assembles the session-start manifest per Protocol § 1: full `state.md` always loaded, Doctrine ordered by `Load-priority: always` first then `Date:` recency, only `Status: active` Plans, Journal entries from the last 72 h plus the latest digest, and a promotion-queue summary from `.cortex/.index.json` (or an explicit "unavailable" line when the index does not exist). Graceful degradation: `--budget < 2000` → state-only, `--budget >= 15000` → Journal window widens from 72 h to 7 d. Token estimates use a conservative ~4 chars/token ratio; the exact tokenizer belongs with whichever agent consumes the manifest. 10 new tests (63 total).
 - **2026-04-17 (late evening)** — **Phase B third slice: `cortex doctor` (basic).** Validates scaffold structure, seven-field metadata on derived layers (SPEC § 4.5), Doctrine entry frontmatter (Status/Date enum + Load-priority for non-superseded; SPEC §§ 3.1, 6 accepts either bold-inline or YAML frontmatter), Plan frontmatter + Goal-hash recomputation (§ 4.9) + required sections with fence-aware parsing + grounding citation (§§ 3.4, 4.1, 4.3) + measurable-signal check on Success Criteria, and Journal filename pattern. Ships a minimal in-repo frontmatter parser (no YAML dependency) and a goal-hash normalizer matching the SPEC § 4.9 worked example (`Sharpen Cortex's Vision` → `1cc12b25`). Dogfood-validated on this repo: doctor surfaced a legacy content gap (`plans/vision-sharpening.md` used `## Success criteria` and was missing the canonical `## Why (grounding)`, `## Approach`, `## Work items` sections) which is fixed in the same PR. Doctrine 0004-scope-boundaries is `Superseded-by 0005` and left untouched per the immutable-with-supersede invariant — the validator exempts superseded entries from the post-hoc `Load-priority:` requirement rather than retrofitting them. `--audit` and `--audit-digests` ship in a separate follow-up slice.
 - **2026-04-17 (late afternoon)** — **Phase B second slice: `cortex init`.** Scaffolds `.cortex/` per SPEC v0.3.1-dev: SPEC_VERSION, protocol.md, full templates/ tree, doctrine/plans/journal/procedures/ subdirs with .gitkeep, seven-field map.md + state.md stubs. Idempotent with `--force` escape hatch that preserves user content. Bundles `.cortex/protocol.md` + `templates/` into `src/cortex/_data/` via hatchling force-include; `tests/test_data_sync.py` enforces the _data/ copies stay in sync with canonical `.cortex/`. 17 tests green.
 - **2026-04-17 (late afternoon)** — **Phase B kicked off: Python scaffold + `cortex version`.** `pyproject.toml` with click/pytest/ruff/mypy; `src/cortex/` package with `__version__` + supported-version constants; click CLI with `version` subcommand; 5 passing tests; ruff + mypy clean. Entry point wired (`uv run cortex version` works).
