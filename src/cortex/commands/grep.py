@@ -31,21 +31,25 @@ def _find_rg() -> str | None:
     return shutil.which("rg")
 
 
-def _parse_rg_json(stdout: str) -> dict[str, list[tuple[str, int, str]]]:
+def _parse_rg_json(stdout: str) -> tuple[dict[str, list[tuple[str, int, str]]], int]:
     """Group ``rg --json`` output by file.
 
-    Returns ``{file_path: [(kind, line_number, text), ...]}`` where ``kind``
-    is ``"match"`` or ``"context"``. Non-event records (``begin``/``end``/
-    ``summary``) are ignored; malformed lines are skipped silently so a
-    future ripgrep record type doesn't crash the command.
+    Returns ``(grouped, malformed_count)`` where ``grouped`` maps
+    ``file_path → [(kind, line_number, text), ...]`` and ``malformed_count``
+    is the number of NDJSON records that failed to decode. The caller
+    surfaces a stderr warning when that count is non-zero so a partial or
+    corrupt ripgrep stream doesn't masquerade as a clean "no matches".
+    Non-event records (``begin``/``end``/``summary``) are ignored.
     """
     grouped: dict[str, list[tuple[str, int, str]]] = defaultdict(list)
+    malformed = 0
     for raw_line in stdout.splitlines():
         if not raw_line.strip():
             continue
         try:
             record = json.loads(raw_line)
         except json.JSONDecodeError:
+            malformed += 1
             continue
         kind = record.get("type")
         if kind not in ("match", "context"):
@@ -58,7 +62,7 @@ def _parse_rg_json(stdout: str) -> dict[str, list[tuple[str, int, str]]]:
         text = text_field.get("text", "")
         if path and isinstance(line_no, int):
             grouped[path].append((kind, line_no, text))
-    return grouped
+    return grouped, malformed
 
 
 def _summarize_file(path: Path, project_root: Path) -> str:
@@ -161,7 +165,13 @@ def grep_command(*, pattern: str, layer: str | None, target_path: Path, rg_args:
         click.echo(result.stderr, err=True, nl=False)
         sys.exit(2)
 
-    grouped = _parse_rg_json(result.stdout)
+    grouped, malformed = _parse_rg_json(result.stdout)
+    if malformed:
+        click.echo(
+            f"warning: {malformed} `rg --json` record(s) could not be decoded; "
+            "output may be incomplete.",
+            err=True,
+        )
     if not grouped:
         click.echo(f"no matches for {pattern!r} under {search_root.relative_to(target_path)}")
         return

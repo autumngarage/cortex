@@ -163,6 +163,41 @@ def test_layer_restricts_search_root(scaffolded_project: Path, monkeypatch: pyte
     assert invoked[-1].endswith(".cortex/journal")
 
 
+def test_malformed_json_surfaces_warning(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _install_fake_rg(monkeypatch, "not-valid-json\n" + "{also bad\n")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["grep", "x", "--path", str(scaffolded_project)])
+    assert result.exit_code == 0
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "could not be decoded" in combined
+
+
+def test_spec_version_guard_warns_on_unsupported(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (scaffolded_project / ".cortex" / "SPEC_VERSION").write_text("9.9.0\n")
+    _install_fake_rg(monkeypatch, "")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["grep", "x", "--path", str(scaffolded_project)])
+    assert result.exit_code == 0
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "9.9.0" in combined
+
+
+def test_spec_version_guard_warns_on_missing(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (scaffolded_project / ".cortex" / "SPEC_VERSION").unlink()
+    _install_fake_rg(monkeypatch, "")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["grep", "x", "--path", str(scaffolded_project)])
+    assert result.exit_code == 0
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "SPEC_VERSION" in combined
+
+
 def test_rg_error_returncode_propagates(scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _install_fake_rg(monkeypatch, "", returncode=2, stderr="rg: bad pattern\n")
     runner = CliRunner()
