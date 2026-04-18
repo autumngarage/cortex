@@ -207,6 +207,35 @@ def test_fenced_success_criteria_does_not_satisfy_empty_check(scaffolded_project
     assert "Success Criteria" in stderr
 
 
+def test_plan_missing_cites_rejected(scaffolded_project: Path) -> None:
+    plan = _write_valid_plan(scaffolded_project, "No Cites Plan")
+    plan.write_text(plan.read_text().replace("Cites: doctrine/0001\n", ""))
+    exit_code, _stdout, stderr = _run_doctor(scaffolded_project)
+    assert exit_code == 1
+    assert "Cites" in stderr
+
+
+def test_plan_missing_updated_by_rejected(scaffolded_project: Path) -> None:
+    plan = _write_valid_plan(scaffolded_project, "No Updated-by Plan")
+    plan.write_text(
+        plan.read_text().replace(
+            "Updated-by:\n  - 2026-04-17T10:00 human\n",
+            "",
+        )
+    )
+    exit_code, _stdout, stderr = _run_doctor(scaffolded_project)
+    assert exit_code == 1
+    assert "Updated-by" in stderr
+
+
+def test_plan_missing_h1_title_rejected(scaffolded_project: Path) -> None:
+    plan = _write_valid_plan(scaffolded_project, "Has Title")
+    plan.write_text(plan.read_text().replace("# Has Title\n", ""))
+    exit_code, _stdout, stderr = _run_doctor(scaffolded_project)
+    assert exit_code == 1
+    assert "H1 title" in stderr
+
+
 def test_superseded_doctrine_exempt_from_load_priority(scaffolded_project: Path) -> None:
     # Doctrine is immutable-with-supersede; entries already marked
     # Superseded-by cannot be retrofitted with Load-priority, so doctor must

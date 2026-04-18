@@ -46,7 +46,7 @@ DOCTRINE_REQUIRED_FIELDS = ("Status", "Date", "Load-priority")
 DOCTRINE_LOAD_PRIORITY_VALUES = ("default", "always")
 DOCTRINE_STATUS_RE = re.compile(r"^(Proposed|Accepted|Superseded-by\s+\d+)\s*$")
 
-PLAN_REQUIRED_FIELDS = ("Status", "Written", "Author", "Goal-hash", "Updated-by")
+PLAN_REQUIRED_FIELDS = ("Status", "Written", "Author", "Goal-hash", "Updated-by", "Cites")
 PLAN_STATUS_VALUES = ("active", "shipped", "cancelled", "deferred", "blocked")
 PLAN_REQUIRED_SECTIONS = (
     "## Why (grounding)",
@@ -354,6 +354,14 @@ def check_plans(project_root: Path) -> list[Issue]:
 
         declared_hash = frontmatter.get("Goal-hash")
         title = _extract_h1(body)
+        if title is None:
+            issues.append(
+                Issue(
+                    Severity.ERROR,
+                    rel,
+                    "Plan missing H1 title (`# <Title>`); required to recompute Goal-hash (SPEC § 4.9).",
+                )
+            )
         if isinstance(declared_hash, str) and declared_hash.strip() and title:
             expected = normalize_goal_hash(title)
             if declared_hash.strip() != expected:
@@ -367,15 +375,32 @@ def check_plans(project_root: Path) -> list[Issue]:
                 )
             goal_hashes.setdefault(expected, []).append(rel)
 
-        updated_by = _list_field(frontmatter, "Updated-by")
-        if "Updated-by" in frontmatter and updated_by is None:
+        if "Updated-by" not in frontmatter:
             issues.append(
                 Issue(
                     Severity.ERROR,
                     rel,
-                    "`Updated-by` must be a block-sequence list (SPEC § 3.4).",
+                    "Plan missing required `Updated-by` writer history (SPEC § 3.4).",
                 )
             )
+        else:
+            updated_by = _list_field(frontmatter, "Updated-by")
+            if updated_by is None:
+                issues.append(
+                    Issue(
+                        Severity.ERROR,
+                        rel,
+                        "`Updated-by` must be a block-sequence list (SPEC § 3.4).",
+                    )
+                )
+            elif not updated_by:
+                issues.append(
+                    Issue(
+                        Severity.ERROR,
+                        rel,
+                        "`Updated-by` must contain at least one writer entry (SPEC § 3.4).",
+                    )
+                )
 
         heading_lines = _collect_h2_headings(body)
         for section in PLAN_REQUIRED_SECTIONS:
