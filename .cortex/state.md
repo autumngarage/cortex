@@ -1,18 +1,18 @@
 ---
-Generated: 2026-04-17T16:20:00-07:00
+Generated: 2026-04-17T22:30:00-07:00
 Generator: hand-authored (regeneration infrastructure ships in Phase C)
 Sources:
-  - HEAD of branch feat/phase-b-cortex-init (targeting main at 5b22977)
+  - HEAD of branch feat/cortex-doctor (targeting main at 676e56b)
   - .cortex/doctrine/ (5 entries: 0001–0003 + 0005 active with Load-priority: always; 0004 Superseded-by 0005)
-  - .cortex/plans/ (1 active: phase-b-walking-skeleton — first Work item checked; vision-sharpening shipped)
+  - .cortex/plans/ (1 active: phase-b-walking-skeleton — doctor slice shipped; vision-sharpening shipped)
   - .cortex/journal/ (12 entries, all for 2026-04-17)
   - .cortex/templates/ (8 files)
   - .cortex/map.md (stub, pending Phase C)
   - .cortex/procedures/ (empty; .gitkeep only)
   - SPEC.md v0.3.1-dev
-  - pyproject.toml, src/cortex/ (scaffold + version command)
+  - pyproject.toml, src/cortex/ (scaffold + version + init + doctor commands)
   - PLAN.md phase-A-complete, phase-B-started
-Corpus: 5 Doctrine entries, 1 active Plan, 12 Journal entries, 8 Templates, 1 Python package (cortex 0.1.0.dev0 with `version` + `init` commands)
+Corpus: 5 Doctrine entries, 1 active Plan, 12 Journal entries, 8 Templates, 1 Python package (cortex 0.1.0.dev0 with `version` + `init` + `doctor` commands)
 Omitted:
   - .cortex/.index.json — not present pre-CLI; per SPEC § 2 the file is auto-maintained by the Cortex CLI and its absence is the expected state before Phase B ships.
 Incomplete:
@@ -41,7 +41,7 @@ Full plan: [`plans/phase-b-walking-skeleton.md`](./plans/phase-b-walking-skeleto
 - [ ] `cortex manifest --budget <N>` — token-budgeted session-start slice per Protocol § 1; default recency-based Doctrine loading plus `Load-priority: always` pins
 - [ ] `cortex grep <pattern>` — frontmatter-aware wrapper over ripgrep; primary mid-session retrieval path per Protocol § 1
 - [ ] `cortex --status-only` — equivalent of status summary, for scripting
-- [ ] `cortex doctor` — validates `.cortex/` structure against SPEC.md; checks the seven-field metadata contract; validates promotion-queue invariants; flags orphan deferrals, unlinked plans, single-authority-rule violations; verifies `Goal-hash:` fields via SPEC § 4.9 normalization
+- [x] `cortex doctor` (first slice) — scaffold structure, seven-field metadata on derived layers, Doctrine frontmatter (Status/Date/Load-priority), Plan frontmatter + sections + Goal-hash recomputation (SPEC § 4.9), Journal filename pattern. Promotion-queue invariants and single-authority-rule drift defer to the `.index.json`-enabled slice.
 - [ ] `cortex doctor --audit` — verifies Tier 1 Protocol triggers (T1.1–T1.9) produced entries during the git session window
 - [ ] `cortex doctor --audit-digests` — random-sample claim verification on digests
 - [ ] `cortex doctor` warning when the CLI-less fallback manifest (per Protocol § 1) is used against a corpus exceeding default thresholds
@@ -63,6 +63,7 @@ Gated on P0–D. Critical integrations: Sentinel end-of-cycle → Journal entry 
 
 ## Shipped recently
 
+- **2026-04-17 (late evening)** — **Phase B third slice: `cortex doctor` (basic).** Validates scaffold structure, seven-field metadata on derived layers (SPEC § 4.5), Doctrine entry frontmatter (Status/Date enum + Load-priority for non-superseded; SPEC §§ 3.1, 6 accepts either bold-inline or YAML frontmatter), Plan frontmatter + Goal-hash recomputation (§ 4.9) + required sections with fence-aware parsing + grounding citation (§§ 3.4, 4.1, 4.3) + measurable-signal check on Success Criteria, and Journal filename pattern. Ships a minimal in-repo frontmatter parser (no YAML dependency) and a goal-hash normalizer matching the SPEC § 4.9 worked example (`Sharpen Cortex's Vision` → `1cc12b25`). Dogfood-validated on this repo: doctor surfaced a legacy content gap (`plans/vision-sharpening.md` used `## Success criteria` and was missing the canonical `## Why (grounding)`, `## Approach`, `## Work items` sections) which is fixed in the same PR. Doctrine 0004-scope-boundaries is `Superseded-by 0005` and left untouched per the immutable-with-supersede invariant — the validator exempts superseded entries from the post-hoc `Load-priority:` requirement rather than retrofitting them. `--audit` and `--audit-digests` ship in a separate follow-up slice.
 - **2026-04-17 (late afternoon)** — **Phase B second slice: `cortex init`.** Scaffolds `.cortex/` per SPEC v0.3.1-dev: SPEC_VERSION, protocol.md, full templates/ tree, doctrine/plans/journal/procedures/ subdirs with .gitkeep, seven-field map.md + state.md stubs. Idempotent with `--force` escape hatch that preserves user content. Bundles `.cortex/protocol.md` + `templates/` into `src/cortex/_data/` via hatchling force-include; `tests/test_data_sync.py` enforces the _data/ copies stay in sync with canonical `.cortex/`. 17 tests green.
 - **2026-04-17 (late afternoon)** — **Phase B kicked off: Python scaffold + `cortex version`.** `pyproject.toml` with click/pytest/ruff/mypy; `src/cortex/` package with `__version__` + supported-version constants; click CLI with `version` subcommand; 5 passing tests; ruff + mypy clean. Entry point wired (`uv run cortex version` works).
 - **2026-04-17 (evening)** — **Protocol sharpened, templates shipped, drafts archived.** Three Protocol/SPEC amendments resolved live contradictions and hand-waves: Protocol § 1 rewritten to use `Load-priority: always` + recency (removing the "semantic relevance" contradiction with Doctrine 0004); Protocol § 1 fallback specified for CLI-less projects; T1.9 (PR merged) added to Tier 1; SPEC § 4.9 Goal-hash normalization concretized (lowercase title → sha256[:8]); SPEC § 3.1 Doctrine gains `Load-priority:` field; all four existing Doctrine entries backfilled. Eight templates shipped under `.cortex/templates/` (five journal, one doctrine, two digest). Vision drafts v1/v2/v3 moved to `drafts/` with supersede banners. Strategic content preserved in [`journal/2026-04-17-competitive-positioning-and-claude-code-risk.md`](./journal/2026-04-17-competitive-positioning-and-claude-code-risk.md). Full details in [`journal/2026-04-17-protocol-sharpened-and-drafts-archived.md`](./journal/2026-04-17-protocol-sharpened-and-drafts-archived.md).
