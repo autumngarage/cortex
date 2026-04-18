@@ -4,6 +4,8 @@
 
 **Status:** spec-stage. [SPEC.md](./SPEC.md) v0.3.1-dev (draft). [`.cortex/protocol.md`](./.cortex/protocol.md) specifies the agent contract. The CLI is Phase B ([PLAN.md](./PLAN.md)).
 
+**New here?** Start with [`docs/PITCH.md`](./docs/PITCH.md) — plain-language one-liner, vision, and day-in-the-life walkthrough.
+
 ---
 
 ## The problem, in two stories
