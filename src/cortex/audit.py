@@ -107,26 +107,35 @@ class AuditReport:
 
 
 def _resolve_default_branch(project_root: Path) -> str:
-    """Best-effort default-branch detection.
+    """Best-effort default-branch ref detection.
 
-    Tries ``refs/remotes/origin/HEAD`` first (set by ``git clone``), then
-    falls back to common names (``main``, ``master``). Returns the first
-    branch that resolves.
+    Prefers the remote ref (``origin/main``, ``origin/master``) so a stale
+    or missing local branch doesn't cause the audit to silently fall back
+    to an older snapshot. Falls back to local ``main`` / ``master`` when
+    the remote ref isn't available (e.g. fresh `git init` repos used by
+    tests). Returns a ref that `git log` can resolve.
     """
-    for candidate_cmd in (
-        ["rev-parse", "--abbrev-ref", "origin/HEAD"],
-        ["rev-parse", "--verify", "--quiet", "refs/heads/main"],
-        ["rev-parse", "--verify", "--quiet", "refs/heads/master"],
-    ):
+    probes: tuple[tuple[list[str], str], ...] = (
+        (["rev-parse", "--abbrev-ref", "origin/HEAD"], "origin/HEAD-detected"),
+        (["rev-parse", "--verify", "--quiet", "refs/remotes/origin/main"], "origin/main"),
+        (["rev-parse", "--verify", "--quiet", "refs/remotes/origin/master"], "origin/master"),
+        (["rev-parse", "--verify", "--quiet", "refs/heads/main"], "main"),
+        (["rev-parse", "--verify", "--quiet", "refs/heads/master"], "master"),
+    )
+    for cmd, label in probes:
         result = subprocess.run(
-            ["git", "-C", str(project_root), *candidate_cmd],
+            ["git", "-C", str(project_root), *cmd],
             capture_output=True,
             text=True,
             check=False,
         )
-        if result.returncode == 0 and result.stdout.strip():
-            ref = result.stdout.strip()
-            return ref.removeprefix("origin/")
+        if result.returncode != 0 or not result.stdout.strip():
+            continue
+        if label == "origin/HEAD-detected":
+            # The abbrev-ref form returns e.g. ``origin/main``. Use it as-is
+            # so we target the remote tip, not a local copy that may lag.
+            return result.stdout.strip()
+        return label
     return "main"
 
 
@@ -144,6 +153,10 @@ def load_commits(
     """
     ref = branch or _resolve_default_branch(project_root)
     since_iso = (datetime.now(UTC) - timedelta(days=since_days)).isoformat()
+    # ``--first-parent`` restricts the walk to mainline commits only. Without
+    # it, a merge commit on main would fan out into every feature-branch
+    # commit reachable from that merge, producing one T1.9 fire per WIP
+    # commit instead of per PR merge.
     result = subprocess.run(
         [
             "git",
@@ -151,6 +164,7 @@ def load_commits(
             str(project_root),
             "log",
             ref,
+            "--first-parent",
             f"--since={since_iso}",
             "--name-only",
             "--pretty=format:--commit--%n%H%n%cI%n%s",

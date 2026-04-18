@@ -236,6 +236,23 @@ def test_t1_9_does_not_fire_on_feature_branch_commits(git_project: Path) -> None
     assert all(c.sha != feature_sha for c in commits), "feature-branch commit must not be audited"
 
 
+def test_merge_commit_fan_out_uses_first_parent(git_project: Path) -> None:
+    # Non-squash merge flow: feature branch with N commits, then a real
+    # merge commit on main. Audit must see only the mainline merge commit,
+    # not one entry per feature-branch WIP commit.
+    _run(git_project, "checkout", "-b", "feat/multi")
+    _commit(git_project, "wip: step one", {"notes.md": "1\n"})
+    _commit(git_project, "wip: step two", {"notes.md": "2\n"})
+    _commit(git_project, "wip: step three", {"notes.md": "3\n"})
+    _run(git_project, "checkout", "main")
+    _run(git_project, "merge", "--no-ff", "feat/multi", "-m", "Merge feat/multi")
+    commits = load_commits(git_project, since_days=30)
+    subjects = [c.subject for c in commits]
+    assert "Merge feat/multi" in subjects
+    # The WIP commits must not appear — first-parent stops at the merge.
+    assert not any(s.startswith("wip: step ") for s in subjects), subjects
+
+
 def test_cli_audit_flag_runs_without_error(git_project: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["doctor", "--audit", "--path", str(git_project), "--since-days", "30"])
