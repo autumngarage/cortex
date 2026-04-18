@@ -66,18 +66,22 @@ Ship the repo and the spec, not the tool. Nothing calls an LLM yet.
 
 **Exit criterion met:** spec is readable standalone, plan doc captures Phase B work, repo is on GitHub with the dogfood `.cortex/` validating the spec against a real project.
 
-### Phase B — Walking skeleton
+### Phase B — Walking skeleton *(shipped as v0.1.0 on 2026-04-18)*
 
-Commands that manipulate `.cortex/` structure but don't synthesize.
+Commands that manipulate `.cortex/` structure but don't synthesize. Every line item below shipped and is covered by tests; exit provenance is in [`.cortex/journal/2026-04-18-phase-b-shipped-v0.1.0-on-homebrew.md`](./.cortex/journal/2026-04-18-phase-b-shipped-v0.1.0-on-homebrew.md).
 
-- [ ] `cortex init` — creates `.cortex/` scaffolding in the CWD per spec v0.3.1-dev (doctrine/, empty map.md + state.md stubs with headers, plans/, journal/, procedures/, templates/, protocol.md, SPEC_VERSION file)
-- [ ] `cortex status` — reports freshness per layer (by parsing `Generated:` headers), flags orphan deferrals and unlinked plans (reads and validates, no synthesis)
-- [ ] `cortex version` — prints Cortex CLI version and spec version supported
-- [ ] `cortex doctor` — health check (valid .cortex? spec version match? required files present?)
-- [ ] Tests: structural validation, init idempotence, status detection of each spec-violation class
-- [ ] v0.1.0 release, brew tap wired, `brew install autumngarage/cortex/cortex` works
+- [x] `cortex init` — creates `.cortex/` scaffolding per spec v0.3.1-dev
+- [x] `cortex status` / bare `cortex` / `--status-only` / `cortex status --json` — structural summary (active plans, journal activity, digest age with overdue flag, promotion-queue counts)
+- [x] `cortex version` — prints CLI version, supported SPEC + Protocol versions, install method
+- [x] `cortex doctor` — structural validation (scaffold, seven-field metadata, Doctrine / Plan / Journal frontmatter + sections, Goal-hash recomputation)
+- [x] `cortex doctor --audit` + `--audit-digests` — first-slice Tier-1 coverage (T1.1 / T1.5 / T1.8 / T1.9) + digest-claim citation sampling
+- [x] `cortex manifest --budget N` — token-budgeted session-start slice per Protocol § 1
+- [x] `cortex grep <pattern>` — frontmatter-aware `rg --json` wrapper
+- [x] `cortex promote <id>` — stub (validates `.index.json` shape; full writer is Phase C)
+- [x] Tests: 111 green, temp-dir fixtures, audit tests use real `git init` temp repos
+- [x] v0.1.0 release + `autumngarage/homebrew-cortex` tap live; `brew install autumngarage/cortex/cortex` works on macOS
 
-**Exit criterion:** a Cortex-shaped `.cortex/` can be created, inspected, and validated by the CLI with zero LLM calls.
+**Exit criterion met:** a Cortex-shaped `.cortex/` can be created, inspected, and validated by the CLI with zero LLM calls; distribution is live.
 
 ### Phase C — First synthesis: Map
 
@@ -136,6 +140,6 @@ Cross-tool composition via file contracts (no code coupling).
 
 ## Where to start next session
 
-**Phase A shipped.** Current P0 is **Phase B — walking-skeleton CLI**, tracked as a full Cortex Plan at [`.cortex/plans/phase-b-walking-skeleton.md`](./.cortex/plans/phase-b-walking-skeleton.md). See also [`.cortex/state.md`](./.cortex/state.md) for the live operational view.
+**Phases A and B shipped.** Cortex v0.1.0 is on Homebrew via [`autumngarage/homebrew-cortex`](https://github.com/autumngarage/homebrew-cortex); the full shipped-plan record is in [`.cortex/journal/2026-04-18-phase-b-shipped-v0.1.0-on-homebrew.md`](./.cortex/journal/2026-04-18-phase-b-shipped-v0.1.0-on-homebrew.md).
 
-First concrete task in Phase B: scaffold the Python package (`pyproject.toml`, `src/cortex/__init__.py`, `src/cortex/cli.py` entrypoint) and implement `cortex version` + `cortex init`. Tests and release wiring follow. No LLM calls in Phase B — synthesis starts in Phase C.
+**Current P0 is Phase C — first synthesis.** Tracked as a full Cortex Plan at [`.cortex/plans/phase-c-first-synthesis.md`](./.cortex/plans/phase-c-first-synthesis.md) (created 2026-04-18 in the Phase B exit commit). Wire `cortex refresh-map` and `cortex refresh-state` to `claude -p` (no SDK, no provider layer), emitting the seven-field metadata contract from SPEC § 4.5 and populating `.cortex/.index.json` so `cortex promote` graduates from stub to working writer. The deferred items from the Phase B plan (orphan-deferral detection, append-only Journal / immutable Doctrine checks, promotion-queue invariants, single-authority-rule drift, CLI-less-fallback warning, expanded T1.2–T1.7 audit coverage, full SPEC § 5.4 claim-trace, interactive per-candidate prompts) are each enumerated as work items in that plan file.

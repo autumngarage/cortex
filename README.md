@@ -141,7 +141,7 @@ Cortex is deliberately **not** a vector store, a database, a knowledge graph, a 
 
 ```bash
 brew tap autumngarage/cortex
-brew install cortex
+brew install autumngarage/cortex/cortex   # fully qualified — homebrew-core has a different `cortex` (Prometheus storage)
 cortex init        # in any project
 cortex doctor      # verify the scaffold
 ```
@@ -167,7 +167,7 @@ brew install sentinel
 
 # Memory: project-local reasoning (this repo)
 brew tap autumngarage/cortex
-brew install cortex
+brew install autumngarage/cortex/cortex   # fully qualified; see note above
 ```
 
 Each tool writes to its own files and reads the others only as best-effort. Nothing breaks if one is missing — Cortex works without Sentinel and without Touchstone; it just can't enforce invariants at push-time (Touchstone) or receive end-of-cycle journal entries (Sentinel). See the [Composition](#composition-with-touchstone-and-sentinel) section above for the file-contract details.
@@ -176,7 +176,7 @@ Each tool writes to its own files and reads the others only as best-effort. Noth
 
 ## Status and plan
 
-See [PLAN.md](./PLAN.md). Phase A (foundation + spec) shipped. **Phase B** is the walking-skeleton CLI: `cortex init`, `cortex status`, `cortex doctor`, the interactive `cortex` entry point, and initial templates under `.cortex/templates/`. Phase C adds regeneration (`refresh-map`, `refresh-state`). Phase D adds authoring helpers (`journal draft`, `plan spawn`). Phase E wires integration with Sentinel and Touchstone.
+See [PLAN.md](./PLAN.md). Phases A (foundation + spec) and B (walking-skeleton CLI — `init` / `status` / `doctor` / `manifest` / `grep` / `promote` stub + `doctor --audit`) shipped as v0.1.0 on Homebrew. **Phase C is the current P0** — regeneration (`refresh-map`, `refresh-state`) via `claude -p`, `.cortex/.index.json` writer, and the expanded `cortex doctor` rules (orphan-deferral, single-authority-rule drift, promotion-queue invariants, CLI-less-fallback warning, extended Tier-1 audit). Phase D adds authoring helpers (`journal draft`, `plan spawn`). Phase E wires integration with Sentinel and Touchstone.
 
 The spec at v0.3.1-dev is a draft. See [`docs/PRIOR_ART.md`](./docs/PRIOR_ART.md) for the research synthesis behind the design, and the `.cortex/journal/` directory in this repo for a dogfood trail of the design decisions (especially `2026-04-17-vision-v3-promoted.md` for the full provenance).
 

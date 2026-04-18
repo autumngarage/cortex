@@ -1,5 +1,6 @@
 ---
-Status: active
+Status: shipped
+Shipped: 2026-04-18
 Written: 2026-04-17
 Author: human
 Goal-hash: 1f10782a
@@ -9,12 +10,14 @@ Updated-by:
   - 2026-04-17T23:59 claude-session-2026-04-17 (refreshed for v0.3.1-dev scope — adds manifest, grep, expanded doctor checks, T1.9 audit, Goal-hash verification, interactive flow, Load-priority validation)
   - 2026-04-17T15:45 claude-session-2026-04-17 (Phase B Work items: Python scaffold + `cortex version` shipped; first two items checked)
   - 2026-04-17T16:20 claude-session-2026-04-17 (`cortex init` shipped; templates + protocol.md bundled as package data; third work item checked)
+  - 2026-04-18T11:30 claude-session-2026-04-18 (Status → shipped; v0.1.0 on Homebrew closes Phase B exit criteria)
+Promoted-to: journal/2026-04-18-phase-b-shipped-v0.1.0-on-homebrew
 Cites: ../../SPEC.md, ../../.cortex/protocol.md, ../../PLAN.md § Phase B, doctrine/0003-spec-is-the-artifact, doctrine/0005-scope-boundaries-v2
 ---
 
 # Phase B — Walking-skeleton CLI
 
-> Ship a Cortex CLI that manipulates `.cortex/` structure without any LLM calls. End-state: `brew install cortex && cortex init` produces a SPEC.md v0.3.1-dev-conformant scaffold (including `protocol.md` + `templates/`) in a fresh repo; `cortex doctor` validates every SPEC.md § 4 rule against it; the interactive `cortex` entrypoint surfaces the promotion queue and overdue digests per the README UX example. No synthesis yet — that's Phase C.
+> Ship a Cortex CLI that manipulates `.cortex/` structure without any LLM calls. End-state: `brew install autumngarage/cortex/cortex && cortex init` produces a SPEC.md v0.3.1-dev-conformant scaffold (including `protocol.md` + `templates/`) in a fresh repo; `cortex doctor` validates every SPEC.md § 4 rule against it; the interactive `cortex` entrypoint surfaces the promotion queue and overdue digests per the README UX example. No synthesis yet — that's Phase C.
 
 ## Why (grounding)
 
@@ -32,7 +35,7 @@ Synthesis stays out of Phase B because it's expensive and variable; a walking sk
 
 This plan is done when all of the following hold on a fresh macOS install:
 
-1. `brew tap autumngarage/cortex && brew install cortex` succeeds.
+1. `brew tap autumngarage/cortex && brew install autumngarage/cortex/cortex` succeeds (fully-qualified name — homebrew-core has an unrelated `cortex` for Prometheus long-term storage).
 2. In an empty git repo: `cortex init` creates `.cortex/SPEC_VERSION` (`0.3.1-dev`), copies `.cortex/protocol.md` and the full `.cortex/templates/` tree, scaffolds `doctrine/`, `plans/`, `journal/`, `procedures/`, and stubs `map.md` + `state.md` with seven-field `Generated:` headers in `(pending Phase C synthesis)` state.
 3. `cortex doctor` on that fresh `.cortex/` prints "spec v0.3.1 conformant" and exits 0.
 4. `cortex doctor` on **this repo's** `.cortex/` also exits 0. Dogfood gate.
