@@ -13,6 +13,8 @@ from pathlib import Path
 
 import click
 
+from cortex.compat import warn_if_incompatible
+
 
 @click.command("promote")
 @click.argument("candidate_id")
@@ -39,6 +41,8 @@ def promote_command(*, candidate_id: str, target_path: Path) -> None:
         )
         sys.exit(2)
 
+    warn_if_incompatible(cortex_dir)
+
     index_path = cortex_dir / ".index.json"
     if not index_path.exists():
         click.echo(
@@ -58,8 +62,25 @@ def promote_command(*, candidate_id: str, target_path: Path) -> None:
         )
         sys.exit(2)
 
-    queue = data.get("promotion_queue", [])
-    match = next((c for c in queue if c.get("id") == candidate_id), None)
+    if not isinstance(data, dict) or "promotion_queue" not in data:
+        click.echo(
+            "error: `.cortex/.index.json` is malformed (missing top-level "
+            "`promotion_queue`). Repair or regenerate before promoting.",
+            err=True,
+        )
+        sys.exit(2)
+    queue = data["promotion_queue"]
+    if not isinstance(queue, list):
+        click.echo(
+            "error: `.cortex/.index.json` is malformed (`promotion_queue` is "
+            "not a list). Repair or regenerate before promoting.",
+            err=True,
+        )
+        sys.exit(2)
+    match = next(
+        (c for c in queue if isinstance(c, dict) and c.get("id") == candidate_id),
+        None,
+    )
     if match is None:
         click.echo(
             f"error: no promotion candidate with id {candidate_id!r} in queue.",

@@ -135,6 +135,41 @@ def test_status_reports_unreadable_index(scaffolded: Path) -> None:
     assert "UNREADABLE" in result.output
 
 
+def test_status_reports_missing_promotion_queue_field(scaffolded: Path) -> None:
+    (scaffolded / ".cortex" / ".index.json").write_text('{"not_the_queue": []}')
+    status = compute_status(scaffolded)
+    assert status.promotion_index_present is True
+    assert status.promotion_index_error is not None
+    runner = CliRunner()
+    result = runner.invoke(cli, ["status", "--path", str(scaffolded)])
+    assert "UNREADABLE" in result.output
+
+
+def test_status_reports_non_list_promotion_queue(scaffolded: Path) -> None:
+    (scaffolded / ".cortex" / ".index.json").write_text('{"promotion_queue": "oops"}')
+    status = compute_status(scaffolded)
+    assert status.promotion_index_error is not None
+
+
+def test_promote_malformed_index_errors(scaffolded: Path) -> None:
+    (scaffolded / ".cortex" / ".index.json").write_text('{"promotion_queue": "oops"}')
+    runner = CliRunner()
+    result = runner.invoke(cli, ["promote", "j-a", "--path", str(scaffolded)])
+    assert result.exit_code == 2
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "malformed" in combined
+
+
+def test_promote_warns_on_unsupported_spec(scaffolded: Path) -> None:
+    (scaffolded / ".cortex" / "SPEC_VERSION").write_text("9.9.0\n")
+    (scaffolded / ".cortex" / ".index.json").write_text('{"promotion_queue": []}')
+    runner = CliRunner()
+    result = runner.invoke(cli, ["promote", "j-a", "--path", str(scaffolded)])
+    # still exits 2 (no such candidate), but must have warned on stderr.
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "9.9.0" in combined
+
+
 def test_promote_without_index_errors(scaffolded: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["promote", "j-abc", "--path", str(scaffolded)])
