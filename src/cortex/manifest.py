@@ -128,11 +128,19 @@ def _doctrine_field(entry: Path, field_name: str) -> str | None:
 
 
 def _doctrine_order(entries: list[Path]) -> list[Path]:
-    """Load-priority: always first (preserving filename order), then the rest
-    by ``Date:`` descending, filename tiebreak."""
+    """Order Doctrine for the default manifest per SPEC §§ 5.1 and Protocol § 1.
+
+    Excludes entries whose ``Status`` begins with ``Superseded-by`` (SPEC § 5.1
+    drops superseded entries from the default load). Among the remainder,
+    ``Load-priority: always`` entries come first (filename order preserved),
+    then everything else sorted by ``Date:`` descending with filename as tie-break.
+    """
     always: list[Path] = []
     others: list[tuple[str, str, Path]] = []
     for entry in entries:
+        status = _doctrine_field(entry, "Status") or ""
+        if status.strip().lower().startswith("superseded-by"):
+            continue
         priority = _doctrine_field(entry, "Load-priority") or "default"
         if priority.strip().lower() == "always":
             always.append(entry)
@@ -172,15 +180,33 @@ def _journal_window(cortex_dir: Path, hours: int, now: datetime) -> list[Path]:
     return result
 
 
+def _journal_type(entry: Path) -> str | None:
+    """Return the ``Type:`` of a Journal entry per SPEC § 3.5.
+
+    Journal entries ship with bold-inline scalar fields by default (``**Type:**
+    digest``) but may use YAML frontmatter under SPEC § 6; both are accepted.
+    """
+    text = entry.read_text()
+    frontmatter, _body = parse_frontmatter(text)
+    value = frontmatter.get("Type")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    header = "\n".join(text.splitlines()[:40])
+    match = re.search(r"\*\*Type:\*\*\s*([^\n]+)", header)
+    if match:
+        return match.group(1).strip()
+    return None
+
+
 def _latest_digest(cortex_dir: Path) -> Path | None:
+    """Return the most recent Journal entry with ``Type: digest``, or None."""
     journal_dir = cortex_dir / "journal"
     if not journal_dir.exists():
         return None
-    digests = sorted(
-        (p for p in journal_dir.glob("*.md") if "digest" in p.stem),
-        reverse=True,
-    )
-    return digests[0] if digests else None
+    digests = [p for p in journal_dir.glob("*.md") if _journal_type(p) == "digest"]
+    if not digests:
+        return None
+    return sorted(digests, reverse=True)[0]
 
 
 def _promotion_summary(cortex_dir: Path) -> str:
@@ -198,14 +224,20 @@ def _promotion_summary(cortex_dir: Path) -> str:
 
 
 def _concat_files(entries: list[Path], budget_chars: int) -> tuple[str, int, int]:
-    """Return ``(body, included_count, truncated_count)`` for the given entries."""
+    """Return ``(body, included_count, truncated_count)`` for the given entries.
+
+    Strict budget enforcement: an entry is only included if it fits. If the
+    very first entry does not fit, the section is rendered empty and every
+    entry is counted as truncated. Callers decide whether to raise the
+    budget or accept the empty section.
+    """
     body_parts: list[str] = []
     used = 0
     included = 0
     for entry in entries:
         text = entry.read_text()
-        size = len(text) + 16  # account for separator lines
-        if used + size > budget_chars and included > 0:
+        size = len(text) + 16  # separator and heading overhead
+        if used + size > budget_chars:
             break
         body_parts.append(f"### `{entry.name}`\n\n{text.rstrip()}\n")
         used += size

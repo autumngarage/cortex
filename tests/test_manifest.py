@@ -134,6 +134,60 @@ def test_missing_cortex_dir_errors(tmp_path: Path) -> None:
     assert "does not exist" in output
 
 
+def test_superseded_doctrine_excluded(scaffolded_project: Path) -> None:
+    _write_doctrine(scaffolded_project, 1, priority="always")
+    superseded = scaffolded_project / ".cortex" / "doctrine" / "0002-old.md"
+    superseded.write_text(
+        "# 0002 — Old\n\n"
+        "**Status:** Superseded-by 3\n"
+        "**Date:** 2026-04-01\n\n"
+        "## Context\nx\n## Decision\ny\n## Consequences\nz\n"
+    )
+    exit_code, output = _run_manifest(scaffolded_project, 8000)
+    assert exit_code == 0
+    assert "0001-example-1.md" in output
+    assert "0002-old.md" not in output
+
+
+def test_digest_detected_by_type_not_filename(scaffolded_project: Path) -> None:
+    # A Journal entry whose slug happens to contain "digest" but has
+    # `Type: decision` must NOT be picked up as the digest, and a real
+    # digest without "digest" in the slug must be found.
+    j = scaffolded_project / ".cortex" / "journal"
+    (j / "2026-01-01-digest-misnamed.md").write_text(
+        "# Title\n\n**Date:** 2026-01-01\n**Type:** decision\n\nbody\n"
+    )
+    (j / "2026-02-01-march-summary.md").write_text(
+        "# Title\n\n**Date:** 2026-02-01\n**Type:** digest\n\nbody\n"
+    )
+    now = datetime(2026, 4, 17, tzinfo=UTC)
+    rendered = build_manifest(scaffolded_project, 8000, now=now).render()
+    # The real digest is loaded as "latest digest" even though it's outside
+    # the 72h window; the misnamed decision is not.
+    assert "2026-02-01-march-summary.md" in rendered
+    assert "2026-01-01-digest-misnamed.md" not in rendered
+
+
+def test_budget_strictly_enforced(scaffolded_project: Path) -> None:
+    # Big Doctrine entry + tiny budget — previously the first entry was
+    # always included even when over budget. Now it must be truncated.
+    big_body = "filler " * 5000  # ~35000 chars
+    path = scaffolded_project / ".cortex" / "doctrine" / "0001-big.md"
+    path.write_text(
+        "# 0001 — Big\n\n"
+        "**Status:** Accepted\n"
+        "**Date:** 2026-04-01\n"
+        "**Load-priority:** default\n\n"
+        f"## Context\n{big_body}\n"
+    )
+    # 8000 tokens ≈ 32000 chars total; the big entry alone is ~35000, so
+    # even with the whole budget it shouldn't fit.
+    manifest = build_manifest(scaffolded_project, 8000)
+    rendered = manifest.render()
+    assert "0001-big.md" not in rendered
+    assert "truncated by budget" in rendered
+
+
 def test_wide_journal_at_high_budget(scaffolded_project: Path) -> None:
     now = datetime(2026, 4, 17, tzinfo=UTC)
     _write_journal(scaffolded_project, "2026-04-14", "six-days-ago")
