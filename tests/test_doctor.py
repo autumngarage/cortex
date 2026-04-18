@@ -144,6 +144,22 @@ def test_invalid_journal_filename_warns(scaffolded_project: Path) -> None:
     assert "Journal filename" in stdout
 
 
+def test_doctrine_yaml_frontmatter_accepted(scaffolded_project: Path) -> None:
+    # SPEC § 6: parsers must accept either bold-inline OR YAML frontmatter.
+    entry = scaffolded_project / ".cortex" / "doctrine" / "0001-example.md"
+    entry.write_text(
+        "---\n"
+        "Status: Accepted\n"
+        "Date: 2026-04-17\n"
+        "Load-priority: always\n"
+        "---\n\n"
+        "# 0001 — Example\n\n"
+        "## Context\nx\n## Decision\ny\n## Consequences\nz\n"
+    )
+    exit_code, stdout, _ = _run_doctor(scaffolded_project)
+    assert exit_code == 0, stdout
+
+
 def test_doctrine_entry_missing_load_priority_reports_error(scaffolded_project: Path) -> None:
     entry = scaffolded_project / ".cortex" / "doctrine" / "0001-example.md"
     entry.write_text(

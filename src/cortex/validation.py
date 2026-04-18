@@ -231,32 +231,40 @@ def check_doctrine(project_root: Path) -> list[Issue]:
 
 
 def _check_doctrine_entry_body(rel: str, text: str) -> list[Issue]:
-    """Doctrine stores its metadata as markdown bolded labels, not YAML.
+    """Validate the Status / Date / Load-priority fields of a Doctrine entry.
 
-    Example from SPEC § 3.1::
-
-        **Status:** Accepted
-        **Date:** 2026-04-17
-        **Load-priority:** default
-
-    Absent a frontmatter convention for Doctrine, we scan the first 40 lines
-    for ``**Field:**`` patterns and flag missing ones.
+    Per SPEC § 6: Doctrine, Journal, and Procedures take their scalar fields
+    as **either** bold-inline markdown (``**Status:** Accepted``) **or** YAML
+    frontmatter. Parsers MUST accept either form. YAML frontmatter is checked
+    first because it's structurally unambiguous; if absent we fall back to
+    scanning for bold-inline patterns.
     """
     issues: list[Issue] = []
+    frontmatter, _body = parse_frontmatter(text)
     header = "\n".join(text.splitlines()[:40])
+
     for field in DOCTRINE_REQUIRED_FIELDS:
-        pattern = re.compile(rf"\*\*{re.escape(field)}:\*\*\s*(.+)")
-        match = pattern.search(header)
-        if not match:
+        value: str | None = None
+        if field in frontmatter:
+            fm_value = frontmatter[field]
+            if isinstance(fm_value, str):
+                value = fm_value.strip()
+        if value is None:
+            match = re.search(rf"\*\*{re.escape(field)}:\*\*\s*(.+)", header)
+            if match:
+                value = match.group(1).strip()
+
+        if value is None:
             issues.append(
                 Issue(
                     Severity.ERROR,
                     rel,
-                    f"Doctrine entry missing `**{field}:**` line (SPEC § 3.1).",
+                    f"Doctrine entry missing `{field}` (SPEC § 3.1); set as YAML "
+                    f"frontmatter or a bold-inline `**{field}:**` line per SPEC § 6.",
                 )
             )
             continue
-        value = match.group(1).strip()
+
         if field == "Load-priority" and value not in DOCTRINE_LOAD_PRIORITY_VALUES:
             issues.append(
                 Issue(
