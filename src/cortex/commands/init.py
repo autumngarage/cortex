@@ -62,14 +62,42 @@ def _now_iso() -> str:
     return datetime.now(UTC).astimezone().isoformat(timespec="seconds")
 
 
+_STUB_BODIES: dict[str, str] = {
+    "state": (
+        "> **Hand-authored placeholder.** `cortex init` wrote this as a scaffolded "
+        "starting point. Edit it freely — describe the current priorities, open "
+        "questions, and load-bearing context you want agents to load at session "
+        "start. When the `cortex refresh-state` command ships (Phase C — tracked "
+        "in the Cortex repo plans), it will regenerate this layer from the "
+        "journal and plans automatically; until then, hand-editing is the "
+        "intended workflow."
+    ),
+    "map": (
+        "> **Hand-authored placeholder.** `cortex init` wrote this as a scaffolded "
+        "starting point. Edit it to describe the structural view of your "
+        "codebase (key modules, entry points, data flows). When "
+        "`cortex refresh-map` ships (Phase C — tracked in the Cortex repo "
+        "plans), it will regenerate this from code + git automatically; until "
+        "then, hand-editing is the intended workflow."
+    ),
+}
+
+
 def _derived_stub(title: str, layer: str, generator: str) -> str:
-    """Render a seven-field derived-layer stub (map or state)."""
+    """Render a seven-field derived-layer stub (map or state).
+
+    The seven-field frontmatter is load-bearing — `cortex doctor` validates it
+    (SPEC § 4.5). Only the prose body is user-facing guidance, and it's phrased
+    for the hand-editing workflow that's expected until `cortex refresh-{layer}`
+    ships in Phase C.
+    """
     now = _now_iso()
+    body = _STUB_BODIES[layer]
     return f"""---
 Generated: {now}
-Generator: {generator} (scaffolded by `cortex init`; real synthesis ships in Phase C)
+Generator: {generator} (scaffolded by `cortex init`; hand-editable until `cortex refresh-{layer}` ships in Phase C)
 Sources:
-  - (none — pending Phase C synthesis)
+  - (none — scaffolded placeholder, no synthesis yet)
 Corpus: 0 files (no synthesis yet)
 Omitted: []
 Incomplete:
@@ -80,7 +108,7 @@ Spec: {CURRENT_SPEC_VERSION.split("-")[0]}
 
 # {title}
 
-> **Stub — pending Phase C synthesis.** This file is a scaffold placeholder written by `cortex init`. Real content arrives when `cortex refresh-{layer}` ships.
+{body}
 """
 
 
