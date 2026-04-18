@@ -195,4 +195,4 @@ def init_command(*, force: bool, target_path: Path) -> None:
     click.echo("Next steps:")
     click.echo("  1. Author doctrine/0001-why-<project>-exists.md (see templates/doctrine/candidate.md for shape).")
     click.echo("  2. Import `@.cortex/protocol.md` and `@.cortex/state.md` into your AGENTS.md or CLAUDE.md.")
-    click.echo("  3. Run `cortex doctor` to validate the scaffold (Phase B — coming soon).")
+    click.echo("  3. Run `cortex doctor` to validate the scaffold against SPEC.md.")

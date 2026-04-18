@@ -85,14 +85,16 @@ Three moments of interaction, almost all of them light.
 
 ### 1. One-time setup (~2 minutes)
 
-**Once v0.1.0 ships** (Phase B; see [PLAN.md](../PLAN.md)), setup will look like this in any project:
+Setup in any project looks like this:
 
 ```
+brew tap autumngarage/cortex
 brew install cortex
 cortex init
+cortex doctor    # verify
 ```
 
-**Today (spec-stage)**, the CLI isn't released yet. You get the same outcome by either (a) installing from source — `uv tool install git+https://github.com/autumngarage/cortex.git` — and running `cortex init`, or (b) hand-authoring the `.cortex/` folder following [SPEC.md](../SPEC.md) § 2 and copying [`.cortex/protocol.md`](../.cortex/protocol.md) + [`.cortex/templates/`](../.cortex/templates/) from this repo.
+Source installs work too: `uv tool install git+https://github.com/autumngarage/cortex.git`. You can also hand-author the `.cortex/` folder following [SPEC.md](../SPEC.md) § 2 and copying [`.cortex/protocol.md`](../.cortex/protocol.md) + [`.cortex/templates/`](../.cortex/templates/) from this repo — the CLI is a convenience around the file format, not a requirement.
 
 Either way, the second step is the same — add one line to your `AGENTS.md` or `CLAUDE.md`:
 
