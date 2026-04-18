@@ -3,6 +3,7 @@ require ripgrep on PATH."""
 
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -65,6 +66,36 @@ def test_missing_ripgrep_errors(scaffolded_project: Path, monkeypatch: pytest.Mo
     assert "ripgrep" in combined
 
 
+def _rg_match_record(path: str, line_number: int, text: str) -> str:
+    return json.dumps(
+        {
+            "type": "match",
+            "data": {
+                "path": {"text": path},
+                "lines": {"text": text},
+                "line_number": line_number,
+                "absolute_offset": 0,
+                "submatches": [],
+            },
+        }
+    )
+
+
+def _rg_context_record(path: str, line_number: int, text: str) -> str:
+    return json.dumps(
+        {
+            "type": "context",
+            "data": {
+                "path": {"text": path},
+                "lines": {"text": text},
+                "line_number": line_number,
+                "absolute_offset": 0,
+                "submatches": [],
+            },
+        }
+    )
+
+
 def test_matches_annotated_with_frontmatter(scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     entry = scaffolded_project / ".cortex" / "doctrine" / "0001-why.md"
     entry.write_text(
@@ -74,7 +105,7 @@ def test_matches_annotated_with_frontmatter(scaffolded_project: Path, monkeypatc
         "**Load-priority:** always\n\n"
         "## Context\nhello world\n"
     )
-    fake_stdout = f"{entry}:5:hello world\n"
+    fake_stdout = _rg_match_record(str(entry), 5, "hello world\n") + "\n"
     _install_fake_rg(monkeypatch, fake_stdout)
 
     runner = CliRunner()
@@ -83,6 +114,32 @@ def test_matches_annotated_with_frontmatter(scaffolded_project: Path, monkeypatc
     assert "Status: Accepted" in result.output
     assert "Load-priority: always" in result.output
     assert "hello world" in result.output
+
+
+def test_context_lines_rendered_with_dash_separator(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    entry = scaffolded_project / ".cortex" / "doctrine" / "0001-why.md"
+    entry.write_text(
+        "# 0001 — Why\n\n"
+        "**Status:** Accepted\n"
+        "**Date:** 2026-04-17\n"
+        "**Load-priority:** default\n\n"
+        "line before\nmatch here\nline after\n"
+    )
+    stdout = "\n".join([
+        _rg_context_record(str(entry), 7, "line before\n"),
+        _rg_match_record(str(entry), 8, "match here\n"),
+        _rg_context_record(str(entry), 9, "line after\n"),
+    ]) + "\n"
+    _install_fake_rg(monkeypatch, stdout)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["grep", "match", "--path", str(scaffolded_project)])
+    assert result.exit_code == 0
+    assert "7-line before" in result.output
+    assert "8:match here" in result.output
+    assert "9-line after" in result.output
 
 
 def test_no_matches_message(scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:

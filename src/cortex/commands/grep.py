@@ -12,6 +12,7 @@ the user to install ripgrep and exits 3.
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
@@ -20,6 +21,7 @@ from pathlib import Path
 
 import click
 
+from cortex.compat import warn_if_incompatible
 from cortex.frontmatter import parse_frontmatter
 
 LAYER_CHOICES = ("doctrine", "plans", "journal", "procedures", "templates")
@@ -27,6 +29,36 @@ LAYER_CHOICES = ("doctrine", "plans", "journal", "procedures", "templates")
 
 def _find_rg() -> str | None:
     return shutil.which("rg")
+
+
+def _parse_rg_json(stdout: str) -> dict[str, list[tuple[str, int, str]]]:
+    """Group ``rg --json`` output by file.
+
+    Returns ``{file_path: [(kind, line_number, text), ...]}`` where ``kind``
+    is ``"match"`` or ``"context"``. Non-event records (``begin``/``end``/
+    ``summary``) are ignored; malformed lines are skipped silently so a
+    future ripgrep record type doesn't crash the command.
+    """
+    grouped: dict[str, list[tuple[str, int, str]]] = defaultdict(list)
+    for raw_line in stdout.splitlines():
+        if not raw_line.strip():
+            continue
+        try:
+            record = json.loads(raw_line)
+        except json.JSONDecodeError:
+            continue
+        kind = record.get("type")
+        if kind not in ("match", "context"):
+            continue
+        data = record.get("data") or {}
+        path_field = data.get("path") or {}
+        path = path_field.get("text")
+        line_no = data.get("line_number")
+        text_field = data.get("lines") or {}
+        text = text_field.get("text", "")
+        if path and isinstance(line_no, int):
+            grouped[path].append((kind, line_no, text))
+    return grouped
 
 
 def _summarize_file(path: Path, project_root: Path) -> str:
@@ -108,6 +140,8 @@ def grep_command(*, pattern: str, layer: str | None, target_path: Path, rg_args:
         )
         sys.exit(3)
 
+    warn_if_incompatible(cortex_dir)
+
     search_root = cortex_dir / layer if layer else cortex_dir
     if not search_root.exists():
         click.echo(
@@ -116,7 +150,10 @@ def grep_command(*, pattern: str, layer: str | None, target_path: Path, rg_args:
         )
         return
 
-    cmd = [rg, "-n", "--no-heading", "--color=never", *rg_args, pattern, str(search_root)]
+    # ``--json`` gives newline-delimited records with ``{type: match|context|...}``
+    # so context lines (emitted by ``-C/-A/-B``) are unambiguous instead of
+    # being line-noise-separated from match lines.
+    cmd = [rg, "--json", *rg_args, pattern, str(search_root)]
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
 
     if result.returncode == 2:
@@ -124,19 +161,15 @@ def grep_command(*, pattern: str, layer: str | None, target_path: Path, rg_args:
         click.echo(result.stderr, err=True, nl=False)
         sys.exit(2)
 
-    if not result.stdout:
+    grouped = _parse_rg_json(result.stdout)
+    if not grouped:
         click.echo(f"no matches for {pattern!r} under {search_root.relative_to(target_path)}")
         return
-
-    # Group matches by file for metadata-prefixed rendering.
-    grouped: dict[str, list[str]] = defaultdict(list)
-    for line in result.stdout.splitlines():
-        file_path, _, rest = line.partition(":")
-        grouped[file_path].append(rest)
 
     for file_path, lines in grouped.items():
         summary = _summarize_file(Path(file_path), target_path)
         if summary:
             click.echo(summary)
-        for line in lines:
-            click.echo(f"  {line}")
+        for kind, line_no, text in lines:
+            marker = ":" if kind == "match" else "-"
+            click.echo(f"  {line_no}{marker}{text.rstrip()}")
