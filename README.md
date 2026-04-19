@@ -2,7 +2,7 @@
 
 > **A protocol for agents to continuously journal what's happening on a project, and for humans to promote what matters.** The reflective layer of the autumngarage composition — Touchstone is the foundation (universal policy), Sentinel is the loop (autonomous execution), Cortex is the memory (project-local reasoning).
 
-**Status:** CLI v0.1.0. [SPEC.md](./SPEC.md) v0.3.1-dev (draft). [`.cortex/protocol.md`](./.cortex/protocol.md) specifies the agent contract. The CLI ships the non-synthesizing commands (`init`, `status`, `doctor`, `manifest`, `grep`, `promote` stub); regeneration (`refresh-map`, `refresh-state`) is Phase C ([PLAN.md](./PLAN.md)).
+**Status:** CLI v0.2.0 (Autumn Garage integration release: interactive `init`, `doctor` sibling detection, shipped Plan template). [SPEC.md](./SPEC.md) v0.3.1-dev (draft, unchanged from v0.1.0). [`.cortex/protocol.md`](./.cortex/protocol.md) specifies the agent contract. The CLI ships the non-synthesizing commands (`init`, `status`, `doctor`, `manifest`, `grep`, `promote` stub); regeneration (`refresh-map`, `refresh-state`) is Phase C ([PLAN.md](./PLAN.md)).
 
 **New here?** Start with [`docs/PITCH.md`](./docs/PITCH.md) — plain-language one-liner, vision, and day-in-the-life walkthrough.
 
@@ -52,7 +52,7 @@ Projects import `.cortex/protocol.md` into `AGENTS.md`. Any agent that reads `AG
 
 ## UX — one command
 
-> **Status:** v0.1.0 ships status, structural validation, audit, and retrieval. The fully interactive per-candidate promotion prompts shown below land with Phase C's index writer. Track progress in [`.cortex/state.md`](./.cortex/state.md).
+> **Status:** v0.2.0 ships status, structural validation, audit, retrieval, an interactive `cortex init` wizard, and Autumn Garage sibling surfacing in `cortex doctor`. The fully interactive per-candidate promotion prompts shown below land with Phase C's index writer. Track progress in [`.cortex/state.md`](./.cortex/state.md).
 
 What ships today:
 

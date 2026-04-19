@@ -1,6 +1,6 @@
 # .cortex/ — project memory
 
-This directory is the project's Cortex memory. Six layers follow the Cortex spec (see `SPEC.md` at the project root, or the canonical copy at <https://github.com/autumngarage/cortex>). Agents read `protocol.md` and `state.md` at session start; humans edit `journal/`, `plans/`, and `doctrine/` directly; `map.md` and `state.md` regenerate via `cortex refresh-map` / `cortex refresh-state` (Phase C — not yet shipped in v0.1.0).
+This directory is the project's Cortex memory. Six layers follow the Cortex spec (see `SPEC.md` at the project root, or the canonical copy at <https://github.com/autumngarage/cortex>). Agents read `protocol.md` and `state.md` at session start; humans edit `journal/`, `plans/`, and `doctrine/` directly; `map.md` and `state.md` regenerate via `cortex refresh-map` / `cortex refresh-state` (Phase C — not yet shipped as of the current CLI release).
 
 ## Layers
 
