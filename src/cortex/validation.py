@@ -62,6 +62,27 @@ PLAN_GROUNDING_LINK_RE = re.compile(
 JOURNAL_FILENAME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-[a-z0-9][a-z0-9._-]*\.md$")
 DOCTRINE_FILENAME_RE = re.compile(r"^\d{4}-[a-z0-9][a-z0-9._-]*\.md$")
 
+# Conservative heuristic for unscoped CLAUDE.md / AGENTS.md constraints
+# (autumngarage cycle-4 finding F2, 2026-04-19): downstream tools like
+# sentinel apply CLAUDE.md statements like "No cloud LLMs." globally,
+# including to dev-toolchain config, when the original intent was
+# app-runtime-only. Constraints that mention LLMs/APIs/providers should
+# carry a `(applies to: runtime|toolchain|both)` qualifier so consumers
+# can disambiguate. False positives are worse than false negatives here,
+# so we require both a constraint keyword AND an LLM/API/provider keyword
+# on the same line before flagging.
+CONSTRAINT_KEYWORD_RE = re.compile(
+    r"\b(no|never|always|forbidden|only|must|don't|do not)\b",
+    re.IGNORECASE,
+)
+LLM_KEYWORD_RE = re.compile(
+    r"\b(llm|api|provider|cloud|inference|drafting)\b",
+    re.IGNORECASE,
+)
+SCOPE_QUALIFIER_RE = re.compile(r"\(applies to:", re.IGNORECASE)
+CLAUDE_AGENTS_FILES = ("CLAUDE.md", "AGENTS.md")
+SCOPE_LOOKAHEAD_LINES = 2
+
 
 class Severity(StrEnum):
     ERROR = "error"
@@ -569,6 +590,103 @@ def check_journal(project_root: Path) -> list[Issue]:
     return issues
 
 
+def _strip_frontmatter_and_fences(text: str) -> list[tuple[int, str]]:
+    """Return ``(line_number, line)`` pairs for lines that are *not* inside
+    YAML frontmatter at the top of the file or fenced code blocks.
+
+    Line numbers are 1-indexed (matching how editors / issue messages display
+    them). Frontmatter is recognized only as ``---`` on the first non-empty
+    line through the next ``---``. Fences are CommonMark ```` ``` ```` /
+    ``~~~`` (matched on the leading marker, like the existing fence-aware
+    helpers in this module).
+    """
+    lines = text.splitlines()
+    result: list[tuple[int, str]] = []
+
+    # Detect YAML frontmatter: first non-empty line must be `---`.
+    in_frontmatter = False
+    frontmatter_end: int | None = None
+    for idx, line in enumerate(lines):
+        if line.strip() == "":
+            continue
+        if line.strip() == "---":
+            in_frontmatter = True
+            # Find closing `---`.
+            for j in range(idx + 1, len(lines)):
+                if lines[j].strip() == "---":
+                    frontmatter_end = j
+                    break
+        break
+
+    fence: str | None = None
+    for i, line in enumerate(lines):
+        if in_frontmatter and frontmatter_end is not None and i <= frontmatter_end:
+            continue
+        stripped = line.lstrip()
+        if fence is None:
+            if stripped.startswith("```") or stripped.startswith("~~~"):
+                fence = stripped[:3]
+                continue
+            result.append((i + 1, line))
+        else:
+            if stripped.startswith(fence):
+                fence = None
+            # Lines inside a fence are skipped entirely.
+    return result
+
+
+def check_claude_agents(project_root: Path) -> list[Issue]:
+    """Warn on unscoped LLM/API constraints in ``CLAUDE.md`` / ``AGENTS.md``.
+
+    Heuristic (deliberately conservative — false positives are worse than
+    false negatives): a line is flagged only if it contains both a
+    constraint keyword (no, never, always, forbidden, only, must, don't,
+    do not) AND an LLM/API/provider keyword (llm, api, provider, cloud,
+    inference, drafting) on the same line, AND none of the line itself or
+    the next two lines contains ``(applies to:``. Lines inside YAML
+    frontmatter (top-of-file ``---`` block) and fenced code blocks
+    (```` ``` ```` / ``~~~``) are skipped.
+
+    Motivation: sentinel's planner reads CLAUDE.md statements like "No
+    cloud LLMs." and applies them globally — including to dev-toolchain
+    config like ``.sentinel/config.toml``. The intent was app-runtime
+    only. Adding ``(applies to: runtime|toolchain|both)`` lets downstream
+    tools disambiguate. See autumngarage cycle-4 finding F2 (2026-04-19).
+    """
+    issues: list[Issue] = []
+    for filename in CLAUDE_AGENTS_FILES:
+        path = project_root / filename
+        if not path.exists() or not path.is_file():
+            continue
+        text = path.read_text()
+        live_lines = _strip_frontmatter_and_fences(text)
+        # Build a quick map for the lookahead check; SCOPE_LOOKAHEAD_LINES
+        # counts the *next* lines after the matched line, so we look at
+        # entries whose 1-indexed line number is in [matched, matched + N].
+        line_lookup = dict(live_lines)
+        for lineno, content in live_lines:
+            if not CONSTRAINT_KEYWORD_RE.search(content):
+                continue
+            if not LLM_KEYWORD_RE.search(content):
+                continue
+            window = [
+                line_lookup.get(lineno + offset, "")
+                for offset in range(SCOPE_LOOKAHEAD_LINES + 1)
+            ]
+            if any(SCOPE_QUALIFIER_RE.search(w) for w in window):
+                continue
+            issues.append(
+                Issue(
+                    Severity.WARNING,
+                    filename,
+                    f"{filename}:{lineno}: constraint statement lacks "
+                    "\"(applies to: runtime|toolchain|both)\" scope qualifier "
+                    "— sentinel and other tools may apply this globally.",
+                )
+            )
+    return issues
+
+
 def run_all_checks(project_root: Path) -> list[Issue]:
     """Run every check and return aggregated issues sorted by severity then path."""
     issues: list[Issue] = []
@@ -580,4 +698,5 @@ def run_all_checks(project_root: Path) -> list[Issue]:
         issues.extend(check_doctrine(project_root))
         issues.extend(check_plans(project_root))
         issues.extend(check_journal(project_root))
+    issues.extend(check_claude_agents(project_root))
     return sorted(issues, key=lambda i: (i.severity.value, i.path, i.message))

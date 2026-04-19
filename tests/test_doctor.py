@@ -346,3 +346,63 @@ def test_doctrine_entry_missing_load_priority_reports_error(scaffolded_project: 
     exit_code, _stdout, stderr = _run_doctor(scaffolded_project)
     assert exit_code == 1
     assert "Load-priority" in stderr
+
+
+# ---------------------------------------------------------------------------
+# CLAUDE.md / AGENTS.md unscoped-constraint warnings (autumngarage F2,
+# 2026-04-19) — sentinel applies "no cloud LLMs" globally when CLAUDE.md
+# omits a `(applies to: runtime|toolchain|both)` scope qualifier.
+# ---------------------------------------------------------------------------
+
+
+def test_claude_md_unscoped_llm_constraint_warns(scaffolded_project: Path) -> None:
+    (scaffolded_project / "CLAUDE.md").write_text("# Project\n\nNo cloud LLMs.\n")
+    exit_code, stdout, _ = _run_doctor(scaffolded_project)
+    assert exit_code == 0
+    assert "applies to:" in stdout
+    assert "CLAUDE.md" in stdout
+
+
+def test_claude_md_scoped_llm_constraint_clean(scaffolded_project: Path) -> None:
+    (scaffolded_project / "CLAUDE.md").write_text(
+        "# Project\n\nNo cloud LLMs (applies to: runtime).\n"
+    )
+    exit_code, stdout, combined = _run_doctor(scaffolded_project)
+    assert exit_code == 0
+    assert "applies to:" not in combined or "looks healthy" in stdout
+
+
+def test_agents_md_independently_checked(scaffolded_project: Path) -> None:
+    (scaffolded_project / "AGENTS.md").write_text("# Agents\n\nNever call cloud LLM APIs.\n")
+    exit_code, stdout, _ = _run_doctor(scaffolded_project)
+    assert exit_code == 0
+    assert "AGENTS.md" in stdout
+    assert "applies to:" in stdout
+
+
+def test_constraint_in_code_fence_ignored(scaffolded_project: Path) -> None:
+    (scaffolded_project / "CLAUDE.md").write_text(
+        "# Project\n\nExample of a forbidden line:\n\n```\nNo cloud LLMs.\n```\n"
+    )
+    exit_code, _stdout, combined = _run_doctor(scaffolded_project)
+    assert exit_code == 0
+    assert "scope qualifier" not in combined
+
+
+def test_unrelated_imperative_not_flagged(scaffolded_project: Path) -> None:
+    # "Always test before merging." has a constraint keyword but no
+    # LLM/API/provider keyword — conservative heuristic should let it pass.
+    (scaffolded_project / "CLAUDE.md").write_text("# Project\n\nAlways test before merging.\n")
+    exit_code, _stdout, combined = _run_doctor(scaffolded_project)
+    assert exit_code == 0
+    assert "scope qualifier" not in combined
+
+
+def test_no_claude_or_agents_md_no_warning(scaffolded_project: Path) -> None:
+    # Fresh scaffold has no CLAUDE.md / AGENTS.md at the project root.
+    assert not (scaffolded_project / "CLAUDE.md").exists()
+    assert not (scaffolded_project / "AGENTS.md").exists()
+    exit_code, stdout, combined = _run_doctor(scaffolded_project)
+    assert exit_code == 0
+    assert "scope qualifier" not in combined
+    assert "looks healthy" in stdout
