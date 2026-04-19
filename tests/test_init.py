@@ -130,6 +130,23 @@ def test_init_stubs_map_and_state_with_seven_fields(tmp_path: Path) -> None:
         assert f"cortex refresh-{layer}" in content, f"{layer}.md missing pointer at refresh-{layer}"
 
 
+def test_init_stub_generator_tracks_current_version(tmp_path: Path) -> None:
+    # Regression for v0.2.0 release review: the Generator: line in
+    # scaffolded map.md / state.md used to hardcode "cortex init v0.1.0",
+    # which silently lied whenever __version__ advanced. Derive from the
+    # live package version so every release's stubs are truthful.
+    from cortex import __version__ as current_version
+
+    _run_init(tmp_path)
+    expected = f"Generator: cortex init v{current_version}"
+    for layer in ("map", "state"):
+        content = (tmp_path / ".cortex" / f"{layer}.md").read_text()
+        assert expected in content, (
+            f"{layer}.md Generator field does not reflect cortex.__version__ ({current_version}); "
+            f"got:\n{content}"
+        )
+
+
 def test_init_refuses_second_invocation_without_force(tmp_path: Path) -> None:
     _run_init(tmp_path)
     result = CliRunner().invoke(cli, ["init", "--path", str(tmp_path)])
