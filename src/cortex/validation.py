@@ -76,7 +76,10 @@ CONSTRAINT_KEYWORD_RE = re.compile(
     re.IGNORECASE,
 )
 LLM_KEYWORD_RE = re.compile(
-    r"\b(llm|api|provider|cloud|inference|drafting)\b",
+    # Singular and plural forms — `\b(llm)\b` does not match `LLMs` because
+    # `s` is a word character, so common phrasings like "No LLMs." or
+    # "Never use APIs." would slip past without the explicit `s?`.
+    r"\b(llms?|apis?|providers?|cloud|inference|drafting)\b",
     re.IGNORECASE,
 )
 SCOPE_QUALIFIER_RE = re.compile(r"\(applies to:", re.IGNORECASE)

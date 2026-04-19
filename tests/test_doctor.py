@@ -406,3 +406,23 @@ def test_no_claude_or_agents_md_no_warning(scaffolded_project: Path) -> None:
     assert exit_code == 0
     assert "scope qualifier" not in combined
     assert "looks healthy" in stdout
+
+
+@pytest.mark.parametrize(
+    "constraint",
+    [
+        "No LLMs.",
+        "Never use APIs.",
+        "No providers allowed.",
+    ],
+)
+def test_plural_llm_keywords_are_flagged(scaffolded_project: Path, constraint: str) -> None:
+    # `\b(llm)\b` doesn't match `LLMs` because `s` is a word character, so
+    # the heuristic must allow optional plural suffixes on the noun-shaped
+    # keywords. Regression for codex review feedback.
+    (scaffolded_project / "CLAUDE.md").write_text(f"# Project\n\n{constraint}\n")
+    exit_code, stdout, _ = _run_doctor(scaffolded_project)
+    assert exit_code == 0
+    assert "scope qualifier" in stdout, (
+        f"plural-form constraint {constraint!r} should warn but did not"
+    )
