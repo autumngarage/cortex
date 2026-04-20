@@ -87,25 +87,52 @@ _STUB_BODIES: dict[str, str] = {
 }
 
 
-def _derived_stub(title: str, layer: str, generator: str) -> str:
+def _derived_stub(
+    title: str,
+    layer: str,
+    generator: str,
+    *,
+    sources: list[str] | None = None,
+) -> str:
     """Render a seven-field derived-layer stub (map or state).
 
     The seven-field frontmatter is load-bearing — `cortex doctor` validates it
     (SPEC § 4.5). Only the prose body is user-facing guidance, and it's phrased
     for the hand-editing workflow that's expected until `cortex refresh-{layer}`
     ships in Phase C.
+
+    ``sources`` is a list of relative paths the scan classified as ``map_ref``
+    or ``reference`` and that the State layer should cite. When non-empty,
+    ``Corpus:`` reflects the source count so the placeholder doesn't lie
+    about how much context exists. Empty/None falls back to today's
+    "no synthesis yet" wording.
     """
     now = _now_iso()
     body = _STUB_BODIES[layer]
+    if sources:
+        sources_yaml = "\n".join(f"  - {src}" for src in sources)
+        corpus_line = f"Corpus: {len(sources)} files (scan-discovered, not synthesized)"
+        incomplete_line = (
+            f"Incomplete:\n"
+            f"  - All sources — listed by `cortex init` from a project scan; "
+            f"`cortex refresh-{layer}` will synthesize them in Phase C."
+        )
+    else:
+        sources_yaml = "  - (none — scaffolded placeholder, no synthesis yet)"
+        corpus_line = "Corpus: 0 files (no synthesis yet)"
+        incomplete_line = (
+            f"Incomplete:\n"
+            f"  - All sources — scaffolded at project init; "
+            f"`cortex refresh-{layer}` will regenerate from primary sources in Phase C."
+        )
     return f"""---
 Generated: {now}
 Generator: {generator} (scaffolded by `cortex init`; hand-editable until `cortex refresh-{layer}` ships in Phase C)
 Sources:
-  - (none — scaffolded placeholder, no synthesis yet)
-Corpus: 0 files (no synthesis yet)
+{sources_yaml}
+{corpus_line}
 Omitted: []
-Incomplete:
-  - All sources — scaffolded at project init; `cortex refresh-{layer}` will regenerate from primary sources in Phase C.
+{incomplete_line}
 Conflicts-preserved: []
 Spec: {CURRENT_SPEC_VERSION.split("-")[0]}
 ---
@@ -618,11 +645,26 @@ def init_command(
     # string is derived from `cortex.__version__` so the stubs' seven-field
     # metadata stays truthful across releases (no hand-bump to remember).
     init_generator = f"cortex init v{CORTEX_VERSION}"
+    # State layer's Sources field is enriched with anything the scan
+    # classified as map_ref (READMEs/ARCHITECTURE/SETUP) or reference
+    # (CHANGELOGs, journal/*) so a fresh state.md cites the project's
+    # existing documentation directly. Map layer stays scaffold-empty for
+    # now; structural inputs are code+git, not markdown sources, so the
+    # scan can't enrich it usefully — that's `cortex refresh-map`'s job
+    # in Phase C.
+    state_sources = [
+        f.relative
+        for f in scan.findings
+        if f.category in ("map_ref", "reference")
+    ]
     for layer, title in (
         ("map", "Project Map"),
         ("state", "Project State"),
     ):
-        (cortex_dir / f"{layer}.md").write_text(_derived_stub(title, layer, init_generator))
+        layer_sources = state_sources if layer == "state" else None
+        (cortex_dir / f"{layer}.md").write_text(
+            _derived_stub(title, layer, init_generator, sources=layer_sources)
+        )
 
     click.echo(f"Scaffolded {cortex_dir} (spec v{CURRENT_SPEC_VERSION}).")
 
