@@ -1,4 +1,6 @@
-"""`cortex init` — scaffold a SPEC-v0.3.1-dev-conformant `.cortex/` directory.
+"""`cortex init` — scaffold a SPEC-v0.3.1-dev-conformant `.cortex/` directory
+and absorb existing project structure (principles/, decisions/, ROADMAP.md,
+…) into it via per-file interactive prompts.
 
 Creates:
 
@@ -11,12 +13,33 @@ Creates:
 - `.cortex/journal/`                → empty; seeded with `.gitkeep`
 - `.cortex/procedures/`             → empty; seeded with `.gitkeep`
 - `.cortex/map.md`                  → seven-field stub with `Incomplete: [all sources]`
-- `.cortex/state.md`                → seven-field stub with `Incomplete: [all sources]`
+- `.cortex/state.md`                → seven-field stub; Sources enriched from the scan
 
 Refuses to overwrite an existing `.cortex/SPEC_VERSION` unless `--force` is
 passed. With `--force`, the scaffold files (SPEC_VERSION, protocol.md,
 templates/, map.md/state.md stubs) are overwritten; existing doctrine, plan,
-journal, and procedure content is never deleted.
+journal, and procedure content is never deleted (idempotency by
+``Imported-from:`` cites — re-running on an absorbed repo never duplicates).
+
+Scan-and-absorb (no flag — driven by the scan + interactive prompts):
+on every TTY invocation, init walks the project root for known patterns
+(`principles/*.md`, `docs/decisions/*.md`, `ROADMAP.md`, `*PLAN*.md`,
+`README.md`, `CHANGELOG.md`, …), prints a one-screen summary grouped by
+category (Doctrine / Plan / Map ref / Reference / Unknown) and asks
+"Continue?" before doing anything. Then per Doctrine candidate it asks
+"Import as Doctrine?" (default Yes), per Plan candidate "Import as Plan?"
+(stubbing required Plan sections as `[ ] Hand-author from <source>`
+checklists), and per unknown file "[D]octrine / [P]lan / [M]ap ref /
+[R]eference / [S]kip?" (default M). Unknown classifications persist to
+`.cortex/.discover.toml` so future invocations recognize the pattern
+without re-prompting. Source files are never modified — every imported
+entry cites the source via `Imported-from:` frontmatter and the source
+remains canonical text.
+
+CHANGELOGs and `journal/*.md` are NEVER auto-imported into the Cortex
+Journal — Journal is time-anchored and append-only (Protocol § 4.1), so
+backfilling synthetic entries from past CHANGELOGs would lie about when
+events happened. Such files surface in `state.md` Sources only.
 
 Interactive first-run follow-ups (per Doctrine 0002 — interactive-by-default):
 when run on a TTY against a project that already has `CLAUDE.md` / `AGENTS.md`,
@@ -25,8 +48,9 @@ imports, and offers to add `.cortex/.index.json` + `.cortex/pending/` entries
 to `.gitignore`. Each prompt defaults to Yes. Flags (`--add-imports-claude`,
 `--add-imports-agents`, `--gitignore`, and their `--no-*` counterparts) skip
 the corresponding prompt. `--yes`/`-y` accepts all defaults without prompting.
-Non-TTY invocations without `--yes` skip all three follow-ups silently,
-preserving the pre-interactive scaffolding behavior.
+Non-TTY invocations without `--yes` skip all three follow-ups silently and
+do not absorb scan candidates either (preserves the pre-interactive
+scaffolding behavior — scan summary still prints).
 """
 
 from __future__ import annotations
