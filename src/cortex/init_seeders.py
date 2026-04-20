@@ -30,6 +30,7 @@ from datetime import date
 from pathlib import Path
 
 from cortex.frontmatter import parse_frontmatter
+from cortex.goal_hash import normalize_goal_hash
 
 # --- Shared helpers ---------------------------------------------------------
 
@@ -71,6 +72,34 @@ def _extract_h1(path: Path) -> str | None:
     if match is None:
         return None
     return match.group(1).strip()
+
+
+def _git_user_email(project_root: Path) -> str:
+    """Best-effort git user.email lookup; falls back to "unknown".
+
+    We deliberately avoid raising — init must not crash because the user
+    hasn't configured git yet. The fallback string is what shows up in the
+    generated Plan's ``Updated-by:`` field, which the user can edit.
+    Reading from the project root respects per-project ``git config`` overrides.
+    """
+    import shutil
+    import subprocess
+
+    git_path = shutil.which("git")
+    if git_path is None:
+        return "unknown"
+    try:
+        completed = subprocess.run(
+            [git_path, "-C", str(project_root), "config", "user.email"],
+            capture_output=True,
+            text=True,
+            timeout=2.0,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return "unknown"
+    value = completed.stdout.strip()
+    return value or "unknown"
 
 
 def _existing_imported_sources(cortex_layer_dir: Path) -> set[str]:
@@ -147,15 +176,24 @@ immutable — never edit this file in place; write a successor instead.
 def _doctrine_frontmatter(*, source_relative: str) -> str:
     """Render frontmatter for an imported Doctrine entry.
 
-    We use the YAML-frontmatter form (not the bold-inline form some
-    older entries use) because it's the form ``cortex doctor`` validates
+    Per SPEC § 3.1, valid ``Status:`` values are ``Proposed`` / ``Accepted``
+    / ``Superseded-by N`` and valid ``Load-priority:`` values are
+    ``default`` / ``always``. Imported entries land as ``Proposed`` because
+    the user has not yet reviewed them as canonical Doctrine — they came
+    in via import, not via the promotion queue, and ``cortex doctor``
+    should surface them as proposals awaiting promotion. ``Load-priority:
+    default`` keeps them out of the always-loaded session-start manifest
+    until the user explicitly upgrades the entry.
+
+    We deliberately use the YAML-frontmatter form (not the bold-inline form
+    some older entries use) because it's the form ``cortex doctor`` validates
     most strictly and the form the templates ship with.
     """
     return (
         "---\n"
-        "Status: Active\n"
+        "Status: Proposed\n"
         f"Date: {_today_iso()}\n"
-        "Load-priority: contextual\n"
+        "Load-priority: default\n"
         f"Imported-from: {source_relative}\n"
         "---\n\n"
     )
@@ -198,4 +236,118 @@ def seed_doctrine(
         written.append(target)
         next_id += 1
 
+    return written
+
+
+# --- Plan seeder ------------------------------------------------------------
+
+
+def _plan_frontmatter(*, title: str, source_relative: str, project_root: Path) -> str:
+    """Render frontmatter for an imported Plan entry.
+
+    We populate Goal-hash from the source H1 (or filename) so
+    ``cortex doctor``'s recompute check passes immediately, Updated-by
+    from git config, and Cites with a placeholder pointing at the source
+    file (per SPEC § 3.4 + validation.py, ``Cites:`` must be a non-empty
+    scalar). Status defaults to ``active`` — the user can flip it to
+    ``shipped|blocked|etc`` after import.
+
+    The ``Cites:`` placeholder satisfies the non-empty-scalar contract
+    while pointing the user at the source they need to flesh out into
+    real grounding citations (doctrine/, state.md, or journal/ refs).
+    Doctor will still warn on missing grounding citation in the body
+    text until the user hand-authors the ``## Why (grounding)`` section,
+    which is the intended forcing function — imported plans must be
+    grounded before they're trusted.
+    """
+    today = _today_iso()
+    return (
+        "---\n"
+        "Status: active\n"
+        f"Written: {today}\n"
+        "Author: human\n"
+        f"Goal: {title}\n"
+        f"Goal-hash: {normalize_goal_hash(title)}\n"
+        "Updated-by:\n"
+        f"  - {today} {_git_user_email(project_root)} (imported by cortex init)\n"
+        f"Cites: imported from {source_relative} — hand-author citations to doctrine/, state.md, or journal/\n"
+        f"Imported-from: {source_relative}\n"
+        "---\n\n"
+    )
+
+
+def _plan_body(title: str, source_relative: str) -> str:
+    """Render the imported Plan body — every required section is stubbed."""
+    return f"""# {title}
+
+> **Imported plan.** Hand-author this body from [`{source_relative}`](../../{source_relative}); cortex init only structures the file so `cortex doctor` validates the shape.
+
+## Why (grounding)
+
+Imported from [`{source_relative}`](../../{source_relative}). Hand-author the grounding here, citing relevant journal entries or doctrine (SPEC § 4.1).
+
+## Approach
+
+- [ ] Hand-author from `{source_relative}` — name the modules touched, the dependencies, the rough shape of the work.
+
+## Success Criteria
+
+- [ ] Hand-author measurable success criteria from `{source_relative}`. Cortex doctor enforces measurable signal per SPEC § 4.3 (numeric threshold, test/dashboard link, or code/path reference).
+
+## Work items
+
+- [ ] Hand-author from `{source_relative}`.
+
+## Follow-ups (deferred)
+
+- [ ] Hand-author from `{source_relative}` if applicable. Per SPEC § 4.2, every deferral resolves to another Plan or Journal entry in the same commit.
+
+## Known limitations at exit
+
+- [ ] Hand-author from `{source_relative}` if applicable.
+"""
+
+
+def seed_plan(
+    project_root: Path,
+    source: Path,
+) -> Path | None:
+    """Mint a single Plan from one source. Returns the written path or None if skipped.
+
+    Returns None when an existing Plan already cites the same source via
+    ``Imported-from:`` — keeps re-runs idempotent. Filename derives from the
+    source stem so two imports of the same source produce stable names.
+    """
+    project_root = project_root.resolve()
+    plans_dir = project_root / ".cortex" / "plans"
+    plans_dir.mkdir(parents=True, exist_ok=True)
+    rel = source.resolve().relative_to(project_root).as_posix()
+    if rel in _existing_imported_sources(plans_dir):
+        return None
+
+    title = _extract_h1(source) or source.stem.replace("-", " ").replace("_", " ").title()
+    slug = _slugify(source.stem)
+    filename = f"{slug}.md"
+    target = plans_dir / filename
+    # Defensive: if a hand-authored plan with this slug already exists,
+    # disambiguate with `-imported` rather than overwriting.
+    if target.exists():
+        target = plans_dir / f"{slug}-imported.md"
+    target.write_text(
+        _plan_frontmatter(title=title, source_relative=rel, project_root=project_root)
+        + _plan_body(title, rel)
+    )
+    return target
+
+
+def seed_plans(
+    project_root: Path,
+    sources: Iterable[Path],
+) -> list[Path]:
+    """Mint Plans for each source. Returns the list of files actually written."""
+    written: list[Path] = []
+    for source in sources:
+        result = seed_plan(project_root, source)
+        if result is not None:
+            written.append(result)
     return written

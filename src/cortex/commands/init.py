@@ -42,7 +42,7 @@ import click
 
 from cortex import __version__ as CORTEX_VERSION
 from cortex.init_scan import ScanResult, scan_project
-from cortex.init_seeders import seed_doctrine
+from cortex.init_seeders import seed_doctrine, seed_plans
 
 CURRENT_SPEC_VERSION = "0.3.1-dev"
 
@@ -280,6 +280,41 @@ def _absorb_doctrine(
     written = seed_doctrine(project_root, accepted)
     for path in written:
         click.echo(f"  Imported Doctrine: {path.relative_to(project_root).as_posix()}")
+    return written
+
+
+def _absorb_plans(
+    project_root: Path,
+    scan: ScanResult,
+    *,
+    will_prompt: bool,
+    assume_yes: bool,
+) -> list[Path]:
+    """Walk Plan candidates with per-file Y/n prompts; mint accepted entries.
+
+    Each accepted source becomes ``.cortex/plans/<slug>.md`` with required
+    sections stubbed as ``[ ] Hand-author from <source>`` checklists. The
+    Goal-hash is computed from the source's H1 (or filename when there's
+    no H1) so ``cortex doctor``'s recompute check passes immediately.
+    """
+    candidates = scan.by_category("plan")
+    if not candidates:
+        return []
+    accepted: list[Path] = []
+    if assume_yes:
+        accepted = [c.path for c in candidates]
+    elif will_prompt:
+        for finding in candidates:
+            if click.confirm(f"  Import {finding.relative} as Plan?", default=True):
+                accepted.append(finding.path)
+    else:
+        return []
+
+    if not accepted:
+        return []
+    written = seed_plans(project_root, accepted)
+    for path in written:
+        click.echo(f"  Imported Plan: {path.relative_to(project_root).as_posix()}")
     return written
 
 
@@ -595,6 +630,7 @@ def init_command(
     # Each candidate gets a per-file Y/n prompt on TTY; --yes accepts all;
     # non-TTY without --yes skips imports entirely (silent-scaffold preserved).
     _absorb_doctrine(target_path, scan, will_prompt=will_prompt, assume_yes=assume_yes)
+    _absorb_plans(target_path, scan, will_prompt=will_prompt, assume_yes=assume_yes)
 
     # Interactive follow-ups (doctrine 0002). Each step is gated on the
     # relevant target file existing — if CLAUDE.md / AGENTS.md / .gitignore
