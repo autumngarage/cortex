@@ -76,6 +76,93 @@ def test_scan_respects_gitignore(tmp_path: Path) -> None:
     assert all("vendor/" not in f.relative for f in result.findings)
 
 
+def test_claude_and_agents_md_not_in_unknowns(tmp_path: Path) -> None:
+    """Top-level CLAUDE.md and AGENTS.md are handled by the import-injection
+    and unscoped-constraint flows in ``commands/init.py`` /
+    ``validation.py``. Listing them as "unknown" makes the wizard
+    double-prompt (sigint/vesper dogfood regression). Real unknowns
+    (e.g. ``MYSTERY_DOC.md``) still surface as before.
+    """
+    (tmp_path / "CLAUDE.md").write_text("# Claude instructions\n\n## Section\n\n" + "x" * 1024)
+    (tmp_path / "AGENTS.md").write_text("# Agents instructions\n\n## Section\n\n" + "x" * 1024)
+    (tmp_path / "MYSTERY_DOC.md").write_text("# Mystery\n\n## Body\n\n" + "x" * 1024)
+
+    result = scan_project(tmp_path)
+    unknowns = {f.relative for f in result.by_category("unknown")}
+    assert unknowns == {"MYSTERY_DOC.md"}, (
+        f"expected only MYSTERY_DOC.md as unknown, got {unknowns}"
+    )
+
+
+def test_toolchain_config_dirs_skipped(tmp_path: Path) -> None:
+    """Markdown files inside toolchain/agent config directories
+    (``.sentinel/``, ``.cortex/``, ``.claude/``, ``.github/``) are
+    config for OTHER tools, not project content. The sigint scan
+    surfaced ``.sentinel/backlog.md``, ``.claude/loop.md``, and
+    ``.github/pull_request_template.md`` as unknown candidates — they
+    must be excluded entirely (no Doctrine, Plan, Map, Reference, or
+    Unknown finding for any of them).
+    """
+    for d in (".sentinel", ".cortex", ".claude", ".github"):
+        (tmp_path / d).mkdir()
+    (tmp_path / ".sentinel" / "foo.md").write_text("# foo\n\n## body\n\n" + "x" * 1024)
+    (tmp_path / ".cortex" / "bar.md").write_text("# bar\n\n## body\n\n" + "x" * 1024)
+    (tmp_path / ".claude" / "baz.md").write_text("# baz\n\n## body\n\n" + "x" * 1024)
+    (tmp_path / ".github" / "qux.md").write_text("# qux\n\n## body\n\n" + "x" * 1024)
+
+    result = scan_project(tmp_path)
+    surfaced = {f.relative for f in result.findings}
+    forbidden = {
+        ".sentinel/foo.md",
+        ".cortex/bar.md",
+        ".claude/baz.md",
+        ".github/qux.md",
+    }
+    leaked = surfaced & forbidden
+    assert not leaked, f"toolchain config files leaked into scan: {leaked}"
+
+
+def test_migration_md_classified_as_plan(tmp_path: Path) -> None:
+    """Migration docs (sigint's ``agent/COLLECTOR_MIGRATION.md``) are
+    typically transient plans — one-shot work to move between systems.
+    Without a ``Status: shipped`` marker they should land in the Plan
+    bucket, not Unknown.
+    """
+    (tmp_path / "agent").mkdir()
+    (tmp_path / "agent" / "COLLECTOR_MIGRATION.md").write_text(
+        "# Collector Migration\n\nMove the collector from system A to system B.\n"
+    )
+
+    result = scan_project(tmp_path)
+    plans = result.by_category("plan")
+    assert any(f.relative == "agent/COLLECTOR_MIGRATION.md" for f in plans), (
+        f"expected migration doc as Plan, got {[f.relative for f in plans]}; "
+        f"unknowns: {[f.relative for f in result.by_category('unknown')]}"
+    )
+
+
+def test_migration_md_with_shipped_marker_demoted_to_reference(tmp_path: Path) -> None:
+    """A migration doc with ``Status: shipped`` in its first 30 lines
+    flows through the existing ``_looks_shipped`` heuristic and lands in
+    reference, not plan. Belt-and-braces: adding the *MIGRATION*.md
+    pattern doesn't risk wrongly importing closed work as an active plan.
+    """
+    (tmp_path / "agent").mkdir()
+    (tmp_path / "agent" / "COLLECTOR_MIGRATION.md").write_text(
+        "---\nStatus: shipped\n---\n\n# Collector Migration\n\nDone.\n"
+    )
+
+    result = scan_project(tmp_path)
+    plans = result.by_category("plan")
+    references = result.by_category("reference")
+    assert not any(f.relative == "agent/COLLECTOR_MIGRATION.md" for f in plans), (
+        f"shipped migration leaked into Plan: {[f.relative for f in plans]}"
+    )
+    demoted = [f for f in references if f.relative == "agent/COLLECTOR_MIGRATION.md"]
+    assert demoted, "expected shipped migration in reference category"
+    assert demoted[0].is_demoted_plan, "demoted_from metadata not preserved"
+
+
 def test_scan_demotes_shipped_plan(tmp_path: Path) -> None:
     """A Plan candidate with ``Status: shipped`` in its head is demoted to reference."""
     (tmp_path / "ROADMAP.md").write_text(

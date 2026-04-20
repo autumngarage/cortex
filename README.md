@@ -2,7 +2,7 @@
 
 > **A protocol for agents to continuously journal what's happening on a project, and for humans to promote what matters.** The reflective layer of the autumngarage composition — Touchstone is the foundation (universal policy), Sentinel is the loop (autonomous execution), Cortex is the memory (project-local reasoning).
 
-**Status:** CLI v0.2.2 (sigint dogfood patch: `cortex init` now scans existing repos and offers to absorb `principles/`, plans, and READMEs into `.cortex/` — large existing projects drop from ~hours of manual seeding to ~10 minutes interactive; v0.2.1 added the unscoped-LLM/API-constraint warning in `cortex doctor`; v0.2.0 added the Autumn Garage integration — interactive `init`, `doctor` sibling detection, shipped Plan template). [SPEC.md](./SPEC.md) v0.3.1-dev (draft, unchanged from v0.1.0). [`.cortex/protocol.md`](./.cortex/protocol.md) specifies the agent contract. The CLI ships the non-synthesizing commands (`init`, `status`, `doctor`, `manifest`, `grep`, `promote` stub); regeneration (`refresh-map`, `refresh-state`) is Phase C ([PLAN.md](./PLAN.md)).
+**Status:** CLI v0.2.3 (polish: `cortex init` scan no longer double-prompts on top-level `CLAUDE.md`/`AGENTS.md`, skips toolchain config dirs (`.sentinel/`, `.cortex/`, `.claude/`, `.github/`, `.husky/`, `.circleci/`, `.devcontainer/`), and recognizes `*MIGRATION*.md` as Plan candidates; v0.2.2 added scan-and-absorb so large existing projects drop from ~hours of manual seeding to ~10 minutes interactive; v0.2.1 added the unscoped-LLM/API-constraint warning in `cortex doctor`; v0.2.0 added the Autumn Garage integration — interactive `init`, `doctor` sibling detection, shipped Plan template). [SPEC.md](./SPEC.md) v0.3.1-dev (draft, unchanged from v0.1.0). [`.cortex/protocol.md`](./.cortex/protocol.md) specifies the agent contract. The CLI ships the non-synthesizing commands (`init`, `status`, `doctor`, `manifest`, `grep`, `promote` stub); regeneration (`refresh-map`, `refresh-state`) is Phase C ([PLAN.md](./PLAN.md)).
 
 **New here?** Start with [`docs/PITCH.md`](./docs/PITCH.md) — plain-language one-liner, vision, and day-in-the-life walkthrough.
 
@@ -52,7 +52,7 @@ Projects import `.cortex/protocol.md` into `AGENTS.md`. Any agent that reads `AG
 
 ## UX — one command
 
-> **Status:** v0.2.2 ships status, structural validation, audit, retrieval, an interactive `cortex init` wizard with scan-and-absorb for existing repos (one screen of "here's what I found", per-file Y/n on Doctrine/Plan candidates, taught patterns persist to `.cortex/.discover.toml`), Autumn Garage sibling surfacing in `cortex doctor`, and the unscoped-LLM/API-constraint warning in `cortex doctor`. The fully interactive per-candidate promotion prompts shown below land with Phase C's index writer. Track progress in [`.cortex/state.md`](./.cortex/state.md).
+> **Status:** v0.2.3 ships status, structural validation, audit, retrieval, an interactive `cortex init` wizard with scan-and-absorb for existing repos (one screen of "here's what I found", per-file Y/n on Doctrine/Plan candidates, taught patterns persist to `.cortex/.discover.toml`), Autumn Garage sibling surfacing in `cortex doctor`, and the unscoped-LLM/API-constraint warning in `cortex doctor`. The fully interactive per-candidate promotion prompts shown below land with Phase C's index writer. Track progress in [`.cortex/state.md`](./.cortex/state.md).
 
 What ships today:
 

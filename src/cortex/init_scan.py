@@ -100,6 +100,17 @@ BUILT_IN_PATTERNS: tuple[Pattern, ...] = (
     Pattern("agent/NEXT_PHASE.md", "plan", "agent-cluster next phase", "built-in"),
     Pattern("agent/*PLAN*.md", "plan", "agent-cluster plan docs", "built-in"),
     Pattern("*PLAN*.md", "plan", "plan-named docs", "built-in"),
+    # Migration docs are typically transient plans (one-shot work to move
+    # between systems). Conservative: we ONLY cover ``*MIGRATION*`` —
+    # ``*SETUP*`` / ``*INTEGRATION*`` / ``*API*`` / ``*_THESIS.md`` are
+    # too ambiguous and stay user-taught via ``.cortex/.discover.toml``.
+    # Shipped/done migrations are demoted to reference by ``_looks_shipped``
+    # (sigint's ``agent/COLLECTOR_MIGRATION.md`` carries ``Status: shipped``
+    # markers and lands in reference, not plan), so adding the pattern
+    # doesn't risk wrongly importing closed work as an active plan.
+    Pattern("agent/*MIGRATION*.md", "plan", "agent-cluster migration docs", "built-in"),
+    Pattern("*/*MIGRATION*.md", "plan", "subdir migration docs", "built-in"),
+    Pattern("*MIGRATION*.md", "plan", "migration plan docs", "built-in"),
     # --- Reference (no auto-import — Cortex Journal is time-anchored) -------
     Pattern("CHANGELOG.md", "reference", "changelog", "built-in"),
     Pattern("journal/*.md", "reference", "journal directory", "built-in"),
@@ -119,13 +130,27 @@ BUILT_IN_PATTERNS: tuple[Pattern, ...] = (
 # these are language-toolchain caches that contain markdown documentation
 # we explicitly do not want to absorb (the JS ``doctrine`` linter package
 # under ``node_modules/`` is the canonical regression case).
+#
+# The second group (``.sentinel/``, ``.cortex/``, ``.claude/``, ``.github/``,
+# ``.husky/``, ``.circleci/``, ``.devcontainer/``) is toolchain/agent
+# configuration — files like ``.sentinel/lenses.md`` or ``.claude/loop.md``
+# are config for OTHER tools, not project content for Cortex to absorb. The
+# sigint dogfood regression that motivated this expansion: scan listed
+# ``.sentinel/backlog.md``, ``.claude/loop.md``, and
+# ``.github/pull_request_template.md`` as unknown candidates.
 ALWAYS_SKIP: frozenset[str] = frozenset(
     {
+        # --- Build / dependency / cache dirs -------------------------------
         "node_modules", ".build", ".swiftpm", "vendor", "dist", "target",
         "__pycache__", ".venv", "venv", ".tox", ".pytest_cache", ".ruff_cache",
         ".mypy_cache", "build", "out", "coverage", ".next", ".nuxt",
-        "DerivedData", "Pods", ".gradle", ".idea", ".vscode", ".git",
-        ".cortex",  # never scan our own scaffold (would feed itself)
+        "DerivedData", "Pods", ".gradle",
+        # --- Toolchain / agent / VCS config dirs --------------------------
+        # Each of these holds config for some other tool whose ``.md`` files
+        # are not project content. ``.cortex`` itself is here so re-running
+        # init never feeds its own scaffold back into the next scan.
+        ".git", ".github", ".vscode", ".idea", ".husky", ".circleci",
+        ".devcontainer", ".sentinel", ".cortex", ".claude",
     }
 )
 
@@ -156,6 +181,15 @@ _LOAD_BEARING_MIN_BYTES = 1024
 _H1_RE = re.compile(r"^#\s+\S", re.MULTILINE)
 _H2_RE = re.compile(r"^##\s+\S", re.MULTILINE)
 _GIT_CHECK_TIMEOUT_SECONDS = 5.0
+
+# Files whose top-level instances are handled by other parts of the init
+# pipeline — listing them under "unknown" would double-prompt the user.
+# ``CLAUDE.md`` / ``AGENTS.md`` already get the Doctrine-0002 import-injection
+# prompts (``--add-imports-claude``, ``--add-imports-agents``) handled in
+# ``commands/init.py``; the unscoped-constraint heuristic in ``validation.py``
+# also reports on their contents. Surfacing them as "unknown" on top of that
+# is the sigint/vesper double-prompt regression we're fixing.
+SCANNER_HANDLED_ELSEWHERE: frozenset[str] = frozenset({"CLAUDE.md", "AGENTS.md"})
 
 
 @dataclass(frozen=True)
@@ -537,6 +571,15 @@ def scan_project(project_root: Path) -> ScanResult:
         if path in classified_paths:
             continue
         if path.resolve() in ignored:
+            continue
+        # Top-level CLAUDE.md / AGENTS.md are handled by the
+        # import-injection + unscoped-constraint flows. Surfacing them as
+        # "unknown" double-prompts the user (sigint/vesper regression).
+        rel_for_skip = path.relative_to(project_root)
+        if (
+            len(rel_for_skip.parts) == 1
+            and rel_for_skip.parts[0] in SCANNER_HANDLED_ELSEWHERE
+        ):
             continue
         if not _looks_load_bearing(path, project_root):
             continue
