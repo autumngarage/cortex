@@ -119,13 +119,27 @@ BUILT_IN_PATTERNS: tuple[Pattern, ...] = (
 # these are language-toolchain caches that contain markdown documentation
 # we explicitly do not want to absorb (the JS ``doctrine`` linter package
 # under ``node_modules/`` is the canonical regression case).
+#
+# The second group (``.sentinel/``, ``.cortex/``, ``.claude/``, ``.github/``,
+# ``.husky/``, ``.circleci/``, ``.devcontainer/``) is toolchain/agent
+# configuration — files like ``.sentinel/lenses.md`` or ``.claude/loop.md``
+# are config for OTHER tools, not project content for Cortex to absorb. The
+# sigint dogfood regression that motivated this expansion: scan listed
+# ``.sentinel/backlog.md``, ``.claude/loop.md``, and
+# ``.github/pull_request_template.md`` as unknown candidates.
 ALWAYS_SKIP: frozenset[str] = frozenset(
     {
+        # --- Build / dependency / cache dirs -------------------------------
         "node_modules", ".build", ".swiftpm", "vendor", "dist", "target",
         "__pycache__", ".venv", "venv", ".tox", ".pytest_cache", ".ruff_cache",
         ".mypy_cache", "build", "out", "coverage", ".next", ".nuxt",
-        "DerivedData", "Pods", ".gradle", ".idea", ".vscode", ".git",
-        ".cortex",  # never scan our own scaffold (would feed itself)
+        "DerivedData", "Pods", ".gradle",
+        # --- Toolchain / agent / VCS config dirs --------------------------
+        # Each of these holds config for some other tool whose ``.md`` files
+        # are not project content. ``.cortex`` itself is here so re-running
+        # init never feeds its own scaffold back into the next scan.
+        ".git", ".github", ".vscode", ".idea", ".husky", ".circleci",
+        ".devcontainer", ".sentinel", ".cortex", ".claude",
     }
 )
 

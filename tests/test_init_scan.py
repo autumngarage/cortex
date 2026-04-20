@@ -94,6 +94,34 @@ def test_claude_and_agents_md_not_in_unknowns(tmp_path: Path) -> None:
     )
 
 
+def test_toolchain_config_dirs_skipped(tmp_path: Path) -> None:
+    """Markdown files inside toolchain/agent config directories
+    (``.sentinel/``, ``.cortex/``, ``.claude/``, ``.github/``) are
+    config for OTHER tools, not project content. The sigint scan
+    surfaced ``.sentinel/backlog.md``, ``.claude/loop.md``, and
+    ``.github/pull_request_template.md`` as unknown candidates — they
+    must be excluded entirely (no Doctrine, Plan, Map, Reference, or
+    Unknown finding for any of them).
+    """
+    for d in (".sentinel", ".cortex", ".claude", ".github"):
+        (tmp_path / d).mkdir()
+    (tmp_path / ".sentinel" / "foo.md").write_text("# foo\n\n## body\n\n" + "x" * 1024)
+    (tmp_path / ".cortex" / "bar.md").write_text("# bar\n\n## body\n\n" + "x" * 1024)
+    (tmp_path / ".claude" / "baz.md").write_text("# baz\n\n## body\n\n" + "x" * 1024)
+    (tmp_path / ".github" / "qux.md").write_text("# qux\n\n## body\n\n" + "x" * 1024)
+
+    result = scan_project(tmp_path)
+    surfaced = {f.relative for f in result.findings}
+    forbidden = {
+        ".sentinel/foo.md",
+        ".cortex/bar.md",
+        ".claude/baz.md",
+        ".github/qux.md",
+    }
+    leaked = surfaced & forbidden
+    assert not leaked, f"toolchain config files leaked into scan: {leaked}"
+
+
 def test_scan_demotes_shipped_plan(tmp_path: Path) -> None:
     """A Plan candidate with ``Status: shipped`` in its head is demoted to reference."""
     (tmp_path / "ROADMAP.md").write_text(
