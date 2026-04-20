@@ -41,6 +41,7 @@ from pathlib import Path
 import click
 
 from cortex import __version__ as CORTEX_VERSION
+from cortex.init_scan import ScanResult, scan_project
 
 CURRENT_SPEC_VERSION = "0.3.1-dev"
 
@@ -241,6 +242,89 @@ def _append_gitignore_entries(gitignore: Path) -> bool:
     return True
 
 
+def _print_scan_summary(scan: ScanResult) -> None:
+    """Render the one-screen scan summary before any prompts fire.
+
+    The block is grouped by category in a fixed order so users developing
+    a mental model of "what cortex finds" see consistent layout regardless
+    of the project shape. Each section is suppressed when empty so projects
+    with no Doctrine candidates don't render a meaningless heading.
+    """
+    click.echo("")
+    click.echo(f"Scanning {scan.project_root}…")
+    click.echo("")
+    click.echo("Found existing structure:")
+    click.echo("")
+
+    doctrine = scan.by_category("doctrine")
+    if doctrine:
+        click.echo("  Doctrine candidates (Y/n on each):")
+        for f in doctrine:
+            click.echo(f"    {f.relative}")
+        click.echo("")
+
+    plans = scan.by_category("plan")
+    if plans:
+        click.echo("  Plan candidates (Y/n on each, Success-Criteria stubbed as TODO):")
+        for f in plans:
+            click.echo(f"    {f.relative}")
+        click.echo("")
+
+    map_refs = scan.by_category("map_ref")
+    if map_refs:
+        click.echo("  Map references (added to state.md Sources, not imported):")
+        for f in map_refs:
+            click.echo(f"    {f.relative}")
+        click.echo("")
+
+    references = scan.by_category("reference")
+    if references:
+        click.echo("  Reference-only (noted in state.md, NOT imported into Journal):")
+        for f in references:
+            note = "  (looks shipped — demoted from Plan)" if f.is_demoted_plan else ""
+            click.echo(f"    {f.relative}{note}")
+        click.echo("")
+
+    unknown = scan.by_category("unknown")
+    if unknown:
+        click.echo("  Unknown pattern (will prompt for classification):")
+        for f in unknown:
+            click.echo(f"    {f.relative}")
+        click.echo("")
+
+    sig = scan.sibling_signals
+    touchstone_bits: list[str] = []
+    if sig.has_codex_review_toml:
+        touchstone_bits.append("✓ .codex-review.toml")
+    if sig.has_codex_review_hook:
+        touchstone_bits.append("✓ codex-review pre-commit hook")
+    if sig.has_touchstone_config:
+        touchstone_bits.append("✓ .touchstone-config")
+    if sig.has_touchstone_manifest:
+        touchstone_bits.append("✓ .touchstone-manifest")
+    if sig.touchstone_version:
+        touchstone_bits.append(f"✓ .touchstone-version {sig.touchstone_version}")
+    if touchstone_bits:
+        click.echo("  Touchstone signals: " + " ".join(touchstone_bits))
+
+    if sig.sentinel_dir_present:
+        if sig.sentinel_runs_count > 0:
+            click.echo(
+                f"  Sentinel signal: ✓ .sentinel/ exists with {sig.sentinel_runs_count} runs, "
+                "no T1.6 entries (forward-only — past runs not backfilled)"
+            )
+        else:
+            click.echo("  Sentinel signal: ✓ .sentinel/ exists, no runs detected")
+
+    if scan.unscoped_constraint_count:
+        click.echo(
+            f"  CLAUDE.md/AGENTS.md unscoped constraints: {scan.unscoped_constraint_count} "
+            "(run `cortex doctor` after init for per-line detail)"
+        )
+
+    click.echo("")
+
+
 def _should_prompt(yes: bool) -> bool:
     """Return True iff we should run interactive prompts.
 
@@ -407,6 +491,18 @@ def init_command(
             err=True,
         )
         sys.exit(1)
+
+    # --- Scan-first: walk the project for existing structure before any prompts.
+    # Per the scan-and-absorb design, the scan summary is the first thing the
+    # user sees so they understand what cortex found before deciding to continue.
+    # On non-TTY without `--yes` we still print the summary (it's information,
+    # not interaction) but skip the "Continue?" prompt and downstream imports.
+    scan = scan_project(target_path)
+    _print_scan_summary(scan)
+    will_prompt = _should_prompt(yes=assume_yes)
+    if will_prompt and not click.confirm("Continue?", default=True):
+        click.echo("Aborted by user — no changes made.")
+        sys.exit(0)
 
     data_root = _package_data_root()
 
