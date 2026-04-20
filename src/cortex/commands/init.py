@@ -34,15 +34,21 @@ from __future__ import annotations
 import re
 import shutil
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from importlib import resources
 from pathlib import Path
 
 import click
 
 from cortex import __version__ as CORTEX_VERSION
-from cortex.init_scan import ScanResult, scan_project
-from cortex.init_seeders import seed_doctrine, seed_plans
+from cortex.init_scan import (
+    Category,
+    Finding,
+    ScanResult,
+    append_user_pattern,
+    scan_project,
+)
+from cortex.init_seeders import seed_doctrine, seed_plan, seed_plans
 
 CURRENT_SPEC_VERSION = "0.3.1-dev"
 
@@ -308,6 +314,119 @@ def _absorb_doctrine(
     for path in written:
         click.echo(f"  Imported Doctrine: {path.relative_to(project_root).as_posix()}")
     return written
+
+
+_UNKNOWN_CHOICES: dict[str, Category | None] = {
+    "d": "doctrine",
+    "p": "plan",
+    "m": "map_ref",
+    "r": "reference",
+    "s": None,  # skip — surface choice but mint nothing
+}
+_UNKNOWN_CHOICE_LABELS = {
+    "d": "Doctrine",
+    "p": "Plan",
+    "m": "Map reference",
+    "r": "Reference",
+    "s": "Skip",
+}
+
+
+def _describe_unknown(finding: Finding) -> str:
+    """Return a short single-line size/structure description for an unknown."""
+    try:
+        size = finding.path.stat().st_size
+    except OSError:
+        size = 0
+    size_kb = size / 1024.0
+    extra = ""
+    try:
+        text = finding.path.read_text(encoding="utf-8", errors="replace")
+        h1 = re.search(r"^#\s+(.+)$", text, re.MULTILINE)
+        h2_count = len(re.findall(r"^##\s+\S", text, re.MULTILINE))
+        if h1 is not None:
+            title_excerpt = h1.group(1).strip()[:60]
+            extra = f', H1 "{title_excerpt}"'
+            if h2_count:
+                extra += f", {h2_count} H2 sections"
+    except OSError:
+        pass
+    return f"This file is {size_kb:.1f}KB{extra}."
+
+
+def _classify_unknown(finding: Finding) -> str | None:
+    """Prompt the user to classify one unknown finding. Return the choice key (or None to abort)."""
+    click.echo("")
+    click.echo(f"Found {finding.relative} — doesn't match a known pattern.")
+    click.echo("")
+    click.echo(f"  {_describe_unknown(finding)}")
+    click.echo("  Treat as: [D]octrine / [P]lan / [M]ap reference / [R]eference / [S]kip?")
+    click.echo("  Default: M (map reference)")
+    raw = click.prompt("  Choice", default="m", show_default=False)
+    if not isinstance(raw, str):
+        return None
+    key = raw.strip().lower()[:1] or "m"
+    if key not in _UNKNOWN_CHOICES:
+        click.echo("  (unrecognized — defaulting to map reference)")
+        key = "m"
+    return key
+
+
+def _absorb_unknowns(
+    project_root: Path,
+    scan: ScanResult,
+    *,
+    will_prompt: bool,
+    assume_yes: bool,
+) -> None:
+    """Walk unknown candidates, prompting the user to classify each.
+
+    On TTY, each unknown is classified into one of the five categories
+    (Doctrine / Plan / Map ref / Reference / Skip) and the choice is
+    persisted to ``.cortex/.discover.toml`` so future invocations
+    recognize the pattern without re-prompting. With ``--yes`` the
+    default classification is ``map_ref`` (the safest choice — surfaces
+    the file in state.md Sources without seeding into Doctrine/Plans).
+    Non-TTY without ``--yes`` skips entirely.
+    """
+    candidates = scan.by_category("unknown")
+    if not candidates:
+        return
+    if not will_prompt and not assume_yes:
+        return
+    for finding in candidates:
+        choice_key = "m" if assume_yes else (_classify_unknown(finding) or "s")
+        category = _UNKNOWN_CHOICES[choice_key]
+        # Persist the teaching for future runs.
+        if category is not None:
+            append_user_pattern(
+                project_root,
+                glob=finding.relative,
+                category=category,
+                description=f"(taught by user during cortex init on {date.today().isoformat()})",
+            )
+        else:
+            append_user_pattern(
+                project_root,
+                glob=finding.relative,
+                category="skip",
+                description=f"(skipped by user during cortex init on {date.today().isoformat()})",
+            )
+        # Mint immediately if the user chose Doctrine or Plan.
+        if category == "doctrine":
+            written = seed_doctrine(project_root, [finding.path])
+            for path in written:
+                click.echo(f"  Imported Doctrine: {path.relative_to(project_root).as_posix()}")
+        elif category == "plan":
+            result = seed_plan(project_root, finding.path)
+            if result is not None:
+                click.echo(f"  Imported Plan: {result.relative_to(project_root).as_posix()}")
+        elif category == "map_ref":
+            click.echo(f"  Noted as map reference: {finding.relative}")
+        elif category == "reference":
+            click.echo(f"  Noted as reference-only: {finding.relative}")
+        else:
+            click.echo(f"  Skipped: {finding.relative}")
 
 
 def _absorb_plans(
@@ -673,6 +792,7 @@ def init_command(
     # non-TTY without --yes skips imports entirely (silent-scaffold preserved).
     _absorb_doctrine(target_path, scan, will_prompt=will_prompt, assume_yes=assume_yes)
     _absorb_plans(target_path, scan, will_prompt=will_prompt, assume_yes=assume_yes)
+    _absorb_unknowns(target_path, scan, will_prompt=will_prompt, assume_yes=assume_yes)
 
     # Interactive follow-ups (doctrine 0002). Each step is gated on the
     # relevant target file existing — if CLAUDE.md / AGENTS.md / .gitignore

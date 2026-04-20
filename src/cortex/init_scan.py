@@ -574,7 +574,7 @@ def append_user_pattern(
     project_root: Path,
     *,
     glob: str,
-    category: Category,
+    category: PatternCategory,
     description: str,
 ) -> None:
     """Append a pattern entry to ``.cortex/.discover.toml`` (creating it if absent).
