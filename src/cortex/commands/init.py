@@ -42,6 +42,7 @@ import click
 
 from cortex import __version__ as CORTEX_VERSION
 from cortex.init_scan import ScanResult, scan_project
+from cortex.init_seeders import seed_doctrine
 
 CURRENT_SPEC_VERSION = "0.3.1-dev"
 
@@ -240,6 +241,46 @@ def _append_gitignore_entries(gitignore: Path) -> bool:
     new_text = prior_text + "\n".join(to_add) + "\n"
     gitignore.write_text(new_text)
     return True
+
+
+def _absorb_doctrine(
+    project_root: Path,
+    scan: ScanResult,
+    *,
+    will_prompt: bool,
+    assume_yes: bool,
+) -> list[Path]:
+    """Walk Doctrine candidates with per-file Y/n prompts; mint accepted entries.
+
+    The selection step is interactive (one prompt per source) so the user
+    can opt into absorbing the principles they want to track in Cortex's
+    promotion queue without taking the ones that aren't load-bearing for
+    agents (e.g. a ``principles/README.md`` that's just orientation prose).
+
+    On non-TTY without ``--yes`` no candidates are imported (preserves
+    today's silent-scaffold behavior). With ``--yes``, every candidate is
+    accepted — same default as the prompts (default Yes).
+    """
+    candidates = scan.by_category("doctrine")
+    if not candidates:
+        return []
+    accepted: list[Path] = []
+    if assume_yes:
+        accepted = [c.path for c in candidates]
+    elif will_prompt:
+        for finding in candidates:
+            if click.confirm(f"  Import {finding.relative} as Doctrine?", default=True):
+                accepted.append(finding.path)
+    else:
+        # Non-TTY without --yes: silent skip per Doctrine 0002.
+        return []
+
+    if not accepted:
+        return []
+    written = seed_doctrine(project_root, accepted)
+    for path in written:
+        click.echo(f"  Imported Doctrine: {path.relative_to(project_root).as_posix()}")
+    return written
 
 
 def _print_scan_summary(scan: ScanResult) -> None:
@@ -549,6 +590,11 @@ def init_command(
         (cortex_dir / f"{layer}.md").write_text(_derived_stub(title, layer, init_generator))
 
     click.echo(f"Scaffolded {cortex_dir} (spec v{CURRENT_SPEC_VERSION}).")
+
+    # Absorb existing structure surfaced by the scan into ``.cortex/``.
+    # Each candidate gets a per-file Y/n prompt on TTY; --yes accepts all;
+    # non-TTY without --yes skips imports entirely (silent-scaffold preserved).
+    _absorb_doctrine(target_path, scan, will_prompt=will_prompt, assume_yes=assume_yes)
 
     # Interactive follow-ups (doctrine 0002). Each step is gated on the
     # relevant target file existing — if CLAUDE.md / AGENTS.md / .gitignore
