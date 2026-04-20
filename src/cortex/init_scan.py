@@ -157,6 +157,15 @@ _H1_RE = re.compile(r"^#\s+\S", re.MULTILINE)
 _H2_RE = re.compile(r"^##\s+\S", re.MULTILINE)
 _GIT_CHECK_TIMEOUT_SECONDS = 5.0
 
+# Files whose top-level instances are handled by other parts of the init
+# pipeline — listing them under "unknown" would double-prompt the user.
+# ``CLAUDE.md`` / ``AGENTS.md`` already get the Doctrine-0002 import-injection
+# prompts (``--add-imports-claude``, ``--add-imports-agents``) handled in
+# ``commands/init.py``; the unscoped-constraint heuristic in ``validation.py``
+# also reports on their contents. Surfacing them as "unknown" on top of that
+# is the sigint/vesper double-prompt regression we're fixing.
+SCANNER_HANDLED_ELSEWHERE: frozenset[str] = frozenset({"CLAUDE.md", "AGENTS.md"})
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -537,6 +546,15 @@ def scan_project(project_root: Path) -> ScanResult:
         if path in classified_paths:
             continue
         if path.resolve() in ignored:
+            continue
+        # Top-level CLAUDE.md / AGENTS.md are handled by the
+        # import-injection + unscoped-constraint flows. Surfacing them as
+        # "unknown" double-prompts the user (sigint/vesper regression).
+        rel_for_skip = path.relative_to(project_root)
+        if (
+            len(rel_for_skip.parts) == 1
+            and rel_for_skip.parts[0] in SCANNER_HANDLED_ELSEWHERE
+        ):
             continue
         if not _looks_load_bearing(path, project_root):
             continue

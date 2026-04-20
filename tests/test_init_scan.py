@@ -76,6 +76,24 @@ def test_scan_respects_gitignore(tmp_path: Path) -> None:
     assert all("vendor/" not in f.relative for f in result.findings)
 
 
+def test_claude_and_agents_md_not_in_unknowns(tmp_path: Path) -> None:
+    """Top-level CLAUDE.md and AGENTS.md are handled by the import-injection
+    and unscoped-constraint flows in ``commands/init.py`` /
+    ``validation.py``. Listing them as "unknown" makes the wizard
+    double-prompt (sigint/vesper dogfood regression). Real unknowns
+    (e.g. ``MYSTERY_DOC.md``) still surface as before.
+    """
+    (tmp_path / "CLAUDE.md").write_text("# Claude instructions\n\n## Section\n\n" + "x" * 1024)
+    (tmp_path / "AGENTS.md").write_text("# Agents instructions\n\n## Section\n\n" + "x" * 1024)
+    (tmp_path / "MYSTERY_DOC.md").write_text("# Mystery\n\n## Body\n\n" + "x" * 1024)
+
+    result = scan_project(tmp_path)
+    unknowns = {f.relative for f in result.by_category("unknown")}
+    assert unknowns == {"MYSTERY_DOC.md"}, (
+        f"expected only MYSTERY_DOC.md as unknown, got {unknowns}"
+    )
+
+
 def test_scan_demotes_shipped_plan(tmp_path: Path) -> None:
     """A Plan candidate with ``Status: shipped`` in its head is demoted to reference."""
     (tmp_path / "ROADMAP.md").write_text(
