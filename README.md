@@ -52,13 +52,16 @@ Projects import `.cortex/protocol.md` into `AGENTS.md`. Any agent that reads `AG
 
 ## UX — one command
 
-> **Status:** v0.2.1 ships status, structural validation, audit, retrieval, an interactive `cortex init` wizard, Autumn Garage sibling surfacing in `cortex doctor`, and the unscoped-LLM/API-constraint warning in `cortex doctor`. The fully interactive per-candidate promotion prompts shown below land with Phase C's index writer. Track progress in [`.cortex/state.md`](./.cortex/state.md).
+> **Status:** v0.2.1 ships status, structural validation, audit, retrieval, an interactive `cortex init` wizard with scan-and-absorb for existing repos (one screen of "here's what I found", per-file Y/n on Doctrine/Plan candidates, taught patterns persist to `.cortex/.discover.toml`), Autumn Garage sibling surfacing in `cortex doctor`, and the unscoped-LLM/API-constraint warning in `cortex doctor`. The fully interactive per-candidate promotion prompts shown below land with Phase C's index writer. Track progress in [`.cortex/state.md`](./.cortex/state.md).
 
 What ships today:
 
 ```bash
 cortex                      # status summary — active plans, journal activity, digest age, queue counts
-cortex init                 # scaffold .cortex/ in a project (idempotent)
+cortex init                 # scaffold .cortex/ in a project (idempotent); scans for existing
+                            # principles/, plans/, decisions/, ROADMAP.md, etc. and offers to
+                            # absorb each one (Y/n) into Doctrine or Plans, citing the source
+                            # via `Imported-from:` frontmatter — no flag needed
 cortex manifest --budget N  # token-budgeted session-start slice per Protocol § 1
 cortex grep <pattern>       # frontmatter-aware ripgrep wrapper
 cortex doctor               # validate .cortex/ against SPEC

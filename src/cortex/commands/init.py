@@ -1,4 +1,6 @@
-"""`cortex init` — scaffold a SPEC-v0.3.1-dev-conformant `.cortex/` directory.
+"""`cortex init` — scaffold a SPEC-v0.3.1-dev-conformant `.cortex/` directory
+and absorb existing project structure (principles/, decisions/, ROADMAP.md,
+…) into it via per-file interactive prompts.
 
 Creates:
 
@@ -11,12 +13,33 @@ Creates:
 - `.cortex/journal/`                → empty; seeded with `.gitkeep`
 - `.cortex/procedures/`             → empty; seeded with `.gitkeep`
 - `.cortex/map.md`                  → seven-field stub with `Incomplete: [all sources]`
-- `.cortex/state.md`                → seven-field stub with `Incomplete: [all sources]`
+- `.cortex/state.md`                → seven-field stub; Sources enriched from the scan
 
 Refuses to overwrite an existing `.cortex/SPEC_VERSION` unless `--force` is
 passed. With `--force`, the scaffold files (SPEC_VERSION, protocol.md,
 templates/, map.md/state.md stubs) are overwritten; existing doctrine, plan,
-journal, and procedure content is never deleted.
+journal, and procedure content is never deleted (idempotency by
+``Imported-from:`` cites — re-running on an absorbed repo never duplicates).
+
+Scan-and-absorb (no flag — driven by the scan + interactive prompts):
+on every TTY invocation, init walks the project root for known patterns
+(`principles/*.md`, `docs/decisions/*.md`, `ROADMAP.md`, `*PLAN*.md`,
+`README.md`, `CHANGELOG.md`, …), prints a one-screen summary grouped by
+category (Doctrine / Plan / Map ref / Reference / Unknown) and asks
+"Continue?" before doing anything. Then per Doctrine candidate it asks
+"Import as Doctrine?" (default Yes), per Plan candidate "Import as Plan?"
+(stubbing required Plan sections as `[ ] Hand-author from <source>`
+checklists), and per unknown file "[D]octrine / [P]lan / [M]ap ref /
+[R]eference / [S]kip?" (default M). Unknown classifications persist to
+`.cortex/.discover.toml` so future invocations recognize the pattern
+without re-prompting. Source files are never modified — every imported
+entry cites the source via `Imported-from:` frontmatter and the source
+remains canonical text.
+
+CHANGELOGs and `journal/*.md` are NEVER auto-imported into the Cortex
+Journal — Journal is time-anchored and append-only (Protocol § 4.1), so
+backfilling synthetic entries from past CHANGELOGs would lie about when
+events happened. Such files surface in `state.md` Sources only.
 
 Interactive first-run follow-ups (per Doctrine 0002 — interactive-by-default):
 when run on a TTY against a project that already has `CLAUDE.md` / `AGENTS.md`,
@@ -25,8 +48,9 @@ imports, and offers to add `.cortex/.index.json` + `.cortex/pending/` entries
 to `.gitignore`. Each prompt defaults to Yes. Flags (`--add-imports-claude`,
 `--add-imports-agents`, `--gitignore`, and their `--no-*` counterparts) skip
 the corresponding prompt. `--yes`/`-y` accepts all defaults without prompting.
-Non-TTY invocations without `--yes` skip all three follow-ups silently,
-preserving the pre-interactive scaffolding behavior.
+Non-TTY invocations without `--yes` skip all three follow-ups silently and
+do not absorb scan candidates either (preserves the pre-interactive
+scaffolding behavior — scan summary still prints).
 """
 
 from __future__ import annotations
@@ -34,13 +58,21 @@ from __future__ import annotations
 import re
 import shutil
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from importlib import resources
 from pathlib import Path
 
 import click
 
 from cortex import __version__ as CORTEX_VERSION
+from cortex.init_scan import (
+    Category,
+    Finding,
+    ScanResult,
+    append_user_pattern,
+    scan_project,
+)
+from cortex.init_seeders import seed_doctrine, seed_plan, seed_plans
 
 CURRENT_SPEC_VERSION = "0.3.1-dev"
 
@@ -85,25 +117,52 @@ _STUB_BODIES: dict[str, str] = {
 }
 
 
-def _derived_stub(title: str, layer: str, generator: str) -> str:
+def _derived_stub(
+    title: str,
+    layer: str,
+    generator: str,
+    *,
+    sources: list[str] | None = None,
+) -> str:
     """Render a seven-field derived-layer stub (map or state).
 
     The seven-field frontmatter is load-bearing — `cortex doctor` validates it
     (SPEC § 4.5). Only the prose body is user-facing guidance, and it's phrased
     for the hand-editing workflow that's expected until `cortex refresh-{layer}`
     ships in Phase C.
+
+    ``sources`` is a list of relative paths the scan classified as ``map_ref``
+    or ``reference`` and that the State layer should cite. When non-empty,
+    ``Corpus:`` reflects the source count so the placeholder doesn't lie
+    about how much context exists. Empty/None falls back to today's
+    "no synthesis yet" wording.
     """
     now = _now_iso()
     body = _STUB_BODIES[layer]
+    if sources:
+        sources_yaml = "\n".join(f"  - {src}" for src in sources)
+        corpus_line = f"Corpus: {len(sources)} files (scan-discovered, not synthesized)"
+        incomplete_line = (
+            f"Incomplete:\n"
+            f"  - All sources — listed by `cortex init` from a project scan; "
+            f"`cortex refresh-{layer}` will synthesize them in Phase C."
+        )
+    else:
+        sources_yaml = "  - (none — scaffolded placeholder, no synthesis yet)"
+        corpus_line = "Corpus: 0 files (no synthesis yet)"
+        incomplete_line = (
+            f"Incomplete:\n"
+            f"  - All sources — scaffolded at project init; "
+            f"`cortex refresh-{layer}` will regenerate from primary sources in Phase C."
+        )
     return f"""---
 Generated: {now}
 Generator: {generator} (scaffolded by `cortex init`; hand-editable until `cortex refresh-{layer}` ships in Phase C)
 Sources:
-  - (none — scaffolded placeholder, no synthesis yet)
-Corpus: 0 files (no synthesis yet)
+{sources_yaml}
+{corpus_line}
 Omitted: []
-Incomplete:
-  - All sources — scaffolded at project init; `cortex refresh-{layer}` will regenerate from primary sources in Phase C.
+{incomplete_line}
 Conflicts-preserved: []
 Spec: {CURRENT_SPEC_VERSION.split("-")[0]}
 ---
@@ -239,6 +298,277 @@ def _append_gitignore_entries(gitignore: Path) -> bool:
     new_text = prior_text + "\n".join(to_add) + "\n"
     gitignore.write_text(new_text)
     return True
+
+
+def _absorb_doctrine(
+    project_root: Path,
+    scan: ScanResult,
+    *,
+    will_prompt: bool,
+    assume_yes: bool,
+) -> list[Path]:
+    """Walk Doctrine candidates with per-file Y/n prompts; mint accepted entries.
+
+    The selection step is interactive (one prompt per source) so the user
+    can opt into absorbing the principles they want to track in Cortex's
+    promotion queue without taking the ones that aren't load-bearing for
+    agents (e.g. a ``principles/README.md`` that's just orientation prose).
+
+    On non-TTY without ``--yes`` no candidates are imported (preserves
+    today's silent-scaffold behavior). With ``--yes``, every candidate is
+    accepted — same default as the prompts (default Yes).
+    """
+    candidates = scan.by_category("doctrine")
+    if not candidates:
+        return []
+    accepted: list[Path] = []
+    if assume_yes:
+        accepted = [c.path for c in candidates]
+    elif will_prompt:
+        for finding in candidates:
+            if click.confirm(f"  Import {finding.relative} as Doctrine?", default=True):
+                accepted.append(finding.path)
+    else:
+        # Non-TTY without --yes: silent skip per Doctrine 0002.
+        return []
+
+    if not accepted:
+        return []
+    written = seed_doctrine(project_root, accepted)
+    for path in written:
+        click.echo(f"  Imported Doctrine: {path.relative_to(project_root).as_posix()}")
+    return written
+
+
+_UNKNOWN_CHOICES: dict[str, Category | None] = {
+    "d": "doctrine",
+    "p": "plan",
+    "m": "map_ref",
+    "r": "reference",
+    "s": None,  # skip — surface choice but mint nothing
+}
+_UNKNOWN_CHOICE_LABELS = {
+    "d": "Doctrine",
+    "p": "Plan",
+    "m": "Map reference",
+    "r": "Reference",
+    "s": "Skip",
+}
+
+
+def _describe_unknown(finding: Finding) -> str:
+    """Return a short single-line size/structure description for an unknown."""
+    try:
+        size = finding.path.stat().st_size
+    except OSError:
+        size = 0
+    size_kb = size / 1024.0
+    extra = ""
+    try:
+        text = finding.path.read_text(encoding="utf-8", errors="replace")
+        h1 = re.search(r"^#\s+(.+)$", text, re.MULTILINE)
+        h2_count = len(re.findall(r"^##\s+\S", text, re.MULTILINE))
+        if h1 is not None:
+            title_excerpt = h1.group(1).strip()[:60]
+            extra = f', H1 "{title_excerpt}"'
+            if h2_count:
+                extra += f", {h2_count} H2 sections"
+    except OSError:
+        pass
+    return f"This file is {size_kb:.1f}KB{extra}."
+
+
+def _classify_unknown(finding: Finding) -> str | None:
+    """Prompt the user to classify one unknown finding. Return the choice key (or None to abort)."""
+    click.echo("")
+    click.echo(f"Found {finding.relative} — doesn't match a known pattern.")
+    click.echo("")
+    click.echo(f"  {_describe_unknown(finding)}")
+    click.echo("  Treat as: [D]octrine / [P]lan / [M]ap reference / [R]eference / [S]kip?")
+    click.echo("  Default: M (map reference)")
+    raw = click.prompt("  Choice", default="m", show_default=False)
+    if not isinstance(raw, str):
+        return None
+    key = raw.strip().lower()[:1] or "m"
+    if key not in _UNKNOWN_CHOICES:
+        click.echo("  (unrecognized — defaulting to map reference)")
+        key = "m"
+    return key
+
+
+def _absorb_unknowns(
+    project_root: Path,
+    scan: ScanResult,
+    *,
+    will_prompt: bool,
+    assume_yes: bool,
+) -> None:
+    """Walk unknown candidates, prompting the user to classify each.
+
+    On TTY, each unknown is classified into one of the five categories
+    (Doctrine / Plan / Map ref / Reference / Skip) and the choice is
+    persisted to ``.cortex/.discover.toml`` so future invocations
+    recognize the pattern without re-prompting. With ``--yes`` the
+    default classification is ``map_ref`` (the safest choice — surfaces
+    the file in state.md Sources without seeding into Doctrine/Plans).
+    Non-TTY without ``--yes`` skips entirely.
+    """
+    candidates = scan.by_category("unknown")
+    if not candidates:
+        return
+    if not will_prompt and not assume_yes:
+        return
+    for finding in candidates:
+        choice_key = "m" if assume_yes else (_classify_unknown(finding) or "s")
+        category = _UNKNOWN_CHOICES[choice_key]
+        # Persist the teaching for future runs.
+        if category is not None:
+            append_user_pattern(
+                project_root,
+                glob=finding.relative,
+                category=category,
+                description=f"(taught by user during cortex init on {date.today().isoformat()})",
+            )
+        else:
+            append_user_pattern(
+                project_root,
+                glob=finding.relative,
+                category="skip",
+                description=f"(skipped by user during cortex init on {date.today().isoformat()})",
+            )
+        # Mint immediately if the user chose Doctrine or Plan.
+        if category == "doctrine":
+            written = seed_doctrine(project_root, [finding.path])
+            for path in written:
+                click.echo(f"  Imported Doctrine: {path.relative_to(project_root).as_posix()}")
+        elif category == "plan":
+            result = seed_plan(project_root, finding.path)
+            if result is not None:
+                click.echo(f"  Imported Plan: {result.relative_to(project_root).as_posix()}")
+        elif category == "map_ref":
+            click.echo(f"  Noted as map reference: {finding.relative}")
+        elif category == "reference":
+            click.echo(f"  Noted as reference-only: {finding.relative}")
+        else:
+            click.echo(f"  Skipped: {finding.relative}")
+
+
+def _absorb_plans(
+    project_root: Path,
+    scan: ScanResult,
+    *,
+    will_prompt: bool,
+    assume_yes: bool,
+) -> list[Path]:
+    """Walk Plan candidates with per-file Y/n prompts; mint accepted entries.
+
+    Each accepted source becomes ``.cortex/plans/<slug>.md`` with required
+    sections stubbed as ``[ ] Hand-author from <source>`` checklists. The
+    Goal-hash is computed from the source's H1 (or filename when there's
+    no H1) so ``cortex doctor``'s recompute check passes immediately.
+    """
+    candidates = scan.by_category("plan")
+    if not candidates:
+        return []
+    accepted: list[Path] = []
+    if assume_yes:
+        accepted = [c.path for c in candidates]
+    elif will_prompt:
+        for finding in candidates:
+            if click.confirm(f"  Import {finding.relative} as Plan?", default=True):
+                accepted.append(finding.path)
+    else:
+        return []
+
+    if not accepted:
+        return []
+    written = seed_plans(project_root, accepted)
+    for path in written:
+        click.echo(f"  Imported Plan: {path.relative_to(project_root).as_posix()}")
+    return written
+
+
+def _print_scan_summary(scan: ScanResult) -> None:
+    """Render the one-screen scan summary before any prompts fire.
+
+    The block is grouped by category in a fixed order so users developing
+    a mental model of "what cortex finds" see consistent layout regardless
+    of the project shape. Each section is suppressed when empty so projects
+    with no Doctrine candidates don't render a meaningless heading.
+    """
+    click.echo("")
+    click.echo(f"Scanning {scan.project_root}…")
+    click.echo("")
+    click.echo("Found existing structure:")
+    click.echo("")
+
+    doctrine = scan.by_category("doctrine")
+    if doctrine:
+        click.echo("  Doctrine candidates (Y/n on each):")
+        for f in doctrine:
+            click.echo(f"    {f.relative}")
+        click.echo("")
+
+    plans = scan.by_category("plan")
+    if plans:
+        click.echo("  Plan candidates (Y/n on each, Success-Criteria stubbed as TODO):")
+        for f in plans:
+            click.echo(f"    {f.relative}")
+        click.echo("")
+
+    map_refs = scan.by_category("map_ref")
+    if map_refs:
+        click.echo("  Map references (added to state.md Sources, not imported):")
+        for f in map_refs:
+            click.echo(f"    {f.relative}")
+        click.echo("")
+
+    references = scan.by_category("reference")
+    if references:
+        click.echo("  Reference-only (noted in state.md, NOT imported into Journal):")
+        for f in references:
+            note = "  (looks shipped — demoted from Plan)" if f.is_demoted_plan else ""
+            click.echo(f"    {f.relative}{note}")
+        click.echo("")
+
+    unknown = scan.by_category("unknown")
+    if unknown:
+        click.echo("  Unknown pattern (will prompt for classification):")
+        for f in unknown:
+            click.echo(f"    {f.relative}")
+        click.echo("")
+
+    sig = scan.sibling_signals
+    touchstone_bits: list[str] = []
+    if sig.has_codex_review_toml:
+        touchstone_bits.append("✓ .codex-review.toml")
+    if sig.has_codex_review_hook:
+        touchstone_bits.append("✓ codex-review pre-commit hook")
+    if sig.has_touchstone_config:
+        touchstone_bits.append("✓ .touchstone-config")
+    if sig.has_touchstone_manifest:
+        touchstone_bits.append("✓ .touchstone-manifest")
+    if sig.touchstone_version:
+        touchstone_bits.append(f"✓ .touchstone-version {sig.touchstone_version}")
+    if touchstone_bits:
+        click.echo("  Touchstone signals: " + " ".join(touchstone_bits))
+
+    if sig.sentinel_dir_present:
+        if sig.sentinel_runs_count > 0:
+            click.echo(
+                f"  Sentinel signal: ✓ .sentinel/ exists with {sig.sentinel_runs_count} runs, "
+                "no T1.6 entries (forward-only — past runs not backfilled)"
+            )
+        else:
+            click.echo("  Sentinel signal: ✓ .sentinel/ exists, no runs detected")
+
+    if scan.unscoped_constraint_count:
+        click.echo(
+            f"  CLAUDE.md/AGENTS.md unscoped constraints: {scan.unscoped_constraint_count} "
+            "(run `cortex doctor` after init for per-line detail)"
+        )
+
+    click.echo("")
 
 
 def _should_prompt(yes: bool) -> bool:
@@ -408,6 +738,18 @@ def init_command(
         )
         sys.exit(1)
 
+    # --- Scan-first: walk the project for existing structure before any prompts.
+    # Per the scan-and-absorb design, the scan summary is the first thing the
+    # user sees so they understand what cortex found before deciding to continue.
+    # On non-TTY without `--yes` we still print the summary (it's information,
+    # not interaction) but skip the "Continue?" prompt and downstream imports.
+    scan = scan_project(target_path)
+    _print_scan_summary(scan)
+    will_prompt = _should_prompt(yes=assume_yes)
+    if will_prompt and not click.confirm("Continue?", default=True):
+        click.echo("Aborted by user — no changes made.")
+        sys.exit(0)
+
     data_root = _package_data_root()
 
     cortex_dir.mkdir(exist_ok=True)
@@ -446,13 +788,35 @@ def init_command(
     # string is derived from `cortex.__version__` so the stubs' seven-field
     # metadata stays truthful across releases (no hand-bump to remember).
     init_generator = f"cortex init v{CORTEX_VERSION}"
+    # State layer's Sources field is enriched with anything the scan
+    # classified as map_ref (READMEs/ARCHITECTURE/SETUP) or reference
+    # (CHANGELOGs, journal/*) so a fresh state.md cites the project's
+    # existing documentation directly. Map layer stays scaffold-empty for
+    # now; structural inputs are code+git, not markdown sources, so the
+    # scan can't enrich it usefully — that's `cortex refresh-map`'s job
+    # in Phase C.
+    state_sources = [
+        f.relative
+        for f in scan.findings
+        if f.category in ("map_ref", "reference")
+    ]
     for layer, title in (
         ("map", "Project Map"),
         ("state", "Project State"),
     ):
-        (cortex_dir / f"{layer}.md").write_text(_derived_stub(title, layer, init_generator))
+        layer_sources = state_sources if layer == "state" else None
+        (cortex_dir / f"{layer}.md").write_text(
+            _derived_stub(title, layer, init_generator, sources=layer_sources)
+        )
 
     click.echo(f"Scaffolded {cortex_dir} (spec v{CURRENT_SPEC_VERSION}).")
+
+    # Absorb existing structure surfaced by the scan into ``.cortex/``.
+    # Each candidate gets a per-file Y/n prompt on TTY; --yes accepts all;
+    # non-TTY without --yes skips imports entirely (silent-scaffold preserved).
+    _absorb_doctrine(target_path, scan, will_prompt=will_prompt, assume_yes=assume_yes)
+    _absorb_plans(target_path, scan, will_prompt=will_prompt, assume_yes=assume_yes)
+    _absorb_unknowns(target_path, scan, will_prompt=will_prompt, assume_yes=assume_yes)
 
     # Interactive follow-ups (doctrine 0002). Each step is gated on the
     # relevant target file existing — if CLAUDE.md / AGENTS.md / .gitignore
