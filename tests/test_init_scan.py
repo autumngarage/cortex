@@ -122,6 +122,47 @@ def test_toolchain_config_dirs_skipped(tmp_path: Path) -> None:
     assert not leaked, f"toolchain config files leaked into scan: {leaked}"
 
 
+def test_migration_md_classified_as_plan(tmp_path: Path) -> None:
+    """Migration docs (sigint's ``agent/COLLECTOR_MIGRATION.md``) are
+    typically transient plans — one-shot work to move between systems.
+    Without a ``Status: shipped`` marker they should land in the Plan
+    bucket, not Unknown.
+    """
+    (tmp_path / "agent").mkdir()
+    (tmp_path / "agent" / "COLLECTOR_MIGRATION.md").write_text(
+        "# Collector Migration\n\nMove the collector from system A to system B.\n"
+    )
+
+    result = scan_project(tmp_path)
+    plans = result.by_category("plan")
+    assert any(f.relative == "agent/COLLECTOR_MIGRATION.md" for f in plans), (
+        f"expected migration doc as Plan, got {[f.relative for f in plans]}; "
+        f"unknowns: {[f.relative for f in result.by_category('unknown')]}"
+    )
+
+
+def test_migration_md_with_shipped_marker_demoted_to_reference(tmp_path: Path) -> None:
+    """A migration doc with ``Status: shipped`` in its first 30 lines
+    flows through the existing ``_looks_shipped`` heuristic and lands in
+    reference, not plan. Belt-and-braces: adding the *MIGRATION*.md
+    pattern doesn't risk wrongly importing closed work as an active plan.
+    """
+    (tmp_path / "agent").mkdir()
+    (tmp_path / "agent" / "COLLECTOR_MIGRATION.md").write_text(
+        "---\nStatus: shipped\n---\n\n# Collector Migration\n\nDone.\n"
+    )
+
+    result = scan_project(tmp_path)
+    plans = result.by_category("plan")
+    references = result.by_category("reference")
+    assert not any(f.relative == "agent/COLLECTOR_MIGRATION.md" for f in plans), (
+        f"shipped migration leaked into Plan: {[f.relative for f in plans]}"
+    )
+    demoted = [f for f in references if f.relative == "agent/COLLECTOR_MIGRATION.md"]
+    assert demoted, "expected shipped migration in reference category"
+    assert demoted[0].is_demoted_plan, "demoted_from metadata not preserved"
+
+
 def test_scan_demotes_shipped_plan(tmp_path: Path) -> None:
     """A Plan candidate with ``Status: shipped`` in its head is demoted to reference."""
     (tmp_path / "ROADMAP.md").write_text(

@@ -100,6 +100,17 @@ BUILT_IN_PATTERNS: tuple[Pattern, ...] = (
     Pattern("agent/NEXT_PHASE.md", "plan", "agent-cluster next phase", "built-in"),
     Pattern("agent/*PLAN*.md", "plan", "agent-cluster plan docs", "built-in"),
     Pattern("*PLAN*.md", "plan", "plan-named docs", "built-in"),
+    # Migration docs are typically transient plans (one-shot work to move
+    # between systems). Conservative: we ONLY cover ``*MIGRATION*`` —
+    # ``*SETUP*`` / ``*INTEGRATION*`` / ``*API*`` / ``*_THESIS.md`` are
+    # too ambiguous and stay user-taught via ``.cortex/.discover.toml``.
+    # Shipped/done migrations are demoted to reference by ``_looks_shipped``
+    # (sigint's ``agent/COLLECTOR_MIGRATION.md`` carries ``Status: shipped``
+    # markers and lands in reference, not plan), so adding the pattern
+    # doesn't risk wrongly importing closed work as an active plan.
+    Pattern("agent/*MIGRATION*.md", "plan", "agent-cluster migration docs", "built-in"),
+    Pattern("*/*MIGRATION*.md", "plan", "subdir migration docs", "built-in"),
+    Pattern("*MIGRATION*.md", "plan", "migration plan docs", "built-in"),
     # --- Reference (no auto-import — Cortex Journal is time-anchored) -------
     Pattern("CHANGELOG.md", "reference", "changelog", "built-in"),
     Pattern("journal/*.md", "reference", "journal directory", "built-in"),
