@@ -98,11 +98,11 @@ Full plan: [`.cortex/plans/phase-c-authoring-and-state.md`](./.cortex/plans/phas
 
 ### Phase D — Composition integrations *(blocked on C, v0.4.0 target)*
 
-Full plan: [`.cortex/plans/phase-d-integration.md`](./.cortex/plans/phase-d-integration.md). Sentinel and Touchstone use Phase C's `cortex journal draft` to write to `.cortex/` on real work events — end-of-cycle (T1.6), PR merge (T1.9), architecturally-significant pre-merge (T1.7). This is the phase where the composition story (Touchstone = standards, Sentinel = loop, Cortex = memory) starts compounding: the Journal fills itself as a byproduct of normal work instead of requiring the author to remember to record things.
+Full plan: [`.cortex/plans/phase-d-integration.md`](./.cortex/plans/phase-d-integration.md). Sentinel and Touchstone use Phase C's `cortex journal draft` to write to `.cortex/` on real work events — end-of-cycle (T1.6), PR merge (T1.9). For architecturally-significant pre-merge (T1.7), the Protocol names `doctrine/candidate.md` as the template; Phase D renders it pre-filled as a PR comment (no new storage layer until Phase E ships the SPEC amendment + `cortex promote` writer). This is the phase where the composition story (Touchstone = standards, Sentinel = loop, Cortex = memory) starts compounding: the Journal fills itself as a byproduct of normal work instead of requiring the author to remember to record things.
 
 - [ ] Sentinel end-of-cycle hook (in `autumngarage/sentinel` repo) → `cortex journal draft --type sentinel-cycle`
 - [ ] Touchstone post-merge hook (in `autumngarage/touchstone`) → `cortex journal draft --type pr-merged`
-- [ ] Touchstone pre-merge hook on architecturally-significant diffs → `cortex journal draft --type decision`
+- [ ] Touchstone pre-merge hook on architecturally-significant diffs → render `doctrine/candidate.md` template filled from PR context, post as PR comment
 - [ ] Touchstone pre-push hook → `cortex doctor --strict` (fail-loud gate)
 - [ ] Graceful-degradation tests for every integration (Cortex missing, Cortex present but not opted in, Cortex present + opted in)
 - [ ] v0.4.0 release
