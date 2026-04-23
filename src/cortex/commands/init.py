@@ -118,9 +118,9 @@ _STUB_BODIES: dict[str, str] = {
         "> **Hand-authored placeholder.** `cortex init` wrote this as a scaffolded "
         "starting point. Edit it to describe the structural view of your "
         "codebase (key modules, entry points, data flows). When "
-        "`cortex refresh-map` ships (Phase C — tracked in the Cortex repo "
-        "plans), it will regenerate this from code + git automatically; until "
-        "then, hand-editing is the intended workflow."
+        "`cortex refresh-map` ships (Phase E — LLM synthesis, tracked in the "
+        "Cortex repo plans), it will regenerate this from code + git automatically; "
+        "until then, hand-editing is the intended workflow."
     ),
 }
 

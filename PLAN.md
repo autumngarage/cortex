@@ -33,7 +33,7 @@ Cortex v1.0 is done when, on sigint or sentinel:
 4. `cortex journal draft <type>` emits a draft journal entry from PR context (diff + description + commit messages), ready for human edit.
 5. `cortex plan spawn <name>` emits a Plan scaffold citing the grounding Doctrine/State entry.
 6. `cortex status` reports freshness per layer and flags spec violations (orphan deferrals, unlinked plans, missing success criteria).
-7. Sentinel integration: Sentinel's end-of-cycle hook writes a Journal entry (via `cortex journal draft --type sentinel-cycle`) on significant events; Sentinel's scan phase reads Doctrine + State as input.
+7. Sentinel integration: Sentinel's end-of-cycle hook writes a Journal entry (via `cortex journal draft --type sentinel-cycle`) on significant events (Phase D work item); Sentinel's scan phase reads Doctrine + State as input when present (Phase D work item under "Sentinel end-of-cycle integration," which ships both the write-side and read-side in the same Sentinel-repo PR).
 8. Touchstone integration: post-merge hook (T1.9) drafts a `Type: pr-merged` Journal entry for every default-branch merge via `cortex journal draft --type pr-merged`; pre-merge hook (T1.7) on architecturally-significant diffs invokes `cortex doctrine draft` to create a durable Doctrine candidate in the Phase E `.cortex/pending/` staging layer; pre-push hook runs `cortex doctor --strict`.
 
 **Out of scope for v1.0:** multi-repo / portfolio views (that's the Lighthouse discussion, deliberately deferred); promotion enforcement (the human gates promotions); embedding / semantic search over Cortex content (may come as v1.1).
