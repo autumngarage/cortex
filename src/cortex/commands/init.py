@@ -64,7 +64,6 @@ from __future__ import annotations
 import re
 import shlex
 import shutil
-import subprocess
 import sys
 from datetime import UTC, date, datetime
 from importlib import resources
@@ -81,6 +80,7 @@ from cortex.init_scan import (
     scan_project,
 )
 from cortex.init_seeders import seed_doctrine, seed_plan, seed_plans
+from cortex.shell import git_remediation_cmd, run_git
 
 CURRENT_SPEC_VERSION = "0.3.1-dev"
 
@@ -307,49 +307,28 @@ def _has_existing_cortex_imports(path: Path) -> bool:
 def _tracked_cortex_files(project_root: Path) -> list[str] | None:
     """Return the list of `.cortex/` files already tracked by git.
 
-    Used by `--local-only` to detect the case where `.cortex/` is committed
-    to an existing repo — adding `.cortex/` to `.gitignore` doesn't untrack
-    files that are already in git's index, so the "not published" claim
-    would be false without an explicit `git rm --cached`.
+    Thin adapter over :func:`cortex.shell.run_git` that maps git's
+    tri-state result to the per-file list the ``--local-only`` caller
+    wants:
 
-    Returns:
       * `[]`  — check ran cleanly and nothing is tracked OR the project is
                 not a git repository (no tracked state is possible).
       * `[...]` — one entry per tracked `.cortex/` path.
       * `None` — the check could not be completed (git missing, subprocess
                 error, unexpected nonzero exit for any reason *other than*
                 "not a repo"). Callers MUST treat None as "unknown, warn
-                the user" rather than "all clear" — silently treating a
-                failed check as success would give false "not published"
-                assurance.
+                the user" — silently treating a failed check as success
+                would give false "not published" assurance.
 
-    Note: we do NOT short-circuit on `(project_root / ".git").exists()` —
-    that check misses the monorepo / subdirectory case where `cortex init
-    --path <subdir>` runs inside a parent repo whose `.git` lives above.
-    `git ls-files` is the authoritative check; it walks up to find the
-    repo root itself.
+    The tri-state comes from :class:`cortex.shell.GitRun`; this function
+    exists only to shape it into the list form the caller already expects.
     """
-    try:
-        result = subprocess.run(
-            ["git", "-C", str(project_root), "ls-files", ".cortex"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except (FileNotFoundError, subprocess.SubprocessError):
-        # git missing or subprocess-level failure — unknown, not "no files".
-        return None
-    if result.returncode != 0:
-        # Distinguish "not a git repo" (a normal, known-safe state — no
-        # tracked files are possible) from other failures (partial checkout,
-        # corrupted index, permission issue) where we genuinely don't know.
-        # `git ls-files` outside a repo prints a recognizable marker on
-        # stderr; match on that to separate the two.
-        stderr_lower = (result.stderr or "").lower()
-        if "not a git repository" in stderr_lower:
-            return []
-        return None
-    return [line for line in result.stdout.splitlines() if line.strip()]
+    result = run_git("-C", str(project_root), "ls-files", ".cortex")
+    if result.ok:
+        return [line for line in result.stdout.splitlines() if line.strip()]
+    if result.not_a_repo:
+        return []
+    return None
 
 
 def _append_gitignore_entries(gitignore: Path, *, local_only: bool = False) -> bool:
@@ -1033,52 +1012,46 @@ def init_command(
         dangling_import_files = [
             p for p in (claude_md, agents_md) if _has_existing_cortex_imports(p)
         ]
+        # Both `tracked is None` and `tracked != []` branches emit git
+        # commands for the user to paste into a shell. Every emission goes
+        # through `cortex.shell.git_remediation_cmd` so the two invariants
+        # the PR #27 review loop nailed down — anchor to the target project
+        # (not cwd), shell-quote every interpolated token — are enforced in
+        # one place rather than re-implemented at each call site.
         if tracked is None:
             # We couldn't determine whether `.cortex/` is tracked. Warn
             # explicitly rather than falling through to the "not published"
             # success message — false assurance is worse than no answer.
-            # Use the same path-aware, shell-quoted `git -C <target>`
-            # remediation shape as the tracked branch so the user, who
-            # may be running from a different cwd in a monorepo, copy-
-            # pastes a command that inspects the right `.cortex/`.
-            if path_differs_from_cwd:
-                quoted_target = shlex.quote(str(target_path))
-                lsfiles_cmd = f"git -C {quoted_target} ls-files .cortex"
-                untrack_hint = (
-                    f"`git -C {quoted_target} rm --cached -r .cortex/`"
-                )
-            else:
-                lsfiles_cmd = "git ls-files .cortex"
-                untrack_hint = "`git rm --cached -r .cortex/`"
+            lsfiles_cmd = git_remediation_cmd(
+                "ls-files", ".cortex",
+                target=target_path,
+                anchor_to_target=path_differs_from_cwd,
+            )
+            untrack_cmd = git_remediation_cmd(
+                "rm", "--cached", "-r", ".cortex/",
+                target=target_path,
+                anchor_to_target=path_differs_from_cwd,
+            )
             click.echo(
                 "  warning: could not verify whether `.cortex/` is already "
                 "tracked by git (git check failed). If this project has a "
                 f"prior Cortex history, run `{lsfiles_cmd}` manually "
-                f"and follow up with {untrack_hint} if files "
+                f"and follow up with `{untrack_cmd}` if files "
                 "are listed. Otherwise downstream clones may still see the "
                 "previously-committed `.cortex/` content.",
                 err=True,
             )
         elif tracked:
-            # Path-aware remediation: when `--path <subdir>` is used (monorepo
-            # / subproject), the user may run the untrack command from the
-            # repo root or from any cwd, so we emit `git -C <target>` to
-            # anchor the operation to the project this init acted on. In the
-            # common case (target == cwd) we emit the plain form for
-            # readability. Shell-quote the path so values containing spaces
-            # (e.g. "My Project") survive copy-paste into a shell intact.
-            if path_differs_from_cwd:
-                quoted_target = shlex.quote(str(target_path))
-                untrack_cmd = f"git -C {quoted_target} rm --cached -r .cortex/"
-                commit_cmd = (
-                    f"git -C {quoted_target} commit -m "
-                    "'chore: untrack .cortex/ (local-only)'"
-                )
-            else:
-                untrack_cmd = "git rm --cached -r .cortex/"
-                commit_cmd = (
-                    "git commit -m 'chore: untrack .cortex/ (local-only)'"
-                )
+            untrack_cmd = git_remediation_cmd(
+                "rm", "--cached", "-r", ".cortex/",
+                target=target_path,
+                anchor_to_target=path_differs_from_cwd,
+            )
+            commit_cmd = git_remediation_cmd(
+                "commit", "-m", "chore: untrack .cortex/ (local-only)",
+                target=target_path,
+                anchor_to_target=path_differs_from_cwd,
+            )
             click.echo(
                 f"  warning: {len(tracked)} `.cortex/` file(s) are already tracked by git. "
                 ".gitignore does not untrack existing files. Run:\n"
