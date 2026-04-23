@@ -37,7 +37,7 @@ Every layer has a single authoring mode (Diataxis discipline), a single write tr
 
 The Protocol ([`.cortex/protocol.md`](./.cortex/protocol.md)) is the rule set any agent follows when working on a Cortex-enabled project. Two tiers:
 
-- **Tier 1 — machine-observable triggers.** Deterministic, auditable, enforceable. *Diff touches `.cortex/doctrine/`. Test failed after passing earlier. Plan status changed. File deleted over N lines. Dependency manifest changed. Sentinel cycle ended. Touchstone pre-merge fired on architecturally significant diff. Commit message matches pattern.* When these fire, the agent writes a Journal entry from a template. Tooling verifies compliance.
+- **Tier 1 — machine-observable triggers.** Deterministic, auditable, enforceable. *Diff touches `.cortex/doctrine/`. Test failed after passing earlier. Plan status changed. File deleted over N lines. Dependency manifest changed. Sentinel cycle ended. Touchstone pre-merge fired on architecturally significant diff (T1.7). Commit message matches pattern. Pull request merged to default branch (T1.9).* When these fire, the agent writes from the template the Protocol specifies — Journal entries for most triggers, a `doctrine/candidate.md` (a Doctrine draft awaiting promotion) for T1.7. Tooling verifies compliance.
 - **Tier 2 — advisory heuristics.** Judgment-based and explicitly labeled. *Decision phrasing. Failed attempt that taught something. Surprise about existing code. User says "remember this."* The agent is asked to journal on these; non-compliance is not enforced.
 
 Projects import `.cortex/protocol.md` into `AGENTS.md`. Any agent that reads `AGENTS.md` inherits the Protocol.

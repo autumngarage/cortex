@@ -75,12 +75,13 @@ Each release must also declare which spec version it supports (in `SUPPORTED_SPE
 
 ## Architecture
 
-Python CLI (click + uv-managed venv) organized around layer commands. v0.1.0 ships the non-synthesizing surface; regeneration is Phase C.
+Python CLI (click + uv-managed venv) organized around layer commands. v0.2.3 ships the non-synthesizing surface; the reordered roadmap (2026-04-23, recorded in [`.cortex/journal/2026-04-23-phase-c-reordered.md`](./.cortex/journal/2026-04-23-phase-c-reordered.md)) lands deterministic authoring/state in Phase C and LLM synthesis in Phase E.
 
 - `cortex init` — scaffold `.cortex/` per SPEC.md
 - `cortex status` / `cortex doctor` — validate and report
-- `cortex refresh-map` / `cortex refresh-state` — regenerate derived layers via `claude` CLI
-- `cortex plan spawn` / `cortex journal draft` — author helpers for Plans / Journal
+- `cortex journal draft` / `cortex plan spawn` / `cortex plan status` — Phase C authoring helpers (deterministic; `journal draft` pre-fills from `git log` + `gh pr view` context)
+- `cortex refresh-state` — Phase C deterministic regeneration of `.cortex/state.md` with marker-preserved hand-authored regions; byte-identical on unchanged inputs
+- `cortex refresh-map` / `cortex refresh-state --enhance` — Phase E LLM-driven regeneration via the `claude` CLI
 - No background daemon; all writes are explicit CLI invocations.
 
 ## Key Files
