@@ -338,6 +338,97 @@ def test_local_only_with_explicit_import_flag_honors_and_warns(tmp_path: Path) -
     assert "dangling" in result.output.lower()
 
 
+def test_local_only_suppresses_import_next_step_hint(tmp_path: Path) -> None:
+    """The "Next steps" block suggests importing `@.cortex/...` into
+    AGENTS.md/CLAUDE.md when those files don't exist. Under --local-only
+    that suggestion would reintroduce the dangling-import problem — suppress
+    it so the next-steps output stays consistent with the flag's intent."""
+    out = _invoke(tmp_path, "--yes", "--local-only")
+    # No CLAUDE.md or AGENTS.md exists in tmp_path; default would print the
+    # import suggestion as step 2. Under --local-only it must be gone.
+    assert "Import `@.cortex/protocol.md`" not in out
+
+
+def test_default_next_step_hint_still_present(tmp_path: Path) -> None:
+    """Regression guard: without --local-only, the import suggestion still
+    prints when CLAUDE.md/AGENTS.md aren't imported. This is the contract
+    that introduces new users to the imports."""
+    out = _invoke(tmp_path, "--yes")
+    assert "Import `@.cortex/protocol.md`" in out
+
+
+def _git_init(target: Path) -> None:
+    """Initialise a minimal git repo at `target` so `git ls-files` can run."""
+    import subprocess  # noqa: PLC0415  local to keep top-level imports minimal
+
+    for cmd in (
+        ["git", "init", "-q"],
+        ["git", "-C", str(target), "config", "user.email", "test@example.com"],
+        ["git", "-C", str(target), "config", "user.name", "Test"],
+        ["git", "-C", str(target), "config", "commit.gpgsign", "false"],
+    ):
+        subprocess.run(cmd, cwd=str(target), check=True, capture_output=True)
+
+
+def _git_add_commit(target: Path, *paths: str) -> None:
+    import subprocess  # noqa: PLC0415
+
+    subprocess.run(
+        ["git", "-C", str(target), "add", *paths],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(target), "commit", "-q", "-m", "seed"],
+        check=True,
+        capture_output=True,
+    )
+
+
+def test_local_only_warns_when_cortex_already_tracked(tmp_path: Path) -> None:
+    """If `.cortex/` is already in git's index, appending `.cortex/` to
+    .gitignore does NOT untrack those files — git continues to publish
+    them. Warn with the exact `git rm --cached` remediation so the user
+    doesn't believe the "not published" promise falsely."""
+    _git_init(tmp_path)
+    # Pre-create a .cortex/ file and commit it so the tree mirrors the
+    # "existing repo adopting Cortex" scenario.
+    (tmp_path / ".cortex").mkdir()
+    (tmp_path / ".cortex" / "state.md").write_text("# seed\n")
+    _git_add_commit(tmp_path, ".cortex/state.md")
+
+    result = CliRunner().invoke(
+        cli, ["init", "--path", str(tmp_path), "--yes", "--local-only", "--force"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "already tracked" in result.output
+    assert "git rm --cached -r .cortex/" in result.output
+
+
+def test_local_only_no_warning_when_cortex_untracked(tmp_path: Path) -> None:
+    """Fresh-init case: `.cortex/` was created by `cortex init` and never
+    committed, so there's nothing to untrack. The warning must stay
+    silent — false positives here would train users to ignore it."""
+    _git_init(tmp_path)
+    result = CliRunner().invoke(
+        cli, ["init", "--path", str(tmp_path), "--yes", "--local-only"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "already tracked" not in result.output
+    assert "will not be published" in result.output
+
+
+def test_local_only_survives_non_git_project(tmp_path: Path) -> None:
+    """`--local-only` must not fail when the project isn't a git repo —
+    the tracked-files check is best-effort advice, not a prerequisite."""
+    # No `git init`; plain tmp_path.
+    result = CliRunner().invoke(
+        cli, ["init", "--path", str(tmp_path), "--yes", "--local-only"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "already tracked" not in result.output
+
+
 def test_default_init_still_commits_cortex_dir(tmp_path: Path) -> None:
     """Regression guard: the SPEC default is that `.cortex/` is committed
     team-shared memory. Without --local-only, the whole directory must NOT

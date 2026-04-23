@@ -63,6 +63,7 @@ from __future__ import annotations
 
 import re
 import shutil
+import subprocess
 import sys
 from datetime import UTC, date, datetime
 from importlib import resources
@@ -284,6 +285,38 @@ def _append_imports(target_file: Path) -> bool:
 
     target_file.write_text(new_text)
     return True
+
+
+def _tracked_cortex_files(project_root: Path) -> list[str]:
+    """Return the list of `.cortex/` files already tracked by git.
+
+    Used by `--local-only` to detect the case where `.cortex/` is committed
+    to an existing repo — adding `.cortex/` to `.gitignore` doesn't untrack
+    files that are already in git's index, so the "not published" claim
+    would be false without an explicit `git rm --cached`.
+
+    Returns an empty list when:
+      * `.cortex/` is not tracked (the common fresh-init case)
+      * `git` is unavailable or the project is not a git repo
+      * the `git ls-files` call fails for any reason
+
+    The empty-list fallback is intentional: we never fail `cortex init` over
+    a missing `git`, we just can't warn. The warning is best-effort advice.
+    """
+    if not (project_root / ".git").exists():
+        return []
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(project_root), "ls-files", ".cortex"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return []
+    if result.returncode != 0:
+        return []
+    return [line for line in result.stdout.splitlines() if line.strip()]
 
 
 def _append_gitignore_entries(gitignore: Path, *, local_only: bool = False) -> bool:
@@ -937,8 +970,7 @@ def init_command(
             if local_only:
                 click.echo(
                     f"  Updated {gitignore_path.name}: `.cortex/` is now gitignored "
-                    "(local-only mode). Doctrine, plans, journals, and state will "
-                    "not be published with this project."
+                    "(local-only mode)."
                 )
             else:
                 click.echo(f"  Updated {gitignore_path.name} with Cortex entries.")
@@ -951,9 +983,35 @@ def init_command(
             else:
                 click.echo(f"  {gitignore_path.name} already ignores Cortex transient paths.")
 
+    # Local-only post-check: if `.cortex/` is already tracked by git,
+    # gitignore-ing it does NOT untrack the files. The user must run
+    # `git rm --cached -r .cortex/` (and commit) for the "not published"
+    # guarantee to hold. Warn loudly with the exact remediation command so
+    # the user can't miss that the rest of `--local-only`'s success message
+    # is contingent on this step.
+    if local_only:
+        tracked = _tracked_cortex_files(target_path)
+        if tracked:
+            click.echo(
+                f"  warning: {len(tracked)} `.cortex/` file(s) are already tracked by git. "
+                ".gitignore does not untrack existing files. Run:\n"
+                "      git rm --cached -r .cortex/\n"
+                "      git commit -m 'chore: untrack .cortex/ (local-only)'\n"
+                "  to complete the local-only transition; otherwise the existing tracked "
+                "files will continue to be published.",
+                err=True,
+            )
+        else:
+            click.echo(
+                "  Doctrine, plans, journals, and state will not be published "
+                "with this project."
+            )
+
     click.echo("Next steps:")
     click.echo("  1. Author doctrine/0001-why-<project>-exists.md (see templates/doctrine/candidate.md for shape).")
-    if not want_claude and not want_agents:
+    if not want_claude and not want_agents and not local_only:
+        # In local-only mode, committing `@.cortex/...` imports would leave
+        # dangling references for downstream clones — don't recommend it.
         click.echo("  2. Import `@.cortex/protocol.md` and `@.cortex/state.md` into your AGENTS.md or CLAUDE.md.")
     click.echo("  3. Run `cortex doctor` to validate the scaffold against SPEC.md.")
 
