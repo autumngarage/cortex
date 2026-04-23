@@ -1034,11 +1034,24 @@ def init_command(
             # We couldn't determine whether `.cortex/` is tracked. Warn
             # explicitly rather than falling through to the "not published"
             # success message — false assurance is worse than no answer.
+            # Use the same path-aware, shell-quoted `git -C <target>`
+            # remediation shape as the tracked branch so the user, who
+            # may be running from a different cwd in a monorepo, copy-
+            # pastes a command that inspects the right `.cortex/`.
+            if path_differs_from_cwd:
+                quoted_target = shlex.quote(str(target_path))
+                lsfiles_cmd = f"git -C {quoted_target} ls-files .cortex"
+                untrack_hint = (
+                    f"`git -C {quoted_target} rm --cached -r .cortex/`"
+                )
+            else:
+                lsfiles_cmd = "git ls-files .cortex"
+                untrack_hint = "`git rm --cached -r .cortex/`"
             click.echo(
                 "  warning: could not verify whether `.cortex/` is already "
                 "tracked by git (git check failed). If this project has a "
-                "prior Cortex history, run `git ls-files .cortex` manually "
-                "and follow up with `git rm --cached -r .cortex/` if files "
+                f"prior Cortex history, run `{lsfiles_cmd}` manually "
+                f"and follow up with {untrack_hint} if files "
                 "are listed. Otherwise downstream clones may still see the "
                 "previously-committed `.cortex/` content.",
                 err=True,

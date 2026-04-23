@@ -535,7 +535,12 @@ def test_local_only_warns_when_git_check_fails(tmp_path: Path, monkeypatch) -> N
     error or corrupted repo), we cannot know whether `.cortex/` is
     tracked. Emit an explicit uncertainty warning rather than falling
     through to the "will not be published" success path — false
-    assurance is worse than no answer."""
+    assurance is worse than no answer.
+
+    CliRunner doesn't cd into tmp_path so `--path <tmp_path>` differs
+    from cwd; the emitted remediation must use the path-aware form
+    (`git -C <target>`) so a monorepo user running from the repo root
+    doesn't inspect or untrack the wrong `.cortex/`."""
     from cortex.commands import init as init_mod  # noqa: PLC0415
 
     def fake_tracked(_path):  # pragma: no cover - simple stub
@@ -547,9 +552,38 @@ def test_local_only_warns_when_git_check_fails(tmp_path: Path, monkeypatch) -> N
     )
     assert result.exit_code == 0, result.output
     assert "could not verify" in result.output
-    assert "git ls-files .cortex" in result.output
+    # Path-aware form: shell-quoted `git -C <target> ls-files .cortex`.
+    assert f"git -C {tmp_path.resolve()} ls-files .cortex" in result.output
+    assert f"git -C {tmp_path.resolve()} rm --cached -r .cortex/" in result.output
     # No false "will not be published" claim when we don't know the truth.
     assert "will not be published" not in result.output
+
+
+def test_local_only_check_failed_uses_plain_form_when_target_equals_cwd(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Regression: when cwd matches the target, the uncertainty warning
+    drops the `-C` prefix for readability — parallel to the tracked
+    branch's plain-form behavior."""
+    import os  # noqa: PLC0415
+    from cortex.commands import init as init_mod  # noqa: PLC0415
+
+    monkeypatch.setattr(init_mod, "_tracked_cortex_files", lambda _p: None)
+
+    prior_cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        result = CliRunner().invoke(
+            cli, ["init", "--yes", "--local-only"]
+        )
+    finally:
+        os.chdir(prior_cwd)
+
+    assert result.exit_code == 0, result.output
+    assert "could not verify" in result.output
+    assert "      git ls-files .cortex" not in result.output  # no leading indent form
+    assert "`git ls-files .cortex`" in result.output  # plain form, backticks
+    assert "git -C" not in result.output
 
 
 def test_local_only_remediation_quotes_paths_with_spaces(tmp_path: Path) -> None:
