@@ -457,6 +457,41 @@ def test_local_only_no_import_warning_when_files_clean(tmp_path: Path) -> None:
     assert "will not be published" in result.output
 
 
+def test_local_only_detects_tracked_files_in_monorepo_subdir(tmp_path: Path) -> None:
+    """Monorepo case: `.git` lives at the parent repo root, `cortex init`
+    runs against a subdirectory. The tracked-files check must still fire —
+    `git ls-files` is authoritative because it walks up on its own."""
+    import subprocess  # noqa: PLC0415
+
+    # Parent repo at tmp_path, subdir at tmp_path/packages/sub which already
+    # has a committed `.cortex/` file (simulating an existing shared mode).
+    _git_init(tmp_path)
+    subdir = tmp_path / "packages" / "sub"
+    subdir.mkdir(parents=True)
+    (subdir / ".cortex").mkdir()
+    (subdir / ".cortex" / "state.md").write_text("# seed\n")
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "add", "packages/sub/.cortex/state.md"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "commit", "-q", "-m", "seed subdir"],
+        check=True,
+        capture_output=True,
+    )
+    # Sanity: the subdir does NOT have its own .git — this is the case the
+    # prior implementation (which short-circuited on `.git` existence) missed.
+    assert not (subdir / ".git").exists()
+
+    result = CliRunner().invoke(
+        cli, ["init", "--path", str(subdir), "--yes", "--local-only", "--force"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "already tracked" in result.output
+    assert "git rm --cached -r .cortex/" in result.output
+
+
 def test_local_only_survives_non_git_project(tmp_path: Path) -> None:
     """`--local-only` must not fail when the project isn't a git repo —
     the tracked-files check is best-effort advice, not a prerequisite."""

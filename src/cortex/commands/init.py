@@ -318,9 +318,14 @@ def _tracked_cortex_files(project_root: Path) -> list[str]:
 
     The empty-list fallback is intentional: we never fail `cortex init` over
     a missing `git`, we just can't warn. The warning is best-effort advice.
+
+    Note: we do NOT short-circuit on `(project_root / ".git").exists()` —
+    that check misses the monorepo / subdirectory case where `cortex init
+    --path <subdir>` runs inside a parent repo whose `.git` lives above.
+    `git ls-files` is the authoritative check; it walks up to find the
+    repo root itself and returns nonzero when no repo is found, which we
+    already degrade to an empty list.
     """
-    if not (project_root / ".git").exists():
-        return []
     try:
         result = subprocess.run(
             ["git", "-C", str(project_root), "ls-files", ".cortex"],
