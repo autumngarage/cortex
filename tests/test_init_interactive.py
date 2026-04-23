@@ -301,6 +301,43 @@ def test_equivalent_command_includes_local_only(tmp_path: Path) -> None:
     assert "--no-gitignore" not in out
 
 
+def test_local_only_skips_claude_imports_by_default(tmp_path: Path) -> None:
+    """`--local-only` gitignores `.cortex/`; committing `@.cortex/...` imports
+    into CLAUDE.md would leave downstream clones with dangling references.
+    Default to skipping imports in local-only mode."""
+    claude = _write_claude_md(tmp_path)
+    _invoke(tmp_path, "--yes", "--local-only")
+    assert "@.cortex/protocol.md" not in claude.read_text()
+    assert "@.cortex/state.md" not in claude.read_text()
+
+
+def test_local_only_skips_agents_imports_by_default(tmp_path: Path) -> None:
+    agents = _write_agents_md(tmp_path)
+    _invoke(tmp_path, "--yes", "--local-only")
+    assert "@.cortex/protocol.md" not in agents.read_text()
+
+
+def test_local_only_with_explicit_import_flag_honors_and_warns(tmp_path: Path) -> None:
+    """Explicit `--add-imports-claude` wins over the local-only default, but
+    emits a warning so the dangling-import tradeoff is visible."""
+    claude = _write_claude_md(tmp_path)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "init",
+            "--path",
+            str(tmp_path),
+            "--yes",
+            "--local-only",
+            "--add-imports-claude",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "@.cortex/protocol.md" in claude.read_text()
+    # Warning is on stderr; CliRunner merges stderr into output by default.
+    assert "dangling" in result.output.lower()
+
+
 def test_default_init_still_commits_cortex_dir(tmp_path: Path) -> None:
     """Regression guard: the SPEC default is that `.cortex/` is committed
     team-shared memory. Without --local-only, the whole directory must NOT

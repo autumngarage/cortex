@@ -877,6 +877,25 @@ def init_command(
     # Resolve what each step will do. We record the effective decision for
     # each step so the printed equivalent-command reflects reality even
     # when a step was a no-op because imports were already present.
+    # `--local-only` inverts the import default. Reason: if `.cortex/` is
+    # gitignored, committing `@.cortex/protocol.md` imports into CLAUDE.md /
+    # AGENTS.md leaves dangling references for anyone who clones the
+    # published repo — the imports resolve locally for the author but not
+    # for downstream consumers. Explicit `--add-imports-claude` /
+    # `--add-imports-agents` still wins (the user is opting in knowingly),
+    # but we print a warning so the tradeoff is visible.
+    if local_only and add_imports_claude is None:
+        add_imports_claude = False
+    if local_only and add_imports_agents is None:
+        add_imports_agents = False
+    if local_only and (add_imports_claude is True or add_imports_agents is True):
+        click.echo(
+            "  warning: --local-only with explicit --add-imports-* leaves "
+            "@.cortex/... imports in CLAUDE.md / AGENTS.md while `.cortex/` "
+            "is gitignored. Downstream clones will see dangling imports.",
+            err=True,
+        )
+
     want_claude = _resolve_flag(
         flag_value=add_imports_claude,
         yes=assume_yes,
