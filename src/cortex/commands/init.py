@@ -118,9 +118,9 @@ _STUB_BODIES: dict[str, str] = {
         "> **Hand-authored placeholder.** `cortex init` wrote this as a scaffolded "
         "starting point. Edit it to describe the structural view of your "
         "codebase (key modules, entry points, data flows). When "
-        "`cortex refresh-map` ships (Phase C — tracked in the Cortex repo "
-        "plans), it will regenerate this from code + git automatically; until "
-        "then, hand-editing is the intended workflow."
+        "`cortex refresh-map` ships (Phase E — LLM synthesis, tracked in the "
+        "Cortex repo plans), it will regenerate this from code + git automatically; "
+        "until then, hand-editing is the intended workflow."
     ),
 }
 
@@ -137,7 +137,7 @@ def _derived_stub(
     The seven-field frontmatter is load-bearing — `cortex doctor` validates it
     (SPEC § 4.5). Only the prose body is user-facing guidance, and it's phrased
     for the hand-editing workflow that's expected until `cortex refresh-{layer}`
-    ships in Phase C.
+    ships (Phase C for state, Phase E for map per the 2026-04-23 roadmap reorder).
 
     ``sources`` is a list of relative paths the scan classified as ``map_ref``
     or ``reference`` and that the State layer should cite. When non-empty,
@@ -147,13 +147,19 @@ def _derived_stub(
     """
     now = _now_iso()
     body = _STUB_BODIES[layer]
+    # Per the 2026-04-23 roadmap reorder: deterministic `cortex refresh-state`
+    # ships in Phase C, LLM `cortex refresh-map` ships in Phase E. Each stub
+    # names its own arrival phase so users reading the scaffolded file don't
+    # get stale guidance from a cortex version that was generated before
+    # the reorder landed.
+    refresh_phase = "Phase C" if layer == "state" else "Phase E"
     if sources:
         sources_yaml = "\n".join(f"  - {src}" for src in sources)
         corpus_line = f"Corpus: {len(sources)} files (scan-discovered, not synthesized)"
         incomplete_line = (
             f"Incomplete:\n"
             f"  - All sources — listed by `cortex init` from a project scan; "
-            f"`cortex refresh-{layer}` will synthesize them in Phase C."
+            f"`cortex refresh-{layer}` will synthesize them in {refresh_phase}."
         )
     else:
         sources_yaml = "  - (none — scaffolded placeholder, no synthesis yet)"
@@ -161,11 +167,11 @@ def _derived_stub(
         incomplete_line = (
             f"Incomplete:\n"
             f"  - All sources — scaffolded at project init; "
-            f"`cortex refresh-{layer}` will regenerate from primary sources in Phase C."
+            f"`cortex refresh-{layer}` will regenerate from primary sources in {refresh_phase}."
         )
     return f"""---
 Generated: {now}
-Generator: {generator} (scaffolded by `cortex init`; hand-editable until `cortex refresh-{layer}` ships in Phase C)
+Generator: {generator} (scaffolded by `cortex init`; hand-editable until `cortex refresh-{layer}` ships in {refresh_phase})
 Sources:
 {sources_yaml}
 {corpus_line}

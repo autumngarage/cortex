@@ -2,7 +2,7 @@
 
 > **A protocol for agents to continuously journal what's happening on a project, and for humans to promote what matters.** The reflective layer of the autumngarage composition — Touchstone is the foundation (universal policy), Sentinel is the loop (autonomous execution), Cortex is the memory (project-local reasoning).
 
-**Status:** CLI v0.2.3 (polish: `cortex init` scan no longer double-prompts on top-level `CLAUDE.md`/`AGENTS.md`, skips toolchain config dirs (`.sentinel/`, `.cortex/`, `.claude/`, `.github/`, `.husky/`, `.circleci/`, `.devcontainer/`), and recognizes `*MIGRATION*.md` as Plan candidates; v0.2.2 added scan-and-absorb so large existing projects drop from ~hours of manual seeding to ~10 minutes interactive; v0.2.1 added the unscoped-LLM/API-constraint warning in `cortex doctor`; v0.2.0 added the Autumn Garage integration — interactive `init`, `doctor` sibling detection, shipped Plan template). [SPEC.md](./SPEC.md) v0.3.1-dev (draft, unchanged from v0.1.0). [`.cortex/protocol.md`](./.cortex/protocol.md) specifies the agent contract. The CLI ships the non-synthesizing commands (`init`, `status`, `doctor`, `manifest`, `grep`, `promote` stub); regeneration (`refresh-map`, `refresh-state`) is Phase C ([PLAN.md](./PLAN.md)).
+**Status:** CLI v0.2.3 (polish: `cortex init` scan no longer double-prompts on top-level `CLAUDE.md`/`AGENTS.md`, skips toolchain config dirs (`.sentinel/`, `.cortex/`, `.claude/`, `.github/`, `.husky/`, `.circleci/`, `.devcontainer/`), and recognizes `*MIGRATION*.md` as Plan candidates; v0.2.2 added scan-and-absorb so large existing projects drop from ~hours of manual seeding to ~10 minutes interactive; v0.2.1 added the unscoped-LLM/API-constraint warning in `cortex doctor`; v0.2.0 added the Autumn Garage integration — interactive `init`, `doctor` sibling detection, shipped Plan template). [SPEC.md](./SPEC.md) v0.3.1-dev (draft, unchanged from v0.1.0). [`.cortex/protocol.md`](./.cortex/protocol.md) specifies the agent contract. The CLI ships the non-synthesizing commands (`init`, `status`, `doctor`, `manifest`, `grep`, `promote` stub). Deterministic `cortex refresh-state` (plus `cortex journal draft` and `cortex plan spawn`) lands in Phase C; LLM-powered `cortex refresh-map` and `cortex refresh-state --enhance` land in Phase E ([PLAN.md](./PLAN.md); 2026-04-23 reorder recorded in [`.cortex/journal/2026-04-23-phase-c-reordered.md`](./.cortex/journal/2026-04-23-phase-c-reordered.md)).
 
 **New here?** Start with [`docs/PITCH.md`](./docs/PITCH.md) — plain-language one-liner, vision, and day-in-the-life walkthrough.
 
@@ -37,7 +37,7 @@ Every layer has a single authoring mode (Diataxis discipline), a single write tr
 
 The Protocol ([`.cortex/protocol.md`](./.cortex/protocol.md)) is the rule set any agent follows when working on a Cortex-enabled project. Two tiers:
 
-- **Tier 1 — machine-observable triggers.** Deterministic, auditable, enforceable. *Diff touches `.cortex/doctrine/`. Test failed after passing earlier. Plan status changed. File deleted over N lines. Dependency manifest changed. Sentinel cycle ended. Touchstone pre-merge fired on architecturally significant diff. Commit message matches pattern.* When these fire, the agent writes a Journal entry from a template. Tooling verifies compliance.
+- **Tier 1 — machine-observable triggers.** Deterministic, auditable, enforceable. *Diff touches `.cortex/doctrine/`. Test failed after passing earlier. Plan status changed. File deleted over N lines. Dependency manifest changed. Sentinel cycle ended. Touchstone pre-merge fired on architecturally significant diff (T1.7). Commit message matches pattern. Pull request merged to default branch (T1.9).* When these fire, the agent writes from the template the Protocol specifies — Journal entries for most triggers, a `doctrine/candidate.md` (a Doctrine draft awaiting promotion) for T1.7. Tooling verifies compliance.
 - **Tier 2 — advisory heuristics.** Judgment-based and explicitly labeled. *Decision phrasing. Failed attempt that taught something. Surprise about existing code. User says "remember this."* The agent is asked to journal on these; non-compliance is not enforced.
 
 Projects import `.cortex/protocol.md` into `AGENTS.md`. Any agent that reads `AGENTS.md` inherits the Protocol.
@@ -52,7 +52,7 @@ Projects import `.cortex/protocol.md` into `AGENTS.md`. Any agent that reads `AG
 
 ## UX — one command
 
-> **Status:** v0.2.3 ships status, structural validation, audit, retrieval, an interactive `cortex init` wizard with scan-and-absorb for existing repos (one screen of "here's what I found", per-file Y/n on Doctrine/Plan candidates, taught patterns persist to `.cortex/.discover.toml`), Autumn Garage sibling surfacing in `cortex doctor`, and the unscoped-LLM/API-constraint warning in `cortex doctor`. The fully interactive per-candidate promotion prompts shown below land with Phase C's index writer. Track progress in [`.cortex/state.md`](./.cortex/state.md).
+> **Status:** v0.2.3 ships status, structural validation, audit, retrieval, an interactive `cortex init` wizard with scan-and-absorb for existing repos (one screen of "here's what I found", per-file Y/n on Doctrine/Plan candidates, taught patterns persist to `.cortex/.discover.toml`), Autumn Garage sibling surfacing in `cortex doctor`, and the unscoped-LLM/API-constraint warning in `cortex doctor`. The fully interactive per-candidate promotion prompts shown below depend on `.cortex/.index.json` being populated, which now lands with **Phase E** (alongside the `cortex promote` writer) per the 2026-04-23 roadmap reorder — Phase C is authoring + deterministic state refresh, Phase D is Sentinel/Touchstone integration, Phase E is LLM synthesis + promotion governance. Track progress in [`.cortex/state.md`](./.cortex/state.md).
 
 What ships today:
 
@@ -67,11 +67,11 @@ cortex grep <pattern>       # frontmatter-aware ripgrep wrapper
 cortex doctor               # validate .cortex/ against SPEC
 cortex doctor --audit       # check Tier-1 Protocol triggers have matching Journal entries
 cortex doctor --audit-digests
-cortex promote <id>         # stub pending Phase C .index.json
+cortex promote <id>         # stub pending Phase E .index.json writer + promote writer
 cortex version
 ```
 
-What the full interactive flow will look like once Phase C lands the promotion-queue writer:
+What the full interactive flow will look like once Phase E lands the `.cortex/.index.json` writer and the `cortex promote` end-to-end writer:
 
 ```
 $ cortex
@@ -95,7 +95,7 @@ Generate March 2026 digest now?  [y/n]:
 Anything else? (enter to exit, or type a request)
 ```
 
-Everything surfaces at every invocation. You can't miss the queue; you can't miss an overdue digest; you can't miss staleness. For scripting use `cortex --status-only` or `cortex status --json`; the full interactive prompts are Phase C.
+Everything surfaces at every invocation. You can't miss the queue; you can't miss an overdue digest; you can't miss staleness. For scripting use `cortex --status-only` or `cortex status --json`; the full interactive prompts are Phase E (they depend on the `.cortex/.index.json` writer and `cortex promote` writer that ship together in that phase).
 
 ---
 
@@ -112,7 +112,7 @@ The three tools occupy distinct authority layers:
 They compose by file contract, never code import:
 
 - **Solo Cortex.** Any agent reading `AGENTS.md` follows the Protocol. Journal grows continuously; humans promote via the `cortex` interactive flow. Invariants are advisory (enforced only on explicit `cortex doctor` runs).
-- **With Touchstone.** Pre-push hook runs `cortex doctor --strict`. Invariants are code-enforced. On architecturally significant diffs, Touchstone drafts Doctrine candidates inline at commit time. Cortex Doctrine `grounds-in:` Touchstone principles where applicable.
+- **With Touchstone.** Pre-push hook runs `cortex doctor --strict`. Invariants are code-enforced. On architecturally-significant pre-merge diffs (Protocol T1.7), Touchstone invokes `cortex doctrine draft` to create a durable Doctrine candidate the author reviews and promotes — this lands in Phase E alongside the SPEC amendment that defines the `.cortex/pending/` staging layer, because a durable write is required for T1.7 to satisfy the Protocol's Tier-1 "auditable" contract. Cortex Doctrine `grounds-in:` Touchstone principles where applicable.
 - **With Sentinel.** Sentinel reads `.cortex/` (Doctrine + active Plans + recent Journal + digests) for cycle context. End-of-cycle writes a Journal entry. Next cycle reads the previous cycle's Journal. The loop closes.
 
 Solo Cortex is *good notes with conventions*. Triad Cortex is *enforced institutional memory*. Both are useful; the triad is where the loop closes.
@@ -179,7 +179,7 @@ Each tool writes to its own files and reads the others only as best-effort. Noth
 
 ## Status and plan
 
-See [PLAN.md](./PLAN.md). Phases A (foundation + spec) and B (walking-skeleton CLI — `init` / `status` / `doctor` / `manifest` / `grep` / `promote` stub + `doctor --audit`) shipped as v0.1.0 on Homebrew. **Phase C is the current P0** — regeneration (`refresh-map`, `refresh-state`) via `claude -p`, `.cortex/.index.json` writer, and the expanded `cortex doctor` rules (orphan-deferral, single-authority-rule drift, promotion-queue invariants, CLI-less-fallback warning, extended Tier-1 audit). Phase D adds authoring helpers (`journal draft`, `plan spawn`). Phase E wires integration with Sentinel and Touchstone.
+See [PLAN.md](./PLAN.md). Phases A (foundation + spec) and B (walking-skeleton CLI — `init` / `status` / `doctor` / `manifest` / `grep` / `promote` stub + `doctor --audit`) shipped as v0.1.0 on Homebrew; currently on v0.2.3. On 2026-04-23 the remaining roadmap was reordered (full provenance in [`.cortex/journal/2026-04-23-phase-c-reordered.md`](./.cortex/journal/2026-04-23-phase-c-reordered.md)) so that the phase that actually closes the session-pickup gap ships first. **Phase C is now the current P0** — authoring primitives (`cortex journal draft`, `cortex plan spawn`, `cortex plan status`) plus a deterministic `cortex refresh-state` that walks plans + journal with a marker convention for preserving hand-authored prioritization; no LLM dependency, works without `claude` on PATH, byte-identical output on unchanged inputs. Phase D wires those commands into Sentinel and Touchstone hooks so the Journal fills itself from real work events (end-of-cycle and PR merge); the architecturally-significant pre-merge trigger (T1.7) is deferred to Phase E so that it ships as a single auditable unit with the `.cortex/pending/` SPEC amendment and the `cortex doctrine draft` command it depends on. Phase E is the capstone — LLM synthesis (`refresh-map`, `refresh-state --enhance`), `.cortex/.index.json` writer, `cortex promote` writer, every remaining SPEC § 4 `cortex doctor` invariant check, and the external dogfood gate on a freshly-cloned Sentinel repo.
 
 The spec at v0.3.1-dev is a draft. See [`docs/PRIOR_ART.md`](./docs/PRIOR_ART.md) for the research synthesis behind the design, and the `.cortex/journal/` directory in this repo for a dogfood trail of the design decisions (especially `2026-04-17-vision-v3-promoted.md` for the full provenance).
 

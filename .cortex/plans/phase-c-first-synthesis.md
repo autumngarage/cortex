@@ -1,14 +1,23 @@
 ---
-Status: active
+Status: cancelled
 Written: 2026-04-18
+Cancelled: 2026-04-23
 Author: human
 Goal-hash: eec16ea4
 Updated-by:
   - 2026-04-18T11:45 claude-session-2026-04-18 (created as Phase C P0 on Phase B exit; absorbs deferred items from phase-b-walking-skeleton)
+  - 2026-04-23T15:15 claude-session-2026-04-23 (cancelled; reordered into three new plans that decompose the work along risk lines)
+Promoted-to: plans/phase-c-authoring-and-state, plans/phase-d-integration, plans/phase-e-synthesis-and-governance, journal/2026-04-23-phase-c-reordered
 Cites: ../../SPEC.md, ../../.cortex/protocol.md, ../../PLAN.md § Phase C, ../doctrine/0003-spec-is-the-artifact, ../doctrine/0005-scope-boundaries-v2, journal/2026-04-18-phase-b-shipped-v0.1.0-on-homebrew
 ---
 
 # Phase C — First Synthesis
+
+> **Cancelled 2026-04-23.** This plan bundled three distinct risk classes (LLM synthesis, deterministic index + promotion writer, doctor expansions) into one phase. Decomposed into [`phase-c-authoring-and-state`](./phase-c-authoring-and-state.md) (P0), [`phase-d-integration`](./phase-d-integration.md) (P1), and [`phase-e-synthesis-and-governance`](./phase-e-synthesis-and-governance.md) (P2) so the reordering delivers "session pickup works" (the stated value) before LLM polish and governance. Every work item below is absorbed into one of the successor plans — see the Work items list in each for the mapping. Full rationale in [`journal/2026-04-23-phase-c-reordered.md`](../journal/2026-04-23-phase-c-reordered.md). The H1 and Goal-hash remain unchanged because SPEC § 4.9 uses them to detect drift; status transitions live in frontmatter, not the title.
+>
+> *Original scope follows, preserved unchanged for historical reference.*
+
+---
 
 > Wire `cortex refresh-map` and `cortex refresh-state` to the `claude -p` CLI so Map and State are generated from primary sources with seven-field provenance (SPEC § 4.5), and populate `.cortex/.index.json` so the promotion queue, doctor's `--audit` invariants, and `cortex promote` graduate from stubs to working writers.
 
