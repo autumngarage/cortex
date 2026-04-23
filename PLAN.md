@@ -33,8 +33,8 @@ Cortex v1.0 is done when, on sigint or sentinel:
 4. `cortex journal draft <type>` emits a draft journal entry from PR context (diff + description + commit messages), ready for human edit.
 5. `cortex plan spawn <name>` emits a Plan scaffold citing the grounding Doctrine/State entry.
 6. `cortex status` reports freshness per layer and flags spec violations (orphan deferrals, unlinked plans, missing success criteria).
-7. Sentinel integration: Sentinel's end-of-cycle hook writes a Journal entry on significant events; Sentinel's scan phase reads Doctrine + State as input.
-8. Touchstone integration: Touchstone's PR-merge hook drafts a Journal entry for merges that match an "architecturally significant" trigger.
+7. Sentinel integration: Sentinel's end-of-cycle hook writes a Journal entry (via `cortex journal draft --type sentinel-cycle`) on significant events; Sentinel's scan phase reads Doctrine + State as input.
+8. Touchstone integration: post-merge hook (T1.9) drafts a `Type: pr-merged` Journal entry for every default-branch merge via `cortex journal draft --type pr-merged`; pre-merge hook (T1.7) on architecturally-significant diffs renders the `doctrine/candidate.md` template pre-filled from PR context as a PR comment for the author to hand-author a Doctrine candidate from; pre-push hook runs `cortex doctor --strict`.
 
 **Out of scope for v1.0:** multi-repo / portfolio views (that's the Lighthouse discussion, deliberately deferred); promotion enforcement (the human gates promotions); embedding / semantic search over Cortex content (may come as v1.1).
 
@@ -123,8 +123,6 @@ Full plan: [`.cortex/plans/phase-e-synthesis-and-governance.md`](./.cortex/plans
 - [ ] v1.0.0 release — SPEC.md frozen at the shipping version
 
 **Exit criterion:** running `cortex refresh-map && cortex refresh-state --enhance && cortex doctor --strict` on a freshly-cloned Sentinel repo produces non-trivial Map/State content + clean exit; SPEC.md has no open `-dev` suffix.
-
-**Exit criterion:** Sentinel cycles that ran against a Cortex-enabled project are demonstrably cheaper (fewer tokens on discovery) and the resulting Journal entries are usable without hand-cleanup >80% of the time.
 
 ---
 

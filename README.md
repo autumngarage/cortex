@@ -52,7 +52,7 @@ Projects import `.cortex/protocol.md` into `AGENTS.md`. Any agent that reads `AG
 
 ## UX — one command
 
-> **Status:** v0.2.3 ships status, structural validation, audit, retrieval, an interactive `cortex init` wizard with scan-and-absorb for existing repos (one screen of "here's what I found", per-file Y/n on Doctrine/Plan candidates, taught patterns persist to `.cortex/.discover.toml`), Autumn Garage sibling surfacing in `cortex doctor`, and the unscoped-LLM/API-constraint warning in `cortex doctor`. The fully interactive per-candidate promotion prompts shown below land with Phase C's index writer. Track progress in [`.cortex/state.md`](./.cortex/state.md).
+> **Status:** v0.2.3 ships status, structural validation, audit, retrieval, an interactive `cortex init` wizard with scan-and-absorb for existing repos (one screen of "here's what I found", per-file Y/n on Doctrine/Plan candidates, taught patterns persist to `.cortex/.discover.toml`), Autumn Garage sibling surfacing in `cortex doctor`, and the unscoped-LLM/API-constraint warning in `cortex doctor`. The fully interactive per-candidate promotion prompts shown below depend on `.cortex/.index.json` being populated, which now lands with **Phase E** (alongside the `cortex promote` writer) per the 2026-04-23 roadmap reorder — Phase C is authoring + deterministic state refresh, Phase D is Sentinel/Touchstone integration, Phase E is LLM synthesis + promotion governance. Track progress in [`.cortex/state.md`](./.cortex/state.md).
 
 What ships today:
 
@@ -112,7 +112,7 @@ The three tools occupy distinct authority layers:
 They compose by file contract, never code import:
 
 - **Solo Cortex.** Any agent reading `AGENTS.md` follows the Protocol. Journal grows continuously; humans promote via the `cortex` interactive flow. Invariants are advisory (enforced only on explicit `cortex doctor` runs).
-- **With Touchstone.** Pre-push hook runs `cortex doctor --strict`. Invariants are code-enforced. On architecturally significant diffs, Touchstone drafts Doctrine candidates inline at commit time. Cortex Doctrine `grounds-in:` Touchstone principles where applicable.
+- **With Touchstone.** Pre-push hook runs `cortex doctor --strict`. Invariants are code-enforced. On architecturally significant pre-merge diffs (Protocol T1.7), Touchstone posts a PR comment pre-filled from the `doctrine/candidate.md` template so the author can hand-author a Doctrine candidate if the decision warrants it. Cortex Doctrine `grounds-in:` Touchstone principles where applicable.
 - **With Sentinel.** Sentinel reads `.cortex/` (Doctrine + active Plans + recent Journal + digests) for cycle context. End-of-cycle writes a Journal entry. Next cycle reads the previous cycle's Journal. The loop closes.
 
 Solo Cortex is *good notes with conventions*. Triad Cortex is *enforced institutional memory*. Both are useful; the triad is where the loop closes.
