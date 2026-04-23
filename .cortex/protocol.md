@@ -48,7 +48,7 @@ The agent imports those two files at session start via the host's `@path` mechan
 
 ## 2. Write on triggers (Tier 1 — machine-observable)
 
-These triggers are **deterministic, auditable, and enforceable**. When any of them fires, the agent writes a Journal entry from the matching template. A post-session audit (`cortex doctor --audit`) verifies compliance.
+These triggers are **deterministic, auditable, and enforceable**. When any of them fires, the agent writes a durable `.cortex/` artifact from the matching template — a Journal entry for most triggers, a Doctrine candidate for T1.7 (which names `doctrine/candidate.md` as its template and graduates via the promotion flow). A post-session audit (`cortex doctor --audit`) verifies compliance against the expected artifact shape for each trigger.
 
 | # | Trigger | Template |
 |---|---|---|
@@ -64,7 +64,7 @@ These triggers are **deterministic, auditable, and enforceable**. When any of th
 
 **Why T1.9 matters.** The merge is the canonical "this shipped" event for team-shared memory. T1.3 (plan transition) and T1.8 (commit-message pattern) are near-misses: a PR can merge without a plan-status change, and commit-pattern matching is fuzzy. A post-merge summary closes the loop — it is the durable record that ties Plans, Journal entries written during the branch, and the final diff together at the moment ratification happened. Authored by whichever agent/human runs the merge command (or by a post-merge hook when present).
 
-**Enforcement.** Tier 1 triggers are machine-detectable; `cortex doctor --audit` walks the git log for the session period and verifies that every qualifying event has a corresponding Journal entry. Missing entries are warnings in solo mode, errors in triad mode (where Touchstone's pre-push hook blocks the push).
+**Enforcement.** Tier 1 triggers are machine-detectable; `cortex doctor --audit` walks the git log for the session period and verifies that every qualifying event has a corresponding artifact of the trigger's expected shape — a Journal entry for most triggers, a Doctrine candidate (produced by `cortex doctrine draft`, ships in Phase E) for T1.7. Missing artifacts are warnings in solo mode, errors in triad mode (where Touchstone's pre-push hook blocks the push).
 
 **Trigger thresholds are project-configurable.** `.cortex/protocol.md` in a project can override: `N` for T1.4 file-deletion threshold; regex patterns for T1.7 architecturally-significant detection; commit-message patterns for T1.8; whether T1.9 fires on every merge or only on merges matching architecturally-significant patterns (default: every merge).
 
