@@ -69,6 +69,8 @@ All items originally scoped into [`phase-c-first-synthesis`](./phase-c-first-syn
 - [ ] **Full SPEC § 5.4 claim-trace in `cortex doctor --audit-digests`** — absorbs same-named item.
 - [ ] **Interactive per-candidate prompts in bare `cortex`** — absorbs same-named item from cancelled Phase C.
 - [ ] **`cortex doctor --strict`** — completed here by gating on all the above checks (Phase D landed `--strict` against the v0.3.0 check set; this phase extends it).
+- [ ] **SPEC amendment: `.cortex/pending/` promotion-staging layer** — define the storage layer that Phase D's T1.7 PR-comment approach avoided introducing; tracked here because it pairs with the `cortex promote` writer and the `cortex doctrine draft` command below. Bumps SPEC.md minor version and adds a corresponding section alongside § 4.7 (promotion-queue operational rules).
+- [ ] **`cortex doctrine draft <slug>`** — writes a Doctrine candidate to the newly-defined staging layer using the `doctrine/candidate.md` template, pre-filled from PR context when invoked from the Phase D Touchstone pre-merge hook. Upgrades the hook from "render template as PR comment" to "create a draft file + comment the path"; Phase D's hook wiring gets a small follow-up PR to call the new command once it lands.
 - [ ] **External dogfood gate on Sentinel repo** — absorbs same-named item; positioned at the end of the phase so every other capability is available for validation.
 - [ ] **v1.0.0 release** — first non-draft release; SPEC.md frozen at the shipping version.
 

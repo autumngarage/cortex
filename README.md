@@ -2,7 +2,7 @@
 
 > **A protocol for agents to continuously journal what's happening on a project, and for humans to promote what matters.** The reflective layer of the autumngarage composition — Touchstone is the foundation (universal policy), Sentinel is the loop (autonomous execution), Cortex is the memory (project-local reasoning).
 
-**Status:** CLI v0.2.3 (polish: `cortex init` scan no longer double-prompts on top-level `CLAUDE.md`/`AGENTS.md`, skips toolchain config dirs (`.sentinel/`, `.cortex/`, `.claude/`, `.github/`, `.husky/`, `.circleci/`, `.devcontainer/`), and recognizes `*MIGRATION*.md` as Plan candidates; v0.2.2 added scan-and-absorb so large existing projects drop from ~hours of manual seeding to ~10 minutes interactive; v0.2.1 added the unscoped-LLM/API-constraint warning in `cortex doctor`; v0.2.0 added the Autumn Garage integration — interactive `init`, `doctor` sibling detection, shipped Plan template). [SPEC.md](./SPEC.md) v0.3.1-dev (draft, unchanged from v0.1.0). [`.cortex/protocol.md`](./.cortex/protocol.md) specifies the agent contract. The CLI ships the non-synthesizing commands (`init`, `status`, `doctor`, `manifest`, `grep`, `promote` stub); regeneration (`refresh-map`, `refresh-state`) is Phase C ([PLAN.md](./PLAN.md)).
+**Status:** CLI v0.2.3 (polish: `cortex init` scan no longer double-prompts on top-level `CLAUDE.md`/`AGENTS.md`, skips toolchain config dirs (`.sentinel/`, `.cortex/`, `.claude/`, `.github/`, `.husky/`, `.circleci/`, `.devcontainer/`), and recognizes `*MIGRATION*.md` as Plan candidates; v0.2.2 added scan-and-absorb so large existing projects drop from ~hours of manual seeding to ~10 minutes interactive; v0.2.1 added the unscoped-LLM/API-constraint warning in `cortex doctor`; v0.2.0 added the Autumn Garage integration — interactive `init`, `doctor` sibling detection, shipped Plan template). [SPEC.md](./SPEC.md) v0.3.1-dev (draft, unchanged from v0.1.0). [`.cortex/protocol.md`](./.cortex/protocol.md) specifies the agent contract. The CLI ships the non-synthesizing commands (`init`, `status`, `doctor`, `manifest`, `grep`, `promote` stub). Deterministic `cortex refresh-state` (plus `cortex journal draft` and `cortex plan spawn`) lands in Phase C; LLM-powered `cortex refresh-map` and `cortex refresh-state --enhance` land in Phase E ([PLAN.md](./PLAN.md); 2026-04-23 reorder recorded in [`.cortex/journal/2026-04-23-phase-c-reordered.md`](./.cortex/journal/2026-04-23-phase-c-reordered.md)).
 
 **New here?** Start with [`docs/PITCH.md`](./docs/PITCH.md) — plain-language one-liner, vision, and day-in-the-life walkthrough.
 
@@ -67,11 +67,11 @@ cortex grep <pattern>       # frontmatter-aware ripgrep wrapper
 cortex doctor               # validate .cortex/ against SPEC
 cortex doctor --audit       # check Tier-1 Protocol triggers have matching Journal entries
 cortex doctor --audit-digests
-cortex promote <id>         # stub pending Phase C .index.json
+cortex promote <id>         # stub pending Phase E .index.json writer + promote writer
 cortex version
 ```
 
-What the full interactive flow will look like once Phase C lands the promotion-queue writer:
+What the full interactive flow will look like once Phase E lands the `.cortex/.index.json` writer and the `cortex promote` end-to-end writer:
 
 ```
 $ cortex

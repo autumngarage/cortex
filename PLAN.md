@@ -77,7 +77,7 @@ Commands that manipulate `.cortex/` structure but don't synthesize. Every line i
 - [x] `cortex doctor --audit` + `--audit-digests` — first-slice Tier-1 coverage (T1.1 / T1.5 / T1.8 / T1.9) + digest-claim citation sampling
 - [x] `cortex manifest --budget N` — token-budgeted session-start slice per Protocol § 1
 - [x] `cortex grep <pattern>` — frontmatter-aware `rg --json` wrapper
-- [x] `cortex promote <id>` — stub (validates `.index.json` shape; full writer is Phase C)
+- [x] `cortex promote <id>` — stub (validates `.index.json` shape; full writer lands in Phase E alongside the `.index.json` writer and SPEC amendment that defines the promotion-staging shape)
 - [x] Tests: 111 green, temp-dir fixtures, audit tests use real `git init` temp repos
 - [x] v0.1.0 release + `autumngarage/homebrew-cortex` tap live; `brew install autumngarage/cortex/cortex` works on macOS
 
