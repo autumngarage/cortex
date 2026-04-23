@@ -95,7 +95,7 @@ Generate March 2026 digest now?  [y/n]:
 Anything else? (enter to exit, or type a request)
 ```
 
-Everything surfaces at every invocation. You can't miss the queue; you can't miss an overdue digest; you can't miss staleness. For scripting use `cortex --status-only` or `cortex status --json`; the full interactive prompts are Phase C.
+Everything surfaces at every invocation. You can't miss the queue; you can't miss an overdue digest; you can't miss staleness. For scripting use `cortex --status-only` or `cortex status --json`; the full interactive prompts are Phase E (they depend on the `.cortex/.index.json` writer and `cortex promote` writer that ship together in that phase).
 
 ---
 
@@ -112,7 +112,7 @@ The three tools occupy distinct authority layers:
 They compose by file contract, never code import:
 
 - **Solo Cortex.** Any agent reading `AGENTS.md` follows the Protocol. Journal grows continuously; humans promote via the `cortex` interactive flow. Invariants are advisory (enforced only on explicit `cortex doctor` runs).
-- **With Touchstone.** Pre-push hook runs `cortex doctor --strict`. Invariants are code-enforced. On architecturally significant pre-merge diffs (Protocol T1.7), Touchstone posts a PR comment pre-filled from the `doctrine/candidate.md` template so the author can hand-author a Doctrine candidate if the decision warrants it. Cortex Doctrine `grounds-in:` Touchstone principles where applicable.
+- **With Touchstone.** Pre-push hook runs `cortex doctor --strict`. Invariants are code-enforced. On architecturally-significant pre-merge diffs (Protocol T1.7), Touchstone invokes `cortex doctrine draft` to create a durable Doctrine candidate the author reviews and promotes — this lands in Phase E alongside the SPEC amendment that defines the `.cortex/pending/` staging layer, because a durable write is required for T1.7 to satisfy the Protocol's Tier-1 "auditable" contract. Cortex Doctrine `grounds-in:` Touchstone principles where applicable.
 - **With Sentinel.** Sentinel reads `.cortex/` (Doctrine + active Plans + recent Journal + digests) for cycle context. End-of-cycle writes a Journal entry. Next cycle reads the previous cycle's Journal. The loop closes.
 
 Solo Cortex is *good notes with conventions*. Triad Cortex is *enforced institutional memory*. Both are useful; the triad is where the loop closes.

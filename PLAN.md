@@ -34,7 +34,7 @@ Cortex v1.0 is done when, on sigint or sentinel:
 5. `cortex plan spawn <name>` emits a Plan scaffold citing the grounding Doctrine/State entry.
 6. `cortex status` reports freshness per layer and flags spec violations (orphan deferrals, unlinked plans, missing success criteria).
 7. Sentinel integration: Sentinel's end-of-cycle hook writes a Journal entry (via `cortex journal draft --type sentinel-cycle`) on significant events; Sentinel's scan phase reads Doctrine + State as input.
-8. Touchstone integration: post-merge hook (T1.9) drafts a `Type: pr-merged` Journal entry for every default-branch merge via `cortex journal draft --type pr-merged`; pre-merge hook (T1.7) on architecturally-significant diffs renders the `doctrine/candidate.md` template pre-filled from PR context as a PR comment for the author to hand-author a Doctrine candidate from; pre-push hook runs `cortex doctor --strict`.
+8. Touchstone integration: post-merge hook (T1.9) drafts a `Type: pr-merged` Journal entry for every default-branch merge via `cortex journal draft --type pr-merged`; pre-merge hook (T1.7) on architecturally-significant diffs invokes `cortex doctrine draft` to create a durable Doctrine candidate in the Phase E `.cortex/pending/` staging layer; pre-push hook runs `cortex doctor --strict`.
 
 **Out of scope for v1.0:** multi-repo / portfolio views (that's the Lighthouse discussion, deliberately deferred); promotion enforcement (the human gates promotions); embedding / semantic search over Cortex content (may come as v1.1).
 
@@ -98,11 +98,11 @@ Full plan: [`.cortex/plans/phase-c-authoring-and-state.md`](./.cortex/plans/phas
 
 ### Phase D — Composition integrations *(blocked on C, v0.4.0 target)*
 
-Full plan: [`.cortex/plans/phase-d-integration.md`](./.cortex/plans/phase-d-integration.md). Sentinel and Touchstone use Phase C's `cortex journal draft` to write to `.cortex/` on real work events — end-of-cycle (T1.6), PR merge (T1.9). For architecturally-significant pre-merge (T1.7), the Protocol names `doctrine/candidate.md` as the template; Phase D renders it pre-filled as a PR comment (no new storage layer until Phase E ships the SPEC amendment + `cortex promote` writer). This is the phase where the composition story (Touchstone = standards, Sentinel = loop, Cortex = memory) starts compounding: the Journal fills itself as a byproduct of normal work instead of requiring the author to remember to record things.
+Full plan: [`.cortex/plans/phase-d-integration.md`](./.cortex/plans/phase-d-integration.md). Sentinel and Touchstone use Phase C's `cortex journal draft` to write to `.cortex/` on real work events — end-of-cycle (T1.6) and PR merge (T1.9). T1.7 (architecturally-significant pre-merge) is deferred to Phase E because it requires a durable write to a Doctrine-candidate staging layer that SPEC.md does not yet define; satisfying T1.7 as a Tier-1 "auditable" trigger per Protocol § 2 has to wait for the SPEC amendment + `cortex doctrine draft` command that ship together in Phase E. This is the phase where the composition story (Touchstone = standards, Sentinel = loop, Cortex = memory) starts compounding: the Journal fills itself as a byproduct of normal work instead of requiring the author to remember to record things.
 
 - [ ] Sentinel end-of-cycle hook (in `autumngarage/sentinel` repo) → `cortex journal draft --type sentinel-cycle`
 - [ ] Touchstone post-merge hook (in `autumngarage/touchstone`) → `cortex journal draft --type pr-merged`
-- [ ] Touchstone pre-merge hook on architecturally-significant diffs → render `doctrine/candidate.md` template filled from PR context, post as PR comment
+- [ ] T1.7 (Touchstone pre-merge on architecturally-significant diff) — **deliberately deferred to Phase E**; see Phase D success criterion #3 for the contract-drift reasoning.
 - [ ] Touchstone pre-push hook → `cortex doctor --strict` (fail-loud gate)
 - [ ] Graceful-degradation tests for every integration (Cortex missing, Cortex present but not opted in, Cortex present + opted in)
 - [ ] v0.4.0 release
