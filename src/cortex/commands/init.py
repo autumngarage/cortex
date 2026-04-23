@@ -51,6 +51,12 @@ the corresponding prompt. `--yes`/`-y` accepts all defaults without prompting.
 Non-TTY invocations without `--yes` skip all three follow-ups silently and
 do not absorb scan candidates either (preserves the pre-interactive
 scaffolding behavior — scan summary still prints).
+
+`--local-only` inverts the `.gitignore` default. The SPEC treats `.cortex/`
+as committed, team-shared memory. Solo / private projects that don't want
+journals, plans, doctrine, or state published alongside their code pass
+`--local-only` to gitignore the whole `.cortex/` directory instead of just
+the transient paths. Conflicts with `--no-gitignore`.
 """
 
 from __future__ import annotations
@@ -232,6 +238,12 @@ _GITIGNORE_ENTRIES: tuple[str, ...] = (
     ".cortex/pending/",
 )
 
+# `--local-only` inverts the default. Instead of committing `.cortex/` as
+# team-shared memory (the SPEC default), the whole directory stays on this
+# machine. Used by solo developers who don't want journals/plans/state
+# published alongside their code when they share the project.
+_GITIGNORE_LOCAL_ONLY_ENTRY: str = ".cortex/"
+
 
 def _append_imports(target_file: Path) -> bool:
     """Append the Cortex import block to `target_file` if not already present.
@@ -274,11 +286,16 @@ def _append_imports(target_file: Path) -> bool:
     return True
 
 
-def _append_gitignore_entries(gitignore: Path) -> bool:
+def _append_gitignore_entries(gitignore: Path, *, local_only: bool = False) -> bool:
     """Append Cortex-specific entries to `.gitignore` if missing.
 
     Idempotent: each entry is only appended when not already present as its
     own line. Returns True when at least one entry was appended.
+
+    When `local_only` is True, appends `.cortex/` (the whole directory) so
+    the project's Cortex memory stays on this machine. Otherwise appends the
+    transient-paths set only, keeping `.cortex/` as committed team-shared
+    memory per the SPEC default.
     """
     existing_lines: set[str] = set()
     prior_text = ""
@@ -286,7 +303,8 @@ def _append_gitignore_entries(gitignore: Path) -> bool:
         prior_text = gitignore.read_text()
         existing_lines = {line.strip() for line in prior_text.splitlines()}
 
-    to_add = [entry for entry in _GITIGNORE_ENTRIES if entry not in existing_lines]
+    entries = (_GITIGNORE_LOCAL_ONLY_ENTRY,) if local_only else _GITIGNORE_ENTRIES
+    to_add = [entry for entry in entries if entry not in existing_lines]
     if not to_add:
         return False
 
@@ -624,6 +642,7 @@ def _format_equivalent_command(
     did_claude: bool,
     did_agents: bool,
     did_gitignore: bool,
+    did_local_only: bool,
     force: bool,
     path_arg: str | None,
 ) -> str:
@@ -637,7 +656,12 @@ def _format_equivalent_command(
         parts.append(f"--path {path_arg}")
     parts.append("--add-imports-claude" if did_claude else "--no-add-imports-claude")
     parts.append("--add-imports-agents" if did_agents else "--no-add-imports-agents")
-    parts.append("--gitignore" if did_gitignore else "--no-gitignore")
+    if did_local_only:
+        # `--local-only` implies the gitignore step; omit `--gitignore` to keep
+        # the reproduction command minimal.
+        parts.append("--local-only")
+    else:
+        parts.append("--gitignore" if did_gitignore else "--no-gitignore")
     parts.append("--yes")
     if force:
         parts.append("--force")
@@ -683,6 +707,17 @@ def _format_equivalent_command(
     "`cortex init` prompts (default Yes).",
 )
 @click.option(
+    "--local-only",
+    "local_only",
+    is_flag=True,
+    default=False,
+    help="Keep `.cortex/` on this machine — append `.cortex/` (the whole directory) "
+    "to `.gitignore` so journals, plans, doctrine, and state stay unpublished when "
+    "the project is shared. The SPEC default treats `.cortex/` as committed "
+    "team-shared memory; this flag inverts that for solo / private use. "
+    "Conflicts with `--no-gitignore`.",
+)
+@click.option(
     "--yes",
     "-y",
     "assume_yes",
@@ -698,9 +733,22 @@ def init_command(
     add_imports_claude: bool | None,
     add_imports_agents: bool | None,
     add_gitignore: bool | None,
+    local_only: bool,
     assume_yes: bool,
 ) -> None:
     """Scaffold a SPEC-v0.3.1-dev-conformant `.cortex/` directory in the target project."""
+    # `--local-only` and `--no-gitignore` are mutually exclusive: the former
+    # says "gitignore all of .cortex/", the latter says "don't touch
+    # .gitignore at all". Silently preferring one over the other would
+    # produce a confusing outcome; fail loudly instead.
+    if local_only and add_gitignore is False:
+        click.echo(
+            "error: --local-only and --no-gitignore conflict. "
+            "--local-only requires writing `.cortex/` to .gitignore.",
+            err=True,
+        )
+        sys.exit(2)
+
     # Capture whether the target differs from cwd so the printed equivalent
     # command at the end reproduces the invocation faithfully.
     path_differs_from_cwd = Path(target_path).resolve() != Path.cwd().resolve()
@@ -843,12 +891,17 @@ def init_command(
     )
     # .gitignore gets prompted even if the file doesn't exist yet — we'll
     # create it. Most projects already have one; pass True unconditionally.
-    want_gitignore = _resolve_flag(
-        flag_value=add_gitignore,
-        yes=assume_yes,
-        prompt_text="Add .cortex/ entries to project .gitignore?",
-        target_exists=True,
-    )
+    # `--local-only` short-circuits the prompt: the flag itself is the
+    # affirmative answer to a more specific question.
+    if local_only:
+        want_gitignore = True
+    else:
+        want_gitignore = _resolve_flag(
+            flag_value=add_gitignore,
+            yes=assume_yes,
+            prompt_text="Add .cortex/ entries to project .gitignore?",
+            target_exists=True,
+        )
 
     if want_claude and claude_md.exists():
         if _append_imports(claude_md):
@@ -861,10 +914,23 @@ def init_command(
         else:
             click.echo(f"  {agents_md.name} already imports Cortex protocol.")
     if want_gitignore:
-        if _append_gitignore_entries(gitignore_path):
-            click.echo(f"  Updated {gitignore_path.name} with Cortex entries.")
+        if _append_gitignore_entries(gitignore_path, local_only=local_only):
+            if local_only:
+                click.echo(
+                    f"  Updated {gitignore_path.name}: `.cortex/` is now gitignored "
+                    "(local-only mode). Doctrine, plans, journals, and state will "
+                    "not be published with this project."
+                )
+            else:
+                click.echo(f"  Updated {gitignore_path.name} with Cortex entries.")
         else:
-            click.echo(f"  {gitignore_path.name} already ignores Cortex transient paths.")
+            if local_only:
+                click.echo(
+                    f"  {gitignore_path.name} already ignores `.cortex/` "
+                    "(local-only mode)."
+                )
+            else:
+                click.echo(f"  {gitignore_path.name} already ignores Cortex transient paths.")
 
     click.echo("Next steps:")
     click.echo("  1. Author doctrine/0001-why-<project>-exists.md (see templates/doctrine/candidate.md for shape).")
@@ -879,6 +945,7 @@ def init_command(
         did_claude=want_claude,
         did_agents=want_agents,
         did_gitignore=want_gitignore,
+        did_local_only=local_only,
         force=force,
         path_arg=str(target_path) if path_differs_from_cwd else None,
     )

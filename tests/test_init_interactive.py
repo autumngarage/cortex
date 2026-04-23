@@ -221,3 +221,92 @@ def test_equivalent_command_reflects_no_flag(tmp_path: Path) -> None:
     # The rerun form must include --no-add-imports-claude so a scripter
     # copy-pasting it reproduces the same result.
     assert "--no-add-imports-claude" in out
+
+
+# --- --local-only ----------------------------------------------------------
+
+
+def test_local_only_gitignores_entire_cortex_dir(tmp_path: Path) -> None:
+    """With --local-only the whole `.cortex/` directory is gitignored so a
+    solo developer's journals, plans, and state stay off the shared repo."""
+    _invoke(tmp_path, "--yes", "--local-only")
+    gi = (tmp_path / ".gitignore").read_text()
+    lines = {line.strip() for line in gi.splitlines()}
+    assert ".cortex/" in lines
+    # Default transient entries are NOT written — .cortex/ already subsumes
+    # them and duplicating would be noise.
+    assert ".cortex/.index.json" not in lines
+    assert ".cortex/pending/" not in lines
+
+
+def test_local_only_creates_gitignore_when_absent(tmp_path: Path) -> None:
+    assert not (tmp_path / ".gitignore").exists()
+    _invoke(tmp_path, "--yes", "--local-only")
+    assert (tmp_path / ".gitignore").exists()
+
+
+def test_local_only_preserves_existing_gitignore(tmp_path: Path) -> None:
+    (tmp_path / ".gitignore").write_text("node_modules/\n")
+    _invoke(tmp_path, "--yes", "--local-only")
+    gi = (tmp_path / ".gitignore").read_text()
+    assert "node_modules/" in gi
+    assert ".cortex/" in gi
+
+
+def test_local_only_is_idempotent(tmp_path: Path) -> None:
+    _invoke(tmp_path, "--yes", "--local-only")
+    first = (tmp_path / ".gitignore").read_text()
+    _invoke(tmp_path, "--yes", "--local-only", "--force")
+    second = (tmp_path / ".gitignore").read_text()
+    assert first == second
+    assert second.count(".cortex/") == 1
+
+
+def test_local_only_short_circuits_gitignore_prompt(tmp_path: Path) -> None:
+    """--local-only without --yes on a non-TTY must still write .gitignore.
+    The flag itself is the affirmative answer; the prompt gating from
+    --gitignore/--no-gitignore does not apply."""
+    _invoke(tmp_path, "--local-only")
+    gi = (tmp_path / ".gitignore").read_text()
+    assert ".cortex/" in gi
+
+
+def test_local_only_conflicts_with_no_gitignore(tmp_path: Path) -> None:
+    """The two flags contradict: --local-only says "gitignore everything" and
+    --no-gitignore says "touch nothing". Fail loudly rather than silently
+    preferring one."""
+    result = CliRunner().invoke(
+        cli, ["init", "--path", str(tmp_path), "--local-only", "--no-gitignore"]
+    )
+    assert result.exit_code == 2
+    assert "conflict" in result.output.lower()
+    assert not (tmp_path / ".cortex").exists()
+
+
+def test_local_only_announces_in_output(tmp_path: Path) -> None:
+    """The success message must state that `.cortex/` is now gitignored so
+    the user understands the tradeoff they opted into (doctrine 0002 §5 —
+    surface the consequence of the choice)."""
+    out = _invoke(tmp_path, "--yes", "--local-only")
+    assert "local-only" in out.lower()
+    assert ".cortex/" in out
+
+
+def test_equivalent_command_includes_local_only(tmp_path: Path) -> None:
+    out = _invoke(tmp_path, "--yes", "--local-only")
+    assert "--local-only" in out
+    # --gitignore/--no-gitignore is suppressed because --local-only implies
+    # the gitignore step; the rerun command stays minimal.
+    assert "--gitignore" not in out
+    assert "--no-gitignore" not in out
+
+
+def test_default_init_still_commits_cortex_dir(tmp_path: Path) -> None:
+    """Regression guard: the SPEC default is that `.cortex/` is committed
+    team-shared memory. Without --local-only, the whole directory must NOT
+    appear in .gitignore."""
+    _invoke(tmp_path, "--yes")
+    lines = {line.strip() for line in (tmp_path / ".gitignore").read_text().splitlines()}
+    assert ".cortex/" not in lines
+    assert ".cortex/.index.json" in lines
+    assert ".cortex/pending/" in lines
