@@ -51,12 +51,20 @@ the corresponding prompt. `--yes`/`-y` accepts all defaults without prompting.
 Non-TTY invocations without `--yes` skip all three follow-ups silently and
 do not absorb scan candidates either (preserves the pre-interactive
 scaffolding behavior — scan summary still prints).
+
+`--local-only` inverts the `.gitignore` default. The SPEC treats `.cortex/`
+as committed, team-shared memory. Solo / private projects that don't want
+journals, plans, doctrine, or state published alongside their code pass
+`--local-only` to gitignore the whole `.cortex/` directory instead of just
+the transient paths. Conflicts with `--no-gitignore`.
 """
 
 from __future__ import annotations
 
 import re
+import shlex
 import shutil
+import subprocess
 import sys
 from datetime import UTC, date, datetime
 from importlib import resources
@@ -232,6 +240,12 @@ _GITIGNORE_ENTRIES: tuple[str, ...] = (
     ".cortex/pending/",
 )
 
+# `--local-only` inverts the default. Instead of committing `.cortex/` as
+# team-shared memory (the SPEC default), the whole directory stays on this
+# machine. Used by solo developers who don't want journals/plans/state
+# published alongside their code when they share the project.
+_GITIGNORE_LOCAL_ONLY_ENTRY: str = ".cortex/"
+
 
 def _append_imports(target_file: Path) -> bool:
     """Append the Cortex import block to `target_file` if not already present.
@@ -274,11 +288,80 @@ def _append_imports(target_file: Path) -> bool:
     return True
 
 
-def _append_gitignore_entries(gitignore: Path) -> bool:
+def _has_existing_cortex_imports(path: Path) -> bool:
+    """Return True iff `path` already imports `@.cortex/protocol.md` or
+    `@.cortex/state.md`.
+
+    Used by `--local-only` to catch the case where a project previously ran
+    `cortex init` in team-shared mode (committing the imports) and is now
+    converting to local-only. Leaving those imports in CLAUDE.md / AGENTS.md
+    while `.cortex/` is gitignored produces dangling references for
+    downstream clones.
+    """
+    if not path.exists():
+        return False
+    text = path.read_text()
+    return _PROTOCOL_IMPORT_MARKER in text or _STATE_IMPORT_MARKER in text
+
+
+def _tracked_cortex_files(project_root: Path) -> list[str] | None:
+    """Return the list of `.cortex/` files already tracked by git.
+
+    Used by `--local-only` to detect the case where `.cortex/` is committed
+    to an existing repo — adding `.cortex/` to `.gitignore` doesn't untrack
+    files that are already in git's index, so the "not published" claim
+    would be false without an explicit `git rm --cached`.
+
+    Returns:
+      * `[]`  — check ran cleanly and nothing is tracked OR the project is
+                not a git repository (no tracked state is possible).
+      * `[...]` — one entry per tracked `.cortex/` path.
+      * `None` — the check could not be completed (git missing, subprocess
+                error, unexpected nonzero exit for any reason *other than*
+                "not a repo"). Callers MUST treat None as "unknown, warn
+                the user" rather than "all clear" — silently treating a
+                failed check as success would give false "not published"
+                assurance.
+
+    Note: we do NOT short-circuit on `(project_root / ".git").exists()` —
+    that check misses the monorepo / subdirectory case where `cortex init
+    --path <subdir>` runs inside a parent repo whose `.git` lives above.
+    `git ls-files` is the authoritative check; it walks up to find the
+    repo root itself.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(project_root), "ls-files", ".cortex"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError):
+        # git missing or subprocess-level failure — unknown, not "no files".
+        return None
+    if result.returncode != 0:
+        # Distinguish "not a git repo" (a normal, known-safe state — no
+        # tracked files are possible) from other failures (partial checkout,
+        # corrupted index, permission issue) where we genuinely don't know.
+        # `git ls-files` outside a repo prints a recognizable marker on
+        # stderr; match on that to separate the two.
+        stderr_lower = (result.stderr or "").lower()
+        if "not a git repository" in stderr_lower:
+            return []
+        return None
+    return [line for line in result.stdout.splitlines() if line.strip()]
+
+
+def _append_gitignore_entries(gitignore: Path, *, local_only: bool = False) -> bool:
     """Append Cortex-specific entries to `.gitignore` if missing.
 
     Idempotent: each entry is only appended when not already present as its
     own line. Returns True when at least one entry was appended.
+
+    When `local_only` is True, appends `.cortex/` (the whole directory) so
+    the project's Cortex memory stays on this machine. Otherwise appends the
+    transient-paths set only, keeping `.cortex/` as committed team-shared
+    memory per the SPEC default.
     """
     existing_lines: set[str] = set()
     prior_text = ""
@@ -286,7 +369,8 @@ def _append_gitignore_entries(gitignore: Path) -> bool:
         prior_text = gitignore.read_text()
         existing_lines = {line.strip() for line in prior_text.splitlines()}
 
-    to_add = [entry for entry in _GITIGNORE_ENTRIES if entry not in existing_lines]
+    entries = (_GITIGNORE_LOCAL_ONLY_ENTRY,) if local_only else _GITIGNORE_ENTRIES
+    to_add = [entry for entry in entries if entry not in existing_lines]
     if not to_add:
         return False
 
@@ -624,6 +708,7 @@ def _format_equivalent_command(
     did_claude: bool,
     did_agents: bool,
     did_gitignore: bool,
+    did_local_only: bool,
     force: bool,
     path_arg: str | None,
 ) -> str:
@@ -634,10 +719,18 @@ def _format_equivalent_command(
     """
     parts = ["cortex init"]
     if path_arg is not None:
-        parts.append(f"--path {path_arg}")
+        # Shell-quote the path so rerun commands for targets containing
+        # spaces or metacharacters (e.g. `/tmp/My Project`) survive
+        # copy-paste into a terminal without re-tokenization.
+        parts.append(f"--path {shlex.quote(path_arg)}")
     parts.append("--add-imports-claude" if did_claude else "--no-add-imports-claude")
     parts.append("--add-imports-agents" if did_agents else "--no-add-imports-agents")
-    parts.append("--gitignore" if did_gitignore else "--no-gitignore")
+    if did_local_only:
+        # `--local-only` implies the gitignore step; omit `--gitignore` to keep
+        # the reproduction command minimal.
+        parts.append("--local-only")
+    else:
+        parts.append("--gitignore" if did_gitignore else "--no-gitignore")
     parts.append("--yes")
     if force:
         parts.append("--force")
@@ -683,6 +776,17 @@ def _format_equivalent_command(
     "`cortex init` prompts (default Yes).",
 )
 @click.option(
+    "--local-only",
+    "local_only",
+    is_flag=True,
+    default=False,
+    help="Keep `.cortex/` on this machine — append `.cortex/` (the whole directory) "
+    "to `.gitignore` so journals, plans, doctrine, and state stay unpublished when "
+    "the project is shared. The SPEC default treats `.cortex/` as committed "
+    "team-shared memory; this flag inverts that for solo / private use. "
+    "Conflicts with `--no-gitignore`.",
+)
+@click.option(
     "--yes",
     "-y",
     "assume_yes",
@@ -698,9 +802,22 @@ def init_command(
     add_imports_claude: bool | None,
     add_imports_agents: bool | None,
     add_gitignore: bool | None,
+    local_only: bool,
     assume_yes: bool,
 ) -> None:
     """Scaffold a SPEC-v0.3.1-dev-conformant `.cortex/` directory in the target project."""
+    # `--local-only` and `--no-gitignore` are mutually exclusive: the former
+    # says "gitignore all of .cortex/", the latter says "don't touch
+    # .gitignore at all". Silently preferring one over the other would
+    # produce a confusing outcome; fail loudly instead.
+    if local_only and add_gitignore is False:
+        click.echo(
+            "error: --local-only and --no-gitignore conflict. "
+            "--local-only requires writing `.cortex/` to .gitignore.",
+            err=True,
+        )
+        sys.exit(2)
+
     # Capture whether the target differs from cwd so the printed equivalent
     # command at the end reproduces the invocation faithfully.
     path_differs_from_cwd = Path(target_path).resolve() != Path.cwd().resolve()
@@ -829,6 +946,25 @@ def init_command(
     # Resolve what each step will do. We record the effective decision for
     # each step so the printed equivalent-command reflects reality even
     # when a step was a no-op because imports were already present.
+    # `--local-only` inverts the import default. Reason: if `.cortex/` is
+    # gitignored, committing `@.cortex/protocol.md` imports into CLAUDE.md /
+    # AGENTS.md leaves dangling references for anyone who clones the
+    # published repo — the imports resolve locally for the author but not
+    # for downstream consumers. Explicit `--add-imports-claude` /
+    # `--add-imports-agents` still wins (the user is opting in knowingly),
+    # but we print a warning so the tradeoff is visible.
+    if local_only and add_imports_claude is None:
+        add_imports_claude = False
+    if local_only and add_imports_agents is None:
+        add_imports_agents = False
+    if local_only and (add_imports_claude is True or add_imports_agents is True):
+        click.echo(
+            "  warning: --local-only with explicit --add-imports-* leaves "
+            "@.cortex/... imports in CLAUDE.md / AGENTS.md while `.cortex/` "
+            "is gitignored. Downstream clones will see dangling imports.",
+            err=True,
+        )
+
     want_claude = _resolve_flag(
         flag_value=add_imports_claude,
         yes=assume_yes,
@@ -843,12 +979,17 @@ def init_command(
     )
     # .gitignore gets prompted even if the file doesn't exist yet — we'll
     # create it. Most projects already have one; pass True unconditionally.
-    want_gitignore = _resolve_flag(
-        flag_value=add_gitignore,
-        yes=assume_yes,
-        prompt_text="Add .cortex/ entries to project .gitignore?",
-        target_exists=True,
-    )
+    # `--local-only` short-circuits the prompt: the flag itself is the
+    # affirmative answer to a more specific question.
+    if local_only:
+        want_gitignore = True
+    else:
+        want_gitignore = _resolve_flag(
+            flag_value=add_gitignore,
+            yes=assume_yes,
+            prompt_text="Add .cortex/ entries to project .gitignore?",
+            target_exists=True,
+        )
 
     if want_claude and claude_md.exists():
         if _append_imports(claude_md):
@@ -861,14 +1002,115 @@ def init_command(
         else:
             click.echo(f"  {agents_md.name} already imports Cortex protocol.")
     if want_gitignore:
-        if _append_gitignore_entries(gitignore_path):
-            click.echo(f"  Updated {gitignore_path.name} with Cortex entries.")
+        if _append_gitignore_entries(gitignore_path, local_only=local_only):
+            if local_only:
+                click.echo(
+                    f"  Updated {gitignore_path.name}: `.cortex/` is now gitignored "
+                    "(local-only mode)."
+                )
+            else:
+                click.echo(f"  Updated {gitignore_path.name} with Cortex entries.")
         else:
-            click.echo(f"  {gitignore_path.name} already ignores Cortex transient paths.")
+            if local_only:
+                click.echo(
+                    f"  {gitignore_path.name} already ignores `.cortex/` "
+                    "(local-only mode)."
+                )
+            else:
+                click.echo(f"  {gitignore_path.name} already ignores Cortex transient paths.")
+
+    # Local-only post-check covers three ways the "not published" promise
+    # can fail silently:
+    #   1. `.cortex/` is already tracked by git — .gitignore does not untrack
+    #      existing files, so the user needs `git rm --cached -r .cortex/`.
+    #   2. CLAUDE.md / AGENTS.md already import `@.cortex/...` from a prior
+    #      team-shared init — those imports get committed and will dangle for
+    #      downstream clones once `.cortex/` is gitignored or untracked.
+    # Each case warns with the specific remediation. The "will not be
+    # published" success message is only printed when both checks are clean.
+    if local_only:
+        tracked = _tracked_cortex_files(target_path)
+        dangling_import_files = [
+            p for p in (claude_md, agents_md) if _has_existing_cortex_imports(p)
+        ]
+        if tracked is None:
+            # We couldn't determine whether `.cortex/` is tracked. Warn
+            # explicitly rather than falling through to the "not published"
+            # success message — false assurance is worse than no answer.
+            # Use the same path-aware, shell-quoted `git -C <target>`
+            # remediation shape as the tracked branch so the user, who
+            # may be running from a different cwd in a monorepo, copy-
+            # pastes a command that inspects the right `.cortex/`.
+            if path_differs_from_cwd:
+                quoted_target = shlex.quote(str(target_path))
+                lsfiles_cmd = f"git -C {quoted_target} ls-files .cortex"
+                untrack_hint = (
+                    f"`git -C {quoted_target} rm --cached -r .cortex/`"
+                )
+            else:
+                lsfiles_cmd = "git ls-files .cortex"
+                untrack_hint = "`git rm --cached -r .cortex/`"
+            click.echo(
+                "  warning: could not verify whether `.cortex/` is already "
+                "tracked by git (git check failed). If this project has a "
+                f"prior Cortex history, run `{lsfiles_cmd}` manually "
+                f"and follow up with {untrack_hint} if files "
+                "are listed. Otherwise downstream clones may still see the "
+                "previously-committed `.cortex/` content.",
+                err=True,
+            )
+        elif tracked:
+            # Path-aware remediation: when `--path <subdir>` is used (monorepo
+            # / subproject), the user may run the untrack command from the
+            # repo root or from any cwd, so we emit `git -C <target>` to
+            # anchor the operation to the project this init acted on. In the
+            # common case (target == cwd) we emit the plain form for
+            # readability. Shell-quote the path so values containing spaces
+            # (e.g. "My Project") survive copy-paste into a shell intact.
+            if path_differs_from_cwd:
+                quoted_target = shlex.quote(str(target_path))
+                untrack_cmd = f"git -C {quoted_target} rm --cached -r .cortex/"
+                commit_cmd = (
+                    f"git -C {quoted_target} commit -m "
+                    "'chore: untrack .cortex/ (local-only)'"
+                )
+            else:
+                untrack_cmd = "git rm --cached -r .cortex/"
+                commit_cmd = (
+                    "git commit -m 'chore: untrack .cortex/ (local-only)'"
+                )
+            click.echo(
+                f"  warning: {len(tracked)} `.cortex/` file(s) are already tracked by git. "
+                ".gitignore does not untrack existing files. Run:\n"
+                f"      {untrack_cmd}\n"
+                f"      {commit_cmd}\n"
+                "  to complete the local-only transition; otherwise the existing tracked "
+                "files will continue to be published.",
+                err=True,
+            )
+        if dangling_import_files:
+            names = ", ".join(p.name for p in dangling_import_files)
+            click.echo(
+                f"  warning: {names} already import(s) `@.cortex/protocol.md` "
+                "or `@.cortex/state.md`. Under --local-only these imports will "
+                "resolve for you but dangle for downstream clones. Remove the "
+                f"`@.cortex/...` lines from {names} to complete the local-only "
+                "transition.",
+                err=True,
+            )
+        # "Will not be published" is only truthful when the check succeeded
+        # and returned no files AND no dangling imports remain.
+        if tracked == [] and not dangling_import_files:
+            click.echo(
+                "  Doctrine, plans, journals, and state will not be published "
+                "with this project."
+            )
 
     click.echo("Next steps:")
     click.echo("  1. Author doctrine/0001-why-<project>-exists.md (see templates/doctrine/candidate.md for shape).")
-    if not want_claude and not want_agents:
+    if not want_claude and not want_agents and not local_only:
+        # In local-only mode, committing `@.cortex/...` imports would leave
+        # dangling references for downstream clones — don't recommend it.
         click.echo("  2. Import `@.cortex/protocol.md` and `@.cortex/state.md` into your AGENTS.md or CLAUDE.md.")
     click.echo("  3. Run `cortex doctor` to validate the scaffold against SPEC.md.")
 
@@ -879,6 +1121,7 @@ def init_command(
         did_claude=want_claude,
         did_agents=want_agents,
         did_gitignore=want_gitignore,
+        did_local_only=local_only,
         force=force,
         path_arg=str(target_path) if path_differs_from_cwd else None,
     )
