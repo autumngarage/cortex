@@ -51,7 +51,7 @@ Per SPEC § 4.2 (deferrals resolve in the same commit), every work item in the c
 | Promotion-queue invariants in doctor | Phase E |
 | Single-authority-rule drift in doctor | Phase E |
 | CLI-less-fallback warning in doctor | Phase E |
-| T1.2–T1.7 audit expansion | Phase E (T1.7 after Phase D Touchstone hook) |
+| T1.2–T1.7 audit expansion | Phase E (T1.7 audit ships as a unit with the Touchstone pre-merge hook + `cortex doctrine draft` + `.cortex/pending/` SPEC amendment, all in Phase E) |
 | Full § 5.4 claim-trace in audit-digests | Phase E |
 | Interactive per-candidate prompts | Phase E |
 | `cortex refresh-map` (LLM) | Phase E |
@@ -63,7 +63,7 @@ Per SPEC § 4.2 (deferrals resolve in the same commit), every work item in the c
 
 New work items introduced in Phase C (not from the cancelled plan): `cortex journal draft`, `cortex plan spawn`, `cortex plan status`. These were previously in old PLAN.md Phase D; the reorder pulls them forward because they're the authoring primitives that unblock everything downstream.
 
-New work items introduced in Phase D (not from the cancelled plan): Sentinel end-of-cycle hook, Touchstone post-merge hook, Touchstone pre-merge hook, Touchstone pre-push `cortex doctor --strict` gate. These were previously in old PLAN.md Phase E; the reorder pulls them forward because they're what turns Cortex from "a thing the author uses" into "a thing that fills itself from work events."
+New work items introduced in Phase D (not from the cancelled plan): Sentinel end-of-cycle hook, Touchstone post-merge hook, Touchstone pre-push `cortex doctor --strict` gate. These were previously in old PLAN.md Phase E; the reorder pulls them forward because they're what turns Cortex from "a thing the author uses" into "a thing that fills itself from work events." The Touchstone pre-merge hook (T1.7) was *also* previously in old PLAN.md Phase E and stays there — it pairs tightly with the `.cortex/pending/` SPEC amendment and `cortex doctrine draft` command that produce the durable write the trigger's Tier-1 classification requires.
 
 ## Consequences / action items
 

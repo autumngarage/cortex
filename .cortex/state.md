@@ -58,7 +58,7 @@ Full plan: [`plans/phase-b-walking-skeleton.md`](./plans/phase-b-walking-skeleto
 
 ## P1 — Phase D (reordered): composition integrations
 
-Full plan: [`plans/phase-d-integration.md`](./plans/phase-d-integration.md). Sentinel and Touchstone use Phase C's `cortex journal draft` to write to `.cortex/` on real work events: Sentinel end-of-cycle (T1.6), Touchstone post-merge (T1.9), Touchstone pre-merge on architecturally-significant diffs (T1.7), Touchstone pre-push `cortex doctor --strict` gate. Opt-in per project via each host tool's existing config. Exit bar: a week of PRs on this repo produces ≥ 5 auto-drafted `pr-merged` entries and ≥ 1 auto-drafted Sentinel-cycle entry. Blocked on Phase C.
+Full plan: [`plans/phase-d-integration.md`](./plans/phase-d-integration.md). Sentinel and Touchstone use Phase C's `cortex journal draft` to write to `.cortex/` on real work events: Sentinel end-of-cycle (T1.6), Touchstone post-merge (T1.9), plus Touchstone pre-push `cortex doctor --strict` gate. T1.7 (architecturally-significant pre-merge) is deferred to Phase E because it needs a durable `.cortex/pending/` write that SPEC.md does not yet define. Opt-in per project via each host tool's existing config. Exit bar: a week of PRs on this repo produces ≥ 5 auto-drafted `pr-merged` entries and ≥ 1 auto-drafted Sentinel-cycle entry. Blocked on Phase C.
 
 ## P2 — Phase E (reordered): synthesis and governance
 
