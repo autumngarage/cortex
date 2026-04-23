@@ -163,7 +163,8 @@ That's the UX. That's *all* the UX.
 - **Writing the journal** (AI does it, triggered deterministically).
 - **Detecting staleness** (`cortex doctor` warns when state is >24h old).
 - **Surfacing candidates** (when a journal pattern repeats, it shows up in the queue).
-- **Regenerating the Map and State** (`cortex refresh-*` in Phase C, on demand or scheduled).
+- **Regenerating the State** (`cortex refresh-state`, deterministic, Phase C; byte-identical output on unchanged inputs so diffs only show when priorities actually move).
+- **Regenerating the Map** (`cortex refresh-map`, LLM-driven, Phase E; map changes slowly on solo projects so automating it is a Phase E concern, not a session-pickup one).
 
 ### The key invariant
 
