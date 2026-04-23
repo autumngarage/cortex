@@ -418,6 +418,45 @@ def test_local_only_no_warning_when_cortex_untracked(tmp_path: Path) -> None:
     assert "will not be published" in result.output
 
 
+def test_local_only_warns_when_claude_md_already_imports(tmp_path: Path) -> None:
+    """If CLAUDE.md already imports `@.cortex/protocol.md` from a prior
+    team-shared init, converting to local-only leaves those imports in the
+    published file pointing at a now-gitignored directory. Warn with
+    specific remediation so the user knows to remove the lines."""
+    content = "# Project\n\n@.cortex/protocol.md\n\n@.cortex/state.md\n"
+    _write_claude_md(tmp_path, content)
+    result = CliRunner().invoke(
+        cli, ["init", "--path", str(tmp_path), "--yes", "--local-only"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "CLAUDE.md already import" in result.output
+    assert "Remove the" in result.output
+    # Success claim must NOT fire when dangling-import remediation is outstanding.
+    assert "will not be published" not in result.output
+
+
+def test_local_only_warns_when_agents_md_already_imports(tmp_path: Path) -> None:
+    content = "# Agents\n\n@.cortex/protocol.md\n"
+    _write_agents_md(tmp_path, content)
+    result = CliRunner().invoke(
+        cli, ["init", "--path", str(tmp_path), "--yes", "--local-only"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "AGENTS.md already import" in result.output
+
+
+def test_local_only_no_import_warning_when_files_clean(tmp_path: Path) -> None:
+    """Regression: a CLAUDE.md without `@.cortex/...` imports must not trip
+    the warning — false positives would train users to ignore it."""
+    _write_claude_md(tmp_path, "# Project\n\n## Overview\n\nNo imports.\n")
+    result = CliRunner().invoke(
+        cli, ["init", "--path", str(tmp_path), "--yes", "--local-only"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "already import" not in result.output
+    assert "will not be published" in result.output
+
+
 def test_local_only_survives_non_git_project(tmp_path: Path) -> None:
     """`--local-only` must not fail when the project isn't a git repo —
     the tracked-files check is best-effort advice, not a prerequisite."""

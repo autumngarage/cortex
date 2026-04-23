@@ -287,6 +287,22 @@ def _append_imports(target_file: Path) -> bool:
     return True
 
 
+def _has_existing_cortex_imports(path: Path) -> bool:
+    """Return True iff `path` already imports `@.cortex/protocol.md` or
+    `@.cortex/state.md`.
+
+    Used by `--local-only` to catch the case where a project previously ran
+    `cortex init` in team-shared mode (committing the imports) and is now
+    converting to local-only. Leaving those imports in CLAUDE.md / AGENTS.md
+    while `.cortex/` is gitignored produces dangling references for
+    downstream clones.
+    """
+    if not path.exists():
+        return False
+    text = path.read_text()
+    return _PROTOCOL_IMPORT_MARKER in text or _STATE_IMPORT_MARKER in text
+
+
 def _tracked_cortex_files(project_root: Path) -> list[str]:
     """Return the list of `.cortex/` files already tracked by git.
 
@@ -983,14 +999,20 @@ def init_command(
             else:
                 click.echo(f"  {gitignore_path.name} already ignores Cortex transient paths.")
 
-    # Local-only post-check: if `.cortex/` is already tracked by git,
-    # gitignore-ing it does NOT untrack the files. The user must run
-    # `git rm --cached -r .cortex/` (and commit) for the "not published"
-    # guarantee to hold. Warn loudly with the exact remediation command so
-    # the user can't miss that the rest of `--local-only`'s success message
-    # is contingent on this step.
+    # Local-only post-check covers three ways the "not published" promise
+    # can fail silently:
+    #   1. `.cortex/` is already tracked by git — .gitignore does not untrack
+    #      existing files, so the user needs `git rm --cached -r .cortex/`.
+    #   2. CLAUDE.md / AGENTS.md already import `@.cortex/...` from a prior
+    #      team-shared init — those imports get committed and will dangle for
+    #      downstream clones once `.cortex/` is gitignored or untracked.
+    # Each case warns with the specific remediation. The "will not be
+    # published" success message is only printed when both checks are clean.
     if local_only:
         tracked = _tracked_cortex_files(target_path)
+        dangling_import_files = [
+            p for p in (claude_md, agents_md) if _has_existing_cortex_imports(p)
+        ]
         if tracked:
             click.echo(
                 f"  warning: {len(tracked)} `.cortex/` file(s) are already tracked by git. "
@@ -1001,7 +1023,17 @@ def init_command(
                 "files will continue to be published.",
                 err=True,
             )
-        else:
+        if dangling_import_files:
+            names = ", ".join(p.name for p in dangling_import_files)
+            click.echo(
+                f"  warning: {names} already import(s) `@.cortex/protocol.md` "
+                "or `@.cortex/state.md`. Under --local-only these imports will "
+                "resolve for you but dangle for downstream clones. Remove the "
+                f"`@.cortex/...` lines from {names} to complete the local-only "
+                "transition.",
+                err=True,
+            )
+        if not tracked and not dangling_import_files:
             click.echo(
                 "  Doctrine, plans, journals, and state will not be published "
                 "with this project."
