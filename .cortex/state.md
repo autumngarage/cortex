@@ -1,6 +1,6 @@
 ---
 Generated: 2026-04-23T15:20:00-07:00
-Generator: hand-authored (regeneration infrastructure ships in reordered Phase C)
+Generator: hand-authored (deterministic `cortex refresh-state` ships in reordered Phase C; LLM `refresh-state --enhance` and `refresh-map` land in Phase E)
 Sources:
   - HEAD of branch docs/rewrite-phase-plans (targeting main at 8916247); cortex v0.2.3 currently on Homebrew; PR #27 (--local-only) and PR #28 (shell helpers + derive-success-from-preconditions) merged today
   - https://github.com/autumngarage/cortex/releases (v0.1.0 through v0.2.3)
@@ -16,11 +16,11 @@ Sources:
   - PLAN.md phase-A-complete, phase-B-shipped-as-v0.1.0, phase-C-reordered-open
 Corpus: 5 Doctrine entries, 3 active Plans (phase-c-authoring-and-state, phase-d-integration, phase-e-synthesis-and-governance), 16 Journal entries, 8 Templates, 1 Python package (cortex 0.2.3 with `version` + `init` (incl. `--local-only`) + `doctor` (incl. `--audit` / `--audit-digests`) + `manifest` + `grep` + `status` + `promote` commands + `cortex.shell` helpers)
 Omitted:
-  - .cortex/.index.json — per SPEC § 2 the file is auto-maintained by the Cortex CLI and its absence is expected until Phase C's `cortex refresh-*` commands (which populate the promotion queue) ship. `cortex status` and `cortex promote` already handle this state gracefully.
+  - .cortex/.index.json — per SPEC § 2 the file is auto-maintained by the Cortex CLI and its absence is expected until Phase E's `.index.json` writer ships (the reorder moved this out of Phase C because the index backs promotion-queue governance, not the session-pickup goal Phase C targets). `cortex status` and `cortex promote` already handle this state gracefully.
 Incomplete:
-  - Map regeneration (Phase C); map.md is a stub with Incomplete: [all sources]
-  - Automated metric aggregation (Phase C); State is hand-authored
-  - Sentinel run journals (no integration yet; Phase E)
+  - Map regeneration (Phase E `cortex refresh-map`); map.md is a stub with Incomplete: [all sources]
+  - Automated State prose / priority synthesis (Phase E `cortex refresh-state --enhance`); deterministic refresh-state lands in Phase C but the hand-authored P0/P1/P2 prose is human judgment and stays that way by design
+  - Sentinel run journal ingestion (Phase D integration hook)
 Conflicts-preserved: []
 Spec: 0.3.1-dev
 ---
@@ -42,7 +42,7 @@ Full plan: [`plans/phase-b-walking-skeleton.md`](./plans/phase-b-walking-skeleto
 **Success signal:** `brew tap autumngarage/cortex && brew install autumngarage/cortex/cortex && cortex init` works in a fresh repo and produces a SPEC-v0.3.1-conformant `.cortex/` scaffold including `.cortex/protocol.md` and `.cortex/templates/`, validated by `cortex doctor`. (Fully-qualified install name is required because homebrew-core has an unrelated `cortex` formula for Prometheus long-term storage.)
 
 - [x] Python package scaffold (`pyproject.toml`, `src/cortex/`, `uv`-managed) — shipped with `cortex version` as first command
-- [~] `cortex` (interactive entry point) — bare `cortex` now runs the status summary (project, versions, active plans, recent journal, digest age + overdue flag at >45 days, promotion-queue counts from `.cortex/.index.json`). Per-candidate review and digest-generation prompts remain deferred to Phase C when `.index.json` gets populated.
+- [~] `cortex` (interactive entry point) — bare `cortex` now runs the status summary (project, versions, active plans, recent journal, digest age + overdue flag at >45 days, promotion-queue counts from `.cortex/.index.json`). Per-candidate review and digest-generation prompts remain deferred to Phase E when `.index.json` gets populated.
 - [x] `cortex init` — scaffolds `.cortex/` per SPEC.md v0.3.1, copying bundled `protocol.md` + `templates/` into the target project; idempotent; `--force` preserves user content
 - [x] `cortex manifest --budget <N>` — token-budgeted session-start slice per Protocol § 1; `Load-priority: always` Doctrine pinned first, then recency; degrades to state-only below 2000 tokens; widens Journal to 7 days at 15000+
 - [x] `cortex grep <pattern>` — frontmatter-aware wrapper over ripgrep; shells out to `rg`, groups matches per file, prepends a metadata summary line (Status/Type/Date/Load-priority) extracted from YAML frontmatter or bold-inline fields per SPEC § 6. `--layer` restricts to one subdirectory; extra flags pass through to `rg`.
@@ -51,7 +51,7 @@ Full plan: [`plans/phase-b-walking-skeleton.md`](./plans/phase-b-walking-skeleto
 - [x] `cortex doctor --audit` (first slice) — walks `git log` for the configurable window (default 7 days) and classifies Tier-1 triggers T1.1 (doctrine/plans/principles/SPEC.md diff), T1.5 (dep manifest change), T1.8 (commit-msg patterns), and T1.9 (every main-branch commit). Each fire is matched against a Journal entry of the expected `Type:` within 72 h. Unmatched fires warn but never fail exit. T1.2/T1.3/T1.4/T1.6/T1.7 deferred (need runtime session state or per-commit diff parsing).
 - [x] `cortex doctor --audit-digests` (first slice) — for every Journal entry with `Type: digest`, samples the first 5 bulleted claims and warns when most lack a `journal/...` citation (SPEC § 5.4 shape; not yet a full claim-trace audit).
 - [ ] `cortex doctor` warning when the CLI-less fallback manifest (per Protocol § 1) is used against a corpus exceeding default thresholds
-- [~] `cortex promote <id>` — stub subcommand. Validates `.cortex/.index.json` presence and candidate id; exits 3 with a clear "not yet implemented" note when the candidate is found, pending Phase C's index writer.
+- [~] `cortex promote <id>` — stub subcommand. Validates `.cortex/.index.json` presence and candidate id; exits 3 with a clear "not yet implemented" note when the candidate is found, pending Phase E's index writer + promote writer.
 - [x] `cortex version` — prints CLI version + supported spec + protocol versions + install method
 - [ ] Tests for each command (temp-dir fixtures, no mocked filesystem)
 - [x] `autumngarage/homebrew-cortex` tap + v0.1.0 release — tagged `v0.1.0`, GitHub Release published with notes covering every shipped command and the trio composition story, tap repo created on the same per-tool pattern as `homebrew-sentinel` / `homebrew-touchstone`, and the formula installs via `uv` + Python 3.11 (ripgrep recommended-not-required so only `cortex grep` needs it). Verified end-to-end: `brew install autumngarage/cortex/cortex` on macOS produces a working `cortex` on PATH that reports install method `homebrew`. README / PITCH use the fully-qualified `autumngarage/cortex/cortex` form to avoid the unrelated `cortex` in homebrew-core (Prometheus long-term storage).
@@ -103,5 +103,5 @@ Full plan: [`plans/phase-e-synthesis-and-governance.md`](./plans/phase-e-synthes
 
 - **Spec freshness:** SPEC.md v0.3.1-dev is draft and has not yet been validated against a real external project. Expect at least one amendment (minor bump) during the Phase E external-dogfood gate on Sentinel's repo; Phase C's deterministic `refresh-state` may surface smaller amendments sooner.
 - **Gemini round-2 critique is missing.** Google capacity was exhausted during v2 → v3 iteration; v3 went to promotion on Codex critique + user direction alone. Re-running Gemini when capacity returns is optional; v3 is defensible without it.
-- **Map layer is a stub.** `.cortex/map.md` exists with a seven-field header and `Incomplete: [all sources]`; real synthesis ships in Phase C via `cortex refresh-map`.
+- **Map layer is a stub.** `.cortex/map.md` exists with a seven-field header and `Incomplete: [all sources]`; real synthesis ships in Phase E via `cortex refresh-map`. The reorder pushed this to Phase E because for a solo developer on a project they wrote, map content drifts slowly — the LLM-synthesized structural summary is a contributor-onboarding feature, not a session-pickup feature.
 - **Competitive landscape re-assessment due ~2026-07-17** (quarterly cadence set in [`journal/2026-04-17-competitive-positioning-and-claude-code-risk.md`](./journal/2026-04-17-competitive-positioning-and-claude-code-risk.md)). Watch-items: Letta trigger-discipline features, Anthropic memory-roadmap signals.
