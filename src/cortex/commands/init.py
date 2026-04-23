@@ -1019,11 +1019,28 @@ def init_command(
             p for p in (claude_md, agents_md) if _has_existing_cortex_imports(p)
         ]
         if tracked:
+            # Path-aware remediation: when `--path <subdir>` is used (monorepo
+            # / subproject), the user may run the untrack command from the
+            # repo root or from any cwd, so we emit `git -C <target>` to
+            # anchor the operation to the project this init acted on. In the
+            # common case (target == cwd) we emit the plain form for
+            # readability.
+            if path_differs_from_cwd:
+                untrack_cmd = f"git -C {target_path} rm --cached -r .cortex/"
+                commit_cmd = (
+                    f"git -C {target_path} commit -m "
+                    "'chore: untrack .cortex/ (local-only)'"
+                )
+            else:
+                untrack_cmd = "git rm --cached -r .cortex/"
+                commit_cmd = (
+                    "git commit -m 'chore: untrack .cortex/ (local-only)'"
+                )
             click.echo(
                 f"  warning: {len(tracked)} `.cortex/` file(s) are already tracked by git. "
                 ".gitignore does not untrack existing files. Run:\n"
-                "      git rm --cached -r .cortex/\n"
-                "      git commit -m 'chore: untrack .cortex/ (local-only)'\n"
+                f"      {untrack_cmd}\n"
+                f"      {commit_cmd}\n"
                 "  to complete the local-only transition; otherwise the existing tracked "
                 "files will continue to be published.",
                 err=True,

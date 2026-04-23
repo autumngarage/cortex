@@ -389,7 +389,10 @@ def test_local_only_warns_when_cortex_already_tracked(tmp_path: Path) -> None:
     """If `.cortex/` is already in git's index, appending `.cortex/` to
     .gitignore does NOT untrack those files — git continues to publish
     them. Warn with the exact `git rm --cached` remediation so the user
-    doesn't believe the "not published" promise falsely."""
+    doesn't believe the "not published" promise falsely.
+
+    CliRunner doesn't cd into tmp_path, so `--path <tmp_path>` always
+    differs from cwd — the emitted remediation is the path-aware form."""
     _git_init(tmp_path)
     # Pre-create a .cortex/ file and commit it so the tree mirrors the
     # "existing repo adopting Cortex" scenario.
@@ -402,7 +405,36 @@ def test_local_only_warns_when_cortex_already_tracked(tmp_path: Path) -> None:
     )
     assert result.exit_code == 0, result.output
     assert "already tracked" in result.output
-    assert "git rm --cached -r .cortex/" in result.output
+    assert f"git -C {tmp_path.resolve()} rm --cached -r .cortex/" in result.output
+
+
+def test_local_only_remediation_is_plain_when_target_equals_cwd(tmp_path: Path) -> None:
+    """When `--path` is not set (or equals cwd), the remediation command
+    should be the plain `git rm --cached -r .cortex/` without the `-C`
+    prefix — the common case deserves the readable form."""
+    import os  # noqa: PLC0415
+
+    _git_init(tmp_path)
+    (tmp_path / ".cortex").mkdir()
+    (tmp_path / ".cortex" / "state.md").write_text("# seed\n")
+    _git_add_commit(tmp_path, ".cortex/state.md")
+
+    # chdir into tmp_path so Path.cwd() matches the default --path target.
+    # Restore cwd after the test regardless of outcome.
+    prior_cwd = os.getcwd()
+    try:
+        os.chdir(tmp_path)
+        result = CliRunner().invoke(
+            cli, ["init", "--yes", "--local-only", "--force"]
+        )
+    finally:
+        os.chdir(prior_cwd)
+
+    assert result.exit_code == 0, result.output
+    assert "already tracked" in result.output
+    # Plain form (no `-C`).
+    assert "      git rm --cached -r .cortex/" in result.output
+    assert "git -C" not in result.output
 
 
 def test_local_only_no_warning_when_cortex_untracked(tmp_path: Path) -> None:
@@ -489,7 +521,12 @@ def test_local_only_detects_tracked_files_in_monorepo_subdir(tmp_path: Path) -> 
     )
     assert result.exit_code == 0, result.output
     assert "already tracked" in result.output
-    assert "git rm --cached -r .cortex/" in result.output
+    # Path-aware remediation: when --path differs from cwd, the untrack
+    # command must anchor to the target (via `git -C <target>`), not rely
+    # on the caller's cwd. Otherwise a user who runs `cortex init --path
+    # packages/sub` from the repo root and copy-pastes the remediation
+    # would untrack the wrong (or nonexistent) `.cortex/`.
+    assert f"git -C {subdir.resolve()} rm --cached -r .cortex/" in result.output
 
 
 def test_local_only_survives_non_git_project(tmp_path: Path) -> None:
