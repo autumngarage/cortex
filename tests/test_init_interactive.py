@@ -301,6 +301,17 @@ def test_equivalent_command_includes_local_only(tmp_path: Path) -> None:
     assert "--no-gitignore" not in out
 
 
+def test_equivalent_command_shell_quotes_path_with_spaces(tmp_path: Path) -> None:
+    """The `Equivalent to rerun:` line must shell-quote `--path` so a
+    target like `/tmp/My Project` survives copy-paste back into a
+    terminal without the shell splitting the path on whitespace."""
+    parent = tmp_path / "My Project"
+    parent.mkdir()
+    out = _invoke(parent, "--yes")
+    # shlex.quote wraps space-containing paths in single quotes.
+    assert f"--path '{parent.resolve()}'" in out
+
+
 def test_local_only_skips_claude_imports_by_default(tmp_path: Path) -> None:
     """`--local-only` gitignores `.cortex/`; committing `@.cortex/...` imports
     into CLAUDE.md would leave downstream clones with dangling references.

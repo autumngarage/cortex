@@ -719,7 +719,10 @@ def _format_equivalent_command(
     """
     parts = ["cortex init"]
     if path_arg is not None:
-        parts.append(f"--path {path_arg}")
+        # Shell-quote the path so rerun commands for targets containing
+        # spaces or metacharacters (e.g. `/tmp/My Project`) survive
+        # copy-paste into a terminal without re-tokenization.
+        parts.append(f"--path {shlex.quote(path_arg)}")
     parts.append("--add-imports-claude" if did_claude else "--no-add-imports-claude")
     parts.append("--add-imports-agents" if did_agents else "--no-add-imports-agents")
     if did_local_only:
