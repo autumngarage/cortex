@@ -529,6 +529,61 @@ def test_local_only_detects_tracked_files_in_monorepo_subdir(tmp_path: Path) -> 
     assert f"git -C {subdir.resolve()} rm --cached -r .cortex/" in result.output
 
 
+def test_local_only_warns_when_git_check_fails(tmp_path: Path, monkeypatch) -> None:
+    """When `git ls-files` fails for an unexpected reason (not a "not a
+    repo" exit — that's a known-safe state — but a genuine subprocess
+    error or corrupted repo), we cannot know whether `.cortex/` is
+    tracked. Emit an explicit uncertainty warning rather than falling
+    through to the "will not be published" success path — false
+    assurance is worse than no answer."""
+    from cortex.commands import init as init_mod  # noqa: PLC0415
+
+    def fake_tracked(_path):  # pragma: no cover - simple stub
+        return None  # simulate the "check failed" branch
+
+    monkeypatch.setattr(init_mod, "_tracked_cortex_files", fake_tracked)
+    result = CliRunner().invoke(
+        cli, ["init", "--path", str(tmp_path), "--yes", "--local-only"]
+    )
+    assert result.exit_code == 0, result.output
+    assert "could not verify" in result.output
+    assert "git ls-files .cortex" in result.output
+    # No false "will not be published" claim when we don't know the truth.
+    assert "will not be published" not in result.output
+
+
+def test_local_only_remediation_quotes_paths_with_spaces(tmp_path: Path) -> None:
+    """If `--path` contains spaces, the `git -C <path>` remediation must
+    shell-quote the path so a copy-paste into a terminal still untracks
+    the right directory instead of parsing the path as multiple args."""
+    import subprocess  # noqa: PLC0415
+
+    parent = tmp_path / "My Project"
+    parent.mkdir()
+    _git_init(parent)
+    (parent / ".cortex").mkdir()
+    (parent / ".cortex" / "state.md").write_text("# seed\n")
+    subprocess.run(
+        ["git", "-C", str(parent), "add", ".cortex/state.md"],
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(parent), "commit", "-q", "-m", "seed"],
+        check=True,
+        capture_output=True,
+    )
+    result = CliRunner().invoke(
+        cli, ["init", "--path", str(parent), "--yes", "--local-only", "--force"]
+    )
+    assert result.exit_code == 0, result.output
+    # shlex.quote wraps paths containing spaces in single quotes.
+    assert f"'{parent.resolve()}'" in result.output
+    # And the quoted path is used in the remediation command, not a raw
+    # space-containing string that would be mis-parsed by the shell.
+    assert f"git -C '{parent.resolve()}' rm --cached -r .cortex/" in result.output
+
+
 def test_local_only_survives_non_git_project(tmp_path: Path) -> None:
     """`--local-only` must not fail when the project isn't a git repo —
     the tracked-files check is best-effort advice, not a prerequisite."""

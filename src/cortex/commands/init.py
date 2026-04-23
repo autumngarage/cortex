@@ -62,6 +62,7 @@ the transient paths. Conflicts with `--no-gitignore`.
 from __future__ import annotations
 
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -303,7 +304,7 @@ def _has_existing_cortex_imports(path: Path) -> bool:
     return _PROTOCOL_IMPORT_MARKER in text or _STATE_IMPORT_MARKER in text
 
 
-def _tracked_cortex_files(project_root: Path) -> list[str]:
+def _tracked_cortex_files(project_root: Path) -> list[str] | None:
     """Return the list of `.cortex/` files already tracked by git.
 
     Used by `--local-only` to detect the case where `.cortex/` is committed
@@ -311,20 +312,22 @@ def _tracked_cortex_files(project_root: Path) -> list[str]:
     files that are already in git's index, so the "not published" claim
     would be false without an explicit `git rm --cached`.
 
-    Returns an empty list when:
-      * `.cortex/` is not tracked (the common fresh-init case)
-      * `git` is unavailable or the project is not a git repo
-      * the `git ls-files` call fails for any reason
-
-    The empty-list fallback is intentional: we never fail `cortex init` over
-    a missing `git`, we just can't warn. The warning is best-effort advice.
+    Returns:
+      * `[]`  — check ran cleanly and nothing is tracked OR the project is
+                not a git repository (no tracked state is possible).
+      * `[...]` — one entry per tracked `.cortex/` path.
+      * `None` — the check could not be completed (git missing, subprocess
+                error, unexpected nonzero exit for any reason *other than*
+                "not a repo"). Callers MUST treat None as "unknown, warn
+                the user" rather than "all clear" — silently treating a
+                failed check as success would give false "not published"
+                assurance.
 
     Note: we do NOT short-circuit on `(project_root / ".git").exists()` —
     that check misses the monorepo / subdirectory case where `cortex init
     --path <subdir>` runs inside a parent repo whose `.git` lives above.
     `git ls-files` is the authoritative check; it walks up to find the
-    repo root itself and returns nonzero when no repo is found, which we
-    already degrade to an empty list.
+    repo root itself.
     """
     try:
         result = subprocess.run(
@@ -334,9 +337,18 @@ def _tracked_cortex_files(project_root: Path) -> list[str]:
             timeout=10,
         )
     except (FileNotFoundError, subprocess.SubprocessError):
-        return []
+        # git missing or subprocess-level failure — unknown, not "no files".
+        return None
     if result.returncode != 0:
-        return []
+        # Distinguish "not a git repo" (a normal, known-safe state — no
+        # tracked files are possible) from other failures (partial checkout,
+        # corrupted index, permission issue) where we genuinely don't know.
+        # `git ls-files` outside a repo prints a recognizable marker on
+        # stderr; match on that to separate the two.
+        stderr_lower = (result.stderr or "").lower()
+        if "not a git repository" in stderr_lower:
+            return []
+        return None
     return [line for line in result.stdout.splitlines() if line.strip()]
 
 
@@ -1018,17 +1030,32 @@ def init_command(
         dangling_import_files = [
             p for p in (claude_md, agents_md) if _has_existing_cortex_imports(p)
         ]
-        if tracked:
+        if tracked is None:
+            # We couldn't determine whether `.cortex/` is tracked. Warn
+            # explicitly rather than falling through to the "not published"
+            # success message — false assurance is worse than no answer.
+            click.echo(
+                "  warning: could not verify whether `.cortex/` is already "
+                "tracked by git (git check failed). If this project has a "
+                "prior Cortex history, run `git ls-files .cortex` manually "
+                "and follow up with `git rm --cached -r .cortex/` if files "
+                "are listed. Otherwise downstream clones may still see the "
+                "previously-committed `.cortex/` content.",
+                err=True,
+            )
+        elif tracked:
             # Path-aware remediation: when `--path <subdir>` is used (monorepo
             # / subproject), the user may run the untrack command from the
             # repo root or from any cwd, so we emit `git -C <target>` to
             # anchor the operation to the project this init acted on. In the
             # common case (target == cwd) we emit the plain form for
-            # readability.
+            # readability. Shell-quote the path so values containing spaces
+            # (e.g. "My Project") survive copy-paste into a shell intact.
             if path_differs_from_cwd:
-                untrack_cmd = f"git -C {target_path} rm --cached -r .cortex/"
+                quoted_target = shlex.quote(str(target_path))
+                untrack_cmd = f"git -C {quoted_target} rm --cached -r .cortex/"
                 commit_cmd = (
-                    f"git -C {target_path} commit -m "
+                    f"git -C {quoted_target} commit -m "
                     "'chore: untrack .cortex/ (local-only)'"
                 )
             else:
@@ -1055,7 +1082,9 @@ def init_command(
                 "transition.",
                 err=True,
             )
-        if not tracked and not dangling_import_files:
+        # "Will not be published" is only truthful when the check succeeded
+        # and returned no files AND no dangling imports remain.
+        if tracked == [] and not dangling_import_files:
             click.echo(
                 "  Doctrine, plans, journals, and state will not be published "
                 "with this project."
