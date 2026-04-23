@@ -1,20 +1,20 @@
 ---
-Generated: 2026-04-18T12:00:00-07:00
-Generator: hand-authored (regeneration infrastructure ships in Phase C)
+Generated: 2026-04-23T15:20:00-07:00
+Generator: hand-authored (regeneration infrastructure ships in reordered Phase C)
 Sources:
-  - HEAD of branch chore/brew-qualified-name (targeting main at b2b92f4); cortex v0.1.0 tagged, GitHub Release published, autumngarage/homebrew-cortex tap created
-  - https://github.com/autumngarage/cortex/releases/tag/v0.1.0 (release notes)
+  - HEAD of branch docs/rewrite-phase-plans (targeting main at 8916247); cortex v0.2.3 currently on Homebrew; PR #27 (--local-only) and PR #28 (shell helpers + derive-success-from-preconditions) merged today
+  - https://github.com/autumngarage/cortex/releases (v0.1.0 through v0.2.3)
   - https://github.com/autumngarage/homebrew-cortex (tap repo)
   - .cortex/doctrine/ (5 entries: 0001–0003 + 0005 active with Load-priority: always; 0004 Superseded-by 0005)
-  - .cortex/plans/ (1 active: phase-c-first-synthesis created 2026-04-18 as Phase C P0; phase-b-walking-skeleton shipped 2026-04-18; vision-sharpening shipped 2026-04-17)
-  - .cortex/journal/ (14 entries: 12 from 2026-04-17 + 1 plan-transition + 1 decision for 2026-04-18)
+  - .cortex/plans/ (3 active post-reorder: phase-c-authoring-and-state, phase-d-integration, phase-e-synthesis-and-governance; phase-c-first-synthesis cancelled 2026-04-23; phase-b-walking-skeleton shipped 2026-04-18; vision-sharpening shipped 2026-04-17)
+  - .cortex/journal/ (16 entries: 12 from 2026-04-17 + 2 from 2026-04-18 + 2 from 2026-04-23 (derive-success-from-preconditions, phase-c-reordered))
   - .cortex/templates/ (8 files)
-  - .cortex/map.md (stub, pending Phase C)
+  - .cortex/map.md (stub, pending reordered Phase E)
   - .cortex/procedures/ (empty; .gitkeep only)
   - SPEC.md v0.3.1-dev
-  - pyproject.toml, src/cortex/ (scaffold + version + init + doctor (incl. `--audit`/`--audit-digests`) + manifest + grep + status + promote commands)
-  - PLAN.md phase-A-complete, phase-B-shipped-as-v0.1.0, phase-C-open
-Corpus: 5 Doctrine entries, 1 active Plan (phase-c-first-synthesis), 14 Journal entries, 8 Templates, 1 Python package (cortex 0.1.0 with `version` + `init` + `doctor` (incl. `--audit` / `--audit-digests`) + `manifest` + `grep` + `status` + `promote` commands)
+  - pyproject.toml, src/cortex/ (scaffold + version + init + doctor + manifest + grep + status + promote commands + new cortex.shell helper module as of 2026-04-23)
+  - PLAN.md phase-A-complete, phase-B-shipped-as-v0.1.0, phase-C-reordered-open
+Corpus: 5 Doctrine entries, 3 active Plans (phase-c-authoring-and-state, phase-d-integration, phase-e-synthesis-and-governance), 16 Journal entries, 8 Templates, 1 Python package (cortex 0.2.3 with `version` + `init` (incl. `--local-only`) + `doctor` (incl. `--audit` / `--audit-digests`) + `manifest` + `grep` + `status` + `promote` commands + `cortex.shell` helpers)
 Omitted:
   - .cortex/.index.json — per SPEC § 2 the file is auto-maintained by the Cortex CLI and its absence is expected until Phase C's `cortex refresh-*` commands (which populate the promotion queue) ship. `cortex status` and `cortex promote` already handle this state gracefully.
 Incomplete:
@@ -27,11 +27,11 @@ Spec: 0.3.1-dev
 
 # Project State
 
-> Phase B exited 2026-04-18 with Cortex v0.1.0 on Homebrew. The single open priority is Phase C — first synthesis (`cortex refresh-map`, `cortex refresh-state`) via `claude -p`, which populates `.cortex/.index.json` and unlocks the fully interactive promotion flow + the Phase E integrations with Sentinel and Touchstone.
+> Phase B exited 2026-04-18 with Cortex v0.1.0 on Homebrew; v0.2.3 currently released. On 2026-04-23 the original Phase C plan was cancelled and reordered into three successor plans along risk lines — the reorder is captured in [`journal/2026-04-23-phase-c-reordered.md`](./journal/2026-04-23-phase-c-reordered.md). P0 is now the reordered Phase C (authoring helpers + deterministic `refresh-state`, no LLM dependency); Phase D (Sentinel / Touchstone integrations) and Phase E (LLM synthesis + governance) follow.
 
-## P0 — Phase C: first synthesis (`cortex refresh-map`, `cortex refresh-state`)
+## P0 — Phase C (reordered): authoring and deterministic state
 
-Full plan: [`plans/phase-c-first-synthesis.md`](./plans/phase-c-first-synthesis.md) (created 2026-04-18 as the transition target for the Phase B deferrals). Call `claude -p` directly (no SDK, no provider layer) to regenerate the derived Map and State layers from the primary sources. Each generation must emit the seven-field metadata contract per SPEC § 4.5 and populate `.cortex/.index.json` so `cortex promote` graduates from stub to working writer, `cortex doctor` picks up orphan-deferral / single-authority-rule / promotion-queue invariants, and `cortex status` surfaces real promotion-queue counts.
+Full plan: [`plans/phase-c-authoring-and-state.md`](./plans/phase-c-authoring-and-state.md) (created 2026-04-23 as the reordered P0). Ship the write-side primitives that close the session-pickup gap: `cortex journal draft <type>` (pre-fills from `git log` + `gh pr view`), `cortex plan spawn <slug>` (seven-field frontmatter + required sections + computed Goal-hash), `cortex plan status` (completion % + staleness report), and a deterministic `cortex refresh-state` (walks plans + journal, writes seven-field header, preserves hand-authored regions between `<!-- cortex:hand -->` markers, byte-identical output on unchanged inputs). No LLM calls — every command works without `claude` on PATH. Exit bar: ≥ 80 % of new journal entries on this repo are authored via `cortex journal draft` for the week following v0.3.0 release.
 
 ## Closed — Phase B: walking-skeleton CLI + Protocol implementation (v0.1.0)
 
@@ -56,18 +56,21 @@ Full plan: [`plans/phase-b-walking-skeleton.md`](./plans/phase-b-walking-skeleto
 - [ ] Tests for each command (temp-dir fixtures, no mocked filesystem)
 - [x] `autumngarage/homebrew-cortex` tap + v0.1.0 release — tagged `v0.1.0`, GitHub Release published with notes covering every shipped command and the trio composition story, tap repo created on the same per-tool pattern as `homebrew-sentinel` / `homebrew-touchstone`, and the formula installs via `uv` + Python 3.11 (ripgrep recommended-not-required so only `cortex grep` needs it). Verified end-to-end: `brew install autumngarage/cortex/cortex` on macOS produces a working `cortex` on PATH that reports install method `homebrew`. README / PITCH use the fully-qualified `autumngarage/cortex/cortex` form to avoid the unrelated `cortex` in homebrew-core (Prometheus long-term storage).
 
-## P1 — Phase D: authoring helpers (`cortex journal draft`, `cortex plan spawn`)
+## P1 — Phase D (reordered): composition integrations
 
-Gated on Phase C. Small scaffolding commands that pre-fill templates with frontmatter and inferred context so humans/agents don't start from a blank page.
+Full plan: [`plans/phase-d-integration.md`](./plans/phase-d-integration.md). Sentinel and Touchstone use Phase C's `cortex journal draft` to write to `.cortex/` on real work events: Sentinel end-of-cycle (T1.6), Touchstone post-merge (T1.9), Touchstone pre-merge on architecturally-significant diffs (T1.7), Touchstone pre-push `cortex doctor --strict` gate. Opt-in per project via each host tool's existing config. Exit bar: a week of PRs on this repo produces ≥ 5 auto-drafted `pr-merged` entries and ≥ 1 auto-drafted Sentinel-cycle entry. Blocked on Phase C.
 
-## P2 — Phase E: integration with Sentinel and Touchstone
+## P2 — Phase E (reordered): synthesis and governance
 
-Gated on Phase C–D. Critical integrations: Sentinel end-of-cycle → Journal entry (Trigger T1.6); Touchstone pre-merge → Doctrine candidate draft (Trigger T1.7); Touchstone post-merge → T1.9 `journal/pr-merged.md` entry; Touchstone pre-push → `cortex doctor --strict` (the invariant-enforcement story from SPEC.md § 9 and README). Without these, Cortex is useful but not *enforced*.
+Full plan: [`plans/phase-e-synthesis-and-governance.md`](./plans/phase-e-synthesis-and-governance.md). Capstone: `cortex refresh-map` (LLM synthesis), `cortex refresh-state --enhance` (LLM prose over the Phase C deterministic core), `.cortex/.index.json` writer + `cortex refresh-index`, `cortex promote` writer end-to-end, every remaining `cortex doctor` invariant check for SPEC § 4 (orphan-deferral, append-only violation, immutable-Doctrine mutation, promotion-queue invariants, single-authority-rule drift, CLI-less-fallback warning, T1.2/T1.3/T1.4/T1.6/T1.7 audit expansion, full § 5.4 claim-trace), interactive per-candidate prompts, external dogfood gate on a freshly-cloned Sentinel repo, v1.0.0 release with SPEC.md frozen. Absorbs every work item from the cancelled `phase-c-first-synthesis` plan. Blocked on Phase D.
 
 ---
 
 ## Shipped recently
 
+- **2026-04-23 (afternoon)** — **Roadmap reorder: old Phase C cancelled; split into C / D / E.** Cancelled [`plans/phase-c-first-synthesis.md`](./plans/phase-c-first-synthesis.md) — it bundled three risk classes (LLM synthesis, deterministic index, doctor expansions) into one phase and led with LLM synthesis before the features that actually close the session-pickup gap the project exists to solve ([`doctrine/0001-why-cortex-exists`](./doctrine/0001-why-cortex-exists.md)). Replaced with three successor plans: [`phase-c-authoring-and-state`](./plans/phase-c-authoring-and-state.md) (P0; v0.3.0; deterministic journal draft + plan spawn + plan status + refresh-state, no LLM), [`phase-d-integration`](./plans/phase-d-integration.md) (P1; v0.4.0; Sentinel + Touchstone hooks consuming Phase C's draft command), [`phase-e-synthesis-and-governance`](./plans/phase-e-synthesis-and-governance.md) (P2; v1.0.0; LLM synthesis + remaining doctor expansions + external Sentinel-clone dogfood). Full rationale in [`journal/2026-04-23-phase-c-reordered.md`](./journal/2026-04-23-phase-c-reordered.md); every cancelled-plan work item is absorbed into a successor plan per SPEC § 4.2.
+- **2026-04-23 (mid-afternoon)** — **`cortex.shell` helpers + derive-success-from-preconditions rule.** Extracted `src/cortex/shell.py` from PR #27's inline subprocess usage: `run_git()` returns a `GitRun` with explicit tri-state semantics (`ok` / `not_a_repo` / unknown-with-reason, disambiguating `FileNotFoundError` between missing-git and missing-cwd); `git_remediation_cmd()` builds copy-paste-safe user advice with anchor-to-target + shell-quoting invariants enforced in one place. Migrated `cortex init`'s `_tracked_cortex_files` to the helper, net −23 lines in init.py. Journal entry [`2026-04-23-derive-success-from-preconditions.md`](./journal/2026-04-23-derive-success-from-preconditions.md) captures the architectural rule that emerged from PR #27's eight-round review loop: success claims must derive from the full precondition set, not from the last step that passed. PR #28, one Codex review round after the `FileNotFoundError` disambiguation fix; 202 tests passing.
+- **2026-04-23 (midday)** — **`cortex init --local-only` flag.** Inverts the default so solo projects can opt out of committing `.cortex/` (journals, plans, doctrine, state stay local when the project is published). Conflicts with `--no-gitignore`; skips `@.cortex/...` imports into CLAUDE.md / AGENTS.md by default (would dangle for downstream clones otherwise); emits path-aware, shell-quoted remediation warnings when `.cortex/` is already tracked by git OR when CLAUDE.md / AGENTS.md already import `@.cortex/...`. Took eight rounds of Codex review to find every dangling-imports vector (monorepo cwd handling, shell metacharacters, FileNotFoundError disambiguation between missing git vs missing cwd) — each round found a real bug. PR #27; 25 new tests.
 - **2026-04-18 (mid-morning)** — **Phase B exit: v0.1.0 release on Homebrew.** Tag `v0.1.0` + [GitHub Release](https://github.com/autumngarage/cortex/releases/tag/v0.1.0) + new [`autumngarage/homebrew-cortex`](https://github.com/autumngarage/homebrew-cortex) tap published. Formula follows the per-tool pattern set by the existing `homebrew-sentinel` and `homebrew-touchstone` taps — each autumngarage tool stands alone at the distribution layer while the trio composes at the file-contract layer (Cortex reads `.sentinel/runs/` and respects `.touchstone-config` when present; neither is required). Install documented as the fully-qualified `brew install autumngarage/cortex/cortex` to side-step the unrelated `cortex` in homebrew-core. Dogfood-verified: `brew install` on macOS produces a working CLI with install method correctly detected as `homebrew` and `cortex doctor` clean on this repo. Phase B exit criterion met; next step is Phase C (`cortex refresh-map` / `cortex refresh-state`).
 - **2026-04-18 (early morning)** — **Phase B seventh slice: `cortex status` + bare `cortex` + `cortex promote` stub.** Bare `cortex` now prints a structured status summary (project name, spec/protocol versions, active plans, journal entries in the last 7 days, latest digest with age + overdue flag at >45 days per SPEC § 5.2 cadence, promotion-queue counts from `.cortex/.index.json` with a clear "not yet initialised" message when absent). `cortex status --json` emits a machine-readable payload for scripting. `cortex status --path` targets arbitrary projects. `cortex --status-only` is a top-level flag that does the same thing (README-promised shape). `cortex promote <id>` is a honest stub: it validates `.index.json` presence and candidate id but exits 3 with a clear "not yet implemented" note pending Phase C's index writer, so the contract is truthful instead of silently no-op'ing. SPEC_VERSION reader-contract warnings go through the shared `cortex.compat.warn_if_incompatible` helper. 11 new tests; 106 total.
 - **2026-04-18 (late evening)** — **Phase B sixth slice: `cortex doctor --audit` and `--audit-digests` (first-slice Tier-1 coverage).** Walks recent `git log` (default window 7 days) and classifies Tier-1 Protocol triggers against every commit: T1.1 (diff touches doctrine/plans/principles/SPEC.md → `Type: decision`), T1.5 (dep manifest change → `Type: decision`), T1.8 (commit subject matches `fix: *regression`, `refactor: *(removes|introduces)`, `feat: *(breaking|replaces)` → `Type: decision`), and T1.9 (every main-branch commit → `Type: pr-merged`). Each fire is matched against a Journal entry of the expected Type within 72 h; unmatched fires print WARNING lines on stderr but never escalate the exit code. `--audit-digests` samples bulleted claims from each `Type: digest` entry and warns when most lack a `journal/…` citation (SPEC § 5.4 shape). T1.2/T1.3/T1.4/T1.6/T1.7 deferred — they need runtime session state or per-commit diff parsing that's out of scope for this slice. 9 new audit tests (89 total) run against real `git init`'d temp repos, not mocks. On this repo, `--audit` surfaces 14 unmatched T1.9 fires — expected, since the `pr-merged` template shipped after most of those merges; retrofit is a follow-up.
@@ -80,16 +83,25 @@ Gated on Phase C–D. Critical integrations: Sentinel end-of-cycle → Journal e
 - **2026-04-17 (afternoon)** — **Vision v3 promoted.** Cortex Protocol shipped as `.cortex/protocol.md` (two-tier triggers, three invariants, template references). SPEC.md bumped to v0.2.0-dev with seven-field metadata contract, promotion queue operational rules, single authority rule for reads, multi-writer Plan visibility, retention and consolidation section. Doctrine 0004 (scope boundaries) landed. README rewritten. Full provenance in [`journal/2026-04-17-vision-v3-promoted.md`](./journal/2026-04-17-vision-v3-promoted.md).
 - **2026-04-17 (morning)** — Phase A complete. Repo bootstrapped, SPEC.md v0.1.0 drafted, PLAN.md + README.md + PRIOR_ART.md + CLAUDE.md + AGENTS.md written, dogfood `.cortex/` populated with three Doctrine entries and one Journal entry. See [`journal/2026-04-17-spec-v0.1.0-drafted.md`](./journal/2026-04-17-spec-v0.1.0-drafted.md).
 
-## Open questions (Phase C kickoff)
+## Open questions
 
-- **Prompt design for `cortex refresh-map` / `cortex refresh-state`:** what's the exact `claude -p` invocation per layer? Streaming vs blocking? Pass Sources as `@path` imports or paste them inline? Start from the spec's seven-field contract and iterate on Sentinel's repo.
-- **`.cortex/.index.json` writer:** synthesize alongside refresh, or a separate command? Lean toward refresh owning it (single source of truth), but may need a separate `cortex refresh-index`.
-- **`cortex doctor` cadence in CI:** pre-commit? pre-push (via Touchstone)? Periodic GH Action? Decide early in Phase C so Sentinel and Touchstone integrations can assume a rhythm.
-- **Interactive-flow UX** (deferred from Phase B): terminal rendering of the prompt-per-candidate flow; pager interaction; keybindings. Click vs `prompt_toolkit` — revisit once `.index.json` has real data.
+**Reordered Phase C (authoring + deterministic state):**
+
+- **Marker convention for `refresh-state`:** `<!-- cortex:hand -->` / `<!-- cortex:end-hand -->` is the proposed shape for preserving hand-authored priority sections through regeneration. Need to decide: one marker pair per section (flexible) or one outer pair bounding all hand-authored regions (simpler)? Lean toward per-section; revisit on first implementation.
+- **`journal draft` and PR context:** how do we behave when `gh` is installed but not authenticated, vs not installed at all? Probably: degrade to `git log`-only pre-fill with a one-line warning, never block. Confirm on first implementation.
+- **Staleness threshold for `plan status`:** 14 days (matches the promotion-queue aging threshold from SPEC § 4.7) or different? Default to 14 for consistency; make configurable via `.cortex/config.toml` when config lands.
+
+**Deferred to Phase D and later:**
+
+- **Touchstone pre-merge pattern config:** which globs count as "architecturally significant" by default? Probably `principles/**`, `.cortex/doctrine/**`, `SPEC.md`, `.cortex/protocol.md`; project-configurable via `.touchstone-config`.
+- **Prompt design for `cortex refresh-map` / `refresh-state --enhance`:** exact `claude -p` invocation, streaming vs blocking, `@path` imports vs inline sources. Defers to Phase E kickoff.
+- **`.cortex/.index.json` writer location:** stands alone as `cortex refresh-index`, bundled into refresh-map / refresh-state, or both? Lean toward both (refresh commands call it; standalone command exists for explicit invocation). Defers to Phase E.
+- **`cortex doctor --strict` policy in CI:** pre-commit, pre-push via Touchstone, or periodic GH Action? Defers to Phase D (Touchstone pre-push is the primary answer; CI is a secondary gate for the repos that don't use Touchstone).
+- **Interactive-flow UX:** terminal rendering of per-candidate prompts; pager interaction; keybindings. Click vs `prompt_toolkit`. Defers to Phase E; revisit once `.index.json` has real data.
 
 ## Known stale-now / handle-later
 
-- **Spec freshness:** SPEC.md v0.3.1-dev is draft and has not yet been validated against a real external project. Expect at least one amendment (minor bump) during Phase C–D dogfood on Sentinel's repo.
+- **Spec freshness:** SPEC.md v0.3.1-dev is draft and has not yet been validated against a real external project. Expect at least one amendment (minor bump) during the Phase E external-dogfood gate on Sentinel's repo; Phase C's deterministic `refresh-state` may surface smaller amendments sooner.
 - **Gemini round-2 critique is missing.** Google capacity was exhausted during v2 → v3 iteration; v3 went to promotion on Codex critique + user direction alone. Re-running Gemini when capacity returns is optional; v3 is defensible without it.
 - **Map layer is a stub.** `.cortex/map.md` exists with a seven-field header and `Incomplete: [all sources]`; real synthesis ships in Phase C via `cortex refresh-map`.
 - **Competitive landscape re-assessment due ~2026-07-17** (quarterly cadence set in [`journal/2026-04-17-competitive-positioning-and-claude-code-risk.md`](./journal/2026-04-17-competitive-positioning-and-claude-code-risk.md)). Watch-items: Letta trigger-discipline features, Anthropic memory-roadmap signals.
