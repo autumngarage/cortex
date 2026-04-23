@@ -89,8 +89,21 @@ def run_git(
             text=True,
             timeout=timeout,
         )
-    except FileNotFoundError:
-        return GitRun(stdout="", stderr="", returncode=-1, reason="git not installed")
+    except FileNotFoundError as exc:
+        # subprocess.run raises FileNotFoundError for two distinct causes:
+        # (a) the `git` executable is not on PATH, and
+        # (b) the supplied `cwd` does not exist.
+        # Collapsing both into "git not installed" loses diagnostic
+        # information and breaks the tri-state contract (callers that
+        # retry after installing git would still fail silently if cwd is
+        # the real problem). `exc.filename` is set by CPython to whichever
+        # path actually went missing; disambiguate via that.
+        missing = exc.filename
+        if missing and cwd is not None and missing == str(cwd):
+            reason = f"working directory does not exist: {missing}"
+        else:
+            reason = "git not installed"
+        return GitRun(stdout="", stderr="", returncode=-1, reason=reason)
     except subprocess.TimeoutExpired:
         return GitRun(stdout="", stderr="", returncode=-1, reason="git timed out")
     except OSError as exc:

@@ -91,6 +91,26 @@ def test_run_git_missing_binary_surfaces_as_unknown(
     assert "not installed" in result.reason.lower()
 
 
+def test_run_git_missing_cwd_does_not_masquerade_as_missing_git(
+    tmp_path: Path,
+) -> None:
+    """subprocess.run raises FileNotFoundError for both "executable missing"
+    AND "cwd does not exist". Collapsing the latter into "git not installed"
+    would mislead diagnostics (a caller who reinstalled git would still
+    fail silently). Disambiguate so the reason names the actual cause."""
+    nonexistent = tmp_path / "definitely-not-here"
+    assert not nonexistent.exists()
+    result = run_git("ls-files", cwd=nonexistent)
+    assert not result.ok
+    assert not result.not_a_repo
+    assert result.reason is not None
+    # The reason must name the cwd problem, NOT git-not-installed — otherwise
+    # a user with git installed would chase the wrong lead.
+    assert "not installed" not in result.reason.lower()
+    assert "working directory" in result.reason.lower()
+    assert str(nonexistent) in result.reason
+
+
 def test_run_git_other_nonzero_exits_treated_as_unknown(tmp_path: Path) -> None:
     """An unknown git subcommand exits non-zero with a message that does
     NOT match "not a git repository". Must land in the tri-state unknown
