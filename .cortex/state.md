@@ -1,5 +1,5 @@
 ---
-Generated: 2026-04-24T15:40:00-04:00
+Generated: 2026-04-24T15:55:00-04:00
 Generator: hand-authored (deterministic `cortex refresh-state` ships in Phase C; LLM `refresh-state --enhance` and `refresh-map` land in Phase E — tracked as sub-sections of the single plan at plans/cortex-v1)
 Sources:
   - HEAD of branch `docs/consolidate-plans-into-cortex-v1` (merge-base main at a6d596b; this snapshot describes the consolidation that lands when the branch merges); cortex v0.2.3 currently on Homebrew
@@ -7,19 +7,19 @@ Sources:
   - https://github.com/autumngarage/homebrew-cortex (tap repo)
   - .cortex/doctrine/ (5 entries: 0001–0003 + 0005 active with Load-priority: always; 0004 Superseded-by 0005)
   - .cortex/plans/ (1 active: cortex-v1; cancelled 2026-04-24: phase-c-authoring-and-state, phase-d-integration, phase-e-synthesis-and-governance (all Promoted-to cortex-v1); cancelled 2026-04-23: phase-c-first-synthesis; shipped: phase-b-walking-skeleton 2026-04-18, vision-sharpening 2026-04-17)
-  - .cortex/journal/ (19 entries: 12 from 2026-04-17 + 2 from 2026-04-18 + 2 from 2026-04-23 (derive-success-from-preconditions, phase-c-reordered) + 3 from 2026-04-24 (case-study-driven-roadmap, single-plan-consolidation, v1-followups-parked))
+  - .cortex/journal/ (20 entries: 12 from 2026-04-17 + 2 from 2026-04-18 + 2 from 2026-04-23 (derive-success-from-preconditions, phase-c-reordered) + 4 from 2026-04-24 (case-study-driven-roadmap, single-plan-consolidation, v1-followups-parked, plan-md-deleted-as-redundant))
   - .cortex/templates/ (8 files)
   - .cortex/map.md (stub, pending Phase E)
   - .cortex/procedures/ (empty; .gitkeep only)
   - docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md (conductor stale-CLAUDE.md incident)
   - SPEC.md v0.3.1-dev
   - pyproject.toml, src/cortex/ (scaffold + version + init + doctor + manifest + grep + status + promote commands + cortex.shell helper module as of 2026-04-23)
-Corpus: 5 Doctrine entries, 1 active Plan (cortex-v1 consolidating Phase C/D/E as sub-sections), 19 Journal entries, 8 Templates, 1 Case study (conductor stale-CLAUDE.md 2026-04-24), 1 Python package (cortex 0.2.3 with `version` + `init` (incl. `--local-only`) + `doctor` (incl. `--audit` / `--audit-digests`) + `manifest` + `grep` + `status` + `promote` commands + `cortex.shell` helpers)
+Corpus: 5 Doctrine entries, 1 active Plan (cortex-v1 consolidating Phase C/D/E as sub-sections), 20 Journal entries, 8 Templates, 1 Case study (conductor stale-CLAUDE.md 2026-04-24), 1 Python package (cortex 0.2.3 with `version` + `init` (incl. `--local-only`) + `doctor` (incl. `--audit` / `--audit-digests`) + `manifest` + `grep` + `status` + `promote` commands + `cortex.shell` helpers)
 Omitted:
   - .cortex/.index.json — per SPEC § 2 the file is auto-maintained by the Cortex CLI and its absence is expected until Phase E's `.index.json` writer ships (the reorder moved this out of Phase C because the index backs promotion-queue governance, not the session-pickup goal Phase C targets). `cortex status` and `cortex promote` already handle this state gracefully.
 Incomplete:
   - Map regeneration (Phase E `cortex refresh-map`); map.md is a stub with Incomplete: [all sources]
-  - Automated State prose / priority synthesis (Phase E `cortex refresh-state --enhance`); deterministic refresh-state lands in Phase C but the hand-authored P0/P1/P2 prose is human judgment and stays that way by design
+  - Automated State prose synthesis (Phase E `cortex refresh-state --enhance`); deterministic refresh-state lands in Phase C but the hand-authored `## Current work` summary (active plan + per-phase narrative) is human judgment and stays that way by design
   - Sentinel run journal ingestion (Phase D integration hook)
 Conflicts-preserved: []
 Spec: 0.3.1-dev
