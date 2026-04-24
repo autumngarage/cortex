@@ -49,7 +49,7 @@ At this stage the repo is **spec-first**: the protocol in [SPEC.md](./SPEC.md) i
 ## Cortex-Specific Principles
 
 - **Spec before implementation.** The protocol in SPEC.md is the primary artifact. Don't code ahead of the spec; amend the spec first, then implement. Spec version bumps follow SPEC.md §6.
-- **Dogfood as the readiness bar.** Each phase exits by running the CLI against a real repo — Sentinel first, Touchstone second, sigint third. If the output needs more than one editing pass, the phase isn't done.
+- **Dogfood as the readiness bar.** v0.9.0 is the engineering release-gate — install Cortex on the chosen real project (recommended: conductor; alternative: sigint), do one week of real work, fix what surfaces. v1.0.0 is ceremonial freeze on top of v0.9.0. Earlier minor releases (v0.3.0 → v0.6.0) exit on this repo's own dogfood metrics named in `.cortex/plans/cortex-v1.md` `## Success Criteria`. If the output needs more than one editing pass at any release boundary, the release isn't done.
 - **Compose by file contract, not code.** Cortex does not import Sentinel, Touchstone, or anything they own. Integration is: "if `.sentinel/runs/` exists, read it; if `.touchstone-config` exists, respect it; otherwise degrade gracefully." Match the pattern Sentinel already uses for Touchstone detection.
 - **Synthesis via `claude` CLI, no SDK.** Same convergent-CLI pattern Sentinel uses. No stored keys inside Cortex. No provider abstraction layer duplicating Sentinel's — shell out to `claude -p` directly for the synthesis commands that need it. (applies to: toolchain — Cortex itself is a toolchain CLI, no app-runtime distinction.)
 - **Regeneration is visible.** Every derived layer (Map, State) carries a `Generated:` timestamp and a source list at the top. Stale-beyond-threshold regeneration surfaces as a warning. Silent staleness is a bug.
@@ -75,13 +75,15 @@ Each release must also declare which spec version it supports (in `SUPPORTED_SPE
 
 ## Architecture
 
-Python CLI (click + uv-managed venv) organized around layer commands. v0.2.3 ships the non-synthesizing surface; the reordered roadmap (2026-04-23, recorded in [`.cortex/journal/2026-04-23-phase-c-reordered.md`](./.cortex/journal/2026-04-23-phase-c-reordered.md)) lands deterministic authoring/state in Phase C and LLM synthesis in Phase E.
+Python CLI (click + uv-managed venv) organized around layer commands. v0.2.3 ships the non-synthesizing surface; the production-release roadmap ([`.cortex/journal/2026-04-24-production-release-rerank.md`](./.cortex/journal/2026-04-24-production-release-rerank.md), supersedes the 2026-04-23 phase reorder for sequencing decisions) sequences the remaining work as six release-driven sub-sections (v0.3.0 → v1.0.0) under a single forcing function: install Cortex on a real project, work for a week, no surprises.
 
 - `cortex init` — scaffold `.cortex/` per SPEC.md
-- `cortex status` / `cortex doctor` — validate and report
-- `cortex journal draft` / `cortex plan spawn` / `cortex plan status` — Phase C authoring helpers (deterministic; `journal draft` pre-fills from `git log` + `gh pr view` context)
-- `cortex refresh-state` — Phase C deterministic regeneration of `.cortex/state.md` with marker-preserved hand-authored regions; byte-identical on unchanged inputs
-- `cortex refresh-map` / `cortex refresh-state --enhance` — Phase E LLM-driven regeneration via the `claude` CLI
+- `cortex status` / `cortex doctor` — validate and report (orphan-deferral check ships v0.3.0; remaining invariant expansions v0.6.0)
+- `cortex journal draft <type>` / `cortex plan spawn <slug>` — v0.3.0 authoring helpers (deterministic; `journal draft` pre-fills from `git log` + `gh pr view` context). Also v0.3.0: `release` journal type + T1.10 release-event trigger.
+- `cortex plan status` / `cortex refresh-state` (deterministic, marker-preserved) / `cortex next` (deterministic MVP) — v0.4.0 read-side helpers
+- `cortex doctor --audit-instructions` (across-the-fourth-wall claim audit) / Manifest `Verified:` per-fact / Touchstone post-merge hook — v0.5.0 trust + automation layer
+- `cortex refresh-index` / `cortex promote <id>` (real writer) — v0.6.0 lifecycle layer
+- `cortex refresh-map` / `cortex refresh-state --enhance` / `cortex next --enhance` — **deferred from v1.0** to v1.x; LLM polish is parked because the conductor case study evidence is that polished prose hides staleness. See [`plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) `## Follow-ups (deferred)`.
 - No background daemon; all writes are explicit CLI invocations.
 
 ## Key Files
@@ -89,7 +91,7 @@ Python CLI (click + uv-managed venv) organized around layer commands. v0.2.3 shi
 | File | Purpose |
 |------|---------|
 | `SPEC.md` | The `.cortex/` file-format protocol, versioned (currently v0.3.1-dev draft) |
-| `.cortex/plans/cortex-v1.md` | The single active plan — Phase C (authoring) + Phase D (integrations) + Phase E (synthesis & governance) through v1.0.0 |
+| `.cortex/plans/cortex-v1.md` | The single active plan — six release-driven sub-sections (v0.3.0 → v1.0.0) under production-on-real-project framing; reranked 2026-04-24 from the original Phase C/D/E shape |
 | `README.md` | The story and composition narrative |
 | `docs/PRIOR_ART.md` | Research synthesis behind the spec's design rules (ADRs, Diataxis, WAL, Zettelkasten, MemGPT, Voyager) |
 | `.cortex/` | This repo's own Cortex dogfood — Doctrine + Journal entries about Cortex itself |
