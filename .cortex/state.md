@@ -1,5 +1,5 @@
 ---
-Generated: 2026-04-24T13:00:00-07:00
+Generated: 2026-04-24T15:40:00-04:00
 Generator: hand-authored (deterministic `cortex refresh-state` ships in Phase C; LLM `refresh-state --enhance` and `refresh-map` land in Phase E — tracked as sub-sections of the single plan at plans/cortex-v1)
 Sources:
   - HEAD of branch `docs/consolidate-plans-into-cortex-v1` (merge-base main at a6d596b; this snapshot describes the consolidation that lands when the branch merges); cortex v0.2.3 currently on Homebrew

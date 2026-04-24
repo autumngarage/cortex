@@ -1,5 +1,5 @@
 ---
-Generated: 2026-04-17T15:30:00-07:00
+Generated: 2026-04-24T15:40:00-04:00
 Generator: hand-authored (regeneration infrastructure ships in Phase E via `cortex refresh-map` per plans/cortex-v1; the 2026-04-23 reorder + 2026-04-24 consolidation moved LLM synthesis from the original Phase C into Phase E)
 Sources:
   - (none — pending Phase E synthesis)
