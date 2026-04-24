@@ -1,15 +1,24 @@
 ---
-Status: active
+Status: cancelled
 Written: 2026-04-23
+Cancelled: 2026-04-24
 Author: human
 Goal-hash: 87f9ab57
 Blocked-by: phase-d-integration
 Updated-by:
   - 2026-04-23T15:10 claude-session-2026-04-23 (created as reordered Phase E; absorbs LLM synthesis, promotion writer, doctor expansions, and external dogfood gate from old phase-c-first-synthesis)
-Cites: ../../SPEC.md, ../../.cortex/protocol.md, ../../PLAN.md § Phase E, ../doctrine/0003-spec-is-the-artifact, ../doctrine/0005-scope-boundaries-v2, journal/2026-04-23-phase-c-reordered
+  - 2026-04-24T12:30 claude-session-2026-04-24 (cancelled; consolidated into plans/cortex-v1 as the Phase E work-item sub-section; the five case-study-driven follow-ups from journal/2026-04-24-case-study-driven-roadmap are folded into the same section there)
+Promoted-to: plans/cortex-v1, journal/2026-04-24-single-plan-consolidation
+Cites: ../../SPEC.md, ../../.cortex/protocol.md, ../doctrine/0003-spec-is-the-artifact, ../doctrine/0005-scope-boundaries-v2, journal/2026-04-23-phase-c-reordered
 ---
 
 # Phase E — Synthesis and governance
+
+> **Cancelled 2026-04-24.** Consolidated into [`plans/cortex-v1`](./cortex-v1.md) as the `### Phase E` sub-section under `## Work items`. Every work item below is absorbed, and the five case-study-driven follow-ups from [`journal/2026-04-24-case-study-driven-roadmap`](../journal/2026-04-24-case-study-driven-roadmap.md) land in the same section there. Rationale in [`journal/2026-04-24-single-plan-consolidation`](../journal/2026-04-24-single-plan-consolidation.md). The H1 and Goal-hash remain unchanged because SPEC § 4.9 uses them to detect drift.
+>
+> *Original scope follows, preserved unchanged for historical reference.*
+
+---
 
 > Layer LLM-enhanced synthesis on top of the deterministic core, wire the promotion-queue writer end-to-end, and give `cortex doctor` teeth on every SPEC § 4 cross-layer rule. This is the phase where spec-compliance becomes enforceable and Cortex produces prose-quality Map/State files alongside the deterministic defaults.
 

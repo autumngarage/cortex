@@ -13,10 +13,10 @@ Checks implemented here (first slice — SPEC.md v0.3.1-dev):
   Updated-by; required sections; grounding citation per §§ 3.4, 4.1, 4.3, 4.9
 - Journal filename ``YYYY-MM-DD-<slug>.md`` per § 3.5
 
-Deferred (tracked in PLAN.md Phase B): promotion-queue invariants
-(`.index.json` not yet emitted), single-authority-rule drift detection
-(§ 4.8), and the Tier-1 audit (`cortex doctor --audit`) which requires git
-traversal.
+Deferred to Phase E (tracked in .cortex/plans/cortex-v1.md ### Phase E):
+promotion-queue invariants (`.index.json` not yet emitted), single-authority-rule
+drift detection (§ 4.8), and the full Tier-1 audit expansion. The first-slice
+`cortex doctor --audit` (T1.1 / T1.5 / T1.8 / T1.9) ships separately.
 """
 
 from __future__ import annotations

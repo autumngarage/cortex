@@ -36,7 +36,7 @@ Style nits, formatting, and theoretical refactors are **out of scope** unless th
 ### High-scrutiny paths
 
 - **`SPEC.md`** — the primary artifact. Any change here must include a version bump in the header and a rationale in the commit message. Breaking changes (major bump) require evidence of migration plan for existing `.cortex/` users (even if currently just this repo's dogfood).
-- **`PLAN.md`** — phase definitions and Success Criteria. Flag if a phase's exit criterion is vague or unmeasurable ("it works well" is not a criterion).
+- **`.cortex/plans/cortex-v1.md`** — the single active plan (consolidated 2026-04-24 from the former Phase C/D/E plan files). Phase definitions and Success Criteria live in its `## Work items` sub-sections. Flag if a phase's exit criterion is vague or unmeasurable ("it works well" is not a criterion).
 - **Code that reads `.cortex/` layer files** — regexes and parsers for status blocks, checkbox syntax, front-matter. Must be tolerant of minor format drift (extra whitespace, trailing newlines) but strict on contract violations.
 - **Code that writes `.cortex/` layer files** — every write to a derived layer (Map, State) must include the `Generated:` header. Every write to an immutable layer (Doctrine, Journal) must verify the target file does not already exist.
 - **Integration code (Sentinel/Touchstone detection)** — must be `shutil.which` + filesystem checks, never imports or subprocess calls into those tools.
