@@ -5,7 +5,8 @@ Author: claude-session-2026-04-24
 Goal-hash: 9e961737
 Updated-by:
   - 2026-04-24T12:30 claude-session-2026-04-24 (consolidated from plans/phase-c-authoring-and-state + phase-d-integration + phase-e-synthesis-and-governance; absorbed the five case-study-driven follow-ups from journal/2026-04-24-case-study-driven-roadmap)
-Cites: ../../SPEC.md, ../../.cortex/protocol.md, ../doctrine/0001-why-cortex-exists, ../doctrine/0005-scope-boundaries-v2, ../doctrine/0003-spec-is-the-artifact, ../doctrine/0002-compose-by-file-contract-not-code, journal/2026-04-23-phase-c-reordered, journal/2026-04-24-case-study-driven-roadmap, ../../docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md
+  - 2026-04-24T15:35 claude-session-2026-04-24 (added journal/2026-04-24-v1-followups-parked as resolution target for v1.x+ deferrals per Codex review on PR #30 + SPEC § 4.2)
+Cites: ../../SPEC.md, ../../.cortex/protocol.md, ../doctrine/0001-why-cortex-exists, ../doctrine/0005-scope-boundaries-v2, ../doctrine/0003-spec-is-the-artifact, ../doctrine/0002-compose-by-file-contract-not-code, journal/2026-04-23-phase-c-reordered, journal/2026-04-24-case-study-driven-roadmap, journal/2026-04-24-single-plan-consolidation, journal/2026-04-24-v1-followups-parked, ../../docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md
 ---
 
 # Ship Cortex v1.0
@@ -75,12 +76,12 @@ This plan is done when Cortex v1.0 ships. Measurable outcomes per phase:
 
 ## Follow-ups (deferred)
 
-Items deliberately out of v1.0 scope, with phase-exit or version targets where applicable:
+Items deliberately out of v1.0 scope. Each item resolves to a Doctrine entry (for items already scoped out) or to [`journal/2026-04-24-v1-followups-parked`](../journal/2026-04-24-v1-followups-parked.md) (for items parked until post-v1.0 retrospective). Per SPEC § 4.2, every deferral has an in-tree resolution target — no orphans.
 
-- **Cross-repo journal import** — opt-in sibling-repo release-event mirroring (`homebrew-<project>` release → journal entry in `<project>`). Depends on T1.10 landing first. Expected v1.1+ or a late-Phase-E add if the sibling-repo watcher shape falls out naturally from `--audit-instructions`.
-- **Promotion enforcement automation** — v1.0 has manual promotion (human decides); automated Journal-to-Doctrine graduation gate is v1.x. Consistent with PLAN.md's retired "Known Limitations" framing.
-- **Embedding / semantic retrieval** — wait until grep stops working. Deferred per [`doctrine/0005-scope-boundaries-v2`](../doctrine/0005-scope-boundaries-v2.md) #1.
-- **Portfolio view (Lighthouse)** — `cortex across` for multi-project aggregation. Out of scope per [`doctrine/0005-scope-boundaries-v2`](../doctrine/0005-scope-boundaries-v2.md).
-- **Cortex-as-protocol separation** — if a second implementation appears (e.g., a JS reader), extract SPEC.md to its own `autumngarage/cortex-spec` repo. Not needed at one implementation.
-- **Single-writer assumption** — two humans or two agents writing `.cortex/` concurrently will conflict. Append-only Journal helps; a full CRDT-ish merge story is v1.x+ if it's ever needed.
-- **Retrofit historical T1.9 journal entries** — `cortex doctor --audit` flagged ~14 unmatched T1.9 fires on this repo (the `pr-merged` template shipped after those merges). Backfill or mark "pre-template" is a follow-up; not on the v1.0 path.
+- **Cross-repo journal import** — opt-in sibling-repo release-event mirroring (`homebrew-<project>` release → journal entry in `<project>`). Depends on T1.10 landing first. Parked per [`journal/2026-04-24-v1-followups-parked`](../journal/2026-04-24-v1-followups-parked.md) #1; revisit when `--audit-instructions` (Phase E item #3) is dogfooded.
+- **Promotion enforcement automation** — v1.0 has manual promotion (human decides via `cortex promote <id>`); automated Journal-to-Doctrine graduation gate is v1.x. Parked per [`journal/2026-04-24-v1-followups-parked`](../journal/2026-04-24-v1-followups-parked.md) #2; revisit once `.index.json` writer (Phase E) has produced ≥ 30 days of real promotion-queue data.
+- **Embedding / semantic retrieval** — wait until grep stops working. Resolved by [`doctrine/0005-scope-boundaries-v2`](../doctrine/0005-scope-boundaries-v2.md) #1 (out of scope at the storage layer).
+- **Portfolio view (Lighthouse)** — `cortex across` for multi-project aggregation. Resolved by [`doctrine/0005-scope-boundaries-v2`](../doctrine/0005-scope-boundaries-v2.md) (out of scope).
+- **Cortex-as-protocol separation** — if a second implementation appears (e.g., a JS reader), extract SPEC.md to its own `autumngarage/cortex-spec` repo. Parked per [`journal/2026-04-24-v1-followups-parked`](../journal/2026-04-24-v1-followups-parked.md) #3; revisit when a second implementation is proposed.
+- **Single-writer assumption** — two humans or two agents writing `.cortex/` concurrently will conflict on the same file. Parked per [`journal/2026-04-24-v1-followups-parked`](../journal/2026-04-24-v1-followups-parked.md) #4; revisit on first concurrent-write conflict in practice.
+- **Retrofit historical T1.9 journal entries** — `cortex doctor --audit` flagged ~14 unmatched T1.9 fires on this repo (the `pr-merged` template shipped after most of those merges). Parked per [`journal/2026-04-24-v1-followups-parked`](../journal/2026-04-24-v1-followups-parked.md) #5; revisit if/when historical entries become load-bearing for any synthesis.

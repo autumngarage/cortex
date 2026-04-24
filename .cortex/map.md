@@ -1,12 +1,12 @@
 ---
 Generated: 2026-04-17T15:30:00-07:00
-Generator: hand-authored (regeneration infrastructure ships in Phase C via `cortex refresh-map`)
+Generator: hand-authored (regeneration infrastructure ships in Phase E via `cortex refresh-map` per plans/cortex-v1; the 2026-04-23 reorder + 2026-04-24 consolidation moved LLM synthesis from the original Phase C into Phase E)
 Sources:
-  - (none — pending Phase C synthesis)
+  - (none — pending Phase E synthesis)
 Corpus: 0 files (no synthesis yet)
 Omitted: []
 Incomplete:
-  - All sources — Phase C ships `cortex refresh-map` which will regenerate this file from directory tree, `pyproject.toml`/`package.json`/`Cargo.toml`, git log, and Doctrine entries. Until then, this is a best-effort stub.
+  - All sources — Phase E ships `cortex refresh-map` which will regenerate this file from directory tree, `pyproject.toml`/`package.json`/`Cargo.toml`, git log, and Doctrine entries. Until then, this is a best-effort stub.
 Conflicts-preserved: []
 Spec: 0.3.1
 ---
