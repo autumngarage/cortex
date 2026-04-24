@@ -20,7 +20,7 @@ First-slice coverage:
   audited range, since this repo uses squash-merge to main). Expects
   ``Type: pr-merged``.
 
-Deferred to a follow-up slice (tracked in PLAN.md Phase B):
+Deferred to Phase E (tracked in .cortex/plans/cortex-v1.md ### Phase E):
 
 - T1.2 (test failure), T1.6 (Sentinel cycle), T1.7 (Touchstone pre-merge)
   — these need runtime session state, not git state.

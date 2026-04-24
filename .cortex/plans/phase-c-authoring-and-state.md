@@ -1,14 +1,23 @@
 ---
-Status: active
+Status: cancelled
 Written: 2026-04-23
+Cancelled: 2026-04-24
 Author: human
 Goal-hash: 45e97ff9
 Updated-by:
   - 2026-04-23T15:00 claude-session-2026-04-23 (created as reordered Phase C; absorbs journal-draft / plan-spawn from old PLAN.md Phase D and deterministic refresh-state from old phase-c-first-synthesis)
-Cites: ../../SPEC.md, ../../.cortex/protocol.md, ../../PLAN.md § Phase C, ../doctrine/0001-why-cortex-exists, ../doctrine/0005-scope-boundaries-v2, journal/2026-04-23-phase-c-reordered
+  - 2026-04-24T12:30 claude-session-2026-04-24 (cancelled; consolidated into plans/cortex-v1 as a phase sub-section so scope lives in one plan file)
+Promoted-to: plans/cortex-v1, journal/2026-04-24-single-plan-consolidation
+Cites: ../../SPEC.md, ../../.cortex/protocol.md, ../doctrine/0001-why-cortex-exists, ../doctrine/0005-scope-boundaries-v2, journal/2026-04-23-phase-c-reordered
 ---
 
 # Phase C — Authoring and deterministic state
+
+> **Cancelled 2026-04-24.** Consolidated into [`plans/cortex-v1`](./cortex-v1.md) as the `### Phase C` sub-section under `## Work items`. Every work item below is absorbed unchanged; scope decisions now live in one plan instead of three. Rationale in [`journal/2026-04-24-single-plan-consolidation`](../journal/2026-04-24-single-plan-consolidation.md). The H1 and Goal-hash remain unchanged because SPEC § 4.9 uses them to detect drift; status transitions live in frontmatter, not the title.
+>
+> *Original scope follows, preserved unchanged for historical reference.*
+
+---
 
 > Make journaling cheap and keep `state.md` current automatically, so a new session (or a session after a crash) can pick up where the last one left off. No LLM dependency in this phase — every command is deterministic, idempotent, and works on a machine that doesn't have `claude` on PATH.
 

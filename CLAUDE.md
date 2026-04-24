@@ -43,7 +43,7 @@ At this stage the repo is **spec-first**: the protocol in [SPEC.md](./SPEC.md) i
 ### Memory Hygiene
 
 - Treat Claude Code memory as cached guidance, not canonical truth. Verify against this repo before acting on a remembered command, flag, path, or version.
-- Do not write memory for facts cheap to derive from `README.md`, `SPEC.md`, `PLAN.md`, or the code itself.
+- Do not write memory for facts cheap to derive from `README.md`, `SPEC.md`, `.cortex/plans/cortex-v1.md`, or the code itself.
 - If you write memory mentioning a command, flag, file path, version, or workflow, include the date (YYYY-MM-DD) and the canonical source checked.
 
 ## Cortex-Specific Principles
@@ -89,7 +89,7 @@ Python CLI (click + uv-managed venv) organized around layer commands. v0.2.3 shi
 | File | Purpose |
 |------|---------|
 | `SPEC.md` | The `.cortex/` file-format protocol, versioned (currently v0.3.1-dev draft) |
-| `PLAN.md` | Build plan, phases A–E with exit criteria and success criteria |
+| `.cortex/plans/cortex-v1.md` | The single active plan — Phase C (authoring) + Phase D (integrations) + Phase E (synthesis & governance) through v1.0.0 |
 | `README.md` | The story and composition narrative |
 | `docs/PRIOR_ART.md` | Research synthesis behind the spec's design rules (ADRs, Diataxis, WAL, Zettelkasten, MemGPT, Voyager) |
 | `.cortex/` | This repo's own Cortex dogfood — Doctrine + Journal entries about Cortex itself |
@@ -98,7 +98,7 @@ Python CLI (click + uv-managed venv) organized around layer commands. v0.2.3 shi
 
 ## State & Config
 
-- Project-owned files include `CLAUDE.md`, `AGENTS.md`, `.codex-review.toml`, `.pre-commit-config.yaml`, `setup.sh`, and the Cortex-native files in this repo (`SPEC.md`, `PLAN.md`, `README.md`, `docs/`, `.cortex/`).
+- Project-owned files include `CLAUDE.md`, `AGENTS.md`, `.codex-review.toml`, `.pre-commit-config.yaml`, `setup.sh`, and the Cortex-native files in this repo (`SPEC.md`, `README.md`, `docs/`, `.cortex/` including `.cortex/plans/cortex-v1.md` as the single active plan).
 - Touchstone-managed files live in `principles/` and `scripts/` and are synced via `touchstone update`.
 - No runtime config yet. When the CLI ships, per-project config (if any) will live in `.cortex/config.toml` or be derived entirely from `.cortex/` contents.
 

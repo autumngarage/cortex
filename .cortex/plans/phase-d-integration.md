@@ -1,15 +1,24 @@
 ---
-Status: active
+Status: cancelled
 Written: 2026-04-23
+Cancelled: 2026-04-24
 Author: human
 Goal-hash: 1c66ba43
 Blocked-by: phase-c-authoring-and-state
 Updated-by:
   - 2026-04-23T15:05 claude-session-2026-04-23 (created as reordered Phase D; promotes integration work from old PLAN.md Phase E because integration is where Cortex's value compounds and synthesis is not a prerequisite)
-Cites: ../../SPEC.md, ../../.cortex/protocol.md, ../../PLAN.md § Phase D, ../doctrine/0001-why-cortex-exists, ../doctrine/0002-compose-by-file-contract-not-code, journal/2026-04-23-phase-c-reordered
+  - 2026-04-24T12:30 claude-session-2026-04-24 (cancelled; consolidated into plans/cortex-v1 as the Phase D work-item sub-section)
+Promoted-to: plans/cortex-v1, journal/2026-04-24-single-plan-consolidation
+Cites: ../../SPEC.md, ../../.cortex/protocol.md, ../doctrine/0001-why-cortex-exists, ../doctrine/0002-compose-by-file-contract-not-code, journal/2026-04-23-phase-c-reordered
 ---
 
 # Phase D — Composition integrations
+
+> **Cancelled 2026-04-24.** Consolidated into [`plans/cortex-v1`](./cortex-v1.md) as the `### Phase D` sub-section under `## Work items`. Every work item below is absorbed unchanged; the `Blocked-by: phase-c-authoring-and-state` relation becomes sequential section ordering inside the single plan. Rationale in [`journal/2026-04-24-single-plan-consolidation`](../journal/2026-04-24-single-plan-consolidation.md). The H1 and Goal-hash remain unchanged because SPEC § 4.9 uses them to detect drift.
+>
+> *Original scope follows, preserved unchanged for historical reference.*
+
+---
 
 > Sentinel and Touchstone write to `.cortex/` via Phase C's `cortex journal draft` so the Journal fills itself from real work events (cycle endings, PR merges) instead of depending on the author remembering to write entries. This is where the composition story (Touchstone = standards, Sentinel = loop, Cortex = memory) actually starts compounding.
 
