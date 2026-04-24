@@ -75,13 +75,15 @@ Each release must also declare which spec version it supports (in `SUPPORTED_SPE
 
 ## Architecture
 
-Python CLI (click + uv-managed venv) organized around layer commands. v0.2.3 ships the non-synthesizing surface; the reordered roadmap (2026-04-23, recorded in [`.cortex/journal/2026-04-23-phase-c-reordered.md`](./.cortex/journal/2026-04-23-phase-c-reordered.md)) lands deterministic authoring/state in Phase C and LLM synthesis in Phase E.
+Python CLI (click + uv-managed venv) organized around layer commands. v0.2.3 ships the non-synthesizing surface; the production-release roadmap ([`.cortex/journal/2026-04-24-production-release-rerank.md`](./.cortex/journal/2026-04-24-production-release-rerank.md), supersedes the 2026-04-23 phase reorder for sequencing decisions) sequences the remaining work as six release-driven sub-sections (v0.3.0 → v1.0.0) under a single forcing function: install Cortex on a real project, work for a week, no surprises.
 
 - `cortex init` — scaffold `.cortex/` per SPEC.md
-- `cortex status` / `cortex doctor` — validate and report
-- `cortex journal draft` / `cortex plan spawn` / `cortex plan status` — Phase C authoring helpers (deterministic; `journal draft` pre-fills from `git log` + `gh pr view` context)
-- `cortex refresh-state` — Phase C deterministic regeneration of `.cortex/state.md` with marker-preserved hand-authored regions; byte-identical on unchanged inputs
-- `cortex refresh-map` / `cortex refresh-state --enhance` — Phase E LLM-driven regeneration via the `claude` CLI
+- `cortex status` / `cortex doctor` — validate and report (orphan-deferral check ships v0.3.0; remaining invariant expansions v0.6.0)
+- `cortex journal draft <type>` / `cortex plan spawn <slug>` — v0.3.0 authoring helpers (deterministic; `journal draft` pre-fills from `git log` + `gh pr view` context). Also v0.3.0: `release` journal type + T1.10 release-event trigger.
+- `cortex plan status` / `cortex refresh-state` (deterministic, marker-preserved) / `cortex next` (deterministic MVP) — v0.4.0 read-side helpers
+- `cortex doctor --audit-instructions` (across-the-fourth-wall claim audit) / Manifest `Verified:` per-fact / Touchstone post-merge hook — v0.5.0 trust + automation layer
+- `cortex refresh-index` / `cortex promote <id>` (real writer) — v0.6.0 lifecycle layer
+- `cortex refresh-map` / `cortex refresh-state --enhance` / `cortex next --enhance` — **deferred from v1.0** to v1.x; LLM polish is parked because the conductor case study evidence is that polished prose hides staleness. See [`plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) `## Follow-ups (deferred)`.
 - No background daemon; all writes are explicit CLI invocations.
 
 ## Key Files
@@ -89,7 +91,7 @@ Python CLI (click + uv-managed venv) organized around layer commands. v0.2.3 shi
 | File | Purpose |
 |------|---------|
 | `SPEC.md` | The `.cortex/` file-format protocol, versioned (currently v0.3.1-dev draft) |
-| `.cortex/plans/cortex-v1.md` | The single active plan — Phase C (authoring) + Phase D (integrations) + Phase E (synthesis & governance) through v1.0.0 |
+| `.cortex/plans/cortex-v1.md` | The single active plan — six release-driven sub-sections (v0.3.0 → v1.0.0) under production-on-real-project framing; reranked 2026-04-24 from the original Phase C/D/E shape |
 | `README.md` | The story and composition narrative |
 | `docs/PRIOR_ART.md` | Research synthesis behind the spec's design rules (ADRs, Diataxis, WAL, Zettelkasten, MemGPT, Voyager) |
 | `.cortex/` | This repo's own Cortex dogfood — Doctrine + Journal entries about Cortex itself |
