@@ -1,20 +1,20 @@
 ---
-Generated: 2026-04-24T22:55:00-04:00
+Generated: 2026-04-24T23:10:00-04:00
 Generator: hand-authored (deterministic `cortex refresh-state` ships in v0.4.0 per the production-release rerank; LLM `refresh-state --enhance` and `refresh-map` deferred to v1.x post-production — tracked as release-driven sub-sections of the single plan at plans/cortex-v1)
 Sources:
-  - HEAD of branch `chore/dogfood-target-touchstone` (merge-base main at 6effe2c, the production-release-rerank merge; this snapshot describes the touchstone-as-v0.9.0-target decision that lands when the branch merges); cortex v0.2.3 currently on Homebrew
+  - HEAD of branch `docs/init-ux-fixes-plan` (merge-base main at 77693f9, the touchstone-target merge; this snapshot describes the v0.2.4 patch plan + same-commit decision journal that land when the branch merges); cortex v0.2.3 currently on Homebrew
   - https://github.com/autumngarage/cortex/releases (v0.1.0 through v0.2.3)
   - https://github.com/autumngarage/homebrew-cortex (tap repo)
   - .cortex/doctrine/ (5 entries: 0001–0003 + 0005 active with Load-priority: always; 0004 Superseded-by 0005)
   - .cortex/plans/ (2 active: init-ux-fixes-from-touchstone (v0.2.4 patch, P0) + cortex-v1 (v0.3.0 → v1.0.0, P1); cancelled 2026-04-24: phase-c-authoring-and-state, phase-d-integration, phase-e-synthesis-and-governance (all Promoted-to cortex-v1); cancelled 2026-04-23: phase-c-first-synthesis; shipped: phase-b-walking-skeleton 2026-04-18, vision-sharpening 2026-04-17)
-  - .cortex/journal/ (22 entries: 12 from 2026-04-17 + 2 from 2026-04-18 + 2 from 2026-04-23 (derive-success-from-preconditions, phase-c-reordered) + 6 from 2026-04-24 (case-study-driven-roadmap, single-plan-consolidation, v1-followups-parked, plan-md-deleted-as-redundant, production-release-rerank, dogfood-target-touchstone))
+  - .cortex/journal/ (23 entries: 12 from 2026-04-17 + 2 from 2026-04-18 + 2 from 2026-04-23 (derive-success-from-preconditions, phase-c-reordered) + 7 from 2026-04-24 (case-study-driven-roadmap, single-plan-consolidation, v1-followups-parked, plan-md-deleted-as-redundant, production-release-rerank, dogfood-target-touchstone, init-ux-fixes-plan-decision))
   - .cortex/templates/ (8 files)
   - .cortex/map.md (stub; refresh-map deferred from v1.0 to v1.x per the production rerank)
   - .cortex/procedures/ (empty; .gitkeep only)
   - docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md (conductor stale-CLAUDE.md incident)
   - SPEC.md v0.3.1-dev
   - pyproject.toml, src/cortex/ (scaffold + version + init + doctor + manifest + grep + status + promote commands + cortex.shell helper module as of 2026-04-23)
-Corpus: 5 Doctrine entries, 2 active Plans (init-ux-fixes-from-touchstone v0.2.4 P0; cortex-v1 v0.3.0 → v1.0.0 P1), 22 Journal entries, 8 Templates, 1 Case study (conductor stale-CLAUDE.md 2026-04-24), 1 Python package (cortex 0.2.3 with `version` + `init` (incl. `--local-only`) + `doctor` (incl. `--audit` / `--audit-digests`) + `manifest` + `grep` + `status` + `promote` commands + `cortex.shell` helpers)
+Corpus: 5 Doctrine entries, 2 active Plans (init-ux-fixes-from-touchstone v0.2.4 P0; cortex-v1 v0.3.0 → v1.0.0 P1), 23 Journal entries, 8 Templates, 1 Case study (conductor stale-CLAUDE.md 2026-04-24), 1 Python package (cortex 0.2.3 with `version` + `init` (incl. `--local-only`) + `doctor` (incl. `--audit` / `--audit-digests`) + `manifest` + `grep` + `status` + `promote` commands + `cortex.shell` helpers)
 Omitted:
   - .cortex/.index.json — per SPEC § 2 the file is auto-maintained by the Cortex CLI and its absence is expected until v0.6.0's `.index.json` writer ships (the lifecycle layer; the index backs promotion-queue governance, sequenced after the v0.3.0–v0.5.0 write/read/trust foundations). `cortex status` and `cortex promote` already handle this state gracefully.
 Incomplete:

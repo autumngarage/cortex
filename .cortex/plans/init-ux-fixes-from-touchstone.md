@@ -5,7 +5,8 @@ Author: claude-session-2026-04-24
 Goal-hash: db2ef686
 Updated-by:
   - 2026-04-24T22:50 claude-session-2026-04-24 (created from the touchstone dogfood UX test; scoped as a v0.2.4 patch series so the Sev-1 / Sev-2 bugs that make Cortex regressive on Touchstone-style projects don't ride along into v0.3.0+)
-Cites: ../../SPEC.md, ../../.cortex/protocol.md, plans/cortex-v1, journal/2026-04-24-dogfood-target-touchstone, journal/2026-04-24-production-release-rerank, ../doctrine/0001-why-cortex-exists, ../doctrine/0005-scope-boundaries-v2, ../../principles/documentation-ownership.md
+  - 2026-04-24T23:05 claude-session-2026-04-24 (added journal/2026-04-24-init-ux-fixes-plan-decision as the in-tree resolution target for the four ## Follow-ups (deferred) items per SPEC § 4.2 + Codex review on PR #33; also folded Sev-3 #6 (Phase C terminology in scaffolded outputs) into Slice 3 ride-along scope)
+Cites: ../../SPEC.md, ../../.cortex/protocol.md, plans/cortex-v1, journal/2026-04-24-dogfood-target-touchstone, journal/2026-04-24-production-release-rerank, journal/2026-04-24-init-ux-fixes-plan-decision, ../doctrine/0001-why-cortex-exists, ../doctrine/0005-scope-boundaries-v2, ../../principles/documentation-ownership.md
 ---
 
 # Cortex Init UX Fixes from Touchstone Dogfood
@@ -133,7 +134,9 @@ This plan is done when **`cortex init -y --path ~/Repos/touchstone`, after rolli
 
 ## Follow-ups (deferred)
 
-- **Sev-3 #6 (state.md Phase C terminology)** — still surfaces from any v0.2.x install because the Generator strings are baked into v0.2.3. Will resolve naturally on v0.3.0 install. Tracked in [`plans/cortex-v1`](./cortex-v1.md) as v0.3.0 implicit cleanup; no separate work item.
-- **`cortex init --dry-run` flag** — Sev-2 issues argue for a preview mode so users can see absorb decisions before writing. Worthy v0.3.0 add but not required for v0.2.4. Resolved by [`plans/cortex-v1.md`](./cortex-v1.md) `### v0.3.0` work items (the keystone PR scope can absorb a `--dry-run` flag if appetite permits).
-- **`--audit-instructions` extension to "is Cortex pulling its weight?"** — Sev-1 #1 specifically argues that v0.5.0's audit should detect when `.cortex/` adds no content beyond what CLAUDE.md already imports, and warn. Resolved by [`plans/cortex-v1.md`](./cortex-v1.md) `### v0.5.0` `cortex doctor --audit-instructions` work item; this plan does not expand v0.5.0's scope.
-- **Stub-Doctrine detection in `cortex doctor`** — orthogonal to init: if any Doctrine entry contains a "See `<path>` for the full content" pattern with no other prose, flag as `Status: shallow`. Out of scope for v0.2.4 (would require new SPEC field); revisit during v0.6.0 doctor invariant expansions.
+Each item resolves to [`journal/2026-04-24-init-ux-fixes-plan-decision`](../journal/2026-04-24-init-ux-fixes-plan-decision.md) (the same-commit decision journal that records the plan's filing rationale and parks these items with explicit revisit conditions). Per SPEC § 4.2, no orphan deferrals.
+
+- **Sev-3 #6 (state.md / map.md Phase C terminology in scaffolded outputs)** — Generator strings shipped in `cortex init` v0.2.3 reference "Phase C" instead of v0.4.0 / v1.x. **Decision: ride along in v0.2.4** (Slice 3 — fold into the same scaffolding-template touch as Sev-3 #5). Parked entry #1 in [`journal/2026-04-24-init-ux-fixes-plan-decision`](../journal/2026-04-24-init-ux-fixes-plan-decision.md) — no separate revisit needed; ships in this plan.
+- **`cortex init --dry-run` flag** — preview-mode for the absorb scan. Sev-2 fixes (README filter + 0100-numbering reservation) reduce the original argument's force. Parked entry #2 in [`journal/2026-04-24-init-ux-fixes-plan-decision`](../journal/2026-04-24-init-ux-fixes-plan-decision.md); revisit at v0.3.0 kickoff if conditions hold.
+- **`--audit-instructions` extension to "is Cortex pulling its weight?"** — broader audit shape than v0.5.0's external-claim scope; would warrant its own command or a config-toggled mode. Parked entry #3 in [`journal/2026-04-24-init-ux-fixes-plan-decision`](../journal/2026-04-24-init-ux-fixes-plan-decision.md); revisit at v0.5.0 exit-bar review.
+- **Stub-Doctrine detection in `cortex doctor`** — flag Doctrine entries whose body is solely a "See `<path>` for the full content" pattern. Requires a new SPEC § 3.1 `Status:` enum value plus a doctor invariant — too large for v0.2.4. Parked entry #4 in [`journal/2026-04-24-init-ux-fixes-plan-decision`](../journal/2026-04-24-init-ux-fixes-plan-decision.md); revisit during v0.6.0 invariant expansions if conditions hold.
