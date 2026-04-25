@@ -3,7 +3,7 @@ revision = 3
 requires-python = ">=3.11"
 
 [options]
-exclude-newer = "2026-04-18T12:28:51.330946Z"
+exclude-newer = "2026-04-18T13:13:24.21209Z"
 exclude-newer-span = "P7D"
 
 [[package]]
@@ -29,7 +29,7 @@ wheels = [
 
 [[package]]
 name = "cortex"
-version = "0.2.4"
+version = "0.2.5"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
