@@ -109,18 +109,19 @@ _STUB_BODIES: dict[str, str] = {
         "> **Hand-authored placeholder.** `cortex init` wrote this as a scaffolded "
         "starting point. Edit it freely — describe the current priorities, open "
         "questions, and load-bearing context you want agents to load at session "
-        "start. When the `cortex refresh-state` command ships (Phase C — tracked "
-        "in the Cortex repo plans), it will regenerate this layer from the "
-        "journal and plans automatically; until then, hand-editing is the "
-        "intended workflow."
+        "start. When the deterministic `cortex refresh-state` command ships in "
+        "v0.4.0 (per the 2026-04-24 production-release rerank), it will "
+        "regenerate this layer from the journal and plans automatically; until "
+        "then, hand-editing is the intended workflow."
     ),
     "map": (
         "> **Hand-authored placeholder.** `cortex init` wrote this as a scaffolded "
         "starting point. Edit it to describe the structural view of your "
-        "codebase (key modules, entry points, data flows). When "
-        "`cortex refresh-map` ships (Phase E — LLM synthesis, tracked in the "
-        "Cortex repo plans), it will regenerate this from code + git automatically; "
-        "until then, hand-editing is the intended workflow."
+        "codebase (key modules, entry points, data flows). The LLM-driven "
+        "`cortex refresh-map` is **deferred from the v1.0 path to v1.x** per "
+        "the 2026-04-24 production-release rerank — solo authors already know "
+        "their map; the synthesis is a contributor-onboarding feature. Until "
+        "`refresh-map` ships, hand-editing is the intended workflow."
     ),
 }
 
@@ -137,7 +138,9 @@ def _derived_stub(
     The seven-field frontmatter is load-bearing — `cortex doctor` validates it
     (SPEC § 4.5). Only the prose body is user-facing guidance, and it's phrased
     for the hand-editing workflow that's expected until `cortex refresh-{layer}`
-    ships (Phase C for state, Phase E for map per the 2026-04-23 roadmap reorder).
+    ships. Per the 2026-04-24 production-release rerank: deterministic
+    `cortex refresh-state` ships in **v0.4.0**; LLM `cortex refresh-map` is
+    **deferred from the v1.0 path to v1.x**.
 
     ``sources`` is a list of relative paths the scan classified as ``map_ref``
     or ``reference`` and that the State layer should cite. When non-empty,
@@ -147,12 +150,13 @@ def _derived_stub(
     """
     now = _now_iso()
     body = _STUB_BODIES[layer]
-    # Per the 2026-04-23 roadmap reorder: deterministic `cortex refresh-state`
-    # ships in Phase C, LLM `cortex refresh-map` ships in Phase E. Each stub
-    # names its own arrival phase so users reading the scaffolded file don't
-    # get stale guidance from a cortex version that was generated before
-    # the reorder landed.
-    refresh_phase = "Phase C" if layer == "state" else "Phase E"
+    # Per the 2026-04-24 production-release rerank: deterministic
+    # `cortex refresh-state` ships in v0.4.0; LLM `cortex refresh-map`
+    # is deferred from v1.0 to v1.x. Each stub names its own arrival
+    # framing so users reading the scaffolded file don't get stale
+    # guidance from a cortex version that was generated before the
+    # rerank landed.
+    refresh_phase = "v0.4.0" if layer == "state" else "v1.x (deferred from v1.0 path)"
     if sources:
         sources_yaml = "\n".join(f"  - {src}" for src in sources)
         corpus_line = f"Corpus: {len(sources)} files (scan-discovered, not synthesized)"
@@ -585,6 +589,16 @@ def _print_scan_summary(scan: ScanResult) -> None:
             click.echo(f"    {f.relative}")
         click.echo("")
 
+    meta_docs = scan.by_category("meta_doc")
+    if meta_docs:
+        click.echo(
+            "  Skipped (meta-doc filename — README files are orientation "
+            "prose, not doctrine; override via .cortex/.discover.toml):"
+        )
+        for f in meta_docs:
+            click.echo(f"    {f.relative}")
+        click.echo("")
+
     plans = scan.by_category("plan")
     if plans:
         click.echo("  Plan candidates (Y/n on each, Success-Criteria stubbed as TODO):")
@@ -639,10 +653,18 @@ def _print_scan_summary(scan: ScanResult) -> None:
             click.echo("  Sentinel signal: ✓ .sentinel/ exists, no runs detected")
 
     if scan.unscoped_constraint_count:
-        click.echo(
-            f"  CLAUDE.md/AGENTS.md unscoped constraints: {scan.unscoped_constraint_count} "
-            "(run `cortex doctor` after init for per-line detail)"
-        )
+        location = scan.unscoped_constraint_first_location
+        if location:
+            click.echo(
+                f"  CLAUDE.md/AGENTS.md unscoped constraints: {scan.unscoped_constraint_count} "
+                f"({location}{' — first of multiple' if scan.unscoped_constraint_count > 1 else ''}; "
+                "run `cortex doctor` for full detail)"
+            )
+        else:  # pragma: no cover — defensive; count > 0 implies a location
+            click.echo(
+                f"  CLAUDE.md/AGENTS.md unscoped constraints: {scan.unscoped_constraint_count} "
+                "(run `cortex doctor` for per-line detail)"
+            )
 
     click.echo("")
 
@@ -898,16 +920,23 @@ def init_command(
     # metadata stays truthful across releases (no hand-bump to remember).
     init_generator = f"cortex init v{CORTEX_VERSION}"
     # State layer's Sources field is enriched with anything the scan
-    # classified as map_ref (READMEs/ARCHITECTURE/SETUP) or reference
-    # (CHANGELOGs, journal/*) so a fresh state.md cites the project's
-    # existing documentation directly. Map layer stays scaffold-empty for
-    # now; structural inputs are code+git, not markdown sources, so the
-    # scan can't enrich it usefully — that's `cortex refresh-map`'s job
-    # in Phase C.
+    # classified as map_ref (READMEs/ARCHITECTURE/SETUP), reference
+    # (CHANGELOGs, journal/*), or doctrine (principles/*.md, decisions/*.md
+    # — the files about to be absorbed as Doctrine entries) so a fresh
+    # state.md cites the full set of documentation that informed any layer.
+    # Fix #5 from plans/init-ux-fixes-from-touchstone — v0.2.3 omitted
+    # the doctrine sources, leaving Sources internally inconsistent with
+    # the .cortex/doctrine/ entries init created in the same invocation.
+    # touchstone_managed and meta_doc are intentionally excluded — those
+    # categories represent files Cortex saw but deliberately did NOT cite
+    # (Touchstone owns them via @path / they're orientation prose).
+    # Map layer stays scaffold-empty; structural inputs are code+git, not
+    # markdown sources, so the scan can't enrich it usefully — that's
+    # `cortex refresh-map`'s job in v1.x.
     state_sources = [
         f.relative
         for f in scan.findings
-        if f.category in ("map_ref", "reference")
+        if f.category in ("map_ref", "reference", "doctrine")
     ]
     for layer, title in (
         ("map", "Project Map"),
@@ -1092,13 +1121,24 @@ def init_command(
                 "with this project."
             )
 
-    click.echo("Next steps:")
-    click.echo("  1. Author doctrine/0001-why-<project>-exists.md (see templates/doctrine/candidate.md for shape).")
+    # Build the Next-steps list contiguously (Fix #7 from
+    # plans/init-ux-fixes-from-touchstone — v0.2.3 emitted "1." then "3."
+    # with step 2 conditionally suppressed but the numbering not
+    # renumbered, leaving a gap that confused dogfood users).
+    next_steps: list[str] = [
+        "Author doctrine/0001-why-<project>-exists.md (see templates/doctrine/candidate.md for shape).",
+    ]
     if not want_claude and not want_agents and not local_only:
         # In local-only mode, committing `@.cortex/...` imports would leave
         # dangling references for downstream clones — don't recommend it.
-        click.echo("  2. Import `@.cortex/protocol.md` and `@.cortex/state.md` into your AGENTS.md or CLAUDE.md.")
-    click.echo("  3. Run `cortex doctor` to validate the scaffold against SPEC.md.")
+        next_steps.append(
+            "Import `@.cortex/protocol.md` and `@.cortex/state.md` into your AGENTS.md or CLAUDE.md."
+        )
+    next_steps.append("Run `cortex doctor` to validate the scaffold against SPEC.md.")
+
+    click.echo("Next steps:")
+    for idx, step in enumerate(next_steps, start=1):
+        click.echo(f"  {idx}. {step}")
 
     # Teach-by-doing (doctrine 0002 § 5): print the exact flag-form command
     # that reproduces this invocation non-interactively. Scripters learn the

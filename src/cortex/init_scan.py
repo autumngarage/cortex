@@ -72,13 +72,28 @@ from typing import Literal
 #   stub-pointer Doctrine entry on top of that adds no content and *displaces*
 #   real Doctrine in the session-start manifest budget. Surface in scan
 #   output as informational; do not seed.
-Category = Literal["doctrine", "plan", "reference", "map_ref", "unknown", "touchstone_managed"]
+# - ``meta_doc`` — would have classified as ``doctrine`` by a built-in
+#   pattern but the filename is README.md (case-insensitive). README files
+#   are orientation prose for the directory they live in, not doctrine
+#   content. Surface in scan output as "Skipped (meta-doc filename):"; do
+#   not seed. User-taught ``.cortex/.discover.toml`` doctrine patterns
+#   override this filter (explicit user instruction wins).
+Category = Literal[
+    "doctrine", "plan", "reference", "map_ref", "unknown", "touchstone_managed", "meta_doc"
+]
 
 # Pattern categories include everything in ``Category`` plus ``skip`` — the
 # latter is a user-taught directive that suppresses matches without producing
 # findings. ``Category`` (no ``skip``) is what flows through ``Finding``.
 PatternCategory = Literal[
-    "doctrine", "plan", "reference", "map_ref", "unknown", "touchstone_managed", "skip"
+    "doctrine",
+    "plan",
+    "reference",
+    "map_ref",
+    "unknown",
+    "touchstone_managed",
+    "meta_doc",
+    "skip",
 ]
 
 # Globs whose matches should be reclassified as ``touchstone_managed`` when
@@ -90,6 +105,13 @@ _TOUCHSTONE_MANAGED_DOCTRINE_GLOBS: frozenset[str] = frozenset({
     "principles/*.md",
     "docs/principles/*.md",
 })
+
+# Filenames (case-insensitive basename) that should NEVER be auto-imported
+# as Doctrine when matched by a built-in pattern. README files are
+# orientation prose; doctrine content lives in sibling files. User-taught
+# patterns from .cortex/.discover.toml bypass this filter (explicit user
+# instruction wins over the conservative default).
+_META_DOC_BASENAMES: frozenset[str] = frozenset({"readme.md"})
 
 
 @dataclass(frozen=True)
@@ -252,6 +274,12 @@ class ScanResult:
     # the scan summary; the existing doctor warning surfaces the per-line
     # detail after init finishes.
     unscoped_constraint_count: int = 0
+    # First unscoped-constraint location ("path.md:line") for inline display
+    # in the scan summary. Lets the printer name the first hit instead of
+    # only the count, saving a follow-up `cortex doctor` invocation for the
+    # common single-warning case (Fix #6 from
+    # plans/init-ux-fixes-from-touchstone). None when count is 0.
+    unscoped_constraint_first_location: str | None = None
 
     def by_category(self, category: Category) -> list[Finding]:
         """Findings filtered by category, preserving discovery order."""
@@ -466,15 +494,25 @@ def _detect_sibling_signals(project_root: Path) -> SiblingSignals:
     return sig
 
 
-def _count_unscoped_constraints(project_root: Path) -> int:
-    """Use the existing doctor heuristic so init's count matches doctor's report.
+def _count_unscoped_constraints(project_root: Path) -> tuple[int, str | None]:
+    """Return (count, first-location-or-None) from the existing doctor heuristic.
 
-    Imported lazily so the scan module stays import-cheap when consumers
-    don't need the count.
+    The location is a short ``"path.md:line"`` string extracted from the
+    first issue's message (which already has shape ``"path.md:line: ..."``
+    per the doctor's existing rendering convention). When no issues are
+    found, returns ``(0, None)``. Imported lazily so the scan module
+    stays import-cheap when consumers don't need the count.
     """
     from cortex.validation import check_claude_agents
 
-    return len(check_claude_agents(project_root))
+    issues = check_claude_agents(project_root)
+    if not issues:
+        return 0, None
+    # Issue.message is already "<path>:<line>: <text>"; take the prefix.
+    first = issues[0].message
+    colon_two = first.find(":", first.find(":") + 1)
+    location = first[:colon_two] if colon_two != -1 else issues[0].path
+    return len(issues), location
 
 
 # --- Filesystem walk --------------------------------------------------------
@@ -560,6 +598,14 @@ def scan_project(project_root: Path) -> ScanResult:
     all_patterns: list[Pattern] = list(BUILT_IN_PATTERNS) + _load_user_patterns(project_root)
     skip_patterns = [p for p in all_patterns if p.category == "skip"]
     match_patterns = [p for p in all_patterns if p.category != "skip"]
+    # User-taught doctrine patterns — used to override the built-in
+    # meta_doc filter (Fix #3). When a built-in doctrine pattern matches
+    # a README.md file we'd normally reclassify as meta_doc, but if a
+    # user-taught doctrine pattern ALSO matches, the user's explicit
+    # instruction wins.
+    user_doctrine_patterns = [
+        p for p in _load_user_patterns(project_root) if p.category == "doctrine"
+    ]
 
     classified_paths: set[Path] = set()
     for path in candidates:
@@ -596,6 +642,18 @@ def scan_project(project_root: Path) -> ScanResult:
                 and pattern.glob in _TOUCHSTONE_MANAGED_DOCTRINE_GLOBS
             ):
                 category = "touchstone_managed"
+            # README files matched by built-in doctrine patterns get
+            # reclassified to meta_doc (orientation prose, not doctrine
+            # content). User-taught patterns from .discover.toml bypass
+            # this filter — if the user has an explicit doctrine pattern
+            # that matches the same path, their instruction wins.
+            elif (
+                category == "doctrine"
+                and pattern.source == "built-in"
+                and path.name.lower() in _META_DOC_BASENAMES
+                and not any(_matches_pattern(rel_posix, p) for p in user_doctrine_patterns)
+            ):
+                category = "meta_doc"
             result.findings.append(
                 Finding(
                     path=path,
@@ -649,10 +707,12 @@ def scan_project(project_root: Path) -> ScanResult:
         "touchstone_managed": 1,  # Surfaced right after Doctrine since it's
         # the "what would have been Doctrine if we hadn't detected
         # Touchstone" bucket.
-        "plan": 2,
-        "reference": 3,
-        "map_ref": 4,
-        "unknown": 5,
+        "meta_doc": 2,  # Same shape — "what would have been Doctrine if it
+        # weren't a meta-doc filename".
+        "plan": 3,
+        "reference": 4,
+        "map_ref": 5,
+        "unknown": 6,
     }
     result.findings.sort(key=lambda f: (bucket.get(f.category, 99), f.relative))
 
@@ -661,9 +721,12 @@ def scan_project(project_root: Path) -> ScanResult:
     # store on the result so the printer can reuse them.
     result.sibling_signals = sibling_signals
 
-    # Constraint count — uses the existing doctor heuristic so the number
-    # init prints matches what `cortex doctor` will report after init.
-    result.unscoped_constraint_count = _count_unscoped_constraints(project_root)
+    # Constraint count + first-issue location — uses the existing doctor
+    # heuristic so the number init prints matches what `cortex doctor` will
+    # report after init.
+    count, first_loc = _count_unscoped_constraints(project_root)
+    result.unscoped_constraint_count = count
+    result.unscoped_constraint_first_location = first_loc
 
     return result
 
