@@ -1,15 +1,24 @@
 ---
-Status: active
+Status: shipped
 Written: 2026-04-24
+Shipped: 2026-04-25
 Author: claude-session-2026-04-24
 Goal-hash: db2ef686
 Updated-by:
   - 2026-04-24T22:50 claude-session-2026-04-24 (created from the touchstone dogfood UX test; scoped as a v0.2.4 patch series so the Sev-1 / Sev-2 bugs that make Cortex regressive on Touchstone-style projects don't ride along into v0.3.0+)
   - 2026-04-24T23:05 claude-session-2026-04-24 (added journal/2026-04-24-init-ux-fixes-plan-decision as the in-tree resolution target for the four ## Follow-ups (deferred) items per SPEC § 4.2 + Codex review on PR #33; also folded Sev-3 #6 (Phase C terminology in scaffolded outputs) into Slice 3 ride-along scope)
-Cites: ../../SPEC.md, ../../.cortex/protocol.md, plans/cortex-v1, journal/2026-04-24-dogfood-target-touchstone, journal/2026-04-24-production-release-rerank, journal/2026-04-24-init-ux-fixes-plan-decision, ../doctrine/0001-why-cortex-exists, ../doctrine/0005-scope-boundaries-v2, ../../principles/documentation-ownership.md
+  - 2026-04-25T09:25 claude-session-2026-04-25 (Status: active → shipped — all five Slices complete; v0.2.4 (Sev-1) + v0.2.5 (Sev-2/3/4) released; brew-installed v0.2.5 re-tested clean on touchstone; closure recorded in journal/2026-04-25-init-ux-fixes-plan-shipped)
+Promoted-to: journal/2026-04-25-init-ux-fixes-plan-shipped
+Cites: ../../SPEC.md, ../../.cortex/protocol.md, plans/cortex-v1, journal/2026-04-24-dogfood-target-touchstone, journal/2026-04-24-production-release-rerank, journal/2026-04-24-init-ux-fixes-plan-decision, journal/2026-04-25-v0.2.4-touchstone-re-test-clean, journal/2026-04-25-init-ux-fixes-plan-shipped, ../doctrine/0001-why-cortex-exists, ../doctrine/0005-scope-boundaries-v2, ../../principles/documentation-ownership.md
 ---
 
 # Cortex Init UX Fixes from Touchstone Dogfood
+
+> **Shipped 2026-04-25.** All five Slices complete; both Sev-1 + four Sev-2/3/4 fixes shipped across [v0.2.4](https://github.com/autumngarage/cortex/releases/tag/v0.2.4) (PRs #34 + #35) and [v0.2.5](https://github.com/autumngarage/cortex/releases/tag/v0.2.5) (PRs #37 + #38) and verified live on touchstone via Homebrew install. Closure recorded in [`journal/2026-04-25-init-ux-fixes-plan-shipped`](../journal/2026-04-25-init-ux-fixes-plan-shipped.md). v0.3.0 work on [`plans/cortex-v1`](./cortex-v1.md) resumes next.
+>
+> *Original scope follows, preserved unchanged for historical reference. Work items below are marked `[x]` per the closure update.*
+
+---
 
 > v0.2.4 patch series fixing bugs surfaced by running `cortex init -y --path ~/Repos/touchstone` on 2026-04-24. The two Sev-1 bugs make Cortex *regressive* on projects that already have working `@path` imports in CLAUDE.md/AGENTS.md — fixing them is a precondition for the v0.9.0 dogfood gate (currently targeting touchstone) producing meaningful evidence rather than evidence of bugs that should have been caught earlier.
 
@@ -62,14 +71,14 @@ This plan is done when **`cortex init -y --path ~/Repos/touchstone`, after rolli
 
 ### Slice 1 — Sev-1 fixes (v0.2.4 must-ship)
 
-- [ ] **Fix #1: Don't auto-import Touchstone-managed paths as Doctrine.**
+- [x] **Fix #1: Don't auto-import Touchstone-managed paths as Doctrine.**
   - Where: `src/cortex/init.py` (or the discovery module — identify in the first commit). Locate the loop that classifies `principles/*.md` as Doctrine candidates.
   - Add condition: when the project's Touchstone integration is detected (any of `.touchstone-config`, `.touchstone-manifest`, `.touchstone-version` present at project root — same signals already surfaced in the "Touchstone signals: ✓" scan output line), skip files under `principles/` from Doctrine candidate classification.
   - Skip surfaces in scan output as a new "Detected Touchstone-managed; skipped from Doctrine import (already imported via @path in CLAUDE.md/AGENTS.md)" line listing each skipped file.
   - Acceptance: `cortex init -y --path <touchstone-fixture>` produces zero `.cortex/doctrine/000N-*.md` entries derived from `principles/*.md`. Existing scan output for the rest of the absorb (map references, reference-only, unknown patterns) unchanged.
   - Test: `tests/test_init_touchstone_managed.py` — fixture sets up a temp repo with `.touchstone-config` + `.touchstone-version` files and a `principles/foo.md`. Asserts post-init that `(temp/.cortex/doctrine/).iterdir()` returns no entry whose `Imported-from:` frontmatter equals `principles/foo.md`.
 
-- [ ] **Fix #2: Append CLAUDE.md / AGENTS.md imports at end of file, not in the middle.**
+- [x] **Fix #2: Append CLAUDE.md / AGENTS.md imports at end of file, not in the middle.**
   - Where: `src/cortex/init.py`, the function(s) that handle `--add-imports-claude` / `--add-imports-agents`.
   - Change: replace the current placement heuristic (which inserts after the last `@`-import line) with strict append-to-end. Ensure exactly one trailing newline before the appended block; ensure exactly one blank line between the appended block and any existing content; ensure the appended block ends with a single trailing newline.
   - Acceptance: on the touchstone fixture (CLAUDE.md ending with `## Release & Distribution` body), the resulting CLAUDE.md has the two new `## ` sections after the existing `## Release & Distribution` body, with no existing `### ` sub-heading reparented.
@@ -78,13 +87,13 @@ This plan is done when **`cortex init -y --path ~/Repos/touchstone`, after rolli
 
 ### Slice 2 — Sev-2 fixes (ride-along; ship in same PR if scope allows)
 
-- [ ] **Fix #3: Filter `**/README.md` from Doctrine candidates by default.**
+- [x] **Fix #3: Filter `**/README.md` from Doctrine candidates by default.**
   - Where: same discovery module. Add a default-skip filter for any path matching `**/README.md` in the Doctrine candidate scanner. Surface in scan output as "Skipped (meta-doc filename): <path>".
   - Override: existing `.cortex/.discover.toml` `[[pattern]]` entries with `category = "doctrine"` should still win for explicit user instruction. The default-skip is only a default.
   - Acceptance: on touchstone fixture, no `doctrine/000N-readme.md` is created from any README.md.
   - Test: `tests/test_init_readme_filter.py` — fixture has `principles/README.md`, asserts no Doctrine entry imports it post-init. Add a second fixture with an explicit `.discover.toml` override that opts the README in; assert it IS imported in that case.
 
-- [ ] **Fix #4: Reserve doctrine/0001 for the human-authored "why X exists" entry; auto-imported Doctrine starts at 0100.**
+- [x] **Fix #4: Reserve doctrine/0001 for the human-authored "why X exists" entry; auto-imported Doctrine starts at 0100.**
   - Where: same discovery module's numbering logic.
   - Change: when allocating numeric IDs for auto-imported Doctrine entries, start at 0100 (not 0001). Human-authored entries that the user creates with `cortex doctrine draft` (when that ships in v1.x) or by hand will use 0001-0099.
   - Acceptance: on a **non-Touchstone fixture** (project with `principles/foo.md` + `principles/bar.md` but NO `.touchstone-config` / `.touchstone-version` — so Fix #1's skip rule does not apply and absorption proceeds), the first auto-imported Doctrine becomes `doctrine/0100-foo.md`, not `doctrine/0001-foo.md`. (On the Touchstone fixture, Fix #1 ensures zero principles imports — that test exercises Fix #1, not Fix #4. The two fixtures are distinct on purpose.)
@@ -93,25 +102,25 @@ This plan is done when **`cortex init -y --path ~/Repos/touchstone`, after rolli
 
 ### Slice 3 — Sev-3 / Sev-4 (cosmetic; ship if cheap, else defer to v0.3.0)
 
-- [ ] **Fix #5: state.md Sources should include all files that informed any layer.**
+- [x] **Fix #5: state.md Sources should include all files that informed any layer.**
   - Where: same module that writes the scaffolded state.md.
   - Change: when listing Sources, include not just the scan-discovered files (CHANGELOG.md, README.md, hooks/README.md) but also every file whose content was imported into Doctrine. Format: keep the list short — "principles/*.md (N files imported as Doctrine 0100-01NN)" is acceptable.
   - Acceptance: on a **non-Touchstone fixture** (where Fix #1 doesn't suppress principles imports), state.md Sources lists the scan-discovered files plus every file imported as Doctrine. On the **Touchstone fixture** (where Fix #1 skips principles imports), state.md Sources still lists the scan-discovered files and the absence of Doctrine sources matches the absence of Doctrine imports — internally consistent.
   - Test: extend `test_init_touchstone_managed.py` (assertion: Touchstone fixture's state.md Sources lists scan-discovered files but no `principles/*` entries) AND extend `test_init_doctrine_numbering.py` (assertion: non-Touchstone fixture's state.md Sources lists each Doctrine source file alongside the scan-discovered ones).
 
-- [ ] **Fix #6: "1 unscoped constraint" output inlines the file:line ref.**
+- [x] **Fix #6: "1 unscoped constraint" output inlines the file:line ref.**
   - Where: the scan-output formatter.
   - Change: instead of "CLAUDE.md/AGENTS.md unscoped constraints: 1 (run `cortex doctor` after init for per-line detail)", print "CLAUDE.md/AGENTS.md unscoped constraints: 1 (AGENTS.md:35 — run `cortex doctor` for full detail)". Reuse the same parser the doctor uses.
   - Acceptance: on touchstone fixture, scan output names the line.
   - Test: extend `test_init_touchstone_managed.py`.
 
-- [ ] **Fix #7: Next steps numbering bug ("step 1, step 3" — missing step 2).**
+- [x] **Fix #7: Next steps numbering bug ("step 1, step 3" — missing step 2).**
   - Where: the scan-output writer for the "Next steps:" block.
   - Change: investigate. Likely a conditional that drops step 2 when no Plan candidates were found, but doesn't renumber. Renumber so steps are always 1, 2, 3, ... in sequence.
   - Acceptance: on touchstone fixture, scan output's Next steps numbering is contiguous.
   - Test: snapshot test on the scan output structure.
 
-- [ ] **Fix #8: `cortex --status-only --path X` accepts `--path`.**
+- [x] **Fix #8: `cortex --status-only --path X` accepts `--path`.**
   - Where: top-level CLI flag definition.
   - Change: top-level `--status-only` should accept the same `--path` option that `cortex status` subcommand does.
   - Acceptance: `cortex --status-only --path /tmp/foo` works the same as `cortex status --path /tmp/foo`.
@@ -119,18 +128,18 @@ This plan is done when **`cortex init -y --path ~/Repos/touchstone`, after rolli
 
 ### Slice 4 — Release ritual
 
-- [ ] Bump version in `src/cortex/__init__.py` to **0.2.4** (regardless of which slices landed in the release-cutting PR — v0.2.4 is the next patch). If Slice 1 + ride-alongs all shipped together, v0.2.4 covers them all. If only Slice 1 shipped and Slices 2/3 land in a follow-up PR after v0.2.4 is tagged, that follow-up release becomes v0.2.5. The version-bump PR includes only the slices being released.
-- [ ] Bump version in `pyproject.toml` to match.
-- [ ] Tag, GitHub Release with notes covering each fix slice that landed in this release.
-- [ ] Update Homebrew formula `url` + `sha256` in `autumngarage/homebrew-cortex`.
-- [ ] Add a `release` journal entry to `.cortex/journal/` once the v0.3.0 `release` template lands; for v0.2.4 itself, write a hand-authored journal entry of `Type: pr-merged` for the release PR.
+- [x] Bump version in `src/cortex/__init__.py` to **0.2.4** (regardless of which slices landed in the release-cutting PR — v0.2.4 is the next patch). If Slice 1 + ride-alongs all shipped together, v0.2.4 covers them all. If only Slice 1 shipped and Slices 2/3 land in a follow-up PR after v0.2.4 is tagged, that follow-up release becomes v0.2.5. The version-bump PR includes only the slices being released.
+- [x] Bump version in `pyproject.toml` to match.
+- [x] Tag, GitHub Release with notes covering each fix slice that landed in this release.
+- [x] Update Homebrew formula `url` + `sha256` in `autumngarage/homebrew-cortex`.
+- [x] Add a `release` journal entry to `.cortex/journal/` once the v0.3.0 `release` template lands; for v0.2.4 itself, write a hand-authored journal entry of `Type: pr-merged` for the release PR.
 
 ### Slice 5 — Re-test on touchstone
 
-- [ ] After v0.2.4 lands on Homebrew, roll back the current touchstone install (`cd ~/Repos/touchstone && rm -rf .cortex && git checkout CLAUDE.md AGENTS.md .gitignore`) and re-run `cortex init -y --path ~/Repos/touchstone`.
-- [ ] Verify each Success Criterion (1-7 above) on the re-installed result.
-- [ ] Capture the re-test as a journal entry on cortex's `.cortex/`. If clean, this entry is what closes this plan (Status: shipped, Promoted-to: that journal entry).
-- [ ] If the re-test surfaces new bugs, scope them as v0.2.5+ patch series in a successor plan; do not let scope creep extend this plan.
+- [x] After v0.2.4 lands on Homebrew, roll back the current touchstone install (`cd ~/Repos/touchstone && rm -rf .cortex && git checkout CLAUDE.md AGENTS.md .gitignore`) and re-run `cortex init -y --path ~/Repos/touchstone`.
+- [x] Verify each Success Criterion (1-7 above) on the re-installed result.
+- [x] Capture the re-test as a journal entry on cortex's `.cortex/`. If clean, this entry is what closes this plan (Status: shipped, Promoted-to: that journal entry).
+- [x] If the re-test surfaces new bugs, scope them as v0.2.5+ patch series in a successor plan; do not let scope creep extend this plan.
 
 ## Follow-ups (deferred)
 
