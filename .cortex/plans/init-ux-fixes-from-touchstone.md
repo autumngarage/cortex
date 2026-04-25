@@ -87,8 +87,8 @@ This plan is done when **`cortex init -y --path ~/Repos/touchstone`, after rolli
 - [ ] **Fix #4: Reserve doctrine/0001 for the human-authored "why X exists" entry; auto-imported Doctrine starts at 0100.**
   - Where: same discovery module's numbering logic.
   - Change: when allocating numeric IDs for auto-imported Doctrine entries, start at 0100 (not 0001). Human-authored entries that the user creates with `cortex doctrine draft` (when that ships in v1.x) or by hand will use 0001-0099.
-  - Acceptance: on touchstone fixture, the first auto-imported Doctrine becomes `doctrine/0100-engineering-principles.md`, not `doctrine/0001-readme.md` (which also stops existing per Fix #3).
-  - Test: `tests/test_init_doctrine_numbering.py` — fixture with two principle files, asserts they are imported as 0100 and 0101 (or higher), not 0001 and 0002.
+  - Acceptance: on a **non-Touchstone fixture** (project with `principles/foo.md` + `principles/bar.md` but NO `.touchstone-config` / `.touchstone-version` — so Fix #1's skip rule does not apply and absorption proceeds), the first auto-imported Doctrine becomes `doctrine/0100-foo.md`, not `doctrine/0001-foo.md`. (On the Touchstone fixture, Fix #1 ensures zero principles imports — that test exercises Fix #1, not Fix #4. The two fixtures are distinct on purpose.)
+  - Test: `tests/test_init_doctrine_numbering.py` — non-Touchstone fixture with two principle files, asserts they are imported as 0100 and 0101 (or higher), not 0001 and 0002.
   - Update Next-Steps text to drop any line that suggests authoring `0001` if `0100+` already exists; it can stay otherwise.
 
 ### Slice 3 — Sev-3 / Sev-4 (cosmetic; ship if cheap, else defer to v0.3.0)
@@ -119,9 +119,9 @@ This plan is done when **`cortex init -y --path ~/Repos/touchstone`, after rolli
 
 ### Slice 4 — Release ritual
 
-- [ ] Bump version in `src/cortex/__init__.py` to 0.2.4 (Sev-1 only) or 0.2.5 (Sev-1 + Sev-2/3/4 if all in same PR).
+- [ ] Bump version in `src/cortex/__init__.py` to **0.2.4** (regardless of which slices landed in the release-cutting PR — v0.2.4 is the next patch). If Slice 1 + ride-alongs all shipped together, v0.2.4 covers them all. If only Slice 1 shipped and Slices 2/3 land in a follow-up PR after v0.2.4 is tagged, that follow-up release becomes v0.2.5. The version-bump PR includes only the slices being released.
 - [ ] Bump version in `pyproject.toml` to match.
-- [ ] Tag, GitHub Release with notes covering each fix slice that landed.
+- [ ] Tag, GitHub Release with notes covering each fix slice that landed in this release.
 - [ ] Update Homebrew formula `url` + `sha256` in `autumngarage/homebrew-cortex`.
 - [ ] Add a `release` journal entry to `.cortex/journal/` once the v0.3.0 `release` template lands; for v0.2.4 itself, write a hand-authored journal entry of `Type: pr-merged` for the release PR.
 
