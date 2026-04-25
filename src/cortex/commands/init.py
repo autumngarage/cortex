@@ -254,41 +254,38 @@ _GITIGNORE_LOCAL_ONLY_ENTRY: str = ".cortex/"
 
 
 def _append_imports(target_file: Path) -> bool:
-    """Append the Cortex import block to `target_file` if not already present.
+    """Append the Cortex import block at the end of `target_file`.
 
     Returns True when the file was modified, False when the imports were
-    already present (idempotent path). The append is placed after the last
-    `@<path>` import line if one exists in the file; otherwise at the end of
-    the file separated by a blank line. Existing content is never rewritten.
+    already present (idempotent path). The append is **always at end-of-file**
+    with exactly one blank line separating prior content from the new block.
+    Existing content is never rewritten or reordered.
+
+    Why end-of-file rather than after the last ``@<path>`` import: the
+    "cluster with existing imports" heuristic broke document outlines on
+    real projects (touchstone dogfood 2026-04-24 — `### Never commit on
+    main` was reparented under `## Cortex Protocol` because the inserted
+    `## ` heading landed immediately after `@principles/git-workflow.md`
+    and before the existing `### ` sub-heading). End-of-file append never
+    reparents existing sub-headings; the cost is that imports may sit
+    physically apart from existing `@<path>` imports — acceptable since
+    Markdown loads the whole file regardless of order.
     """
     text = target_file.read_text()
     if _PROTOCOL_IMPORT_MARKER in text and _STATE_IMPORT_MARKER in text:
         # Both imports already present — no-op. Do not duplicate.
         return False
 
-    # Find the last existing `@<path>` import line so new imports cluster with
-    # the existing ones instead of landing at the bottom of a long file.
-    import_line_pattern = re.compile(r"^@\S+\s*$", re.MULTILINE)
-    matches = list(import_line_pattern.finditer(text))
-
-    if matches:
-        last = matches[-1]
-        # Insert after the last import line (which ends at `last.end()`), with
-        # a blank line separator. If the file already has content after the
-        # last import line it stays untouched below the insertion.
-        insertion = "\n\n" + _CORTEX_IMPORT_BLOCK
-        new_text = text[: last.end()] + insertion + text[last.end():]
+    # Always append at end of file with a blank-line guard (exactly one
+    # blank line separating prior content from the block).
+    if text.endswith("\n\n"):
+        new_text = text + _CORTEX_IMPORT_BLOCK
+    elif text.endswith("\n"):
+        new_text = text + "\n" + _CORTEX_IMPORT_BLOCK
+    elif text == "":
+        new_text = _CORTEX_IMPORT_BLOCK
     else:
-        # No existing imports — append at end of file with a blank-line guard
-        # (exactly one blank line separating prior content from the block).
-        if text.endswith("\n\n"):
-            new_text = text + _CORTEX_IMPORT_BLOCK
-        elif text.endswith("\n"):
-            new_text = text + "\n" + _CORTEX_IMPORT_BLOCK
-        elif text == "":
-            new_text = _CORTEX_IMPORT_BLOCK
-        else:
-            new_text = text + "\n\n" + _CORTEX_IMPORT_BLOCK
+        new_text = text + "\n\n" + _CORTEX_IMPORT_BLOCK
 
     target_file.write_text(new_text)
     return True
@@ -575,6 +572,16 @@ def _print_scan_summary(scan: ScanResult) -> None:
     if doctrine:
         click.echo("  Doctrine candidates (Y/n on each):")
         for f in doctrine:
+            click.echo(f"    {f.relative}")
+        click.echo("")
+
+    touchstone_managed = scan.by_category("touchstone_managed")
+    if touchstone_managed:
+        click.echo(
+            "  Detected Touchstone-managed; skipped from Doctrine import "
+            "(already imported via @path in CLAUDE.md/AGENTS.md):"
+        )
+        for f in touchstone_managed:
             click.echo(f"    {f.relative}")
         click.echo("")
 
