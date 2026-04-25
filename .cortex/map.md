@@ -20,7 +20,7 @@ Spec: 0.3.1
 
 When `cortex refresh-map` ships, it will produce sections covering:
 
-- **Top-level artifacts.** `SPEC.md`, `README.md`, `docs/PRIOR_ART.md`, `.cortex/` (incl. `.cortex/plans/cortex-v1.md` as the single active plan) — each with a one-sentence purpose.
+- **Top-level artifacts.** `SPEC.md`, `README.md`, `docs/PRIOR_ART.md`, `.cortex/` (active plans listed in `.cortex/state.md` `## Current work`) — each with a one-sentence purpose.
 - **`.cortex/` layout.** Doctrine (scope and why), Plans (active work), Journal (append-only decision trail), Templates (write scaffolds), Protocol (agent contract), State (priorities).
 - **Touchstone integration.** `principles/`, `scripts/`, `.pre-commit-config.yaml`, `.touchstone-config` — all project-owned but synced from the upstream Touchstone package.
 - **Future CLI source layout.** `src/cortex/` (when Phase B scaffolds it), `tests/`, `pyproject.toml`.

@@ -100,7 +100,7 @@ Python CLI (click + uv-managed venv) organized around layer commands. v0.2.3 shi
 
 ## State & Config
 
-- Project-owned files include `CLAUDE.md`, `AGENTS.md`, `.codex-review.toml`, `.pre-commit-config.yaml`, `setup.sh`, and the Cortex-native files in this repo (`SPEC.md`, `README.md`, `docs/`, `.cortex/` including `.cortex/plans/cortex-v1.md` as the single active plan).
+- Project-owned files include `CLAUDE.md`, `AGENTS.md`, `.codex-review.toml`, `.pre-commit-config.yaml`, `setup.sh`, and the Cortex-native files in this repo (`SPEC.md`, `README.md`, `docs/`, `.cortex/` — see `.cortex/state.md` `## Current work` for the active-plan list).
 - Touchstone-managed files live in `principles/` and `scripts/` and are synced via `touchstone update`.
 - No runtime config yet. When the CLI ships, per-project config (if any) will live in `.cortex/config.toml` or be derived entirely from `.cortex/` contents.
 
