@@ -15,7 +15,7 @@
 
 ## Outcome against success criteria
 
-The plan's `## Success Criteria` named seven measurable signals. Every one passes against the brew-installed v0.2.5 on touchstone:
+The plan's `## Success Criteria` named eight measurable signals. Every one passes against the brew-installed v0.2.5 on touchstone:
 
 | # | Criterion | Result |
 |---|---|---|
@@ -25,9 +25,8 @@ The plan's `## Success Criteria` named seven measurable signals. Every one passe
 | 4 | `0001` stays reserved for human-authored "why X exists" entry; auto-imports start at 0100 | ✓ — `_AUTO_IMPORT_DOCTRINE_FLOOR = 100` in `init_seeders.py`; verified on non-Touchstone fixture |
 | 5 | Idempotent re-run | ✓ — re-running `cortex init` on touchstone produces no NEW Doctrine entries; existing imports detected, idempotent skip path triggered |
 | 6 | Tests for each fix run against real `git init`'d temp repos | ✓ — 218 tests passing across `test_init_touchstone_managed.py` (11 tests) + `test_init_slice_3_cosmetic.py` (4 tests) + updated `test_init_interactive.py`; no mocked filesystem |
-| 7 | v0.2.4 release shipped | ✓ — tag, GitHub Release, Homebrew formula update at `9eb4eea`; verified `brew upgrade` works |
-
-Plus: v0.2.5 release (covering Slices 2-3) shipped — tag, [GitHub Release](https://github.com/autumngarage/cortex/releases/tag/v0.2.5), Homebrew formula update at `c5ad634`. `brew upgrade` from v0.2.4 → v0.2.5 verified locally.
+| 7 | Sev-3/Sev-4 fixes ship if cheap; otherwise defer to v0.3.0 | ✓ — all four Sev-3/Sev-4 ride-alongs (Fix #5 / #6 / #7 / #8) shipped in v0.2.5 alongside Sev-2 (Fix #3 / #4); none deferred |
+| 8 | v0.2.4 release | ✓ — tag, GitHub Release, Homebrew formula update at `9eb4eea`; verified `brew upgrade` works. Plus: v0.2.5 release (covering Slices 2-3) shipped — tag, [GitHub Release](https://github.com/autumngarage/cortex/releases/tag/v0.2.5), Homebrew formula update at `c5ad634`. `brew upgrade` from v0.2.4 → v0.2.5 verified locally |
 
 ## Slices completed
 

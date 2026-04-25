@@ -91,7 +91,7 @@ Python CLI (click + uv-managed venv) organized around layer commands. v0.2.3 shi
 | File | Purpose |
 |------|---------|
 | `SPEC.md` | The `.cortex/` file-format protocol, versioned (currently v0.3.1-dev draft) |
-| `.cortex/plans/*.md` | Active plans (currently two: `init-ux-fixes-from-touchstone.md` P0 v0.2.4 patch + `cortex-v1.md` P1 v0.3.0 → v1.0.0 release sequence). See `.cortex/state.md` `## Current work` for the canonical active-plan list. |
+| `.cortex/plans/*.md` | Active plans. Currently one: `cortex-v1.md` (v0.3.0 → v1.0.0 release sequence). The v0.2.4 → v0.2.5 patch plan (`init-ux-fixes-from-touchstone.md`) shipped 2026-04-25. See `.cortex/state.md` `## Current work` for the canonical active-plan list. |
 | `README.md` | The story and composition narrative |
 | `docs/PRIOR_ART.md` | Research synthesis behind the spec's design rules (ADRs, Diataxis, WAL, Zettelkasten, MemGPT, Voyager) |
 | `.cortex/` | This repo's own Cortex dogfood — Doctrine + Journal entries about Cortex itself |
