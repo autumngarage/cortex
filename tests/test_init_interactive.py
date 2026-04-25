@@ -173,10 +173,18 @@ def test_yes_does_not_create_agents_md_when_absent(tmp_path: Path) -> None:
 # --- import placement ------------------------------------------------------
 
 
-def test_imports_placed_after_existing_import_block(tmp_path: Path) -> None:
-    """When CLAUDE.md already has `@<path>` imports, the Cortex imports land
-    after the last one so they cluster with the existing block instead of
-    scattering at the bottom of a long file."""
+def test_imports_appended_at_end_of_file_even_when_existing_imports_present(
+    tmp_path: Path,
+) -> None:
+    """Cortex imports are appended at end-of-file regardless of whether
+    existing ``@<path>`` imports already exist in CLAUDE.md.
+
+    The earlier "cluster with existing imports" placement broke document
+    outlines on real projects (touchstone dogfood 2026-04-24) — inserting
+    a ``## `` heading after the last ``@<path>`` line could reparent any
+    ``### `` sub-heading that immediately followed. End-of-file append
+    never reparents existing sub-headings.
+    """
     content = (
         "# Project\n\n"
         "## Principles\n\n"
@@ -187,11 +195,67 @@ def test_imports_placed_after_existing_import_block(tmp_path: Path) -> None:
     claude = _write_claude_md(tmp_path, content)
     _invoke(tmp_path, "--yes")
     text = claude.read_text()
-    # Imports are present and the trailing section is still below them.
+    # Imports land after BOTH the existing import AND the trailing section.
     protocol_idx = text.index("@.cortex/protocol.md")
     existing_idx = text.index("@principles/engineering-principles.md")
     trailing_idx = text.index("Unrelated trailing section")
-    assert existing_idx < protocol_idx < trailing_idx
+    assert existing_idx < trailing_idx < protocol_idx, (
+        "Cortex imports must land at end-of-file, after all existing content "
+        "(including any pre-existing @path imports and any trailing sections). "
+        "Inserting in the middle reparents subsequent ### sub-headings — "
+        "the touchstone dogfood UX bug 2026-04-24."
+    )
+
+
+def test_imports_do_not_reparent_existing_sub_headings(tmp_path: Path) -> None:
+    """Direct regression test for the touchstone dogfood UX bug 2026-04-24.
+
+    On touchstone, CLAUDE.md had ``@principles/git-workflow.md`` immediately
+    followed by ``### Never commit on main`` (a sub-section of an earlier
+    ``## Git Workflow`` heading). The old placement heuristic inserted the
+    ``## Cortex Protocol`` block right between them, reparenting
+    ``### Never commit on main`` under ``## Cortex Protocol`` from any
+    markdown TOC tool's perspective.
+
+    This test asserts that every ``### `` sub-heading retains the same
+    nearest preceding ``## `` parent after init runs.
+    """
+    content = (
+        "# Touchstone — like\n\n"
+        "## Git Workflow\n\n"
+        "@principles/git-workflow.md\n\n"
+        "### Never commit on main\n\n"
+        "Branch first.\n\n"
+        "## Touchstone-Specific Principles\n\n"
+        "Body.\n"
+    )
+    claude = _write_claude_md(tmp_path, content)
+
+    def _outline(text: str) -> list[tuple[str, str]]:
+        """Walk markdown and return [(heading, nearest_h2_parent), ...]
+        for every ``### `` heading."""
+        parent_h2: str = ""
+        outline: list[tuple[str, str]] = []
+        for line in text.splitlines():
+            if line.startswith("## ") and not line.startswith("### "):
+                parent_h2 = line[3:].strip()
+            elif line.startswith("### "):
+                outline.append((line[4:].strip(), parent_h2))
+        return outline
+
+    before = _outline(claude.read_text())
+    _invoke(tmp_path, "--yes")
+    after = _outline(claude.read_text())
+    # Every pre-existing ### heading must keep the same ## parent.
+    # (after may have ADDITIONAL ### entries Cortex added; we only require
+    # the existing ones haven't been reparented.)
+    after_map = dict(after)
+    for h3, expected_parent in before:
+        assert after_map.get(h3) == expected_parent, (
+            f"Sub-heading '### {h3}' was reparented from "
+            f"'## {expected_parent}' to '## {after_map.get(h3)}' by init's "
+            "import-append. End-of-file placement should never reparent."
+        )
 
 
 def test_imports_appended_at_end_when_no_existing_imports(tmp_path: Path) -> None:

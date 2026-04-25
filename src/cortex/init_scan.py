@@ -64,12 +64,32 @@ from typing import Literal
 #   layer should cite, also Sources-only (not extracted).
 # - ``unknown`` — load-bearing markdown that didn't match any built-in or
 #   user-taught pattern; surfaces for an interactive classify prompt.
-Category = Literal["doctrine", "plan", "reference", "map_ref", "unknown"]
+# - ``touchstone_managed`` — would have classified as ``doctrine`` but the
+#   project has Touchstone integration (.touchstone-config / .touchstone-
+#   manifest / .touchstone-version present), meaning the source file is
+#   already imported into the agent's context via ``@<path>`` directives in
+#   CLAUDE.md / AGENTS.md (Touchstone owns ``principles/``). Importing a
+#   stub-pointer Doctrine entry on top of that adds no content and *displaces*
+#   real Doctrine in the session-start manifest budget. Surface in scan
+#   output as informational; do not seed.
+Category = Literal["doctrine", "plan", "reference", "map_ref", "unknown", "touchstone_managed"]
 
 # Pattern categories include everything in ``Category`` plus ``skip`` — the
 # latter is a user-taught directive that suppresses matches without producing
 # findings. ``Category`` (no ``skip``) is what flows through ``Finding``.
-PatternCategory = Literal["doctrine", "plan", "reference", "map_ref", "unknown", "skip"]
+PatternCategory = Literal[
+    "doctrine", "plan", "reference", "map_ref", "unknown", "touchstone_managed", "skip"
+]
+
+# Globs whose matches should be reclassified as ``touchstone_managed`` when
+# Touchstone integration is detected on the project. These are the
+# Touchstone-owned (synced via ``touchstone update``) source paths whose
+# content already lands in the agent's context via the existing
+# ``@<path>`` import directives in CLAUDE.md / AGENTS.md.
+_TOUCHSTONE_MANAGED_DOCTRINE_GLOBS: frozenset[str] = frozenset({
+    "principles/*.md",
+    "docs/principles/*.md",
+})
 
 
 @dataclass(frozen=True)
@@ -521,6 +541,19 @@ def scan_project(project_root: Path) -> ScanResult:
     # Ask git which ones are ignored — single shell-out for the whole list.
     ignored = _git_ignored_paths(project_root, candidates)
 
+    # Detect sibling integrations early so the main scan loop can reclassify
+    # Touchstone-managed Doctrine candidates (``principles/*.md`` etc.) as
+    # ``touchstone_managed`` instead of importing them as stub-pointer
+    # Doctrine entries that displace real content in the manifest budget.
+    # The result is also stored on `result.sibling_signals` below for the
+    # scan summary printer; we just need it earlier here.
+    sibling_signals = _detect_sibling_signals(project_root)
+    touchstone_present = (
+        sibling_signals.has_touchstone_config
+        or sibling_signals.has_touchstone_manifest
+        or sibling_signals.touchstone_version is not None
+    )
+
     # Merge built-in + user-taught patterns; user-taught come second so the
     # built-in description wins when both match. (User patterns can still
     # *add* matches that built-ins missed, which is the common case.)
@@ -544,7 +577,7 @@ def scan_project(project_root: Path) -> ScanResult:
             if not _matches_pattern(rel_posix, pattern):
                 continue
             # `match_patterns` filters out the "skip" sentinel above, so any
-            # pattern reaching here has one of the five real categories. We
+            # pattern reaching here has one of the six real categories. We
             # narrow explicitly so mypy sees the same invariant.
             assert pattern.category != "skip"
             category: Category = pattern.category
@@ -552,6 +585,17 @@ def scan_project(project_root: Path) -> ScanResult:
             if category == "plan" and _looks_shipped(path):
                 demoted_from = "plan"
                 category = "reference"
+            # Touchstone-managed Doctrine candidates get reclassified so
+            # they're displayed informationally but not imported. Importing
+            # them as Doctrine creates stub-pointer entries that displace
+            # real Doctrine in the session-start manifest (the conductor-
+            # case-study failure mode applied to the install path).
+            if (
+                category == "doctrine"
+                and touchstone_present
+                and pattern.glob in _TOUCHSTONE_MANAGED_DOCTRINE_GLOBS
+            ):
+                category = "touchstone_managed"
             result.findings.append(
                 Finding(
                     path=path,
@@ -600,11 +644,22 @@ def scan_project(project_root: Path) -> ScanResult:
 
     # Stable display ordering: by category bucket, then by path. (Categories
     # below match the printer's section order.)
-    bucket = {"doctrine": 0, "plan": 1, "reference": 2, "map_ref": 3, "unknown": 4}
+    bucket = {
+        "doctrine": 0,
+        "touchstone_managed": 1,  # Surfaced right after Doctrine since it's
+        # the "what would have been Doctrine if we hadn't detected
+        # Touchstone" bucket.
+        "plan": 2,
+        "reference": 3,
+        "map_ref": 4,
+        "unknown": 5,
+    }
     result.findings.sort(key=lambda f: (bucket.get(f.category, 99), f.relative))
 
     # Sibling + Sentinel signals — never gating, always informational.
-    result.sibling_signals = _detect_sibling_signals(project_root)
+    # We detected these earlier (above) for the touchstone reclassification;
+    # store on the result so the printer can reuse them.
+    result.sibling_signals = sibling_signals
 
     # Constraint count — uses the existing doctor heuristic so the number
     # init prints matches what `cortex doctor` will report after init.
