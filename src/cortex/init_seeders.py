@@ -127,28 +127,56 @@ def _existing_imported_sources(cortex_layer_dir: Path) -> set[str]:
 # --- Doctrine seeder --------------------------------------------------------
 
 
-def _next_doctrine_id(doctrine_dir: Path) -> int:
-    """Return the next 4-digit Doctrine ID, scanning existing filenames.
+_AUTO_IMPORT_DOCTRINE_FLOOR: int = 100
+"""Auto-imported Doctrine entries start at 0100, not 0001.
 
-    Doctrine filenames are ``NNNN-<slug>.md`` per SPEC § 3.1. We pick the
-    highest existing NNNN and add 1 so imports continue the numbering
-    sequence rather than colliding with existing entries.
+Reserved range 0001-0099 is for **human-authored** Doctrine — the canonical
+"why X exists" foundational entry the user is expected to write at
+``doctrine/0001-why-<project>-exists.md`` (Next-steps prompt) plus any
+other hand-authored Doctrine the user wants to reserve a low number for.
+Auto-imports start past that range so the printed Next-steps guidance
+("Author doctrine/0001-why-<project>-exists.md") never collides with a
+freshly-imported entry.
+
+Fix #4 from plans/init-ux-fixes-from-touchstone — the v0.2.3 numbering
+allocated auto-imports starting at 0001, taking the slot the Next-steps
+prompt told the user to author. The conflict was confusing on the
+touchstone dogfood (the imported principles/README.md became
+0001-readme.md while the user was simultaneously instructed to author
+0001-why-<project>-exists.md).
+"""
+
+
+def _next_doctrine_id(doctrine_dir: Path) -> int:
+    """Return the next 4-digit Doctrine ID for an auto-imported entry.
+
+    Doctrine filenames are ``NNNN-<slug>.md`` per SPEC § 3.1. Auto-imports
+    start at ``_AUTO_IMPORT_DOCTRINE_FLOOR`` (0100) so the 0001-0099 range
+    stays reserved for human-authored Doctrine. Among existing imports,
+    we pick the highest existing NNNN and add 1 to continue the sequence.
+    Hand-authored entries below the floor never block auto-import
+    numbering — they're tracked but the floor is the lower bound.
     """
     highest = 0
-    if not doctrine_dir.is_dir():
-        return 1
-    for entry in doctrine_dir.iterdir():
-        if not entry.is_file() or entry.suffix != ".md":
-            continue
-        match = _DOCTRINE_FILENAME_RE.match(entry.name)
-        if match is None:
-            continue
-        try:
-            value = int(match.group(1))
-        except ValueError:
-            continue
-        highest = max(highest, value)
-    return highest + 1
+    if doctrine_dir.is_dir():
+        for entry in doctrine_dir.iterdir():
+            if not entry.is_file() or entry.suffix != ".md":
+                continue
+            match = _DOCTRINE_FILENAME_RE.match(entry.name)
+            if match is None:
+                continue
+            try:
+                value = int(match.group(1))
+            except ValueError:
+                continue
+            highest = max(highest, value)
+    # If existing IDs include any at or above the floor, continue from the
+    # highest. Otherwise (empty doctrine_dir or only hand-authored entries
+    # below the floor), start from the floor itself so we don't allocate
+    # below 0100 for an auto-import.
+    if highest >= _AUTO_IMPORT_DOCTRINE_FLOOR:
+        return highest + 1
+    return _AUTO_IMPORT_DOCTRINE_FLOOR
 
 
 def _doctrine_body(title: str, source_relative: str) -> str:
