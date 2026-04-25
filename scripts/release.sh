@@ -34,6 +34,20 @@ git fetch --tags origin >/dev/null
 [ "$(git rev-list --left-right --count origin/main...main)" = "0	0" ] || { echo "ERROR: local main out of sync with origin" >&2; exit 1; }
 
 current_version="$(grep -oE '__version__ = "[0-9.]+"' src/cortex/__init__.py | grep -oE '[0-9.]+')"
+
+# Guard against partial-state from a previous failed run: if the source
+# version is ahead of the latest tag, the previous release didn't make
+# it to GitHub. Bumping again would skip past the intended version.
+latest_tag="$(git tag -l --sort=-v:refname 'v*' | head -1)"
+latest_tag_version="${latest_tag#v}"
+if [ "$current_version" != "$latest_tag_version" ]; then
+  echo "ERROR: source is at v${current_version} but latest tag is ${latest_tag:-(none)}" >&2
+  echo "       A previous release likely failed mid-flight. Recover with:" >&2
+  echo "         gh release create v${current_version} --target main --generate-notes" >&2
+  echo "       Then rerun this helper." >&2
+  exit 1
+fi
+
 IFS='.' read -r major minor patch <<< "$current_version"
 case "$bump" in
   --major) major=$((major + 1)); minor=0; patch=0 ;;
@@ -67,12 +81,14 @@ git add src/cortex/__init__.py pyproject.toml uv.lock
 git commit --no-verify -m "chore: release ${new_tag}"
 
 # Push the version-bump commit first; then let gh create the tag + release
-# atomically server-side. If gh release create fails, no orphan tag is
-# left behind, and rerunning the helper detects the bumped version on
-# disk and aborts (rather than silently skipping past the intended one).
+# atomically server-side. If gh release create fails, the version-ahead-of-tag
+# guard at the top of the script catches the partial state on the next run.
+# Pin the release target to the just-pushed SHA so a concurrent commit on
+# main can't get released instead.
 git push --no-verify origin main
-gh release create "$new_tag" --target main --generate-notes
-git fetch --tags origin >/dev/null
+target_sha="$(git rev-parse HEAD)"
+gh release create "$new_tag" --target "$target_sha" --generate-notes
+git fetch --tags origin >/dev/null || true
 
 echo
 echo "  ✓ Released ${new_tag}"
