@@ -95,9 +95,9 @@ This plan is done when **`cortex init -y --path ~/Repos/touchstone`, after rolli
 
 - [ ] **Fix #5: state.md Sources should include all files that informed any layer.**
   - Where: same module that writes the scaffolded state.md.
-  - Change: when listing Sources, include not just the scan-discovered files (CHANGELOG.md, README.md, hooks/README.md) but also every file whose content was imported into Doctrine. Format: keep the list short — "principles/*.md (6 files imported as Doctrine 0100-0105)" is acceptable.
-  - Acceptance: on touchstone fixture, state.md Sources lists at least 9 entries (the 3 scan-discovered + the 6 doctrine sources).
-  - Test: extend `test_init_touchstone_managed.py`.
+  - Change: when listing Sources, include not just the scan-discovered files (CHANGELOG.md, README.md, hooks/README.md) but also every file whose content was imported into Doctrine. Format: keep the list short — "principles/*.md (N files imported as Doctrine 0100-01NN)" is acceptable.
+  - Acceptance: on a **non-Touchstone fixture** (where Fix #1 doesn't suppress principles imports), state.md Sources lists the scan-discovered files plus every file imported as Doctrine. On the **Touchstone fixture** (where Fix #1 skips principles imports), state.md Sources still lists the scan-discovered files and the absence of Doctrine sources matches the absence of Doctrine imports — internally consistent.
+  - Test: extend `test_init_touchstone_managed.py` (assertion: Touchstone fixture's state.md Sources lists scan-discovered files but no `principles/*` entries) AND extend `test_init_doctrine_numbering.py` (assertion: non-Touchstone fixture's state.md Sources lists each Doctrine source file alongside the scan-discovered ones).
 
 - [ ] **Fix #6: "1 unscoped constraint" output inlines the file:line ref.**
   - Where: the scan-output formatter.
