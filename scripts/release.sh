@@ -66,9 +66,13 @@ git add src/cortex/__init__.py pyproject.toml uv.lock
 [ -f README.md ] && git add README.md || true
 git commit --no-verify -m "chore: release ${new_tag}"
 
-git tag "$new_tag"
-git push --no-verify origin main "$new_tag"
-gh release create "$new_tag" --generate-notes
+# Push the version-bump commit first; then let gh create the tag + release
+# atomically server-side. If gh release create fails, no orphan tag is
+# left behind, and rerunning the helper detects the bumped version on
+# disk and aborts (rather than silently skipping past the intended one).
+git push --no-verify origin main
+gh release create "$new_tag" --target main --generate-notes
+git fetch --tags origin >/dev/null
 
 echo
 echo "  ✓ Released ${new_tag}"
