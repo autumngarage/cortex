@@ -1,6 +1,6 @@
 ---
 Generated: 2026-04-24T23:10:00-04:00
-Generator: hand-authored (deterministic `cortex refresh-state` ships in v0.4.0 per the production-release rerank; LLM `refresh-state --enhance` and `refresh-map` deferred to v1.x post-production — tracked as release-driven sub-sections of the single plan at plans/cortex-v1)
+Generator: hand-authored (deterministic `cortex refresh-state` ships in v0.4.0 per the production-release rerank; LLM `refresh-state --enhance` and `refresh-map` deferred to v1.x post-production — tracked as release-driven sub-sections of plans/cortex-v1, with the v0.2.4 patch plan plans/init-ux-fixes-from-touchstone parallel to it)
 Sources:
   - HEAD of branch `docs/init-ux-fixes-plan` (merge-base main at 77693f9, the touchstone-target merge; this snapshot describes the v0.2.4 patch plan + same-commit decision journal that land when the branch merges); cortex v0.2.3 currently on Homebrew
   - https://github.com/autumngarage/cortex/releases (v0.1.0 through v0.2.3)

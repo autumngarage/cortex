@@ -14,7 +14,7 @@ Spec: 0.3.1
 
 # Project Map
 
-> **Stub — `cortex refresh-map` deferred from v1.0 to v1.x.** This repo is spec-stage: the directory structure is self-evident from the root `README.md`, `SPEC.md`, the single plan at `.cortex/plans/cortex-v1.md`, and the `.cortex/` layout itself. The 2026-04-24 production-release rerank (see `journal/2026-04-24-production-release-rerank`) parked LLM-driven map synthesis off the v1.0 path because solo-author value is near-zero — the author already knows the map. Revisit when a contributor lands on the dogfood target's repo or a fresh agent on a clone gets visibly confused. Until then, treat the root-level docs as the authoritative map.
+> **Stub — `cortex refresh-map` deferred from v1.0 to v1.x.** This repo is spec-stage: the directory structure is self-evident from the root `README.md`, `SPEC.md`, the active plans under `.cortex/plans/` (canonical list in `.cortex/state.md` `## Current work`), and the `.cortex/` layout itself. The 2026-04-24 production-release rerank (see `journal/2026-04-24-production-release-rerank`) parked LLM-driven map synthesis off the v1.0 path because solo-author value is near-zero — the author already knows the map. Revisit when a contributor lands on the dogfood target's repo or a fresh agent on a clone gets visibly confused. Until then, treat the root-level docs as the authoritative map.
 
 ## Pending structural narrative (when refresh-map ships in v1.x)
 
