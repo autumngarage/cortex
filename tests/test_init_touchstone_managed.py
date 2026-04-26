@@ -148,7 +148,7 @@ def test_init_idempotent_on_touchstone_project(tmp_path: Path) -> None:
     assert first.exit_code == 0, first.output
     first_listing = sorted((project / ".cortex" / "doctrine").iterdir())
 
-    second = runner.invoke(cli, ["init", "--path", str(project), "--yes"])
+    runner.invoke(cli, ["init", "--path", str(project), "--yes"])  # second pass; result inspected via filesystem state, not return value
     # Second invocation may be a no-op or may re-scaffold (depending on the
     # idempotency contract); either way no NEW Doctrine entries appear.
     second_listing = sorted((project / ".cortex" / "doctrine").iterdir())

@@ -71,7 +71,9 @@ from pathlib import Path
 
 import click
 
-from cortex import __version__ as CORTEX_VERSION
+from cortex import (
+    __version__ as CORTEX_VERSION,  # noqa: N812 — namespaced re-export, deliberate caps.
+)
 from cortex.init_scan import (
     Category,
     Finding,

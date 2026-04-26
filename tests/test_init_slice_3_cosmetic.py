@@ -14,7 +14,6 @@ from click.testing import CliRunner
 
 from cortex.cli import cli
 
-
 # --- Fix #6: inline file:line ref in unscoped-constraint output ------------
 
 
