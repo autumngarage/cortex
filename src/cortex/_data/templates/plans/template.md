@@ -36,9 +36,9 @@ Cites: {{ doctrine/<nnnn>-<slug>, state.md § <section>, journal/<date>-<slug> }
 
 ## Follow-ups (deferred)
 
-{{ TODO: items moved out of scope during execution. SPEC requires every deferral to resolve to another Plan or Journal entry in the same commit — no orphan deferrals. Cortex doctor's orphan-deferral check ships in the v0.3.0 release. }}
+{{ TODO: items moved out of scope during execution. SPEC § 4.2 requires every deferral to resolve to another Plan, Journal entry, or Doctrine entry in the same commit — no orphan deferrals. Cortex doctor's orphan-deferral check ships in the v0.3.0 release. }}
 
-- {{ TODO: deferred item — resolve to a successor plan or a journal entry }}
+- {{ TODO: deferred item — resolve to a successor plan, a journal entry, or a doctrine entry }}
 
 ## Known limitations at exit
 

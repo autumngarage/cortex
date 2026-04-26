@@ -215,7 +215,7 @@ Link to the triggering metric or decision — never invent context; always cite.
 - [ ] <pending>
 
 ## Follow-ups (deferred)
-Items moved out of scope during execution — each resolved to another plan or journal entry per § 4.2.
+Items moved out of scope during execution — each resolved to another Plan, Journal entry, or Doctrine entry per § 4.2.
 ```
 
 **Multi-writer collisions** (§ 4.9) are made visible via `Goal-hash:` matching, not prevented.
