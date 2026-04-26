@@ -110,4 +110,4 @@ Too new for project-specific lessons. The spec's design rules are themselves dis
 
 - **Premature completion declarations** (sigint's `COLLECTOR_MIGRATION.md`, 2026-04-05) → SPEC.md requires measurable Success Criteria on every Plan.
 - **Silent staleness in aggregators** (sigint's resolution-pipeline death, 2026-04-05 through 04-09) → SPEC.md requires `Generated:` headers with source lists on every derived layer; stale-beyond-threshold surfaces as warning.
-- **Scattered deferrals with no consolidation** (sigint's multiple plans) → SPEC.md §4.2 requires deferred items to resolve to another plan or journal entry in the same commit.
+- **Scattered deferrals with no consolidation** (sigint's multiple plans) → SPEC.md §4.2 requires deferred items to resolve to another Plan, Journal entry, or Doctrine entry in the same commit.

@@ -18,7 +18,7 @@ This file is the source of truth for how AI reviewers (Codex, Claude, etc.) shou
    - Overwrite or mutate a Journal entry (append-only invariant)
    - Delete a Doctrine entry (immutable-with-supersede invariant)
    - Write a regenerated layer (Map, State) without a `Generated:` header and source list
-   - Leave an orphan deferral (deferred Plan item that doesn't resolve to another Plan or Journal entry within the same commit)
+   - Leave an orphan deferral (deferred Plan item that doesn't resolve to another Plan, Journal entry, or Doctrine entry within the same commit)
    - Accept a Plan without explicit Success Criteria
 
 3. **Graceful degradation across composition boundaries.** Cortex must run on a bare repo without Sentinel or Touchstone installed. Any code path that hard-requires `.sentinel/` or `.touchstone-config` is a composition bug — it must be an `if-present, read; else, degrade` pattern.
@@ -36,7 +36,7 @@ Style nits, formatting, and theoretical refactors are **out of scope** unless th
 ### High-scrutiny paths
 
 - **`SPEC.md`** — the primary artifact. Any change here must include a version bump in the header and a rationale in the commit message. Breaking changes (major bump) require evidence of migration plan for existing `.cortex/` users (even if currently just this repo's dogfood).
-- **`.cortex/plans/*.md`** — active Plans drive scope. One is currently active per `.cortex/state.md` `## Current work`: `cortex-v1.md` (v0.3.0 → v1.0.0 release-driven sub-sections under production-on-real-project framing per [`journal/2026-04-24-production-release-rerank.md`](./.cortex/journal/2026-04-24-production-release-rerank.md)). The v0.2.4 → v0.2.5 patch plan (`init-ux-fixes-from-touchstone.md`) shipped 2026-04-25 — see [`journal/2026-04-25-init-ux-fixes-plan-shipped.md`](./.cortex/journal/2026-04-25-init-ux-fixes-plan-shipped.md). Flag if any release / Success Criterion exit bar is vague or unmeasurable ("it works well" is not a criterion); flag if a deferred item lacks a citation to a Plan or Journal entry per SPEC § 4.2.
+- **`.cortex/plans/*.md`** — active Plans drive scope. One is currently active per `.cortex/state.md` `## Current work`: `cortex-v1.md` (v0.3.0 → v1.0.0 release-driven sub-sections under production-on-real-project framing per [`journal/2026-04-24-production-release-rerank.md`](./.cortex/journal/2026-04-24-production-release-rerank.md)). The v0.2.4 → v0.2.5 patch plan (`init-ux-fixes-from-touchstone.md`) shipped 2026-04-25 — see [`journal/2026-04-25-init-ux-fixes-plan-shipped.md`](./.cortex/journal/2026-04-25-init-ux-fixes-plan-shipped.md). Flag if any release / Success Criterion exit bar is vague or unmeasurable ("it works well" is not a criterion); flag if a deferred item lacks a citation to a Plan, Journal entry, or Doctrine entry per SPEC § 4.2.
 - **Code that reads `.cortex/` layer files** — regexes and parsers for status blocks, checkbox syntax, front-matter. Must be tolerant of minor format drift (extra whitespace, trailing newlines) but strict on contract violations.
 - **Code that writes `.cortex/` layer files** — every write to a derived layer (Map, State) must include the `Generated:` header. Every write to an immutable layer (Doctrine, Journal) must verify the target file does not already exist.
 - **Integration code (Sentinel/Touchstone detection)** — must be `shutil.which` + filesystem checks, never imports or subprocess calls into those tools.

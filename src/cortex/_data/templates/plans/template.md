@@ -53,6 +53,6 @@ Authoring checklist (remove before committing):
 - [ ] Replace every `{{ ... }}` placeholder with real content.
 - [ ] `## Success Criteria` must name measurable signals (SPEC § 4.3) — numeric thresholds, test/dashboard links, or path-based references like `tests/`, `doctrine/`, `journal/`, `PR #<n>`.
 - [ ] `## Why (grounding)` must link to doctrine/, state.md, or journal/ (SPEC § 4.1).
-- [ ] Every deferral in `## Follow-ups (deferred)` resolves to a successor plan or journal entry in the same commit (SPEC § 4.2).
+- [ ] Every deferral in `## Follow-ups (deferred)` resolves to a successor plan, journal entry, or doctrine entry in the same commit (SPEC § 4.2).
 - [ ] Run `cortex doctor` — green on this plan before you commit.
 -->
