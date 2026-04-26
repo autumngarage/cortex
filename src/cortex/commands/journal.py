@@ -37,6 +37,13 @@ from cortex.compat import warn_if_incompatible
 _DATE_PLACEHOLDER = "{{ YYYY-MM-DD }}"
 _H1_TEMPLATE_RE = re.compile(r"^# \{\{[^}]+\}\}.*$", re.MULTILINE)
 _SLUG_MAX_CHARS = 50
+# Valid type names are lowercase identifiers with optional dashes — same
+# shape as the bundled template stems (decision, pr-merged, release, ...).
+# Restricting here closes a path-traversal hole: ``journal_type`` flows into
+# both the template-resolution path and (via the fallback slug) the journal
+# filename, so any ``..`` / ``/`` / leading-dash input would resolve outside
+# ``.cortex/templates/journal/`` or write outside ``.cortex/journal/``.
+_TYPE_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
 
 def _normalize_slug(text: str) -> str:
@@ -189,6 +196,14 @@ def draft_command(
     if not cortex_dir.is_dir():
         click.echo(
             f"error: {cortex_dir} does not exist; run `cortex init` first.",
+            err=True,
+        )
+        sys.exit(2)
+    if not _TYPE_RE.match(journal_type):
+        click.echo(
+            f"error: invalid journal type {journal_type!r}; types are "
+            f"lowercase identifiers with optional dashes (e.g. `decision`, "
+            f"`pr-merged`, `release`).",
             err=True,
         )
         sys.exit(2)

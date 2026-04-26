@@ -15,7 +15,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
-from click.testing import CliRunner
+from click.testing import CliRunner, Result
 
 from cortex.cli import cli
 from cortex.commands.init import init_command
@@ -44,7 +44,7 @@ def git_project(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _draft(project: Path, *args: str) -> "subprocess.CompletedProcess[str] | object":
+def _draft(project: Path, *args: str) -> Result:
     runner = CliRunner()
     return runner.invoke(
         cli, ["journal", "draft", *args, "--path", str(project), "--no-edit"]
@@ -216,6 +216,58 @@ def test_no_edit_exclusive_create_blocks_overwrite(git_project: Path) -> None:
     assert result.exit_code == 2, result.output
     # File contents preserved.
     assert "Pre-existing" in target.read_text()
+
+
+def test_editor_path_exclusive_create_blocks_race_overwrite(
+    git_project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Race coverage for the editor flow: a third process creates the
+    target after the early check + during the edit; the final write must
+    refuse to overwrite (Journal append-only invariant)."""
+    today = date.today().isoformat()
+    target = git_project / ".cortex" / "journal" / f"{today}-editor-race.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    # Custom $EDITOR: a shell snippet that simulates the race by creating
+    # the final target file mid-edit (between the early existence check
+    # and the post-editor exclusive write).
+    editor_script = tmp_path / "racing-editor.sh"
+    editor_script.write_text(
+        "#!/bin/bash\n"
+        f'echo "# Pre-existing — must not be overwritten" > "{target}"\n'
+        "exit 0\n"
+    )
+    editor_script.chmod(0o755)
+    monkeypatch.setenv("EDITOR", str(editor_script))
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["journal", "draft", "decision", "--path", str(git_project), "--slug", "editor-race"],
+    )
+    assert result.exit_code == 2, result.output + (getattr(result, "stderr", "") or "")
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "appeared while editing" in combined
+    # The pre-existing content must survive — append-only invariant.
+    assert "Pre-existing" in target.read_text()
+    # The edited temp file is preserved for the user.
+    match = re.search(r"draft preserved at (\S+\.md)", combined)
+    assert match, combined
+    Path(match.group(1)).unlink(missing_ok=True)
+
+
+def test_invalid_type_name_rejected(git_project: Path) -> None:
+    # Path-traversal attempt: ../../etc/passwd as the type would resolve
+    # outside .cortex/templates/journal/. Validator must reject before any
+    # path joining happens.
+    result = _draft(git_project, "../../etc/passwd")
+    assert result.exit_code == 2, result.output
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "invalid journal type" in combined
+    # Slash + uppercase + leading-dash all rejected.
+    for bad in ("foo/bar", "Decision", "-leading-dash", "..", ""):
+        r = _draft(git_project, bad)
+        assert r.exit_code == 2, (bad, r.output)
 
 
 def test_project_template_override_wins(git_project: Path) -> None:
