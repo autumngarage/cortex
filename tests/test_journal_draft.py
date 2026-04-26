@@ -204,18 +204,51 @@ def test_editor_missing_binary_preserves_temp_draft(git_project: Path, monkeypat
             preserved.unlink()
 
 
-def test_no_edit_exclusive_create_blocks_overwrite(git_project: Path) -> None:
-    # Race scenario: pre-create the target file, then run the draft. The
-    # early existence check should fire — but if it didn't (true race), the
-    # exclusive-create on the actual write must catch it. We simulate by
-    # pre-creating after a successful first draft.
+def test_no_edit_early_check_blocks_existing_target(git_project: Path) -> None:
+    """Common-case overwrite check: pre-existing target hits the early
+    ``target.exists()`` guard. Asserts the user-facing 'already exists'
+    message points at --slug for differentiation."""
     today = date.today().isoformat()
     target = git_project / ".cortex" / "journal" / f"{today}-overwrite-test.md"
     target.write_text("# Pre-existing entry — must not be overwritten\n")
     result = _draft(git_project, "decision", "--slug", "overwrite-test")
     assert result.exit_code == 2, result.output
-    # File contents preserved.
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "already exists" in combined
+    assert "--slug" in combined
     assert "Pre-existing" in target.read_text()
+
+
+def test_no_edit_race_after_early_check_caught_by_exclusive_create(
+    git_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Race scenario the prior test didn't cover: target file appears
+    *after* the early ``target.exists()`` guard but before ``target.open("x")``.
+    Without the exclusive-create fix this would silently overwrite an
+    append-only Journal entry. We simulate the race by monkeypatching
+    ``_gather_git_context`` (which is called between the check and the
+    write) to create the target as a side effect."""
+    today = date.today().isoformat()
+    target = git_project / ".cortex" / "journal" / f"{today}-race-after-check.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    pre_existing_body = "# Pre-existing entry — must not be overwritten\n"
+
+    def _racing_gather(_project_root: Path) -> list[str]:
+        # Simulate a concurrent writer landing the entry between the early
+        # check and the post-context exclusive-create write.
+        target.write_text(pre_existing_body)
+        return []
+
+    import cortex.commands.journal as journal_mod
+    monkeypatch.setattr(journal_mod, "_gather_git_context", _racing_gather)
+
+    result = _draft(git_project, "decision", "--slug", "race-after-check")
+    assert result.exit_code == 2, result.output
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "appeared between the existence check" in combined
+    # Append-only invariant: the racer's content survives intact.
+    assert target.read_text() == pre_existing_body
 
 
 def test_editor_path_exclusive_create_blocks_race_overwrite(
