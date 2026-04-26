@@ -2,7 +2,7 @@
 
 > The set of rules an agent follows to read and write `.cortex/`. Projects import this file into `AGENTS.md` (or `CLAUDE.md`) so every agent working on the project follows the same contract.
 
-**Protocol version:** 0.2.1 (draft, ships with SPEC.md v0.3.2-dev)
+**Protocol version:** 0.2.1 (draft, ships with SPEC.md v0.4.0-dev)
 **Status:** Proposed
 **Imports:** this file is imported into `AGENTS.md` via `@.cortex/protocol.md`
 
