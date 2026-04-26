@@ -82,7 +82,7 @@ from cortex.init_scan import (
 from cortex.init_seeders import seed_doctrine, seed_plan, seed_plans
 from cortex.shell import git_remediation_cmd, run_git
 
-CURRENT_SPEC_VERSION = "0.3.1-dev"
+CURRENT_SPEC_VERSION = "0.3.2-dev"
 
 SCAFFOLD_SUBDIRS = ("doctrine", "plans", "journal", "procedures")
 

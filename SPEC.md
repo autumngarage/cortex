@@ -233,7 +233,7 @@ Items moved out of scope during execution — each resolved to another plan or j
 # <Title>
 
 **Date:** 2026-04-17
-**Type:** decision | incident | migration | reversal | promotion | plan-transition | sentinel-cycle | pr-merged | digest
+**Type:** decision | incident | migration | reversal | promotion | plan-transition | sentinel-cycle | pr-merged | release | digest
 **Trigger:** T1.3 (Plan status changed)   # for Protocol-triggered entries only
 **Cites:** plans/anti-chase.md, doctrine/0003
 
