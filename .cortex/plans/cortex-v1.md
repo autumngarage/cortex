@@ -8,6 +8,7 @@ Updated-by:
   - 2026-04-24T15:35 claude-session-2026-04-24 (added journal/2026-04-24-v1-followups-parked as resolution target for v1.x+ deferrals per Codex review on PR #30 + SPEC § 4.2)
   - 2026-04-24T16:30 claude-session-2026-04-24 (reranked work items from 3 Phase C/D/E sub-sections into 6 release-driven sub-sections (v0.3.0 → v1.0.0) under production-on-real-project framing; LLM features and triad-mode infrastructure deferred to v1.x per journal/2026-04-24-production-release-rerank)
   - 2026-04-24T17:10 claude-session-2026-04-24 (locked in touchstone as the v0.9.0 dogfood target per journal/2026-04-24-dogfood-target-touchstone; updated v0.9.0 work items + Approach to reflect the choice)
+  - 2026-04-25T23:35 claude-session-2026-04-25 (v0.3.0 shipped — sub-plan plans/cortex-v0.3.0 closed Status: shipped; release journal entry at journal/2026-04-25-v0.3.0-released; v0.4.0 read-side foundation is the next active sub-section)
 Cites: ../../SPEC.md, ../../.cortex/protocol.md, ../doctrine/0001-why-cortex-exists, ../doctrine/0005-scope-boundaries-v2, ../doctrine/0003-spec-is-the-artifact, ../doctrine/0002-compose-by-file-contract-not-code, journal/2026-04-23-phase-c-reordered, journal/2026-04-24-case-study-driven-roadmap, journal/2026-04-24-single-plan-consolidation, journal/2026-04-24-v1-followups-parked, journal/2026-04-24-production-release-rerank, journal/2026-04-24-dogfood-target-touchstone, ../../docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md
 ---
 
@@ -46,17 +47,17 @@ This plan is done when Cortex v1.0 ships into real-project use. Measurable per r
 
 ## Work items
 
-### v0.3.0 — Write-side foundation
+### v0.3.0 — Write-side foundation ✅ shipped 2026-04-25
 
-Goal: the user can write journal entries and spawn plans cheaply, and the contract enforcement that would have caught the orphan-deferral bug on PR #30 ships with the release.
+Goal: the user can write journal entries and spawn plans cheaply, and the contract enforcement that would have caught the orphan-deferral bug on PR #30 ships with the release. **Sub-plan:** [`plans/cortex-v0.3.0`](./cortex-v0.3.0.md) (`Status: shipped`). **Closure:** [`journal/2026-04-25-v0.3.0-released`](../journal/2026-04-25-v0.3.0-released.md).
 
-- [ ] **`cortex journal draft <type>`** — writes a journal entry from the matching template under `.cortex/templates/journal/`, pre-filled from `git log` + `gh pr view` context. Opens `$EDITOR` by default; `--no-edit` writes and exits with the draft path on stdout. Handles `gh` not installed / not authenticated: degrade to `git log`-only pre-fill with a one-line warning, never block.
-- [ ] **`release` journal type + `.cortex/templates/journal/release.md` template** (case-study item #1) — fields: artifact kind (tap / PyPI / Docker / tag), artifact location, release version, release-notes link, "install-path this changes" downstream-docs list. Template-only; pairs with the T1.10 audit shipped in the same release.
-- [ ] **T1.10 Protocol amendment + SPEC.md minor bump + `cortex doctor --audit` expansion** (case-study item #2) — Add `T1.10: Release / distribution artifact shipped` to `.cortex/protocol.md` § 2 with `journal/release.md` as its template. SPEC bumps to v0.4.0-dev (minor — additive Protocol trigger per § 7) so accepted Protocol versions include 0.2.1. Audit walks `git tag --list --sort=-creatordate` for the window and matches each tag against a `Type: release` journal entry within 72 h. May land in its own small PR before the keystone `cortex journal draft` PR.
-- [ ] **`cortex plan spawn <slug>`** — scaffolds a Plan file with seven-field frontmatter (Status, Written, Author, Goal-hash, Updated-by seeded, Cites) and all required sections per SPEC § 3.4. Title prompt computes Goal-hash per § 4.9 (reuses existing `cortex.goal_hash.normalize_goal_hash`).
-- [ ] **`cortex doctor` orphan-deferral check** — scans every active Plan's `## Follow-ups (deferred)` section; warns when any item lacks a citation to another Plan, Journal entry, or Doctrine entry per SPEC § 4.2 (citation must resolve to a real file under `.cortex/`; a plan citing its own slug doesn't count). Errors under `--strict`. Would have caught the round-1 finding on PR #30.
-- [ ] Tests — real filesystem, real git (no mocked subprocess), template-presence check, `cortex doctor` orphan-check unit tests against synthetic plan files, T1.10 audit test against a real `git init`'d repo with tags.
-- [ ] v0.3.0 release — version bump, tag, GitHub Release, Homebrew formula SHA update.
+- [x] **`cortex journal draft <type>`** — writes a journal entry from the matching template under `.cortex/templates/journal/`, pre-filled from `git log` + `gh pr view` context. Opens `$EDITOR` by default; `--no-edit` writes and exits with the draft path on stdout. Handles `gh` not installed / not authenticated: degrade to `git log`-only pre-fill with a one-line warning, never block. Shipped in PR #45.
+- [x] **`release` journal type + `.cortex/templates/journal/release.md` template** (case-study item #1) — fields: artifact kind (tap / PyPI / Docker / tag), artifact location, release version, release-notes link, "install-path this changes" downstream-docs list. Template-only; pairs with the T1.10 audit shipped in the same release. Shipped in PR #44.
+- [x] **T1.10 Protocol amendment + SPEC.md minor bump + `cortex doctor --audit` expansion** (case-study item #2) — Added `T1.10: Release / distribution artifact shipped` to `.cortex/protocol.md` § 2 with `journal/release.md` as its template. SPEC bumped to v0.4.0-dev (minor — additive Protocol trigger per § 7) so accepted Protocol versions include 0.2.1. Audit walks `git tag --list --sort=-creatordate` for the window and matches each tag against a `Type: release` journal entry within 72 h. Shipped in PR #44.
+- [x] **`cortex plan spawn <slug>`** — scaffolds a Plan file with seven-field frontmatter (Status, Written, Author, Goal-hash, Updated-by seeded, Cites) and all required sections per SPEC § 3.4. `--title` computes Goal-hash per § 4.9 (reuses existing `cortex.goal_hash.normalize_goal_hash`). Shipped in PR #46.
+- [x] **`cortex doctor` orphan-deferral check** — scans every active Plan's `## Follow-ups (deferred)` section; warns when any item lacks a citation to another Plan, Journal entry, or Doctrine entry per SPEC § 4.2 (citation must resolve to a real file under `.cortex/`; a plan citing its own slug doesn't count). Errors under `--strict`. Would have caught the round-1 finding on PR #30. Shipped in PR #47.
+- [x] Tests — real filesystem, real git (no mocked subprocess), template-presence check, `cortex doctor` orphan-check unit tests against synthetic plan files, T1.10 audit test against a real `git init`'d repo with tags. 274 tests passing across the v0.3.0 PR sequence.
+- [x] v0.3.0 release — version bump, tag, GitHub Release, Homebrew formula SHA update. PR #48.
 
 ### v0.4.0 — Read-side foundation
 

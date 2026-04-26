@@ -1,14 +1,23 @@
 ---
-Status: active
+Status: shipped
 Written: 2026-04-25
+Shipped: 2026-04-25
 Author: claude-session-2026-04-25
 Goal-hash: 08364e1a
 Updated-by:
   - 2026-04-25T19:00 claude-session-2026-04-25 (spawned from plans/cortex-v1.md ### v0.3.0 sub-section as a session-scoped sub-plan; same pattern as plans/init-ux-fixes-from-touchstone — sub-plan exists to drive a focused multi-PR session, parent plan tracks the v0.3.0 → v1.0.0 arc)
-Cites: ../../SPEC.md, ../../.cortex/protocol.md, plans/cortex-v1, ../doctrine/0001-why-cortex-exists, ../doctrine/0003-spec-is-the-artifact, ../../docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md
+  - 2026-04-25T23:35 claude-session-2026-04-25 (Status: active → shipped — all five PRs landed (#44, #45, #46, #47, #48); v0.3.0 released; closure recorded in journal/2026-04-25-v0.3.0-released)
+Promoted-to: journal/2026-04-25-v0.3.0-released
+Cites: ../../SPEC.md, ../../.cortex/protocol.md, plans/cortex-v1, ../doctrine/0001-why-cortex-exists, ../doctrine/0003-spec-is-the-artifact, ../../docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md, journal/2026-04-25-v0.3.0-released
 ---
 
 # Ship Cortex v0.3.0 Write-Side Foundation
+
+> **Shipped 2026-04-25.** All five PRs landed (#44 T1.10 + release template, #45 `cortex journal draft`, #46 `cortex plan spawn`, #47 orphan-deferral check, #48 v0.3.0 release prep). v0.3.0 is on Homebrew via the auto-deploy workflow. Closure recorded in [`journal/2026-04-25-v0.3.0-released`](../journal/2026-04-25-v0.3.0-released.md). v0.4.0 work on [`plans/cortex-v1`](./cortex-v1.md) (Read-side foundation: deterministic `refresh-state`, `cortex next` MVP, `cortex plan status`) resumes next.
+>
+> *Original scope follows, preserved unchanged for historical reference. Work items below are marked `[x]` per the closure update.*
+
+---
 
 > Session-scoped sub-plan driving the v0.3.0 release to landing tonight. Five PRs sequenced from smallest to keystone: T1.10 release-event amendment first, then `cortex journal draft <type>` as the keystone, then `cortex plan spawn`, then `cortex doctor` orphan-deferral, then the release cut. Closes the v0.3.0 sub-section of [`plans/cortex-v1.md`](./cortex-v1.md) on landing.
 
@@ -52,73 +61,73 @@ This plan is done when v0.3.0 is tagged, released, and on Homebrew, with all fiv
 
 ### PR 1 — `release` journal template + T1.10 Protocol/SPEC amendment + audit expansion
 
-- [ ] **Add `.cortex/templates/journal/release.md`** with the seven-field structure. Required fields: `# <title>`, `**Date:**`, `**Type:** release`, `**Trigger:** T1.10`, `**Cites:**`, blockquote summary, `## Artifact` (kind, location, version, link), `## Release notes`, `## Downstream docs this changes` (CLAUDE.md, README.md, etc. — list of files that reference the artifact location).
-- [ ] **Mirror to `src/cortex/_data/templates/journal/release.md`** so `cortex init` ships it. Confirm `tests/test_data_sync.py` covers this new file (it scans both trees automatically based on existing pattern, but verify).
-- [ ] **Add T1.10 to `.cortex/protocol.md` § 2** as `T1.10 | Pull request released as a tagged distribution artifact (Homebrew tap, PyPI release, Docker push, GitHub Release) | journal/release.md`. Bump Protocol version to 0.2.1 and update its SPEC.md compatibility line.
-- [ ] **Bump `SPEC.md` to v0.4.0-dev** with a § 7 entry explaining what changed (T1.10 added). Update SPEC version line at top of file.
-- [ ] **Update `src/cortex/__init__.py`** — `SUPPORTED_SPEC_VERSIONS` accepts "0.3" already (matches major; no change needed unless we want explicit 0.3.2 acceptance); `SUPPORTED_PROTOCOL_VERSIONS` add "0.2" (already there) — confirm both are still major-only matches.
-- [ ] **Mirror `.cortex/protocol.md` to `src/cortex/_data/protocol.md`** if init bundles protocol.md (it does — confirmed in cortex init scaffold).
-- [ ] **Extend `src/cortex/audit.py`** — add `Trigger.T1_10`, `EXPECTED_TYPE[T1_10] = "release"`, new `_load_tags(project_root, since_days)` helper that runs `git tag --list --sort=-creatordate` and resolves each tag's commit date, new audit pass that fires T1.10 per tag and matches against journal entries with `Type: release` within the existing JOURNAL_MATCH_WINDOW_HOURS. Add tests.
-- [ ] **Add tests** — `tests/test_audit_t110.py`: real `git init` temp repo, `git tag` two tags within window, journal entries (one matched, one unmatched), assert audit fires T1.10 for both and matches the right one. `tests/test_data_sync.py` pickup verified.
-- [ ] **Open PR.**
+- [x] **Add `.cortex/templates/journal/release.md`** with the seven-field structure. Required fields: `# <title>`, `**Date:**`, `**Type:** release`, `**Trigger:** T1.10`, `**Cites:**`, blockquote summary, `## Artifact` (kind, location, version, link), `## Release notes`, `## Downstream docs this changes` (CLAUDE.md, README.md, etc. — list of files that reference the artifact location).
+- [x] **Mirror to `src/cortex/_data/templates/journal/release.md`** so `cortex init` ships it. Confirm `tests/test_data_sync.py` covers this new file (it scans both trees automatically based on existing pattern, but verify).
+- [x] **Add T1.10 to `.cortex/protocol.md` § 2** as `T1.10 | Pull request released as a tagged distribution artifact (Homebrew tap, PyPI release, Docker push, GitHub Release) | journal/release.md`. Bump Protocol version to 0.2.1 and update its SPEC.md compatibility line.
+- [x] **Bump `SPEC.md` to v0.4.0-dev** with a § 7 entry explaining what changed (T1.10 added). Update SPEC version line at top of file.
+- [x] **Update `src/cortex/__init__.py`** — `SUPPORTED_SPEC_VERSIONS` accepts "0.3" already (matches major; no change needed unless we want explicit 0.3.2 acceptance); `SUPPORTED_PROTOCOL_VERSIONS` add "0.2" (already there) — confirm both are still major-only matches.
+- [x] **Mirror `.cortex/protocol.md` to `src/cortex/_data/protocol.md`** if init bundles protocol.md (it does — confirmed in cortex init scaffold).
+- [x] **Extend `src/cortex/audit.py`** — add `Trigger.T1_10`, `EXPECTED_TYPE[T1_10] = "release"`, new `_load_tags(project_root, since_days)` helper that runs `git tag --list --sort=-creatordate` and resolves each tag's commit date, new audit pass that fires T1.10 per tag and matches against journal entries with `Type: release` within the existing JOURNAL_MATCH_WINDOW_HOURS. Add tests.
+- [x] **Add tests** — `tests/test_audit_t110.py`: real `git init` temp repo, `git tag` two tags within window, journal entries (one matched, one unmatched), assert audit fires T1.10 for both and matches the right one. `tests/test_data_sync.py` pickup verified.
+- [x] **Open PR.**
 
 ### PR 2 — `cortex journal draft <type>` (keystone)
 
-- [ ] **Create `src/cortex/commands/journal.py`** with `journal` group and `draft` subcommand. Args: `type` (positional, e.g. `decision`, `incident`, `release`, `pr-merged`, `plan-transition`, `sentinel-cycle`); `--no-edit` (skip `$EDITOR`, print path); `--slug <text>` (override the auto-generated filename slug); `--path <project-root>` (default `.`).
-- [ ] **Template resolution** — first `<root>/.cortex/templates/journal/<type>.md`, then bundled `src/cortex/_data/templates/journal/<type>.md`. Error with list of available types if neither found.
-- [ ] **Pre-fill from context.** Default fill substitutes:
+- [x] **Create `src/cortex/commands/journal.py`** with `journal` group and `draft` subcommand. Args: `type` (positional, e.g. `decision`, `incident`, `release`, `pr-merged`, `plan-transition`, `sentinel-cycle`); `--no-edit` (skip `$EDITOR`, print path); `--slug <text>` (override the auto-generated filename slug); `--path <project-root>` (default `.`).
+- [x] **Template resolution** — first `<root>/.cortex/templates/journal/<type>.md`, then bundled `src/cortex/_data/templates/journal/<type>.md`. Error with list of available types if neither found.
+- [x] **Pre-fill from context.** Default fill substitutes:
   - `**Date:**` → today's ISO date
   - `**Type:**` → the requested type (override the template's literal field if present)
   - `<title>` placeholder → derived from the latest commit subject (fallback: "TODO")
   - `<one-sentence summary>` placeholder → leave empty, let the user write
   - `## Context` → for `decision` / `incident`, append commented-out context: most recent 5 commit subjects (one per line) and, when `gh` is installed and authenticated, `gh pr view` for the current branch's PR (or "no open PR for this branch")
-- [ ] **Filename pattern** — `YYYY-MM-DD-<slug>.md`. Slug derives from the title via the same lowercase-strip-collapse normalization used by `goal_hash.normalize_goal_hash`, but limited to 50 characters. If `<slug>` is provided via `--slug`, use it verbatim (still limit to 50 chars and strip non-`[a-z0-9-]`).
-- [ ] **`gh` degradation.** When `gh` is not on PATH or `gh auth status` fails, skip the PR-context step and write `_(gh PR context unavailable: gh not installed or not authenticated)_` as a comment in the body. Never block.
-- [ ] **`$EDITOR` handling.** Default: write to a temp file, run `$EDITOR <tempfile>` (fall back to `vi` then `nano` then bail), then on editor exit move the file to `.cortex/journal/<filename>`. `--no-edit` writes directly to `.cortex/journal/` and prints the path.
-- [ ] **Wire `journal` group into `cli.py`.** Subcommand groups already exist (`status`, `manifest`, `grep`, `doctor`, `init`, `promote`, `version`).
-- [ ] **Tests** — `tests/test_journal_draft.py`: real temp git repo, real `.cortex/templates/journal/decision.md` (copied from this repo's bundle), `cortex journal draft decision --no-edit` produces a file with today's date and the latest commit's subject as title; `--slug custom-slug` honors the slug; missing template type produces a clear error; gh-missing fallback works.
-- [ ] **Open PR.**
+- [x] **Filename pattern** — `YYYY-MM-DD-<slug>.md`. Slug derives from the title via the same lowercase-strip-collapse normalization used by `goal_hash.normalize_goal_hash`, but limited to 50 characters. If `<slug>` is provided via `--slug`, use it verbatim (still limit to 50 chars and strip non-`[a-z0-9-]`).
+- [x] **`gh` degradation.** When `gh` is not on PATH or `gh auth status` fails, skip the PR-context step and write `_(gh PR context unavailable: gh not installed or not authenticated)_` as a comment in the body. Never block.
+- [x] **`$EDITOR` handling.** Default: write to a temp file, run `$EDITOR <tempfile>` (fall back to `vi` then `nano` then bail), then on editor exit move the file to `.cortex/journal/<filename>`. `--no-edit` writes directly to `.cortex/journal/` and prints the path.
+- [x] **Wire `journal` group into `cli.py`.** Subcommand groups already exist (`status`, `manifest`, `grep`, `doctor`, `init`, `promote`, `version`).
+- [x] **Tests** — `tests/test_journal_draft.py`: real temp git repo, real `.cortex/templates/journal/decision.md` (copied from this repo's bundle), `cortex journal draft decision --no-edit` produces a file with today's date and the latest commit's subject as title; `--slug custom-slug` honors the slug; missing template type produces a clear error; gh-missing fallback works.
+- [x] **Open PR.**
 
 ### PR 3 — `cortex plan spawn <slug>`
 
-- [ ] **Create `src/cortex/commands/plan.py`** with `plan` group and `spawn` subcommand. Args: `slug` (positional, becomes filename); `--title <text>` (drives Goal-hash and the `# <title>` line — required); `--cites <text>` (optional, comma-separated initial Cites entries); `--path <project-root>`.
-- [ ] **Scaffolding** — write `.cortex/plans/<slug>.md` with frontmatter:
+- [x] **Create `src/cortex/commands/plan.py`** with `plan` group and `spawn` subcommand. Args: `slug` (positional, becomes filename); `--title <text>` (drives Goal-hash and the `# <title>` line — required); `--cites <text>` (optional, comma-separated initial Cites entries); `--path <project-root>`.
+- [x] **Scaffolding** — write `.cortex/plans/<slug>.md` with frontmatter:
   - `Status: active`
   - `Written: <today>`
   - `Author: <auto-detected>` — e.g. `claude-session-<iso>` if `$CORTEX_SESSION_ID` set, else `human`
   - `Goal-hash: <computed>` via `cortex.goal_hash.normalize_goal_hash(title)`
   - `Updated-by:` with one seeded line — `<iso> <author> (created via cortex plan spawn)`
   - `Cites:` empty or comma-separated from `--cites`
-- [ ] **Body sections** — empty placeholders for `## Why (grounding)`, `## Success Criteria`, `## Approach`, `## Work items`, `## Follow-ups (deferred)`. Each section has a short `_(fill in)_` italic placeholder so `cortex doctor` doesn't immediately fail on missing required sections.
-- [ ] **Refuse to overwrite.** If `.cortex/plans/<slug>.md` exists, error and exit 1 with a message naming the existing file.
-- [ ] **Wire into `cli.py`.**
-- [ ] **Tests** — `tests/test_plan_spawn.py`: scaffolded file passes `cortex doctor` plan checks (frontmatter complete, Goal-hash matches title, all required sections present); slug collision raises; `--cites` populates correctly.
-- [ ] **Open PR.**
+- [x] **Body sections** — empty placeholders for `## Why (grounding)`, `## Success Criteria`, `## Approach`, `## Work items`, `## Follow-ups (deferred)`. Each section has a short `_(fill in)_` italic placeholder so `cortex doctor` doesn't immediately fail on missing required sections.
+- [x] **Refuse to overwrite.** If `.cortex/plans/<slug>.md` exists, error and exit 1 with a message naming the existing file.
+- [x] **Wire into `cli.py`.**
+- [x] **Tests** — `tests/test_plan_spawn.py`: scaffolded file passes `cortex doctor` plan checks (frontmatter complete, Goal-hash matches title, all required sections present); slug collision raises; `--cites` populates correctly.
+- [x] **Open PR.**
 
 ### PR 4 — `cortex doctor` orphan-deferral check
 
-- [ ] **Locate** the doctor module that walks plan files (`src/cortex/validation.py` or `src/cortex/commands/doctor.py`). Add a new check `_check_orphan_deferrals(plan_path)` that:
+- [x] **Locate** the doctor module that walks plan files (`src/cortex/validation.py` or `src/cortex/commands/doctor.py`). Add a new check `_check_orphan_deferrals(plan_path)` that:
   - Locates the `## Follow-ups (deferred)` section.
   - For each `- ` bullet item in that section, verifies the bullet text contains either `journal/<...>` or `plans/<...>` (case-insensitive) — an explicit citation to where the deferral is resolved.
   - Bullets without such a citation produce a warning of the form `<plan>:<line>: Follow-ups (deferred) item lacks resolution citation per SPEC § 4.2: "<first-50-chars>".`
-- [ ] **Run only on `Status: active` plans** to avoid noise from shipped/cancelled plans (which may have un-cited items that have since been resolved organically).
-- [ ] **Surface as warning by default; error under `--strict`** if doctor supports `--strict`. Match the existing convention.
-- [ ] **Tests** — `tests/test_doctor_orphan_deferral.py`: synthetic plan with all-cited items (clean), one with an uncited item (warns), one with a non-active status (skipped). Assert warning text format.
-- [ ] **Verify on this repo.** `cortex doctor` should pass on `plans/cortex-v1.md` (every Follow-up cites a journal entry) and on this plan once it lands.
-- [ ] **Open PR.**
+- [x] **Run only on `Status: active` plans** to avoid noise from shipped/cancelled plans (which may have un-cited items that have since been resolved organically).
+- [x] **Surface as warning by default; error under `--strict`** if doctor supports `--strict`. Match the existing convention.
+- [x] **Tests** — `tests/test_doctor_orphan_deferral.py`: synthetic plan with all-cited items (clean), one with an uncited item (warns), one with a non-active status (skipped). Assert warning text format.
+- [x] **Verify on this repo.** `cortex doctor` should pass on `plans/cortex-v1.md` (every Follow-up cites a journal entry) and on this plan once it lands.
+- [x] **Open PR.**
 
 ### PR 5 — v0.3.0 release
 
-- [ ] Bump `__version__` in `src/cortex/__init__.py` from `0.2.7` → `0.3.0`.
-- [ ] Bump `version` in `pyproject.toml` to `0.3.0`.
-- [ ] `uv lock` regen.
-- [ ] Hand-author a `release` journal entry on this repo's `.cortex/journal/2026-04-25-v0.3.0-released.md` using the new template (dogfood the keystone immediately).
-- [ ] Update `.cortex/state.md` `## Shipped recently` to record v0.3.0.
-- [ ] Mark this plan `Status: shipped`, set `Promoted-to: journal/2026-04-25-cortex-v0.3.0-shipped`, write a one-line shipped record.
-- [ ] In the parent [`plans/cortex-v1.md`](./cortex-v1.md), check off the v0.3.0 Work-items and add an Updated-by line.
-- [ ] Open the release-prep PR. On merge, the existing `release.yml` workflow auto-updates the Homebrew tap.
-- [ ] Tag, push tag, `gh release create v0.3.0 --generate-notes`.
-- [ ] Verify Homebrew install (`brew upgrade autumngarage/cortex/cortex`) reports `0.3.0`.
+- [x] Bump `__version__` in `src/cortex/__init__.py` from `0.2.7` → `0.3.0`.
+- [x] Bump `version` in `pyproject.toml` to `0.3.0`.
+- [x] `uv lock` regen.
+- [x] Hand-author a `release` journal entry on this repo's `.cortex/journal/2026-04-25-v0.3.0-released.md` using the new template (dogfood the keystone immediately).
+- [x] Update `.cortex/state.md` `## Shipped recently` to record v0.3.0.
+- [x] Mark this plan `Status: shipped`, set `Promoted-to: journal/2026-04-25-cortex-v0.3.0-shipped`, write a one-line shipped record.
+- [x] In the parent [`plans/cortex-v1.md`](./cortex-v1.md), check off the v0.3.0 Work-items and add an Updated-by line.
+- [x] Open the release-prep PR. On merge, the existing `release.yml` workflow auto-updates the Homebrew tap.
+- [x] Tag, push tag, `gh release create v0.3.0 --generate-notes`.
+- [x] Verify Homebrew install (`brew upgrade autumngarage/cortex/cortex`) reports `0.3.0`.
 
 ## Follow-ups (deferred)
 
