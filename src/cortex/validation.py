@@ -54,6 +54,15 @@ PLAN_REQUIRED_SECTIONS = (
     "## Approach",
     "## Work items",
 )
+
+# SPEC § 4.2: every item moved out of a Plan's scope must resolve to another
+# Plan or Journal entry within the same commit. The orphan-deferral check
+# scans `## Follow-ups (deferred)` bullets on active plans and warns when an
+# item lacks a citation to a durable layer entry. The literal SPEC text
+# names Plan and Journal; in practice projects also resolve to Doctrine
+# (which is the most durable layer of all — immutable-with-supersede),
+# so we accept all three durable-layer prefixes.
+PLAN_FOLLOWUP_CITATION_RE = re.compile(r"(?:plans|journal|doctrine)/[A-Za-z0-9._-]+")
 PLAN_GROUNDING_LINK_RE = re.compile(
     r"(doctrine/|state\.md|journal/)",
     re.IGNORECASE,
@@ -475,6 +484,38 @@ def check_plans(project_root: Path) -> list[Issue]:
                         "(SPEC § 4.3).",
                     )
                 )
+
+        # Orphan-deferral check (SPEC § 4.2). Only run on active plans —
+        # shipped/cancelled plans may have follow-up bullets whose
+        # resolution is now in git history rather than a citation, and
+        # warning on those would generate noise on every doctor run.
+        status_str = frontmatter.get("Status")
+        is_active = isinstance(status_str, str) and status_str.strip() == "active"
+        if is_active:
+            followups = _extract_section(body, "## Follow-ups (deferred)")
+            if followups is not None:
+                for raw_line in followups.splitlines():
+                    stripped = raw_line.lstrip()
+                    if not stripped.startswith(("- ", "* ")):
+                        continue
+                    bullet_text = stripped[2:].strip()
+                    if not bullet_text:
+                        continue
+                    if PLAN_FOLLOWUP_CITATION_RE.search(bullet_text):
+                        continue
+                    snippet = bullet_text[:80]
+                    if len(bullet_text) > 80:
+                        snippet += "…"
+                    issues.append(
+                        Issue(
+                            Severity.WARNING,
+                            rel,
+                            f"Plan `Follow-ups (deferred)` item lacks resolution "
+                            f"citation per SPEC § 4.2 (needs `plans/<slug>`, "
+                            f"`journal/<date>-<slug>`, or `doctrine/<nnnn>-<slug>`): "
+                            f"{snippet!r}",
+                        )
+                    )
 
     for goal_hash, plans in goal_hashes.items():
         if len(plans) > 1:
