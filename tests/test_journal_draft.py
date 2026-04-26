@@ -256,6 +256,30 @@ def test_editor_path_exclusive_create_blocks_race_overwrite(
     Path(match.group(1)).unlink(missing_ok=True)
 
 
+def test_writer_refuses_missing_spec_version(git_project: Path) -> None:
+    # SPEC § 7: writers refuse, readers warn. Removing SPEC_VERSION must
+    # trigger refuse-to-write before any Journal entry is created.
+    (git_project / ".cortex" / "SPEC_VERSION").unlink()
+    result = _draft(git_project, "decision", "--slug", "no-spec-version")
+    assert result.exit_code == 2, result.output
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "refusing to write" in combined
+    today = date.today().isoformat()
+    target = git_project / ".cortex" / "journal" / f"{today}-no-spec-version.md"
+    assert not target.exists()
+
+
+def test_writer_refuses_unsupported_spec_version(git_project: Path) -> None:
+    (git_project / ".cortex" / "SPEC_VERSION").write_text("9.9.9-future\n")
+    result = _draft(git_project, "decision", "--slug", "future-spec")
+    assert result.exit_code == 2, result.output
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "Refusing to write" in combined
+    today = date.today().isoformat()
+    target = git_project / ".cortex" / "journal" / f"{today}-future-spec.md"
+    assert not target.exists()
+
+
 def test_invalid_type_name_rejected(git_project: Path) -> None:
     # Path-traversal attempt: ../../etc/passwd as the type would resolve
     # outside .cortex/templates/journal/. Validator must reject before any

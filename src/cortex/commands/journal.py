@@ -32,7 +32,7 @@ from pathlib import Path
 
 import click
 
-from cortex.compat import warn_if_incompatible
+from cortex.compat import require_compatible
 
 _DATE_PLACEHOLDER = "{{ YYYY-MM-DD }}"
 _H1_TEMPLATE_RE = re.compile(r"^# \{\{[^}]+\}\}.*$", re.MULTILINE)
@@ -207,7 +207,10 @@ def draft_command(
             err=True,
         )
         sys.exit(2)
-    warn_if_incompatible(cortex_dir)
+    # `journal draft` is a writer; SPEC § 7 says writers refuse on unknown
+    # major versions rather than warning. require_compatible exits 2 on
+    # missing or unsupported SPEC_VERSION.
+    require_compatible(cortex_dir)
 
     try:
         template = _resolve_template(cortex_dir, journal_type)
