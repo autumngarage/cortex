@@ -122,16 +122,16 @@ def _print_siblings(project_root: Path) -> None:
 def _print_audit(project_root: Path, since_days: int) -> None:
     report = audit(project_root, since_days=since_days)
     click.echo(
-        f"\ncortex doctor --audit: {report.commits_examined} commit(s) in the last "
-        f"{since_days} days; {len(report.fires)} trigger fires, "
-        f"{len(report.unmatched)} unmatched."
+        f"\ncortex doctor --audit: {report.commits_examined} commit(s), "
+        f"{report.tags_examined} tag(s) in the last {since_days} days; "
+        f"{len(report.fires)} trigger fires, {len(report.unmatched)} unmatched."
     )
     for fire in report.unmatched:
         click.echo(
-            f"WARNING  {fire.trigger} {fire.commit.sha[:8]} "
-            f"({fire.commit.date.date()}) — no Journal entry "
+            f"WARNING  {fire.trigger} {fire.short_sha} "
+            f"({fire.source_date.date()}) — no Journal entry "
             f"of Type `{EXPECTED_TYPE[fire.trigger]}` within 72h. "
-            f"Subject: {fire.commit.subject}",
+            f"{fire.label}",
             err=True,
         )
 
