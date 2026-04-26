@@ -1,6 +1,6 @@
 ---
-Generated: 2026-04-25T23:50:00-04:00
-Generator: hand-authored (deterministic `cortex refresh-state` ships in v0.4.0 per the production-release rerank; LLM `refresh-state --enhance` and `refresh-map` deferred to v1.x post-production — tracked as release-driven sub-sections of plans/cortex-v1; v0.3.0 release-prep PR #48 currently in flight, four PRs (#44 #45 #46 #47) already merged on main)
+Generated: 2026-04-26T01:20:00-04:00
+Generator: hand-authored (deterministic `cortex refresh-state` ships in v0.4.0 per the production-release rerank; LLM `refresh-state --enhance` and `refresh-map` deferred to v1.x post-production — tracked as release-driven sub-sections of plans/cortex-v1; v0.3.0 shipped 2026-04-26 — five PRs #44–#48 merged, tag pushed, GitHub Release published, Homebrew formula auto-bumped)
 Sources:
   - HEAD of branch `chore/v0.3.0-shipped-record` (merge-base main at 6ee4455, PR #48 squash; this snapshot adds the post-tag closure: journal/2026-04-26-v0.3.0-released release entry, plans/cortex-v0.3.0 → Status: shipped, plans/cortex-v1 v0.3.0 sub-section ✅ shipped). v0.3.0 artifact published — tag `v0.3.0` pushed; GitHub Release at https://github.com/autumngarage/cortex/releases/tag/v0.3.0; release.yml auto-bumped the homebrew-cortex formula
   - https://github.com/autumngarage/cortex/releases (v0.1.0 through v0.3.0 published)
@@ -14,7 +14,7 @@ Sources:
   - docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md (conductor stale-CLAUDE.md incident)
   - SPEC.md v0.4.0-dev (T1.10 + § 4.2 Doctrine clarification, additive minor)
   - pyproject.toml, src/cortex/ (cortex 0.3.0 — `journal draft <type>` (#45) + `plan spawn <slug>` (#46) + T1.10 release trigger + `release` journal template (#44) + cortex doctor orphan-deferral check (#47); shipped on Homebrew via release.yml auto-bump of autumngarage/homebrew-cortex formula)
-Corpus: 5 Doctrine entries, 1 active Plan (cortex-v1), 28 Journal entries, 11 Templates, 1 Case study (conductor stale-CLAUDE.md 2026-04-24), 1 Python package (cortex 0.3.0-pending — adds `journal draft` + `plan spawn` + T1.10 audit + orphan-deferral check on top of the existing `version` + `init` + `doctor` + `manifest` + `grep` + `status` + `promote` surface)
+Corpus: 5 Doctrine entries, 1 active Plan (cortex-v1), 28 Journal entries, 11 Templates, 1 Case study (conductor stale-CLAUDE.md 2026-04-24), 1 Python package (cortex 0.3.0 — `journal draft` + `plan spawn` + T1.10 audit + orphan-deferral check on top of the existing `version` + `init` + `doctor` + `manifest` + `grep` + `status` + `promote` surface; published on Homebrew via release.yml)
 Omitted:
   - .cortex/.index.json — per SPEC § 2 the file is auto-maintained by the Cortex CLI and its absence is expected until v0.6.0's `.index.json` writer ships (the lifecycle layer; the index backs promotion-queue governance, sequenced after the v0.3.0–v0.5.0 write/read/trust foundations). `cortex status` and `cortex promote` already handle this state gracefully.
 Incomplete:
