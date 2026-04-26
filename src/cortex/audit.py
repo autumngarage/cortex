@@ -400,9 +400,8 @@ def _best_matching_entry(
             continue
         if entry.trigger is not None and entry.trigger != trigger.value:
             continue
-        if trigger is Trigger.T1_10 and tag_name is not None:
-            if entry.tag != tag_name:
-                continue
+        if trigger is Trigger.T1_10 and tag_name is not None and entry.tag != tag_name:
+            continue
         delta = abs(entry.date - source_date)
         if delta <= best_delta:
             best = entry

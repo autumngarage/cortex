@@ -434,7 +434,7 @@ def test_default_next_step_hint_still_present(tmp_path: Path) -> None:
 
 def _git_init(target: Path) -> None:
     """Initialise a minimal git repo at `target` so `git ls-files` can run."""
-    import subprocess  # noqa: PLC0415  local to keep top-level imports minimal
+    import subprocess
 
     for cmd in (
         ["git", "init", "-q"],
@@ -446,7 +446,7 @@ def _git_init(target: Path) -> None:
 
 
 def _git_add_commit(target: Path, *paths: str) -> None:
-    import subprocess  # noqa: PLC0415
+    import subprocess
 
     subprocess.run(
         ["git", "-C", str(target), "add", *paths],
@@ -487,7 +487,7 @@ def test_local_only_remediation_is_plain_when_target_equals_cwd(tmp_path: Path) 
     """When `--path` is not set (or equals cwd), the remediation command
     should be the plain `git rm --cached -r .cortex/` without the `-C`
     prefix — the common case deserves the readable form."""
-    import os  # noqa: PLC0415
+    import os
 
     _git_init(tmp_path)
     (tmp_path / ".cortex").mkdir()
@@ -568,7 +568,7 @@ def test_local_only_detects_tracked_files_in_monorepo_subdir(tmp_path: Path) -> 
     """Monorepo case: `.git` lives at the parent repo root, `cortex init`
     runs against a subdirectory. The tracked-files check must still fire —
     `git ls-files` is authoritative because it walks up on its own."""
-    import subprocess  # noqa: PLC0415
+    import subprocess
 
     # Parent repo at tmp_path, subdir at tmp_path/packages/sub which already
     # has a committed `.cortex/` file (simulating an existing shared mode).
@@ -616,7 +616,7 @@ def test_local_only_warns_when_git_check_fails(tmp_path: Path, monkeypatch) -> N
     from cwd; the emitted remediation must use the path-aware form
     (`git -C <target>`) so a monorepo user running from the repo root
     doesn't inspect or untrack the wrong `.cortex/`."""
-    from cortex.commands import init as init_mod  # noqa: PLC0415
+    from cortex.commands import init as init_mod
 
     def fake_tracked(_path):  # pragma: no cover - simple stub
         return None  # simulate the "check failed" branch
@@ -640,8 +640,9 @@ def test_local_only_check_failed_uses_plain_form_when_target_equals_cwd(
     """Regression: when cwd matches the target, the uncertainty warning
     drops the `-C` prefix for readability — parallel to the tracked
     branch's plain-form behavior."""
-    import os  # noqa: PLC0415
-    from cortex.commands import init as init_mod  # noqa: PLC0415
+    import os
+
+    from cortex.commands import init as init_mod
 
     monkeypatch.setattr(init_mod, "_tracked_cortex_files", lambda _p: None)
 
@@ -665,7 +666,7 @@ def test_local_only_remediation_quotes_paths_with_spaces(tmp_path: Path) -> None
     """If `--path` contains spaces, the `git -C <path>` remediation must
     shell-quote the path so a copy-paste into a terminal still untracks
     the right directory instead of parsing the path as multiple args."""
-    import subprocess  # noqa: PLC0415
+    import subprocess
 
     parent = tmp_path / "My Project"
     parent.mkdir()
