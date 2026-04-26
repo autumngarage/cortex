@@ -126,8 +126,8 @@ This plan is done when v0.3.0 is tagged, released, and on Homebrew, with all fiv
 - [x] Mark this plan `Status: shipped`, set `Promoted-to: journal/2026-04-25-cortex-v0.3.0-shipped`, write a one-line shipped record.
 - [x] In the parent [`plans/cortex-v1.md`](./cortex-v1.md), check off the v0.3.0 Work-items and add an Updated-by line.
 - [x] Open the release-prep PR. On merge, the existing `release.yml` workflow auto-updates the Homebrew tap.
-- [x] Tag, push tag, `gh release create v0.3.0 --generate-notes`.
-- [x] Verify Homebrew install (`brew upgrade autumngarage/cortex/cortex`) reports `0.3.0`.
+- [ ] Tag, push tag, `gh release create v0.3.0 --generate-notes`. (post-merge of this PR)
+- [ ] Verify Homebrew install (`brew upgrade autumngarage/cortex/cortex`) reports `0.3.0`. (post-tag, after `release.yml` runs)
 
 ## Follow-ups (deferred)
 
