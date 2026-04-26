@@ -501,6 +501,7 @@ def check_plans(project_root: Path) -> list[Issue]:
         if is_active:
             followups = _extract_section(body, "## Follow-ups (deferred)")
             if followups is not None:
+                cortex_dir = project_root / ".cortex"
                 for raw_line in followups.splitlines():
                     stripped = raw_line.lstrip()
                     if not stripped.startswith(("- ", "* ")):
@@ -508,21 +509,43 @@ def check_plans(project_root: Path) -> list[Issue]:
                     bullet_text = stripped[2:].strip()
                     if not bullet_text:
                         continue
-                    if PLAN_FOLLOWUP_CITATION_RE.search(bullet_text):
-                        continue
+                    matches = list(
+                        PLAN_FOLLOWUP_CITATION_RE.finditer(bullet_text)
+                    )
                     snippet = bullet_text[:80]
                     if len(bullet_text) > 80:
                         snippet += "…"
-                    issues.append(
-                        Issue(
-                            Severity.WARNING,
-                            rel,
-                            f"Plan `Follow-ups (deferred)` item lacks resolution "
-                            f"citation per SPEC § 4.2 (needs `plans/<slug>`, "
-                            f"`journal/<date>-<slug>`, or `doctrine/<nnnn>-<slug>`): "
-                            f"{snippet!r}",
+                    if not matches:
+                        issues.append(
+                            Issue(
+                                Severity.WARNING,
+                                rel,
+                                f"Plan `Follow-ups (deferred)` item lacks "
+                                f"resolution citation per SPEC § 4.2 (needs "
+                                f"`plans/<slug>`, `journal/<date>-<slug>`, or "
+                                f"`doctrine/<nnnn>-<slug>`): {snippet!r}",
+                            )
                         )
-                    )
+                        continue
+                    # Citation-shape match found; verify at least one cited
+                    # target actually exists. SPEC § 4.2 mandates resolution
+                    # to a *durable-layer entry*, not just a path-shaped
+                    # string — dangling citations are still orphans.
+                    if not any(
+                        _resolves_to_existing_layer_entry(cortex_dir, m.group(0))
+                        for m in matches
+                    ):
+                        cited = ", ".join(m.group(0) for m in matches)
+                        issues.append(
+                            Issue(
+                                Severity.WARNING,
+                                rel,
+                                f"Plan `Follow-ups (deferred)` item cites a "
+                                f"non-existent target (no matching file "
+                                f"under .cortex/) per SPEC § 4.2: cited "
+                                f"{cited!r} in {snippet!r}",
+                            )
+                        )
 
     for goal_hash, plans in goal_hashes.items():
         if len(plans) > 1:
@@ -535,6 +558,41 @@ def check_plans(project_root: Path) -> list[Issue]:
                 )
             )
     return issues
+
+
+def _resolves_to_existing_layer_entry(cortex_dir: Path, citation: str) -> bool:
+    """Return True if ``citation`` (e.g. ``plans/foo``, ``journal/2026-04-25-bar``,
+    ``doctrine/0005-baz``) resolves to a real file under ``cortex_dir``.
+
+    Tolerates ``.md`` suffix and looks in archive subdirs for Plans and
+    Journals (per SPEC § 5.1 retention tiers). Doctrine has no archive —
+    superseded entries stay in place.
+    """
+    layer, sep, slug = citation.partition("/")
+    if not sep or not slug:
+        return False
+    # Strip trailing punctuation that the regex character class greedily
+    # consumed from prose (e.g. "see plans/foo.md." has a sentence-final
+    # period). Then strip a trailing `.md` suffix if present.
+    slug = slug.rstrip(".")
+    slug = slug[:-3] if slug.endswith(".md") else slug
+    if not slug:
+        return False
+    filename = f"{slug}.md"
+    if layer == "plans":
+        candidates = (
+            cortex_dir / "plans" / filename,
+            cortex_dir / "plans" / "archive" / filename,
+        )
+    elif layer == "doctrine":
+        candidates = (cortex_dir / "doctrine" / filename,)
+    elif layer == "journal":
+        archive_root = cortex_dir / "journal" / "archive"
+        archive_candidates = tuple(archive_root.glob(f"*/{filename}")) if archive_root.exists() else ()
+        candidates = (cortex_dir / "journal" / filename, *archive_candidates)
+    else:
+        return False
+    return any(c.exists() for c in candidates)
 
 
 _MEASURABLE_SIGNAL_RE = re.compile(

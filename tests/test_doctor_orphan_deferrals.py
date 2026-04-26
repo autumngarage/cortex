@@ -78,7 +78,33 @@ def test_orphan_warns_on_uncited_bullet(cortex_project: Path) -> None:
     assert "lacks resolution citation" in warnings[0]
 
 
-def test_orphan_clean_when_bullet_cites_journal(cortex_project: Path) -> None:
+def _create_journal_entry(project: Path, name: str) -> None:
+    (project / ".cortex" / "journal" / f"{name}.md").write_text(
+        f"# {name}\n\n**Date:** 2026-04-25\n**Type:** decision\n\nbody\n"
+    )
+
+
+def _create_doctrine_entry(project: Path, name: str) -> None:
+    (project / ".cortex" / "doctrine" / f"{name}.md").write_text(
+        f"# 0005 — {name}\n\n**Status:** Accepted\n**Date:** 2026-04-25\n**Load-priority:** default\n"
+    )
+
+
+def _create_plan_entry(project: Path, slug: str, status: str = "shipped") -> None:
+    (project / ".cortex" / "plans" / f"{slug}.md").write_text(
+        f"---\n"
+        f"Status: {status}\n"
+        f"Written: 2026-04-25\n"
+        f"Author: human\n"
+        f"Goal-hash: 12345678\n"
+        f"Updated-by:\n  - 2026-04-25T22:00 human (test)\n"
+        f"Cites: doctrine/0001\n"
+        f"---\n\n# {slug}\n\nplaceholder\n"
+    )
+
+
+def test_orphan_clean_when_bullet_cites_existing_journal(cortex_project: Path) -> None:
+    _create_journal_entry(cortex_project, "2026-04-25-foo")
     plan = _write_plan(
         cortex_project,
         "orphan-journal",
@@ -88,7 +114,8 @@ def test_orphan_clean_when_bullet_cites_journal(cortex_project: Path) -> None:
     assert _orphan_warnings(cortex_project, plan) == []
 
 
-def test_orphan_clean_when_bullet_cites_plan(cortex_project: Path) -> None:
+def test_orphan_clean_when_bullet_cites_existing_plan(cortex_project: Path) -> None:
+    _create_plan_entry(cortex_project, "successor-plan")
     plan = _write_plan(
         cortex_project,
         "orphan-plan",
@@ -98,12 +125,56 @@ def test_orphan_clean_when_bullet_cites_plan(cortex_project: Path) -> None:
     assert _orphan_warnings(cortex_project, plan) == []
 
 
-def test_orphan_clean_when_bullet_cites_doctrine(cortex_project: Path) -> None:
+def test_orphan_clean_when_bullet_cites_existing_doctrine(cortex_project: Path) -> None:
+    _create_doctrine_entry(cortex_project, "0005-scope-boundaries")
     plan = _write_plan(
         cortex_project,
         "orphan-doctrine",
         "active",
         "- Resolved by doctrine/0005-scope-boundaries (out of scope).\n",
+    )
+    assert _orphan_warnings(cortex_project, plan) == []
+
+
+def test_orphan_warns_when_cited_target_does_not_exist(cortex_project: Path) -> None:
+    """SPEC § 4.2 requires resolution to a real durable-layer entry, not a
+    citation-shaped string. Dangling citations are still orphans."""
+    plan = _write_plan(
+        cortex_project,
+        "orphan-dangling",
+        "active",
+        "- Resolved by journal/2026-04-25-does-not-exist.\n",
+    )
+    warnings = _orphan_warnings(cortex_project, plan)
+    assert len(warnings) == 1, warnings
+    assert "non-existent target" in warnings[0]
+
+
+def test_orphan_clean_when_one_of_multiple_citations_exists(cortex_project: Path) -> None:
+    """If a bullet cites multiple targets and at least one resolves to an
+    existing file, the bullet passes — humans often write 'see X or Y' in
+    a deferral note and either resolution suffices."""
+    _create_journal_entry(cortex_project, "2026-04-25-real")
+    plan = _write_plan(
+        cortex_project,
+        "orphan-mixed",
+        "active",
+        "- See journal/2026-04-25-real or journal/2026-04-25-fake for context.\n",
+    )
+    assert _orphan_warnings(cortex_project, plan) == []
+
+
+def test_orphan_clean_when_journal_in_archive(cortex_project: Path, tmp_path: Path) -> None:
+    archive_dir = cortex_project / ".cortex" / "journal" / "archive" / "2025"
+    archive_dir.mkdir(parents=True)
+    (archive_dir / "2025-12-31-old.md").write_text(
+        "# Old\n\n**Date:** 2025-12-31\n**Type:** decision\n\nbody\n"
+    )
+    plan = _write_plan(
+        cortex_project,
+        "orphan-archived",
+        "active",
+        "- Resolved by journal/2025-12-31-old (in archive).\n",
     )
     assert _orphan_warnings(cortex_project, plan) == []
 
@@ -167,6 +238,7 @@ def test_orphan_skipped_on_empty_followups(cortex_project: Path) -> None:
 def test_orphan_warns_per_uncited_bullet_independently(cortex_project: Path) -> None:
     """Each uncited bullet generates its own warning so the user sees the
     full list of items needing attention, not just the first."""
+    _create_journal_entry(cortex_project, "2026-04-25-foo")
     plan = _write_plan(
         cortex_project,
         "orphan-multi",
@@ -225,7 +297,8 @@ def test_orphan_warns_on_malformed_doctrine_citation(cortex_project: Path) -> No
     assert len(_orphan_warnings(cortex_project, plan)) == 1
 
 
-def test_orphan_clean_on_well_formed_dated_journal_path(cortex_project: Path) -> None:
+def test_orphan_clean_on_well_formed_existing_journal(cortex_project: Path) -> None:
+    _create_journal_entry(cortex_project, "2026-04-25-init-ux-fixes-plan-shipped")
     plan = _write_plan(
         cortex_project,
         "orphan-good-journal",
@@ -235,7 +308,8 @@ def test_orphan_clean_on_well_formed_dated_journal_path(cortex_project: Path) ->
     assert _orphan_warnings(cortex_project, plan) == []
 
 
-def test_orphan_clean_on_well_formed_doctrine_path(cortex_project: Path) -> None:
+def test_orphan_clean_on_well_formed_existing_doctrine(cortex_project: Path) -> None:
+    _create_doctrine_entry(cortex_project, "0005-scope-boundaries-v2")
     plan = _write_plan(
         cortex_project,
         "orphan-good-doctrine",
