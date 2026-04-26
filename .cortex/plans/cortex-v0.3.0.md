@@ -1,25 +1,17 @@
 ---
-Status: shipped
+Status: active
 Written: 2026-04-25
-Shipped: 2026-04-25
 Author: claude-session-2026-04-25
 Goal-hash: 08364e1a
 Updated-by:
   - 2026-04-25T19:00 claude-session-2026-04-25 (spawned from plans/cortex-v1.md ### v0.3.0 sub-section as a session-scoped sub-plan; same pattern as plans/init-ux-fixes-from-touchstone — sub-plan exists to drive a focused multi-PR session, parent plan tracks the v0.3.0 → v1.0.0 arc)
-  - 2026-04-25T23:35 claude-session-2026-04-25 (Status: active → shipped — all five PRs landed (#44, #45, #46, #47, #48); v0.3.0 released; closure recorded in journal/2026-04-25-v0.3.0-released)
-Promoted-to: journal/2026-04-25-v0.3.0-released
-Cites: ../../SPEC.md, ../../.cortex/protocol.md, plans/cortex-v1, ../doctrine/0001-why-cortex-exists, ../doctrine/0003-spec-is-the-artifact, ../../docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md, journal/2026-04-25-v0.3.0-released
+  - 2026-04-26T00:05 claude-session-2026-04-25 (work-item PRs #44-#47 merged; release-prep PR #48 opened — version bump + uv.lock + README + state.md. Plan stays Status: active until the release artifact (tag + GitHub Release + Homebrew tap bump via release.yml) actually lands; on artifact landing this plan flips to Status: shipped with Promoted-to journal/<date>-v0.3.0-released)
+Cites: ../../SPEC.md, ../../.cortex/protocol.md, plans/cortex-v1, ../doctrine/0001-why-cortex-exists, ../doctrine/0003-spec-is-the-artifact, ../../docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md
 ---
 
 # Ship Cortex v0.3.0 Write-Side Foundation
 
-> **Shipped 2026-04-25.** All five PRs landed (#44 T1.10 + release template, #45 `cortex journal draft`, #46 `cortex plan spawn`, #47 orphan-deferral check, #48 v0.3.0 release prep). v0.3.0 is on Homebrew via the auto-deploy workflow. Closure recorded in [`journal/2026-04-25-v0.3.0-released`](../journal/2026-04-25-v0.3.0-released.md). v0.4.0 work on [`plans/cortex-v1`](./cortex-v1.md) (Read-side foundation: deterministic `refresh-state`, `cortex next` MVP, `cortex plan status`) resumes next.
->
-> *Original scope follows, preserved unchanged for historical reference. Work items below are marked `[x]` per the closure update.*
-
----
-
-> Session-scoped sub-plan driving the v0.3.0 release to landing tonight. Five PRs sequenced from smallest to keystone: T1.10 release-event amendment first, then `cortex journal draft <type>` as the keystone, then `cortex plan spawn`, then `cortex doctor` orphan-deferral, then the release cut. Closes the v0.3.0 sub-section of [`plans/cortex-v1.md`](./cortex-v1.md) on landing.
+> **Work-item PRs all merged on main as of 2026-04-25 (#44 T1.10 + release template, #45 `cortex journal draft`, #46 `cortex plan spawn`, #47 orphan-deferral check). Release-prep PR #48 in flight; tag, GitHub Release, and Homebrew tap bump follow on PR #48 merge via the existing `release.yml` workflow. Plan flips to `Status: shipped` once the artifact actually lands and a `release` Journal entry records it.**
 
 ## Why (grounding)
 
