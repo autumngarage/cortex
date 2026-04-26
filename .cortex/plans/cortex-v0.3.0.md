@@ -11,7 +11,7 @@ Cites: ../../SPEC.md, ../../.cortex/protocol.md, plans/cortex-v1, ../doctrine/00
 
 # Ship Cortex v0.3.0 Write-Side Foundation
 
-> **Work-item PRs all merged on main as of 2026-04-25 (#44 T1.10 + release template, #45 `cortex journal draft`, #46 `cortex plan spawn`, #47 orphan-deferral check). Release-prep PR #48 in flight; tag, GitHub Release, and Homebrew tap bump follow on PR #48 merge via the existing `release.yml` workflow. Plan flips to `Status: shipped` once the artifact actually lands and a `release` Journal entry records it.**
+> **Work-item PRs all merged on main as of 2026-04-25 (#44 T1.10 + release template, #45 `cortex journal draft`, #46 `cortex plan spawn`, #47 orphan-deferral check). Release-prep PR #48 in flight. Post-merge sequence: manual `git tag v0.3.0 && gh release create v0.3.0`; the `release-published` event then fires the existing `release.yml` workflow, which auto-bumps the Homebrew formula's url + sha256 (the workflow handles the formula bump only — tagging and release creation stay manual). Plan flips to `Status: shipped` once the artifact lands and a `release` Journal entry records it.**
 
 ## Why (grounding)
 
@@ -113,13 +113,13 @@ This plan is done when v0.3.0 is tagged, released, and on Homebrew, with all fiv
 - [x] Bump `__version__` in `src/cortex/__init__.py` from `0.2.7` → `0.3.0`.
 - [x] Bump `version` in `pyproject.toml` to `0.3.0`.
 - [x] `uv lock` regen.
-- [x] Hand-author a `release` journal entry on this repo's `.cortex/journal/2026-04-25-v0.3.0-released.md` using the new template (dogfood the keystone immediately).
-- [x] Update `.cortex/state.md` `## Shipped recently` to record v0.3.0.
-- [x] Mark this plan `Status: shipped`, set `Promoted-to: journal/2026-04-25-cortex-v0.3.0-shipped`, write a one-line shipped record.
-- [x] In the parent [`plans/cortex-v1.md`](./cortex-v1.md), check off the v0.3.0 Work-items and add an Updated-by line.
-- [x] Open the release-prep PR. On merge, the existing `release.yml` workflow auto-updates the Homebrew tap.
-- [ ] Tag, push tag, `gh release create v0.3.0 --generate-notes`. (post-merge of this PR)
-- [ ] Verify Homebrew install (`brew upgrade autumngarage/cortex/cortex`) reports `0.3.0`. (post-tag, after `release.yml` runs)
+- [x] Update `.cortex/state.md` `## Shipped recently` to record v0.3.0 (release-prep entry).
+- [x] In the parent [`plans/cortex-v1.md`](./cortex-v1.md), check off the v0.3.0 Work-item PRs and add an Updated-by line.
+- [x] Open the release-prep PR (#48).
+- [ ] (post-merge) Tag `v0.3.0`, push tag, `gh release create v0.3.0 --generate-notes`. The `release.yml` workflow fires on the `release-published` event (not on merge) and bumps the Homebrew formula's `url` + `sha256` automatically.
+- [ ] (post-release-published) Verify `brew upgrade autumngarage/cortex/cortex` reports `0.3.0`.
+- [ ] (post-tag) Hand-author a `release` Journal entry under `.cortex/journal/<release-date>-v0.3.0-released.md` using the new template — dogfoods the keystone command and supplies the matching `Type: release / Trigger: T1.10` entry the doctor audit looks for.
+- [ ] (post-release-entry) Mark this plan `Status: shipped` with `Promoted-to: journal/<release-date>-v0.3.0-released`, and tick the v0.3.0 release work-item in `plans/cortex-v1.md`.
 
 ## Follow-ups (deferred)
 

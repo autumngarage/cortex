@@ -57,7 +57,7 @@ Goal: the user can write journal entries and spawn plans cheaply, and the contra
 - [x] **`cortex plan spawn <slug>`** — scaffolds a Plan file with seven-field frontmatter (Status, Written, Author, Goal-hash, Updated-by seeded, Cites) and all required sections per SPEC § 3.4. `--title` computes Goal-hash per § 4.9 (reuses existing `cortex.goal_hash.normalize_goal_hash`). Shipped in PR #46.
 - [x] **`cortex doctor` orphan-deferral check** — scans every active Plan's `## Follow-ups (deferred)` section; warns when any item lacks a citation to another Plan, Journal entry, or Doctrine entry per SPEC § 4.2 (citation must resolve to a real file under `.cortex/`; a plan citing its own slug doesn't count). Errors under `--strict`. Would have caught the round-1 finding on PR #30. Shipped in PR #47.
 - [x] Tests — real filesystem, real git (no mocked subprocess), template-presence check, `cortex doctor` orphan-check unit tests against synthetic plan files, T1.10 audit test against a real `git init`'d repo with tags. 274 tests passing across the v0.3.0 PR sequence.
-- [~] v0.3.0 release — version bump (PR #48 in flight), tag + GitHub Release + Homebrew formula SHA update follow on PR #48 merge via `release.yml` workflow.
+- [~] v0.3.0 release — version bump (PR #48 in flight). Post-merge: manual `git tag v0.3.0 && gh release create v0.3.0`; the resulting `release-published` event fires `release.yml` which auto-bumps the Homebrew formula. (Tagging and release creation stay manual — the workflow only handles the formula bump.)
 
 ### v0.4.0 — Read-side foundation
 
