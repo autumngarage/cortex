@@ -215,7 +215,7 @@ Link to the triggering metric or decision — never invent context; always cite.
 - [ ] <pending>
 
 ## Follow-ups (deferred)
-Items moved out of scope during execution — each resolved to another plan or journal entry per § 4.2.
+Items moved out of scope during execution — each resolved to another Plan, Journal entry, or Doctrine entry per § 4.2.
 ```
 
 **Multi-writer collisions** (§ 4.9) are made visible via `Goal-hash:` matching, not prevented.
@@ -286,7 +286,7 @@ Enforced by any Cortex-spec-aware tool. Violations surface as warnings or (for t
 Every Plan's `Why (grounding)` section must link to a Doctrine entry, a State priority, or a Journal item. Unlinked plans are a smell.
 
 ### 4.2 Deferrals are tracked end-to-end
-Any item moved out of a Plan's scope must resolve to another Plan or a Journal entry within the same commit. No orphan deferrals.
+Any item moved out of a Plan's scope must resolve to a durable-layer entry within the same commit — another Plan, a Journal entry, or a Doctrine entry (the latter for "out of scope per Doctrine N" deferrals, where the resolution is a permanent scope boundary rather than a piece of work to track). No orphan deferrals. `cortex doctor` warns when a `## Follow-ups (deferred)` bullet on an active Plan lacks a `plans/<slug>`, `journal/<date>-<slug>`, or `doctrine/<nnnn>-<slug>` citation.
 
 ### 4.3 Success criteria are measurable
 Plan `Success Criteria` must name a concrete signal (metric, test, dashboard). Prose-only criteria fail the check.
@@ -410,7 +410,7 @@ Tools must declare which spec major versions they support. Readers encountering 
 
 **v0.3.1-dev is a clarification patch.** It rewrites § 4.4 promotion semantics and tightens § 4.6 typed-links usage. No implementable behavior changes: the prior § 4.4 text required retroactive `Promoted-to:` writes on source Journal entries, which contradicted § 3.5 (Journal is append-only); no conforming tool could have satisfied both. v0.3.1-dev resolves the contradiction by layer-mutability: `Promoted-to:` is allowed on mutable sources (Plans, Procedures) where retroactive writes were already permitted, and forbidden on append-only/immutable sources (Journal, Doctrine) where retroactive writes violate existing invariants. The § 4.6 list keeps `promoted-to` but clarifies its scope. Also fixes the `supersded-by` typo (now `superseded-by`). Because the implementable surface for each layer is unchanged, this stays a patch bump under the § 7 rule that patch = clarification without behavior change.
 
-**v0.4.0-dev adds T1.10.** Protocol § 2 gains a tenth Tier-1 trigger — `T1.10: A tagged release / distribution artifact shipped` — paired with a new `journal/release.md` template and a new `release` value in the § 3.5 `Type:` enum. Rationale grounded in the conductor case study (`docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md`): downstream documentation references *released* artifacts, not merged commits, and a release without a journal record is how the conductor incident's stale `CLAUDE.md` claim about the Homebrew tap survived eight subsequent releases. T1.10's audit walks `git tag --list` and matches each tag against a `Type: release` journal entry within 72h, parallel to T1.9's commit walk. Additive change — no existing fields, layouts, or invariants are modified. Bumped as a minor under § 7's "new Protocol triggers" rule (consumers need to opt into the new trigger and `release` enum value, so it is not a clarification patch).
+**v0.4.0-dev adds T1.10 plus the § 4.2 Doctrine-resolution clarification.** Protocol § 2 gains a tenth Tier-1 trigger — `T1.10: A tagged release / distribution artifact shipped` — paired with a new `journal/release.md` template and a new `release` value in the § 3.5 `Type:` enum. Rationale grounded in the conductor case study (`docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md`): downstream documentation references *released* artifacts, not merged commits, and a release without a journal record is how the conductor incident's stale `CLAUDE.md` claim about the Homebrew tap survived eight subsequent releases. T1.10's audit walks `git tag --list` and matches each tag against a `Type: release` journal entry within 72h, parallel to T1.9's commit walk. § 4.2 also formalizes Doctrine entries as a valid deferral resolution target alongside Plans and Journal entries — the practical pattern when a follow-up resolves to "out of scope per Doctrine N" rather than to a piece of work being tracked elsewhere. Additive change — no existing fields, layouts, or invariants are modified. Bumped as a minor under § 7's "new Protocol triggers" rule (consumers need to opt into the new trigger and `release` enum value, so it is not a clarification patch).
 
 **Protocol version relationship.** [`.cortex/protocol.md`](./.cortex/protocol.md) carries its own version. A Protocol version is compatible with one or more SPEC.md versions, declared in the Protocol's header. A major SPEC bump always requires a Protocol review; a minor SPEC bump may or may not trigger a Protocol bump depending on whether new triggers are needed.
 

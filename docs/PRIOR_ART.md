@@ -18,7 +18,7 @@ Internal evidence, `~/Repos/sigint`. Over ~6 months, the author evolved five doc
 Observed pains drove Cortex's cross-layer rules:
 - **Premature-completion declarations** (`COLLECTOR_MIGRATION.md` was declared complete Apr 5; tests weren't running the real code; fix landed Apr 7 with an AST guardrail). → **Plans must define measurable success criteria.**
 - **Silent data-flow failures hidden by stale aggregators** (`FIX_DATAFLOW_GAPS_PLAN`: 4 days of dead resolution pipeline while `/sig-status` reported normal). → **Regenerated layers carry `Generated:` headers and source lists; staleness is surfaced.**
-- **Deferrals scattered with no consolidated queue.** → **Deferred items must resolve to another plan or a journal entry in the same commit.**
+- **Deferrals scattered with no consolidated queue.** → **Deferred items must resolve to another Plan, Journal entry, or Doctrine entry in the same commit.**
 - **Lessons buried in CLAUDE.md rather than surfaced near risky code.** → **Promotion pipeline (Journal → Doctrine) with bidirectional links.**
 - **Plans didn't link to the metric they claim to fix.** → **Plans cite grounding (Doctrine entry, State priority, or Journal item).**
 

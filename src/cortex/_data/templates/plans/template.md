@@ -36,9 +36,9 @@ Cites: {{ doctrine/<nnnn>-<slug>, state.md § <section>, journal/<date>-<slug> }
 
 ## Follow-ups (deferred)
 
-{{ TODO: items moved out of scope during execution. SPEC requires every deferral to resolve to another Plan or Journal entry in the same commit — no orphan deferrals. Cortex doctor's orphan-deferral check ships in the v0.3.0 release. }}
+{{ TODO: items moved out of scope during execution. SPEC § 4.2 requires every deferral to resolve to another Plan, Journal entry, or Doctrine entry in the same commit — no orphan deferrals. Cortex doctor's orphan-deferral check ships in the v0.3.0 release. }}
 
-- {{ TODO: deferred item — resolve to a successor plan or a journal entry }}
+- {{ TODO: deferred item — resolve to a successor plan, a journal entry, or a doctrine entry }}
 
 ## Known limitations at exit
 
@@ -53,6 +53,6 @@ Authoring checklist (remove before committing):
 - [ ] Replace every `{{ ... }}` placeholder with real content.
 - [ ] `## Success Criteria` must name measurable signals (SPEC § 4.3) — numeric thresholds, test/dashboard links, or path-based references like `tests/`, `doctrine/`, `journal/`, `PR #<n>`.
 - [ ] `## Why (grounding)` must link to doctrine/, state.md, or journal/ (SPEC § 4.1).
-- [ ] Every deferral in `## Follow-ups (deferred)` resolves to a successor plan or journal entry in the same commit (SPEC § 4.2).
+- [ ] Every deferral in `## Follow-ups (deferred)` resolves to a successor plan, journal entry, or doctrine entry in the same commit (SPEC § 4.2).
 - [ ] Run `cortex doctor` — green on this plan before you commit.
 -->

@@ -328,7 +328,7 @@ Imported from [`{source_relative}`](../../{source_relative}). Hand-author the gr
 
 ## Follow-ups (deferred)
 
-- [ ] Hand-author from `{source_relative}` if applicable. Per SPEC § 4.2, every deferral resolves to another Plan or Journal entry in the same commit.
+- [ ] Hand-author from `{source_relative}` if applicable. Per SPEC § 4.2, every deferral resolves to another Plan, Journal entry, or Doctrine entry in the same commit.
 
 ## Known limitations at exit
 
