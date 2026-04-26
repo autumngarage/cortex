@@ -9,6 +9,7 @@ Updated-by:
   - 2026-04-24T16:30 claude-session-2026-04-24 (reranked work items from 3 Phase C/D/E sub-sections into 6 release-driven sub-sections (v0.3.0 → v1.0.0) under production-on-real-project framing; LLM features and triad-mode infrastructure deferred to v1.x per journal/2026-04-24-production-release-rerank)
   - 2026-04-24T17:10 claude-session-2026-04-24 (locked in touchstone as the v0.9.0 dogfood target per journal/2026-04-24-dogfood-target-touchstone; updated v0.9.0 work items + Approach to reflect the choice)
   - 2026-04-26T00:05 claude-session-2026-04-25 (v0.3.0 work-item PRs #44-#47 merged on main; release-prep PR #48 in flight; v0.3.0 sub-section flips to shipped on artifact landing — tag + GitHub Release + Homebrew bump via release.yml + release Journal entry)
+  - 2026-04-26T01:15 claude-session-2026-04-25 (v0.3.0 SHIPPED — PR #48 merged, tag v0.3.0 pushed, GitHub Release published, release.yml auto-bumped the homebrew-cortex formula, plans/cortex-v0.3.0 closed Status: shipped + Promoted-to journal/2026-04-26-v0.3.0-released. v0.4.0 read-side foundation is the next active sub-section.)
 Cites: ../../SPEC.md, ../../.cortex/protocol.md, ../doctrine/0001-why-cortex-exists, ../doctrine/0005-scope-boundaries-v2, ../doctrine/0003-spec-is-the-artifact, ../doctrine/0002-compose-by-file-contract-not-code, journal/2026-04-23-phase-c-reordered, journal/2026-04-24-case-study-driven-roadmap, journal/2026-04-24-single-plan-consolidation, journal/2026-04-24-v1-followups-parked, journal/2026-04-24-production-release-rerank, journal/2026-04-24-dogfood-target-touchstone, ../../docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md
 ---
 
@@ -47,9 +48,9 @@ This plan is done when Cortex v1.0 ships into real-project use. Measurable per r
 
 ## Work items
 
-### v0.3.0 — Write-side foundation 🚧 release-prep in flight
+### v0.3.0 — Write-side foundation ✅ shipped 2026-04-26
 
-Goal: the user can write journal entries and spawn plans cheaply, and the contract enforcement that would have caught the orphan-deferral bug on PR #30 ships with the release. **Sub-plan:** [`plans/cortex-v0.3.0`](./cortex-v0.3.0.md) (`Status: active` until release-artifact landing). Work-item PRs #44–#47 merged on main 2026-04-25; release-prep PR #48 in flight. Sub-section flips to ✅ when the tag + GitHub Release land via the manual `git tag` + `gh release create` step (then `release.yml` auto-bumps the Homebrew formula on the `release-published` event) and a `release` Journal entry records the artifact.
+Goal: the user can write journal entries and spawn plans cheaply, and the contract enforcement that would have caught the orphan-deferral bug on PR #30 ships with the release. **Sub-plan:** [`plans/cortex-v0.3.0`](./cortex-v0.3.0.md) (`Status: shipped`). **Closure:** [`journal/2026-04-26-v0.3.0-released`](../journal/2026-04-26-v0.3.0-released.md). All five PRs (#44–#48) merged; tag `v0.3.0` pushed; GitHub Release published; `release.yml` auto-bumped the `autumngarage/homebrew-cortex` formula.
 
 - [x] **`cortex journal draft <type>`** — writes a journal entry from the matching template under `.cortex/templates/journal/`, pre-filled from `git log` + `gh pr view` context. Opens `$EDITOR` by default; `--no-edit` writes and exits with the draft path on stdout. Handles `gh` not installed / not authenticated: degrade to `git log`-only pre-fill with a one-line warning, never block. Shipped in PR #45.
 - [x] **`release` journal type + `.cortex/templates/journal/release.md` template** (case-study item #1) — fields: artifact kind (tap / PyPI / Docker / tag), artifact location, release version, release-notes link, "install-path this changes" downstream-docs list. Template-only; pairs with the T1.10 audit shipped in the same release. Shipped in PR #44.
@@ -57,7 +58,7 @@ Goal: the user can write journal entries and spawn plans cheaply, and the contra
 - [x] **`cortex plan spawn <slug>`** — scaffolds a Plan file with seven-field frontmatter (Status, Written, Author, Goal-hash, Updated-by seeded, Cites) and all required sections per SPEC § 3.4. `--title` computes Goal-hash per § 4.9 (reuses existing `cortex.goal_hash.normalize_goal_hash`). Shipped in PR #46.
 - [x] **`cortex doctor` orphan-deferral check** — scans every active Plan's `## Follow-ups (deferred)` section; warns when any item lacks a citation to another Plan, Journal entry, or Doctrine entry per SPEC § 4.2 (citation must resolve to a real file under `.cortex/`; a plan citing its own slug doesn't count). Warning-only in v0.3.0; a `--strict` flag (escalating warnings to errors so Touchstone pre-push can block) is parked alongside the existing strict-policy follow-up in `## Follow-ups (deferred)`. Would have caught the round-1 finding on PR #30. Shipped in PR #47.
 - [x] Tests — real filesystem, real git (no mocked subprocess), template-presence check, `cortex doctor` orphan-check unit tests against synthetic plan files, T1.10 audit test against a real `git init`'d repo with tags. 274 tests passing across the v0.3.0 PR sequence.
-- [~] v0.3.0 release — version bump (PR #48 in flight). Post-merge: manual `git tag v0.3.0 && gh release create v0.3.0`; the resulting `release-published` event fires `release.yml` which auto-bumps the Homebrew formula. (Tagging and release creation stay manual — the workflow only handles the formula bump.)
+- [x] v0.3.0 release — version bump (PR #48), tag `v0.3.0` pushed, [GitHub Release](https://github.com/autumngarage/cortex/releases/tag/v0.3.0) published, Homebrew formula auto-bumped via the `release-published` event firing `release.yml`. Closure record: [`journal/2026-04-26-v0.3.0-released`](../journal/2026-04-26-v0.3.0-released.md).
 
 ### v0.4.0 — Read-side foundation
 
