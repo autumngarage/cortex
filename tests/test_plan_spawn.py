@@ -69,6 +69,24 @@ def test_spawn_passes_doctor(cortex_project: Path) -> None:
     assert not errors, [f"{i.path}: {i.message}" for i in errors]
 
 
+def test_spawn_without_cites_still_passes_doctor(cortex_project: Path) -> None:
+    """Default flow (no --cites) must produce a SPEC-conformant Plan.
+
+    Cites is a required scalar (validation.PLAN_REQUIRED_FIELDS); a bare
+    `Cites:` parses as None and fails the non-empty-scalar check. The
+    default value should be a placeholder string so doctor stays clean
+    while flagging the TODO in human-readable form."""
+    result = _spawn(cortex_project, "no-cites", title="Plan without explicit cites")
+    assert result.exit_code == 0, result.output
+    text = (cortex_project / ".cortex" / "plans" / "no-cites.md").read_text()
+    # Cites line is non-empty (passes validation).
+    assert "Cites: (fill in:" in text
+    issues = run_all_checks(cortex_project)
+    plan_issues = [i for i in issues if i.path and "no-cites.md" in i.path]
+    errors = [i for i in plan_issues if i.severity is Severity.ERROR]
+    assert not errors, [f"{i.path}: {i.message}" for i in errors]
+
+
 def test_spawn_cites_populated_from_flag(cortex_project: Path) -> None:
     result = _spawn(
         cortex_project,
