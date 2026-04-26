@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -237,40 +238,83 @@ def draft_command(
 
     if no_edit:
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(body)
+        try:
+            # Exclusive-create closes the TOCTOU race between the early
+            # existence check above and this write — Journal is append-only
+            # (SPEC § 3.5 / Protocol § 4.1), so silently overwriting an
+            # entry that appeared in the meantime is a spec violation.
+            with target.open("x") as f:
+                f.write(body)
+        except FileExistsError:
+            click.echo(
+                f"error: {target} appeared between the existence check and "
+                f"the write (race or duplicate run); not overwriting "
+                f"(Journal is append-only).",
+                err=True,
+            )
+            sys.exit(2)
         click.echo(str(target))
         return
 
-    editor = os.environ.get("EDITOR") or shutil.which("vi") or shutil.which("nano")
-    if editor is None:
-        click.echo(
-            "error: $EDITOR is unset and neither `vi` nor `nano` is on PATH. "
-            "Set $EDITOR or pass --no-edit.",
-            err=True,
-        )
-        sys.exit(2)
+    editor_env = os.environ.get("EDITOR")
+    if editor_env:
+        editor_argv = shlex.split(editor_env)
+    else:
+        fallback = shutil.which("vi") or shutil.which("nano")
+        if fallback is None:
+            click.echo(
+                "error: $EDITOR is unset and neither `vi` nor `nano` is on "
+                "PATH. Set $EDITOR or pass --no-edit.",
+                err=True,
+            )
+            sys.exit(2)
+        editor_argv = [fallback]
 
     fd, tmp_path = tempfile.mkstemp(suffix=".md", prefix=f"cortex-{journal_type}-")
     tmp = Path(tmp_path)
+    preserve_tmp = True
     try:
         with os.fdopen(fd, "w") as f:
             f.write(body)
-        result = subprocess.run([editor, str(tmp)], check=False)
+        try:
+            result = subprocess.run([*editor_argv, str(tmp)], check=False)
+        except FileNotFoundError as exc:
+            click.echo(
+                f"error: editor command {editor_argv!r} not executable "
+                f"({exc}); draft preserved at {tmp}.",
+                err=True,
+            )
+            sys.exit(2)
         if result.returncode != 0:
             click.echo(
-                f"error: editor exited with code {result.returncode}; draft "
-                f"preserved at {tmp}.",
+                f"error: editor exited with code {result.returncode}; "
+                f"draft preserved at {tmp}.",
                 err=True,
             )
             sys.exit(2)
         edited = tmp.read_text()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with target.open("x") as f:
+                f.write(edited)
+        except FileExistsError:
+            # Same race-window concern as the --no-edit path. The user spent
+            # time editing, so leave the temp file in place with a pointer.
+            click.echo(
+                f"error: {target} appeared while editing (race or duplicate "
+                f"run); edited draft preserved at {tmp}.",
+                err=True,
+            )
+            sys.exit(2)
+        click.echo(str(target))
+        preserve_tmp = False
     finally:
-        if tmp.exists():
+        # Only delete the temp file on the clean success path. Every error
+        # exit above leaves preserve_tmp=True so the user can recover their
+        # work — the prior version's blanket unlink contradicted the
+        # "draft preserved at <tmp>" promise on every error path.
+        if not preserve_tmp and tmp.exists():
             tmp.unlink()
-
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(edited)
-    click.echo(str(target))
 
 
 @click.group("journal")

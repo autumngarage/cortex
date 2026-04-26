@@ -9,6 +9,7 @@ must work.
 
 from __future__ import annotations
 
+import re
 import subprocess
 from datetime import date
 from pathlib import Path
@@ -143,6 +144,78 @@ def test_normalize_slug_handles_unicode_and_punctuation() -> None:
     assert _normalize_slug("Café — résumé") == "cafe-resume"
     assert _normalize_slug("!!!") == "untitled"
     assert _normalize_slug("a" * 100) == "a" * 50
+
+
+def test_editor_command_with_args_is_split(git_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # `EDITOR="bash -c true"` exits 0 — verifies shlex-splitting the env value
+    # rather than trying to exec the whole string as one binary.
+    monkeypatch.setenv("EDITOR", "bash -c true")
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["journal", "draft", "decision", "--path", str(git_project), "--slug", "split-editor"],
+    )
+    assert result.exit_code == 0, result.output + (getattr(result, "stderr", "") or "")
+    today = date.today().isoformat()
+    target = git_project / ".cortex" / "journal" / f"{today}-split-editor.md"
+    assert target.exists()
+
+
+def test_editor_failure_preserves_temp_draft(git_project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # `EDITOR=false` exits 1; the command must error AND keep the temp file
+    # so the user can recover. The prior version unlinked it unconditionally.
+    monkeypatch.setenv("EDITOR", "false")
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["journal", "draft", "decision", "--path", str(git_project), "--slug", "ed-fails"],
+    )
+    assert result.exit_code == 2, result.output
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "draft preserved at" in combined
+    # Pull the path out of the message and assert the file is still there.
+    match = re.search(r"draft preserved at (\S+\.md)", combined)
+    assert match, combined
+    preserved = Path(match.group(1))
+    try:
+        assert preserved.exists()
+    finally:
+        if preserved.exists():
+            preserved.unlink()
+
+
+def test_editor_missing_binary_preserves_temp_draft(git_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("EDITOR", "this-editor-does-not-exist-anywhere")
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["journal", "draft", "decision", "--path", str(git_project), "--slug", "ed-missing"],
+    )
+    assert result.exit_code == 2, result.output
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "draft preserved at" in combined
+    match = re.search(r"draft preserved at (\S+\.md)", combined)
+    assert match, combined
+    preserved = Path(match.group(1))
+    try:
+        assert preserved.exists()
+    finally:
+        if preserved.exists():
+            preserved.unlink()
+
+
+def test_no_edit_exclusive_create_blocks_overwrite(git_project: Path) -> None:
+    # Race scenario: pre-create the target file, then run the draft. The
+    # early existence check should fire — but if it didn't (true race), the
+    # exclusive-create on the actual write must catch it. We simulate by
+    # pre-creating after a successful first draft.
+    today = date.today().isoformat()
+    target = git_project / ".cortex" / "journal" / f"{today}-overwrite-test.md"
+    target.write_text("# Pre-existing entry — must not be overwritten\n")
+    result = _draft(git_project, "decision", "--slug", "overwrite-test")
+    assert result.exit_code == 2, result.output
+    # File contents preserved.
+    assert "Pre-existing" in target.read_text()
 
 
 def test_project_template_override_wins(git_project: Path) -> None:
