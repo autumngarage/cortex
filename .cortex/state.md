@@ -1,20 +1,20 @@
 ---
-Generated: 2026-04-25T09:40:00-04:00
-Generator: hand-authored (deterministic `cortex refresh-state` ships in v0.4.0 per the production-release rerank; LLM `refresh-state --enhance` and `refresh-map` deferred to v1.x post-production — tracked as release-driven sub-sections of plans/cortex-v1; the v0.2.4 → v0.2.5 patch plan plans/init-ux-fixes-from-touchstone shipped 2026-04-25)
+Generated: 2026-04-25T20:30:00-04:00
+Generator: hand-authored (deterministic `cortex refresh-state` ships in v0.4.0 per the production-release rerank; LLM `refresh-state --enhance` and `refresh-map` deferred to v1.x post-production — tracked as release-driven sub-sections of plans/cortex-v1; the v0.2.4 → v0.2.5 patch plan plans/init-ux-fixes-from-touchstone shipped 2026-04-25; v0.3.0 work in flight on plans/cortex-v0.3.0)
 Sources:
-  - HEAD of branch `docs/close-init-ux-fixes-plan` (merge-base main at f5c0cef, the v0.2.5 release-prep merge; this snapshot closes plans/init-ux-fixes-from-touchstone as Status: shipped + adds journal/2026-04-25-init-ux-fixes-plan-shipped); cortex v0.2.5 currently on Homebrew
-  - https://github.com/autumngarage/cortex/releases (v0.1.0 through v0.2.5)
-  - https://github.com/autumngarage/homebrew-cortex (tap repo; updated to v0.2.5 at c5ad634)
+  - HEAD of branch `feat/v0.3.0-release-trigger` (merge-base main at 459a44a, the v0.2.7 release; this snapshot adds plans/cortex-v0.3.0 + journal/release.md template + T1.10 Protocol amendment + SPEC bump to v0.4.0-dev); cortex v0.2.7 currently on Homebrew
+  - https://github.com/autumngarage/cortex/releases (v0.1.0 through v0.2.7)
+  - https://github.com/autumngarage/homebrew-cortex (tap repo; auto-updated through v0.2.7 via the release.yml + reusable homebrew-bump workflow)
   - .cortex/doctrine/ (5 entries: 0001–0003 + 0005 active with Load-priority: always; 0004 Superseded-by 0005)
-  - .cortex/plans/ (1 active: cortex-v1 (v0.3.0 → v1.0.0, P0); shipped 2026-04-25: init-ux-fixes-from-touchstone (Promoted-to journal/2026-04-25-init-ux-fixes-plan-shipped); cancelled 2026-04-24: phase-c-authoring-and-state, phase-d-integration, phase-e-synthesis-and-governance (all Promoted-to cortex-v1); cancelled 2026-04-23: phase-c-first-synthesis; shipped: phase-b-walking-skeleton 2026-04-18, vision-sharpening 2026-04-17)
+  - .cortex/plans/ (2 active: cortex-v1 (v0.3.0 → v1.0.0, P0) + cortex-v0.3.0 (session-scoped sub-plan, P0); shipped 2026-04-25: init-ux-fixes-from-touchstone (Promoted-to journal/2026-04-25-init-ux-fixes-plan-shipped); cancelled 2026-04-24: phase-c-authoring-and-state, phase-d-integration, phase-e-synthesis-and-governance (all Promoted-to cortex-v1); cancelled 2026-04-23: phase-c-first-synthesis; shipped: phase-b-walking-skeleton 2026-04-18, vision-sharpening 2026-04-17)
   - .cortex/journal/ (27 entries: 12 from 2026-04-17 + 2 from 2026-04-18 + 2 from 2026-04-23 + 7 from 2026-04-24 + 4 from 2026-04-25 (readme-drift-detection-feature-request, v0.2.4-touchstone-re-test-clean, init-ux-fixes-plan-shipped, v0.2.4-and-v0.2.5-released))
-  - .cortex/templates/ (8 files)
+  - .cortex/templates/ (9 files: + journal/release.md as of v0.4.0-dev)
   - .cortex/map.md (stub; refresh-map deferred from v1.0 to v1.x per the production rerank)
   - .cortex/procedures/ (empty; .gitkeep only)
   - docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md (conductor stale-CLAUDE.md incident)
-  - SPEC.md v0.3.1-dev
-  - pyproject.toml, src/cortex/ (cortex 0.2.5 — v0.2.4 added touchstone_managed Category + end-of-file import placement; v0.2.5 added meta_doc Category + 0100-doctrine-floor + state.md Sources accuracy + inline file:line ref + contiguous Next-steps numbering + top-level --status-only --path + scaffolded-template Phase C → v0.4.0/v1.x cleanup)
-Corpus: 5 Doctrine entries, 1 active Plan (cortex-v1 v0.3.0 → v1.0.0 P0), 27 Journal entries, 8 Templates, 1 Case study (conductor stale-CLAUDE.md 2026-04-24), 1 Python package (cortex 0.2.5 with `version` + `init` (incl. `--local-only` + Touchstone-managed Doctrine skip + end-of-file import placement + meta_doc README filter + 0100-doctrine-floor + accurate state.md Sources + contiguous Next-steps + Phase C → v0.4.0/v1.x scaffolded terminology) + `doctor` (incl. `--audit` / `--audit-digests`) + `manifest` + `grep` + `status` (incl. top-level `--status-only --path`) + `promote` commands + `cortex.shell` helpers)
+  - SPEC.md v0.4.0-dev
+  - pyproject.toml, src/cortex/ (cortex 0.2.7 — v0.2.4 added touchstone_managed Category + end-of-file import placement; v0.2.5 added meta_doc Category + 0100-doctrine-floor + state.md Sources accuracy + inline file:line ref + contiguous Next-steps numbering + top-level --status-only --path + scaffolded-template Phase C → v0.4.0/v1.x cleanup; v0.2.6 / v0.2.7 added homebrew tap auto-deploy on release publish + scripts/release.sh release driver)
+Corpus: 5 Doctrine entries, 2 active Plans (cortex-v1 + cortex-v0.3.0), 27 Journal entries, 9 Templates, 1 Case study (conductor stale-CLAUDE.md 2026-04-24), 1 Python package (cortex 0.2.7 with `version` + `init` + `doctor` (incl. `--audit` w/ T1.10 + `--audit-digests`) + `manifest` + `grep` + `status` + `promote` commands + `cortex.shell` helpers)
 Omitted:
   - .cortex/.index.json — per SPEC § 2 the file is auto-maintained by the Cortex CLI and its absence is expected until v0.6.0's `.index.json` writer ships (the lifecycle layer; the index backs promotion-queue governance, sequenced after the v0.3.0–v0.5.0 write/read/trust foundations). `cortex status` and `cortex promote` already handle this state gracefully.
 Incomplete:
@@ -22,7 +22,7 @@ Incomplete:
   - Automated State prose synthesis — `cortex refresh-state --enhance` LLM polish is deferred from v1.0 to v1.x (`## Follow-ups (deferred)` #2). Deterministic `cortex refresh-state` ships in v0.4.0; the hand-authored `## Current work` summary stays human judgment by design.
   - Sentinel run journal ingestion — Sentinel end-of-cycle hook is deferred from v1.0 to v1.x (`## Follow-ups (deferred)` #4); revisit when the dogfood target starts using Sentinel cycles.
 Conflicts-preserved: []
-Spec: 0.3.1-dev
+Spec: 0.4.0-dev
 ---
 
 # Project State

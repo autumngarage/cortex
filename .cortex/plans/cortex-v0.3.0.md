@@ -46,7 +46,7 @@ This plan is done when v0.3.0 is tagged, released, and on Homebrew, with all fiv
 
 **T1.10 audit window for tags uses `git tag --list --sort=-creatordate` not `git log`.** Tags are ref objects, not commits — annotated tags carry their own date. The audit walks tags in the window, looks up the tagged commit's date for the 72h window, and matches against `Type: release` journal entries. This is parallel to T1.9's commit walk, not the same path.
 
-**`cortex journal draft` template-resolution degrades.** If a custom template lives at `.cortex/templates/journal/<type>.md`, use it. Otherwise fall back to bundled `src/cortex/_data/.cortex/templates/journal/<type>.md`. If neither exists, error with the list of available types.
+**`cortex journal draft` template-resolution degrades.** If a custom template lives at `.cortex/templates/journal/<type>.md`, use it. Otherwise fall back to bundled `src/cortex/_data/templates/journal/<type>.md`. If neither exists, error with the list of available types.
 
 ## Work items
 
@@ -57,7 +57,7 @@ This plan is done when v0.3.0 is tagged, released, and on Homebrew, with all fiv
 - [ ] **Add T1.10 to `.cortex/protocol.md` § 2** as `T1.10 | Pull request released as a tagged distribution artifact (Homebrew tap, PyPI release, Docker push, GitHub Release) | journal/release.md`. Bump Protocol version to 0.2.1 and update its SPEC.md compatibility line.
 - [ ] **Bump `SPEC.md` to v0.4.0-dev** with a § 7 entry explaining what changed (T1.10 added). Update SPEC version line at top of file.
 - [ ] **Update `src/cortex/__init__.py`** — `SUPPORTED_SPEC_VERSIONS` accepts "0.3" already (matches major; no change needed unless we want explicit 0.3.2 acceptance); `SUPPORTED_PROTOCOL_VERSIONS` add "0.2" (already there) — confirm both are still major-only matches.
-- [ ] **Mirror `.cortex/protocol.md` to `src/cortex/_data/.cortex/protocol.md`** if init bundles protocol.md (it does — confirmed in cortex init scaffold).
+- [ ] **Mirror `.cortex/protocol.md` to `src/cortex/_data/protocol.md`** if init bundles protocol.md (it does — confirmed in cortex init scaffold).
 - [ ] **Extend `src/cortex/audit.py`** — add `Trigger.T1_10`, `EXPECTED_TYPE[T1_10] = "release"`, new `_load_tags(project_root, since_days)` helper that runs `git tag --list --sort=-creatordate` and resolves each tag's commit date, new audit pass that fires T1.10 per tag and matches against journal entries with `Type: release` within the existing JOURNAL_MATCH_WINDOW_HOURS. Add tests.
 - [ ] **Add tests** — `tests/test_audit_t110.py`: real `git init` temp repo, `git tag` two tags within window, journal entries (one matched, one unmatched), assert audit fires T1.10 for both and matches the right one. `tests/test_data_sync.py` pickup verified.
 - [ ] **Open PR.**
@@ -65,7 +65,7 @@ This plan is done when v0.3.0 is tagged, released, and on Homebrew, with all fiv
 ### PR 2 — `cortex journal draft <type>` (keystone)
 
 - [ ] **Create `src/cortex/commands/journal.py`** with `journal` group and `draft` subcommand. Args: `type` (positional, e.g. `decision`, `incident`, `release`, `pr-merged`, `plan-transition`, `sentinel-cycle`); `--no-edit` (skip `$EDITOR`, print path); `--slug <text>` (override the auto-generated filename slug); `--path <project-root>` (default `.`).
-- [ ] **Template resolution** — first `<root>/.cortex/templates/journal/<type>.md`, then bundled `_data/.cortex/templates/journal/<type>.md`. Error with list of available types if neither found.
+- [ ] **Template resolution** — first `<root>/.cortex/templates/journal/<type>.md`, then bundled `src/cortex/_data/templates/journal/<type>.md`. Error with list of available types if neither found.
 - [ ] **Pre-fill from context.** Default fill substitutes:
   - `**Date:**` → today's ISO date
   - `**Type:**` → the requested type (override the template's literal field if present)
