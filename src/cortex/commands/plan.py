@@ -142,14 +142,16 @@ def spawn_command(
 
     body = _TITLE_LINE_RE.sub(f"# {title}", body, count=1)
 
+    cites_value = ""
     if cites is not None:
         cites_value = ", ".join(c.strip() for c in cites.split(",") if c.strip())
-    else:
+    if not cites_value:
         # SPEC § 3.4 + cortex.validation require Cites to be a non-empty
         # scalar. A bare `Cites:` parses as None and fails validation, so
-        # the default substitutes a placeholder reminder. Authors get a
-        # clean doctor on spawn AND a visible TODO pointing at the right
-        # SPEC § 4.1 grounding sources.
+        # the default (and any whitespace/comma-only --cites input) falls
+        # back to a placeholder reminder. Authors get a clean doctor-scalar
+        # check while keeping a visible TODO pointing at the right SPEC §
+        # 4.1 grounding sources.
         cites_value = "(fill in: doctrine/<nnnn>, state.md § <section>, journal/<date>-<slug>)"
     body = _CITES_LINE_RE.sub(f"Cites: {cites_value}", body, count=1)
 

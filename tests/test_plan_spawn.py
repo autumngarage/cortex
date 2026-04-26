@@ -51,11 +51,13 @@ def test_spawn_writes_plan_with_computed_goal_hash(cortex_project: Path) -> None
     assert f"Written: {today}" in text
 
 
-def test_spawn_passes_doctor(cortex_project: Path) -> None:
-    """Plan scaffolded by `plan spawn` must pass cortex doctor cleanly —
-    the whole point of the command is that authors don't fight required-
-    sections / Goal-hash / measurable-success-criteria errors before they
-    can even start writing."""
+def test_spawn_passes_structural_doctor_checks(cortex_project: Path) -> None:
+    """The scaffolded plan satisfies structural doctor checks: required
+    frontmatter is present and non-empty, Goal-hash matches the title,
+    required sections exist. Semantic checks (measurable success criteria,
+    grounding citation) honestly fail because the body still has
+    placeholders — that is the point of spawn (it scaffolds; the user
+    fills in real content)."""
     result = _spawn(
         cortex_project,
         "ship-feature-x",
@@ -65,26 +67,75 @@ def test_spawn_passes_doctor(cortex_project: Path) -> None:
     assert result.exit_code == 0, result.output
     issues = run_all_checks(cortex_project)
     plan_issues = [i for i in issues if i.path and "ship-feature-x.md" in i.path]
-    errors = [i for i in plan_issues if i.severity is Severity.ERROR]
-    assert not errors, [f"{i.path}: {i.message}" for i in errors]
+    error_messages = [i.message for i in plan_issues if i.severity is Severity.ERROR]
+    # Structural errors must NOT appear: missing required field, missing
+    # required section, mismatched Goal-hash.
+    for forbidden in (
+        "Plan frontmatter field",
+        "missing required Plan section",
+        "Goal-hash",
+        "Plan filename",
+    ):
+        assert not any(forbidden in m for m in error_messages), (forbidden, error_messages)
 
 
-def test_spawn_without_cites_still_passes_doctor(cortex_project: Path) -> None:
-    """Default flow (no --cites) must produce a SPEC-conformant Plan.
+def test_spawn_body_honestly_fails_semantic_doctor_checks(cortex_project: Path) -> None:
+    """The scaffolded body must NOT pass cortex doctor's measurable-criteria
+    or grounding-citation checks by accident — placeholder text in earlier
+    versions of the bundled template happened to contain the magic strings
+    (`doctrine/`, `cortex doctor`) that the validators look for, so the
+    scaffold validated as a complete Plan even with every section
+    un-filled. The fix removes those magic strings from placeholder text
+    so the validators honestly fire and tell the author what to fill in."""
+    result = _spawn(
+        cortex_project,
+        "ship-feature-y",
+        title="Ship feature Y",
+        cites="doctrine/0001-why-cortex-exists",
+    )
+    assert result.exit_code == 0, result.output
+    issues = run_all_checks(cortex_project)
+    plan_issues = [i for i in issues if i.path and "ship-feature-y.md" in i.path]
+    messages = [(i.severity, i.message) for i in plan_issues]
+    # Measurable Success Criteria check (an ERROR) must fire on the placeholder body.
+    assert any(
+        sev is Severity.ERROR and "Success Criteria" in m for sev, m in messages
+    ), messages
+    # Grounding citation check (a WARNING) must fire — placeholder body
+    # has no doctrine/ / state.md / journal/ link in `## Why (grounding)`.
+    assert any(
+        sev is Severity.WARNING and "grounding" in m.lower() for sev, m in messages
+    ), messages
 
-    Cites is a required scalar (validation.PLAN_REQUIRED_FIELDS); a bare
-    `Cites:` parses as None and fails the non-empty-scalar check. The
-    default value should be a placeholder string so doctor stays clean
-    while flagging the TODO in human-readable form."""
+
+def test_spawn_without_cites_still_satisfies_scalar_check(cortex_project: Path) -> None:
+    """Cites is a required non-empty scalar (validation.PLAN_REQUIRED_FIELDS);
+    a bare `Cites:` parses as None and fails. Default and empty-input
+    cases substitute a placeholder so the scalar check passes while the
+    TODO stays human-readable."""
     result = _spawn(cortex_project, "no-cites", title="Plan without explicit cites")
     assert result.exit_code == 0, result.output
     text = (cortex_project / ".cortex" / "plans" / "no-cites.md").read_text()
-    # Cites line is non-empty (passes validation).
     assert "Cites: (fill in:" in text
     issues = run_all_checks(cortex_project)
     plan_issues = [i for i in issues if i.path and "no-cites.md" in i.path]
-    errors = [i for i in plan_issues if i.severity is Severity.ERROR]
-    assert not errors, [f"{i.path}: {i.message}" for i in errors]
+    # Specifically: no "Cites must be non-empty" error.
+    cites_errors = [
+        i for i in plan_issues
+        if i.severity is Severity.ERROR and "Cites" in i.message
+    ]
+    assert not cites_errors, [i.message for i in cites_errors]
+
+
+def test_spawn_empty_cites_string_falls_back_to_placeholder(cortex_project: Path) -> None:
+    """Defensive: --cites '' (or comma-only / whitespace-only) must fall back
+    to the placeholder rather than writing an empty Cites: scalar."""
+    for bad_input in ("", ", ,", "   ", ","):
+        slug = f"empty-cites-{abs(hash(bad_input)) % 10000}"
+        result = _spawn(cortex_project, slug, title="Plan", cites=bad_input)
+        assert result.exit_code == 0, (bad_input, result.output)
+        text = (cortex_project / ".cortex" / "plans" / f"{slug}.md").read_text()
+        assert "Cites: (fill in:" in text, (bad_input, text)
 
 
 def test_spawn_cites_populated_from_flag(cortex_project: Path) -> None:
