@@ -35,6 +35,7 @@ Seven rules, each inherited from prior art (sources in `docs/PRIOR_ART.md`):
       plan-transition.md
       sentinel-cycle.md
       pr-merged.md
+      release.md
     doctrine/
       candidate.md
     digest/
