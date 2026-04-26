@@ -295,6 +295,24 @@ def test_t1_10_unmatched_when_no_release_journal(git_project: Path) -> None:
     assert t1_10_unmatched, "tag without release entry should remain unmatched"
 
 
+def test_t1_10_journal_must_name_the_tag(git_project: Path) -> None:
+    """One Type: release entry must not satisfy every nearby release tag —
+    the audit requires the entry's filename to contain the specific tag
+    name. Otherwise a v0.3.0 release entry could falsely match a v0.2.4
+    tag created in the same window."""
+    _run(git_project, "tag", "v0.3.0", "-m", "Release 0.3.0")
+    _run(git_project, "tag", "v0.2.4", "-m", "Release 0.2.4")
+    from datetime import datetime
+    date = datetime.now().date().isoformat()
+    # One release entry naming v0.3.0 only.
+    (git_project / ".cortex" / "journal" / f"{date}-v0.3.0-released.md").write_text(
+        f"# Release v0.3.0\n\n**Date:** {date}\n**Type:** release\n**Trigger:** T1.10\n\nbody\n"
+    )
+    report = audit(git_project, since_days=30)
+    t1_10 = {f.tag.name: f.matched for f in report.fires if f.trigger == Trigger.T1_10}
+    assert t1_10 == {"v0.3.0": True, "v0.2.4": False}, t1_10
+
+
 def test_t1_10_decision_journal_does_not_satisfy_release_fire(git_project: Path) -> None:
     _run(git_project, "tag", "v0.3.0", "-m", "Release 0.3.0")
     from datetime import datetime

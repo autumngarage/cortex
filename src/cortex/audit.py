@@ -368,6 +368,8 @@ def _best_matching_entry(
     trigger: Trigger,
     expected_type: str,
     candidates: Iterable[JournalEntry],
+    *,
+    tag_name: str | None = None,
 ) -> JournalEntry | None:
     """Return the nearest in-window candidate for this fire, or None.
 
@@ -376,6 +378,11 @@ def _best_matching_entry(
     trigger. Human-authored Protocol entries without a ``Trigger:`` still
     count as valid matches (Type-only) so teams aren't forced to retrofit
     the field.
+
+    For T1.10 (release) fires, ``tag_name`` is required: the entry's filename
+    must contain the tag name as a substring. This prevents one ``Type:
+    release`` entry from accidentally satisfying every nearby release tag —
+    each release entry must be tag-specific.
     """
     window = timedelta(hours=JOURNAL_MATCH_WINDOW_HOURS)
     best: JournalEntry | None = None
@@ -385,6 +392,9 @@ def _best_matching_entry(
             continue
         if entry.trigger is not None and entry.trigger != trigger.value:
             continue
+        if trigger is Trigger.T1_10 and tag_name is not None:
+            if tag_name not in entry.path.name:
+                continue
         delta = abs(entry.date - source_date)
         if delta <= best_delta:
             best = entry
@@ -423,7 +433,13 @@ def audit(
     ordered_fires.sort(key=lambda f: f[0])
     for source_date, trigger, commit, tag in ordered_fires:
         available = [e for e in journal if e.path not in consumed]
-        entry = _best_matching_entry(source_date, trigger, EXPECTED_TYPE[trigger], available)
+        entry = _best_matching_entry(
+            source_date,
+            trigger,
+            EXPECTED_TYPE[trigger],
+            available,
+            tag_name=tag.name if tag is not None else None,
+        )
         if entry is not None:
             consumed.add(entry.path)
         report.fires.append(
