@@ -19,6 +19,10 @@ First-slice coverage:
 - **T1.9** — commit landed on the default branch (every commit in the
   audited range, since this repo uses squash-merge to main). Expects
   ``Type: pr-merged``.
+- **T1.10** — a tag matching the release pattern (default
+  ``^v\\d+\\.\\d+\\.\\d+``) was created in the audit window. Walks
+  ``git tag --list`` rather than ``git log``; the tag's commit date
+  defines the 72h match window. Expects ``Type: release``.
 
 Deferred to Phase E (tracked in .cortex/plans/cortex-v1.md ### Phase E):
 
@@ -55,12 +59,17 @@ T1_8_RE = re.compile(
 T1_1_PATH_PREFIXES = (".cortex/doctrine/", ".cortex/plans/", "principles/")
 T1_1_EXACT_PATHS = ("SPEC.md",)
 
+# Default release-tag pattern per Protocol § 2 ("T1.10 ... default `^v\d+\.\d+\.\d+`").
+# Projects using calendar versioning or non-`v`-prefix tags override via .cortex/protocol.md.
+DEFAULT_TAG_PATTERN = re.compile(r"^v\d+\.\d+\.\d+")
+
 
 class Trigger(StrEnum):
     T1_1 = "T1.1"
     T1_5 = "T1.5"
     T1_8 = "T1.8"
     T1_9 = "T1.9"
+    T1_10 = "T1.10"
 
 
 EXPECTED_TYPE: dict[Trigger, str] = {
@@ -68,6 +77,7 @@ EXPECTED_TYPE: dict[Trigger, str] = {
     Trigger.T1_5: "decision",
     Trigger.T1_8: "decision",
     Trigger.T1_9: "pr-merged",
+    Trigger.T1_10: "release",
 }
 
 
@@ -80,6 +90,13 @@ class Commit:
 
 
 @dataclass(frozen=True)
+class Tag:
+    name: str
+    sha: str
+    date: datetime
+
+
+@dataclass(frozen=True)
 class JournalEntry:
     path: Path
     date: datetime
@@ -89,16 +106,50 @@ class JournalEntry:
 
 @dataclass(frozen=True)
 class TriggerFire:
-    commit: Commit
+    """One Tier-1 trigger fire.
+
+    Either ``commit`` or ``tag`` is set depending on the source: T1.1/1.5/1.8/1.9
+    fire from commits; T1.10 fires from tags (a tag is its own ref object with
+    its own date, distinct from any one commit on the branch).
+    """
+
     trigger: Trigger
     matched: bool
     matched_entry: Path | None
+    commit: Commit | None = None
+    tag: Tag | None = None
+
+    @property
+    def short_sha(self) -> str:
+        if self.commit is not None:
+            return self.commit.sha[:8]
+        if self.tag is not None:
+            return self.tag.sha[:8]
+        return "????????"
+
+    @property
+    def source_date(self) -> datetime:
+        if self.commit is not None:
+            return self.commit.date
+        if self.tag is not None:
+            return self.tag.date
+        raise RuntimeError("TriggerFire has neither commit nor tag")
+
+    @property
+    def label(self) -> str:
+        """Human-readable identifier for the fire's source — used in audit output."""
+        if self.tag is not None:
+            return f"tag {self.tag.name}"
+        if self.commit is not None:
+            return f"commit {self.commit.subject}"
+        return "<unknown source>"
 
 
 @dataclass
 class AuditReport:
     since: datetime
     commits_examined: int
+    tags_examined: int = 0
     fires: list[TriggerFire] = field(default_factory=list)
 
     @property
@@ -193,6 +244,52 @@ def load_commits(
     return commits
 
 
+def load_tags(
+    project_root: Path,
+    since_days: int,
+    *,
+    pattern: re.Pattern[str] = DEFAULT_TAG_PATTERN,
+) -> list[Tag]:
+    """Return tags matching ``pattern`` whose creation date falls within the window.
+
+    Uses ``git for-each-ref refs/tags`` so both lightweight tags (which have
+    only the underlying commit's date) and annotated tags (which carry their
+    own ``creatordate``) work. Tags outside the audit window are dropped.
+    """
+    cutoff = datetime.now(UTC) - timedelta(days=since_days)
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(project_root),
+            "for-each-ref",
+            "--format=%(refname:short)%09%(objectname)%09%(creatordate:iso-strict)",
+            "refs/tags",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    tags: list[Tag] = []
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        parts = line.split("\t")
+        if len(parts) != 3:
+            continue
+        name, sha, iso_date = parts
+        if not pattern.match(name):
+            continue
+        try:
+            tag_date = datetime.fromisoformat(iso_date)
+        except ValueError:
+            continue
+        if tag_date < cutoff:
+            continue
+        tags.append(Tag(name=name, sha=sha, date=tag_date))
+    return tags
+
+
 def classify(commit: Commit) -> list[Trigger]:
     fired: list[Trigger] = []
     if any(
@@ -267,7 +364,7 @@ def _journal_header_fields(path: Path) -> tuple[str | None, str | None]:
 
 
 def _best_matching_entry(
-    commit: Commit,
+    source_date: datetime,
     trigger: Trigger,
     expected_type: str,
     candidates: Iterable[JournalEntry],
@@ -288,7 +385,7 @@ def _best_matching_entry(
             continue
         if entry.trigger is not None and entry.trigger != trigger.value:
             continue
-        delta = abs(entry.date - commit.date)
+        delta = abs(entry.date - source_date)
         if delta <= best_delta:
             best = entry
             best_delta = delta
@@ -300,33 +397,42 @@ def audit(
     since_days: int = DEFAULT_WINDOW_DAYS,
     *,
     branch: str | None = None,
+    tag_pattern: re.Pattern[str] = DEFAULT_TAG_PATTERN,
 ) -> AuditReport:
     commits = load_commits(project_root, since_days, branch=branch)
+    tags = load_tags(project_root, since_days, pattern=tag_pattern)
     journal = load_journal_entries(project_root)
     report = AuditReport(
         since=datetime.now(UTC) - timedelta(days=since_days),
         commits_examined=len(commits),
+        tags_examined=len(tags),
     )
     # A Journal entry is one event per file (SPEC § 3.5) — each entry can
     # satisfy at most one trigger fire. Process fires oldest-first so the
     # earliest trigger wins the entry; later fires needing the same type
     # must find their own unconsumed entry or remain unmatched.
     consumed: set[Path] = set()
-    ordered_fires: list[tuple[Commit, Trigger]] = []
-    for commit in sorted(commits, key=lambda c: c.date):
+    # Build the unified, oldest-first fire stream across commit-sourced and
+    # tag-sourced triggers. Each entry is (source_date, trigger, commit_or_None, tag_or_None).
+    ordered_fires: list[tuple[datetime, Trigger, Commit | None, Tag | None]] = []
+    for commit in commits:
         for trigger in classify(commit):
-            ordered_fires.append((commit, trigger))
-    for commit, trigger in ordered_fires:
+            ordered_fires.append((commit.date, trigger, commit, None))
+    for tag in tags:
+        ordered_fires.append((tag.date, Trigger.T1_10, None, tag))
+    ordered_fires.sort(key=lambda f: f[0])
+    for source_date, trigger, commit, tag in ordered_fires:
         available = [e for e in journal if e.path not in consumed]
-        entry = _best_matching_entry(commit, trigger, EXPECTED_TYPE[trigger], available)
+        entry = _best_matching_entry(source_date, trigger, EXPECTED_TYPE[trigger], available)
         if entry is not None:
             consumed.add(entry.path)
         report.fires.append(
             TriggerFire(
-                commit=commit,
                 trigger=trigger,
                 matched=entry is not None,
                 matched_entry=entry.path if entry else None,
+                commit=commit,
+                tag=tag,
             )
         )
     return report

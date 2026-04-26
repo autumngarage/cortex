@@ -2,7 +2,7 @@
 
 > **Cortex is a file-format protocol for project memory.** Six layers of documents per project, each with a mechanical, authoring, and retrieval contract. Consumed by humans and AI coding agents. The CLI named `cortex` is one implementation; other tools (Sentinel, Touchstone, Claude Code sessions, humans) read and write the same files by the same rules.
 
-**Spec version:** 0.3.1-dev (draft)
+**Spec version:** 0.4.0-dev (draft)
 **Status:** Proposed
 **Protocol companion:** [`.cortex/protocol.md`](./.cortex/protocol.md) defines when and how agents write; SPEC.md defines what the files look like.
 
@@ -35,6 +35,7 @@ Seven rules, each inherited from prior art (sources in `docs/PRIOR_ART.md`):
       plan-transition.md
       sentinel-cycle.md
       pr-merged.md
+      release.md
     doctrine/
       candidate.md
     digest/
@@ -233,7 +234,7 @@ Items moved out of scope during execution — each resolved to another plan or j
 # <Title>
 
 **Date:** 2026-04-17
-**Type:** decision | incident | migration | reversal | promotion | plan-transition | sentinel-cycle | pr-merged | digest
+**Type:** decision | incident | migration | reversal | promotion | plan-transition | sentinel-cycle | pr-merged | release | digest
 **Trigger:** T1.3 (Plan status changed)   # for Protocol-triggered entries only
 **Cites:** plans/anti-chase.md, doctrine/0003
 
@@ -408,6 +409,8 @@ Tools must declare which spec major versions they support. Readers encountering 
 **Pre-1.0 exception.** Per standard semver 0.x convention, during `0.x.y` development minor bumps may include breaking changes. The strict major-for-breaking rule above applies from `1.0.0` onward. This is why v0.2.0-dev introduced breaking frontmatter changes (seven-field metadata contract on generated layers; `Author`/`Goal-hash`/`Updated-by` on Plans) under a minor bump, and why v0.3.0-dev adds `Load-priority:` to Doctrine, concretizes `Goal-hash:` normalization (§ 4.9), and adds T1.9 to the Protocol — also under a minor bump.
 
 **v0.3.1-dev is a clarification patch.** It rewrites § 4.4 promotion semantics and tightens § 4.6 typed-links usage. No implementable behavior changes: the prior § 4.4 text required retroactive `Promoted-to:` writes on source Journal entries, which contradicted § 3.5 (Journal is append-only); no conforming tool could have satisfied both. v0.3.1-dev resolves the contradiction by layer-mutability: `Promoted-to:` is allowed on mutable sources (Plans, Procedures) where retroactive writes were already permitted, and forbidden on append-only/immutable sources (Journal, Doctrine) where retroactive writes violate existing invariants. The § 4.6 list keeps `promoted-to` but clarifies its scope. Also fixes the `supersded-by` typo (now `superseded-by`). Because the implementable surface for each layer is unchanged, this stays a patch bump under the § 7 rule that patch = clarification without behavior change.
+
+**v0.4.0-dev adds T1.10.** Protocol § 2 gains a tenth Tier-1 trigger — `T1.10: A tagged release / distribution artifact shipped` — paired with a new `journal/release.md` template and a new `release` value in the § 3.5 `Type:` enum. Rationale grounded in the conductor case study (`docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md`): downstream documentation references *released* artifacts, not merged commits, and a release without a journal record is how the conductor incident's stale `CLAUDE.md` claim about the Homebrew tap survived eight subsequent releases. T1.10's audit walks `git tag --list` and matches each tag against a `Type: release` journal entry within 72h, parallel to T1.9's commit walk. Additive change — no existing fields, layouts, or invariants are modified. Bumped as a minor under § 7's "new Protocol triggers" rule (consumers need to opt into the new trigger and `release` enum value, so it is not a clarification patch).
 
 **Protocol version relationship.** [`.cortex/protocol.md`](./.cortex/protocol.md) carries its own version. A Protocol version is compatible with one or more SPEC.md versions, declared in the Protocol's header. A major SPEC bump always requires a Protocol review; a minor SPEC bump may or may not trigger a Protocol bump depending on whether new triggers are needed.
 

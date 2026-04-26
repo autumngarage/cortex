@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from cortex.audit import Trigger, audit, audit_digests, classify, load_commits
+from cortex.audit import Trigger, audit, audit_digests, classify, load_commits, load_tags
 from cortex.cli import cli
 from cortex.commands.init import init_command
 
@@ -251,6 +251,61 @@ def test_merge_commit_fan_out_uses_first_parent(git_project: Path) -> None:
     assert "Merge feat/multi" in subjects
     # The WIP commits must not appear — first-parent stops at the merge.
     assert not any(s.startswith("wip: step ") for s in subjects), subjects
+
+
+def test_t1_10_load_tags_filters_by_pattern(git_project: Path) -> None:
+    # Tag two refs: one matching v0.3.0 (should fire), one not (should not).
+    _run(git_project, "tag", "v0.3.0", "-m", "Release 0.3.0")
+    _run(git_project, "tag", "experimental")
+    tags = load_tags(git_project, since_days=30)
+    names = [t.name for t in tags]
+    assert "v0.3.0" in names
+    assert "experimental" not in names
+
+
+def test_t1_10_fires_per_release_tag(git_project: Path) -> None:
+    _run(git_project, "tag", "v0.3.0", "-m", "Release 0.3.0")
+    report = audit(git_project, since_days=30)
+    t1_10_fires = [f for f in report.fires if f.trigger == Trigger.T1_10]
+    assert len(t1_10_fires) == 1
+    assert t1_10_fires[0].tag is not None
+    assert t1_10_fires[0].tag.name == "v0.3.0"
+
+
+def test_t1_10_matches_release_journal_entry_within_window(git_project: Path) -> None:
+    _run(git_project, "tag", "v0.3.0", "-m", "Release 0.3.0")
+    # Journal entry dated today with Type: release should match the tag.
+    from datetime import datetime
+    date = datetime.now().date().isoformat()
+    (git_project / ".cortex" / "journal" / f"{date}-v0.3.0-released.md").write_text(
+        f"# Release v0.3.0\n\n**Date:** {date}\n**Type:** release\n**Trigger:** T1.10\n\nbody\n"
+    )
+    report = audit(git_project, since_days=30)
+    t1_10_fires = [f for f in report.fires if f.trigger == Trigger.T1_10]
+    assert t1_10_fires
+    assert all(f.matched for f in t1_10_fires)
+
+
+def test_t1_10_unmatched_when_no_release_journal(git_project: Path) -> None:
+    _run(git_project, "tag", "v0.3.0", "-m", "Release 0.3.0")
+    report = audit(git_project, since_days=30)
+    t1_10_unmatched = [
+        f for f in report.fires if f.trigger == Trigger.T1_10 and not f.matched
+    ]
+    assert t1_10_unmatched, "tag without release entry should remain unmatched"
+
+
+def test_t1_10_decision_journal_does_not_satisfy_release_fire(git_project: Path) -> None:
+    _run(git_project, "tag", "v0.3.0", "-m", "Release 0.3.0")
+    from datetime import datetime
+    date = datetime.now().date().isoformat()
+    # A decision entry — wrong Type, must not satisfy a T1.10 release fire.
+    (git_project / ".cortex" / "journal" / f"{date}-decision.md").write_text(
+        f"# Decision\n\n**Date:** {date}\n**Type:** decision\n\nbody\n"
+    )
+    report = audit(git_project, since_days=30)
+    t1_10_fires = [f for f in report.fires if f.trigger == Trigger.T1_10]
+    assert t1_10_fires and not any(f.matched for f in t1_10_fires)
 
 
 def test_cli_audit_flag_runs_without_error(git_project: Path) -> None:

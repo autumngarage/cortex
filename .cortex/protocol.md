@@ -2,7 +2,7 @@
 
 > The set of rules an agent follows to read and write `.cortex/`. Projects import this file into `AGENTS.md` (or `CLAUDE.md`) so every agent working on the project follows the same contract.
 
-**Protocol version:** 0.2.0 (draft, ships with SPEC.md v0.3.1-dev)
+**Protocol version:** 0.2.1 (draft, ships with SPEC.md v0.4.0-dev)
 **Status:** Proposed
 **Imports:** this file is imported into `AGENTS.md` via `@.cortex/protocol.md`
 
@@ -61,12 +61,15 @@ These triggers are **deterministic, auditable, and enforceable**. When any of th
 | T1.7 | Touchstone pre-merge ran on architecturally significant diff (touches `principles/`, `.cortex/doctrine/`, `SPEC.md`, or matches configured patterns) | `doctrine/candidate.md` (draft, awaits promotion) |
 | T1.8 | Commit message matches patterns: `fix: ... regression`, `refactor: ... (removes|introduces)`, `feat: ... (breaking|replaces)` | `journal/decision.md` |
 | T1.9 | Pull request merged to the default branch (main/master) | `journal/pr-merged.md` |
+| T1.10 | A tagged release / distribution artifact shipped (`git tag` matching a release pattern, GitHub Release published, Homebrew tap / PyPI / Docker image updated) | `journal/release.md` |
 
 **Why T1.9 matters.** The merge is the canonical "this shipped" event for team-shared memory. T1.3 (plan transition) and T1.8 (commit-message pattern) are near-misses: a PR can merge without a plan-status change, and commit-pattern matching is fuzzy. A post-merge summary closes the loop — it is the durable record that ties Plans, Journal entries written during the branch, and the final diff together at the moment ratification happened. Authored by whichever agent/human runs the merge command (or by a post-merge hook when present).
 
+**Why T1.10 matters.** The merge is when work *enters the trunk*; the release is when it *enters the world*. Downstream documentation (CLAUDE.md install commands, README quickstart, PITCH version mentions, sibling-repo formula references) refers to *released* artifacts, not merged commits. A release event without a Journal entry is the failure mode the conductor case study documented: the Homebrew tap shipped, no Journal entry recorded that reality changed, and `CLAUDE.md` kept claiming "tap planned for v0.1.0; not yet wired" for eight further releases. The `release.md` template captures `Downstream docs this changes` as the seed list for the v0.5.0 `cortex doctor --audit-instructions` check; T1.10's audit walks `git tag --list` and matches each tag against a `Type: release` Journal entry within 72h.
+
 **Enforcement.** Tier 1 triggers are machine-detectable; `cortex doctor --audit` walks the git log for the session period and verifies that every qualifying event has a corresponding artifact of the trigger's expected shape — a Journal entry for most triggers, a Doctrine candidate (produced by `cortex doctrine draft`, ships in Phase E) for T1.7. Missing artifacts are warnings in solo mode, errors in triad mode (where Touchstone's pre-push hook blocks the push).
 
-**Trigger thresholds are project-configurable.** `.cortex/protocol.md` in a project can override: `N` for T1.4 file-deletion threshold; regex patterns for T1.7 architecturally-significant detection; commit-message patterns for T1.8; whether T1.9 fires on every merge or only on merges matching architecturally-significant patterns (default: every merge).
+**Trigger thresholds are project-configurable.** `.cortex/protocol.md` in a project can override: `N` for T1.4 file-deletion threshold; regex patterns for T1.7 architecturally-significant detection; commit-message patterns for T1.8; whether T1.9 fires on every merge or only on merges matching architecturally-significant patterns (default: every merge); the regex for T1.10 tag-name detection (default: `^v\d+\.\d+\.\d+` — semver tags only; projects using calendar versioning or non-`v`-prefix tags can override).
 
 ---
 
@@ -139,6 +142,7 @@ Templates shipped with the Protocol (filenames):
 - `journal/plan-transition.md` — Plan status change
 - `journal/sentinel-cycle.md` — end-of-cycle summary
 - `journal/pr-merged.md` — post-merge summary (T1.9)
+- `journal/release.md` — release / distribution-artifact summary (T1.10)
 - `doctrine/candidate.md` — Doctrine draft pending promotion
 - `digest/monthly.md` — monthly Journal digest
 - `digest/quarterly.md` — quarterly digest
