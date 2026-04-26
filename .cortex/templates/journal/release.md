@@ -3,6 +3,7 @@
 **Date:** {{ YYYY-MM-DD }}
 **Type:** release
 **Trigger:** T1.10
+**Tag:** {{ git tag, e.g. v0.3.0 }}
 **Cites:** plans/{{ <slug> }}, journal/{{ <date>-<slug> }}
 
 > {{ One sentence: what artifact shipped, where it lives now, which downstream docs reference it. }}

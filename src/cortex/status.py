@@ -148,7 +148,7 @@ def _latest_digest(project_root: Path, now: datetime) -> tuple[Path, int] | None
     entries = load_journal_entries(project_root)
     digests: list[tuple[Path, datetime]] = []
     for entry in entries:
-        type_, _trigger = _journal_header_fields(entry.path)
+        type_, _trigger, _tag = _journal_header_fields(entry.path)
         if type_ == "digest":
             digests.append((entry.path, entry.date))
     if not digests:
