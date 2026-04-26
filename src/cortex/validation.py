@@ -55,14 +55,21 @@ PLAN_REQUIRED_SECTIONS = (
     "## Work items",
 )
 
-# SPEC § 4.2: every item moved out of a Plan's scope must resolve to another
-# Plan or Journal entry within the same commit. The orphan-deferral check
-# scans `## Follow-ups (deferred)` bullets on active plans and warns when an
-# item lacks a citation to a durable layer entry. The literal SPEC text
-# names Plan and Journal; in practice projects also resolve to Doctrine
-# (which is the most durable layer of all — immutable-with-supersede),
-# so we accept all three durable-layer prefixes.
-PLAN_FOLLOWUP_CITATION_RE = re.compile(r"(?:plans|journal|doctrine)/[A-Za-z0-9._-]+")
+# SPEC § 4.2: every item moved out of a Plan's scope must resolve to a
+# durable-layer entry within the same commit. The orphan-deferral check
+# scans `## Follow-ups (deferred)` bullets on active plans and warns when
+# an item lacks a citation to one of the three durable layers. Filename
+# shapes are enforced per SPEC § 2 / § 3.5:
+# - `plans/<slug>(.md)` — plain slug, no required prefix
+# - `journal/YYYY-MM-DD-<slug>(.md)` — date-prefixed
+# - `doctrine/<nnnn>-<slug>(.md)` — 4-digit prefix
+# Tightening the shapes prevents typos like `journal/foo` or
+# `doctrine/scope` from accidentally clearing the check.
+PLAN_FOLLOWUP_CITATION_RE = re.compile(
+    r"plans/[A-Za-z0-9._-]+"
+    r"|journal/\d{4}-\d{2}-\d{2}-[A-Za-z0-9._-]+"
+    r"|doctrine/\d{4}-[A-Za-z0-9._-]+"
+)
 PLAN_GROUNDING_LINK_RE = re.compile(
     r"(doctrine/|state\.md|journal/)",
     re.IGNORECASE,

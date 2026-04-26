@@ -199,3 +199,47 @@ def test_orphan_handles_asterisk_bullets(cortex_project: Path) -> None:
     )
     warnings = _orphan_warnings(cortex_project, plan)
     assert len(warnings) == 1
+
+
+def test_orphan_warns_on_malformed_journal_citation(cortex_project: Path) -> None:
+    """`journal/foo` is the wrong shape — SPEC § 3.5 requires
+    `journal/YYYY-MM-DD-<slug>`. The regex must reject typos so the
+    check does its job (catching humans who half-write a citation)."""
+    plan = _write_plan(
+        cortex_project,
+        "orphan-malformed-journal",
+        "active",
+        "- Resolved by journal/foo.md (missing date prefix).\n",
+    )
+    assert len(_orphan_warnings(cortex_project, plan)) == 1
+
+
+def test_orphan_warns_on_malformed_doctrine_citation(cortex_project: Path) -> None:
+    """`doctrine/scope-boundary` is missing the 4-digit prefix per SPEC § 2."""
+    plan = _write_plan(
+        cortex_project,
+        "orphan-malformed-doctrine",
+        "active",
+        "- Out of scope per doctrine/scope-boundary (missing 0005- prefix).\n",
+    )
+    assert len(_orphan_warnings(cortex_project, plan)) == 1
+
+
+def test_orphan_clean_on_well_formed_dated_journal_path(cortex_project: Path) -> None:
+    plan = _write_plan(
+        cortex_project,
+        "orphan-good-journal",
+        "active",
+        "- Resolved by `journal/2026-04-25-init-ux-fixes-plan-shipped`.\n",
+    )
+    assert _orphan_warnings(cortex_project, plan) == []
+
+
+def test_orphan_clean_on_well_formed_doctrine_path(cortex_project: Path) -> None:
+    plan = _write_plan(
+        cortex_project,
+        "orphan-good-doctrine",
+        "active",
+        "- Out of scope per `doctrine/0005-scope-boundaries-v2`.\n",
+    )
+    assert _orphan_warnings(cortex_project, plan) == []
