@@ -1,25 +1,36 @@
 #!/usr/bin/env bash
 #
 # hooks/codex-review.sh — non-interactive AI code review + auto-fix loop.
-# Supports multiple reviewers (Codex, Claude, Gemini) with a configurable
-# fallback cascade. Wired into merge-pr.sh and default-branch pre-push checks.
+#
+# Touchstone 2.0+: the single reviewer is `conductor` (autumn-garage/conductor).
+# Conductor owns per-provider model selection, auth, tool/sandbox translation,
+# route logging, and cost reporting. This hook declares *what it needs* (review
+# mode → tools + sandbox) and lets Conductor's router pick *how* to run it.
+# Wired into merge-pr.sh and default-branch pre-push checks.
 #
 # Loop:
-#   1. Run the selected reviewer against the local diff vs the default branch
-#   2. If reviewer says CODEX_REVIEW_CLEAN → push allowed.
-#   3. If reviewer says CODEX_REVIEW_FIXED → it edited files. Stage + commit
-#      the fixes (a new commit, NOT an amend) and loop back to step 1.
-#   4. If reviewer says CODEX_REVIEW_BLOCKED → push aborts, findings printed.
+#   1. Run Conductor against the local diff vs the default branch
+#   2. If it says CODEX_REVIEW_CLEAN → push allowed.
+#   3. If it says CODEX_REVIEW_FIXED → it edited files. Stage + commit the
+#      fixes (a new commit, NOT an amend) and loop back to step 1.
+#   4. If it says CODEX_REVIEW_BLOCKED → push aborts, findings printed.
 #   5. After max_iterations rounds without converging, push aborts.
 #
-# Reviewer cascade:
-#   The [review] section in .codex-review.toml lists reviewers to try in order.
-#   The optional [review.routing] section can choose a different reviewer list
-#   for small vs larger diffs. The first installed/authenticated reviewer wins.
-#   If no [review] section exists, defaults to ["codex"] (backward compatible).
+# Reviewer selection:
+#   2.0 uses a single adapter (`reviewer_conductor_*`) — see the
+#   `reviewer_conductor_exec` block below. Legacy 1.x configs that set
+#   `[review].reviewers = ["codex", "claude", ...]` are auto-detected at
+#   startup and a one-time migration hint is printed; the values are
+#   translated to Conductor's auto-router.
 #
 # Configuration:
-#   Place a .codex-review.toml at the repo root to configure behavior.
+#   Place a .codex-review.toml at the repo root. Key knobs:
+#     [review].reviewer         = "conductor"  (only valid 2.0 value)
+#     [review.conductor].prefer = best|cheapest|fastest|balanced
+#     [review.conductor].effort = minimal|low|medium|high|max
+#     [review.conductor].tags   = "code-review,..."
+#     [review.conductor].with   = "<provider>"  (pins a specific provider)
+#     [review.conductor].exclude = "<p1>,<p2>"  (skips in auto-routing)
 #   See hooks/codex-review.config.example.toml for the full spec.
 #
 #   If no .codex-review.toml exists, ALL paths are treated as unsafe
@@ -27,39 +38,43 @@
 #   explicitly by listing safe paths or setting safe_by_default = true.
 #
 # Modes:
-#   review-only — reviewer can read + run commands, but cannot edit files or commit
-#   fix         — full access: reviewer can edit, stage, and commit auto-fixes
-#   diff-only   — read-only: reviewer can only read files, no commands or edits
-#   no-tests    — reviewer can edit and commit, but cannot run commands (no test execution)
+#   review-only — read + run commands, no file edits or commits
+#   fix         — full access: read, run commands, edit files, commit fixes
+#   diff-only   — read-only: diff embedded in the prompt, no tool use
+#   no-tests    — edit + commit, no command execution (skip test runs)
 #
-#   Modes are enforced at the wrapper level (tool restrictions, sandboxes), not just
-#   in the prompt. Set via CODEX_REVIEW_MODE env var or `mode` in .codex-review.toml.
+#   Modes are enforced at the Conductor boundary: Touchstone translates mode
+#   → (tools, sandbox) and passes those; Conductor maps them to each
+#   provider's native flag dialect.  Set via CODEX_REVIEW_MODE env var or
+#   `mode` in .codex-review.toml.
 #
 # Env overrides:
-#   TOUCHSTONE_REVIEWER              — force a specific reviewer (skips cascade, hard-fails if unavailable)
-#   TOUCHSTONE_LOCAL_REVIEWER_COMMAND — local reviewer command; reads prompt from stdin
-#   TOUCHSTONE_LOCAL_REVIEWER_AUTH_COMMAND — optional command that must pass before local review runs
-#   CODEX_REVIEW_ENABLED          — true/false override for the [review].enabled setting
-#   CODEX_REVIEW_MODE             — review-only|fix|diff-only|no-tests (default: fix)
-#   CODEX_REVIEW_BASE             — base ref to diff against (default: origin/<default-branch>)
-#   CODEX_REVIEW_MAX_ITERATIONS   — fix loop cap (default: from config, or 3)
-#   CODEX_REVIEW_MAX_DIFF_LINES   — skip review if diff > this many lines (default: 5000)
-#   CODEX_REVIEW_CACHE_CLEAN      — cache exact-input clean reviews (default: true)
-#   CODEX_REVIEW_TIMEOUT          — wall-clock timeout per invocation in seconds (default: 300, 0=none)
-#   CODEX_REVIEW_ASSIST           — enable peer reviewer help requests (default: false)
-#   CODEX_REVIEW_ASSIST_TIMEOUT   — timeout for peer reviewer helper calls (default: 60)
-#   CODEX_REVIEW_ASSIST_MAX_ROUNDS — max helper calls per review run (default: 1)
-#   CODEX_REVIEW_ON_ERROR         — fail-open (default) or fail-closed
-#   CODEX_REVIEW_DISABLE_CACHE    — set to true/1 to force a fresh review
-#   CODEX_REVIEW_FORCE            — set to true/1 to run even on non-default-branch pushes
-#   CODEX_REVIEW_NO_AUTOFIX       — set to true/1 for review-only mode (backward compat)
-#   CODEX_REVIEW_IN_PROGRESS      — internal guard to skip nested review runs
+#   TOUCHSTONE_REVIEWER               — DEPRECATED in 2.0.0; auto-translates to TOUCHSTONE_CONDUCTOR_WITH=<provider>
+#   TOUCHSTONE_CONDUCTOR_WITH         — pin a specific provider for auto-routing
+#   TOUCHSTONE_CONDUCTOR_PREFER       — best|cheapest|fastest|balanced (default: best)
+#   TOUCHSTONE_CONDUCTOR_EFFORT       — minimal|low|medium|high|max (default: max)
+#   TOUCHSTONE_CONDUCTOR_TAGS         — comma-separated tag hints (default: code-review)
+#   TOUCHSTONE_CONDUCTOR_EXCLUDE      — comma-separated providers to skip
+#   CODEX_REVIEW_SUPPRESS_LEGACY_WARNINGS — silence one-time migration hints
+#   CODEX_REVIEW_ENABLED              — true/false override for the [review].enabled setting
+#   CODEX_REVIEW_MODE                 — review-only|fix|diff-only|no-tests (default: fix)
+#   CODEX_REVIEW_BASE                 — base ref to diff against (default: origin/<default-branch>)
+#   CODEX_REVIEW_MAX_ITERATIONS       — fix loop cap (default: from config, or 3)
+#   CODEX_REVIEW_MAX_DIFF_LINES       — skip review if diff > this many lines (default: 5000)
+#   CODEX_REVIEW_CACHE_CLEAN          — cache exact-input clean reviews (default: true)
+#   CODEX_REVIEW_TIMEOUT              — wall-clock timeout per invocation in seconds (default: 300, 0=none)
+#   CODEX_REVIEW_ON_ERROR             — fail-open (default) or fail-closed
+#   CODEX_REVIEW_DISABLE_CACHE        — set to true/1 to force a fresh review
+#   CODEX_REVIEW_FORCE                — set to true/1 to run even on non-default-branch pushes
+#   CODEX_REVIEW_NO_AUTOFIX           — set to true/1 for review-only mode (backward compat)
+#   CODEX_REVIEW_IN_PROGRESS          — internal guard to skip nested review runs
+#   Legacy: TOUCHSTONE_LOCAL_REVIEWER_COMMAND, CODEX_REVIEW_ASSIST*  — parsed but inert in 2.0.
 #
 # To bypass entirely in an emergency: git push --no-verify
 #
 # Exit codes:
 #   0 — clean review (or graceful skip), push allowed
-#   1 — Codex flagged blocking issues OR fix loop did not converge, push aborted
+#   1 — reviewer flagged blocking issues OR fix loop did not converge, push aborted
 #
 set -euo pipefail
 
@@ -83,12 +98,35 @@ REVIEW_TIMEOUT="${CODEX_REVIEW_TIMEOUT:-300}"
 ON_ERROR="${CODEX_REVIEW_ON_ERROR:-fail-open}"
 UNSAFE_PATHS=""
 REVIEWER_CASCADE=()
-LOCAL_REVIEWER_COMMAND="${TOUCHSTONE_LOCAL_REVIEWER_COMMAND:-}"
-LOCAL_REVIEWER_AUTH_COMMAND="${TOUCHSTONE_LOCAL_REVIEWER_AUTH_COMMAND:-}"
+# Legacy local-reviewer env vars — no longer drive behavior in 2.0+, but
+# we still declare them so users with these set in their shell don't get
+# an unexpected unbound-variable error and existing config-migration
+# paths can detect a v1.x project. Register with the shellcheck-friendly
+# : ${VAR:=} form (shellcheck flags bare assignment as SC2034 "unused").
+# shellcheck disable=SC2269
+TOUCHSTONE_LOCAL_REVIEWER_COMMAND="${TOUCHSTONE_LOCAL_REVIEWER_COMMAND:-}"
+# shellcheck disable=SC2269
+TOUCHSTONE_LOCAL_REVIEWER_AUTH_COMMAND="${TOUCHSTONE_LOCAL_REVIEWER_AUTH_COMMAND:-}"
+# 2.0 conductor knobs — filled from [review.conductor] during TOML parse;
+# env vars (TOUCHSTONE_CONDUCTOR_*) override just before invocation.
+CONDUCTOR_WITH=""
+CONDUCTOR_PREFER=""
+CONDUCTOR_EFFORT=""
+CONDUCTOR_TAGS=""
+CONDUCTOR_EXCLUDE=""
 ROUTING_ENABLED=false
 ROUTING_SMALL_MAX_DIFF_LINES=400
-ROUTING_SMALL_REVIEWERS=()
-ROUTING_LARGE_REVIEWERS=()
+ROUTING_SMALL_REVIEWERS=()   # legacy 1.x shape; retained for back-compat parsing
+ROUTING_LARGE_REVIEWERS=()   # legacy 1.x shape; retained for back-compat parsing
+# 2.0 routing knobs — override CONDUCTOR_* for small vs large diffs.
+ROUTING_SMALL_WITH=""
+ROUTING_SMALL_PREFER=""
+ROUTING_SMALL_EFFORT=""
+ROUTING_SMALL_TAGS=""
+ROUTING_LARGE_WITH=""
+ROUTING_LARGE_PREFER=""
+ROUTING_LARGE_EFFORT=""
+ROUTING_LARGE_TAGS=""
 ROUTING_DECISION="default"
 ASSIST_ENABLED="${CODEX_REVIEW_ASSIST:-false}"
 ASSIST_TIMEOUT="${CODEX_REVIEW_ASSIST_TIMEOUT:-60}"
@@ -99,6 +137,19 @@ trim() {
   local value="$1"
   value="${value#"${value%%[![:space:]]*}"}"
   value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
+}
+
+strip_toml_string() {
+  # Trim whitespace and strip surrounding single/double quotes from a
+  # scalar TOML value. No attempt at full TOML-string semantics — just
+  # the quoted vs bare-word split that [review.conductor] keys use.
+  local value="$1"
+  value="$(trim "$value")"
+  case "$value" in
+    \"*\") value="${value#\"}"; value="${value%\"}" ;;
+    \'*\') value="${value#\'}"; value="${value%\'}" ;;
+  esac
   printf '%s' "$value"
 }
 
@@ -381,6 +432,21 @@ if [ -f "$CONFIG_FILE" ]; then
       continue
     fi
 
+    # Parse [review.conductor] section keys (2.0). These translate directly
+    # to the CONDUCTOR_* env-var contract the adapter uses at call-time.
+    # Env vars (TOUCHSTONE_CONDUCTOR_*) still take precedence; these supply
+    # the config-file default before env resolution at line ~650.
+    if [ "$CURRENT_SECTION" = "review.conductor" ]; then
+      case "$line" in
+        prefer*=*)  CONDUCTOR_PREFER="$(strip_toml_string "${line#*=}")" ;;
+        effort*=*)  CONDUCTOR_EFFORT="$(strip_toml_string "${line#*=}")" ;;
+        tags*=*)    CONDUCTOR_TAGS="$(strip_toml_string "${line#*=}")" ;;
+        with*=*)    CONDUCTOR_WITH="$(strip_toml_string "${line#*=}")" ;;
+        exclude*=*) CONDUCTOR_EXCLUDE="$(strip_toml_string "${line#*=}")" ;;
+      esac
+      continue
+    fi
+
     # Parse [review.routing] section keys.
     if [ "$CURRENT_SECTION" = "review.routing" ]; then
       case "$line" in
@@ -391,6 +457,7 @@ if [ -f "$CONFIG_FILE" ]; then
           ROUTING_SMALL_MAX_DIFF_LINES="$(trim "${line#*=}")"
           ;;
         small_reviewers*=*)
+          # Legacy 1.x shape — auto-migrated at push-time.
           array_value="$(trim "${line#*=}")"
           array_value="${array_value#\[}"
           if [[ "$array_value" == *"]"* ]]; then
@@ -401,6 +468,7 @@ if [ -f "$CONFIG_FILE" ]; then
           fi
           ;;
         large_reviewers*=*)
+          # Legacy 1.x shape — auto-migrated at push-time.
           array_value="$(trim "${line#*=}")"
           array_value="${array_value#\[}"
           if [[ "$array_value" == *"]"* ]]; then
@@ -410,6 +478,15 @@ if [ -f "$CONFIG_FILE" ]; then
             IN_ROUTING_LARGE_REVIEWERS=true
           fi
           ;;
+        # 2.0 routing knobs — override CONDUCTOR_* per size bucket.
+        small_with*=*)    ROUTING_SMALL_WITH="$(strip_toml_string "${line#*=}")" ;;
+        small_prefer*=*)  ROUTING_SMALL_PREFER="$(strip_toml_string "${line#*=}")" ;;
+        small_effort*=*)  ROUTING_SMALL_EFFORT="$(strip_toml_string "${line#*=}")" ;;
+        small_tags*=*)    ROUTING_SMALL_TAGS="$(strip_toml_string "${line#*=}")" ;;
+        large_with*=*)    ROUTING_LARGE_WITH="$(strip_toml_string "${line#*=}")" ;;
+        large_prefer*=*)  ROUTING_LARGE_PREFER="$(strip_toml_string "${line#*=}")" ;;
+        large_effort*=*)  ROUTING_LARGE_EFFORT="$(strip_toml_string "${line#*=}")" ;;
+        large_tags*=*)    ROUTING_LARGE_TAGS="$(strip_toml_string "${line#*=}")" ;;
       esac
       continue
     fi
@@ -463,17 +540,47 @@ if [ -f "$CONFIG_FILE" ]; then
       continue
     fi
 
-    # Parse [review.local] section keys.
+    # Parse [review.conductor] section keys (Touchstone 2.0+).
+    if [ "$CURRENT_SECTION" = "review.conductor" ]; then
+      case "$line" in
+        prefer*=*)
+          CONDUCTOR_PREFER="${CONDUCTOR_PREFER:-$(toml_string_value "${line#*=}")}"
+          ;;
+        effort*=*)
+          CONDUCTOR_EFFORT="${CONDUCTOR_EFFORT:-$(toml_string_value "${line#*=}")}"
+          ;;
+        tags*=*)
+          # Supports both "a,b,c" string and ["a","b","c"] array forms.
+          val="$(trim "${line#*=}")"
+          val="${val#\[}"; val="${val%\]}"
+          val="$(printf '%s' "$val" | tr -d '"' | tr -d "'" | tr -d ' ')"
+          CONDUCTOR_TAGS="${CONDUCTOR_TAGS:-$val}"
+          ;;
+        with*=*)
+          CONDUCTOR_WITH="${CONDUCTOR_WITH:-$(toml_string_value "${line#*=}")}"
+          ;;
+        exclude*=*)
+          val="$(trim "${line#*=}")"
+          val="${val#\[}"; val="${val%\]}"
+          val="$(printf '%s' "$val" | tr -d '"' | tr -d "'" | tr -d ' ')"
+          CONDUCTOR_EXCLUDE="${CONDUCTOR_EXCLUDE:-$val}"
+          ;;
+      esac
+      continue
+    fi
+
+    # [review.local] was the v1.x local-reviewer escape hatch. Touchstone 2.0
+    # retires it — users who want a custom model wire it in as a Conductor
+    # custom provider (see `conductor providers add`). Parser still consumes
+    # the section so old configs don't error; values are ignored.
     if [ "$CURRENT_SECTION" = "review.local" ]; then
       case "$line" in
-        command*=*)
-          if [ -z "${TOUCHSTONE_LOCAL_REVIEWER_COMMAND:-}" ]; then
-            LOCAL_REVIEWER_COMMAND="$(toml_string_value "${line#*=}")"
-          fi
-          ;;
-        auth_command*=*)
-          if [ -z "${TOUCHSTONE_LOCAL_REVIEWER_AUTH_COMMAND:-}" ]; then
-            LOCAL_REVIEWER_AUTH_COMMAND="$(toml_string_value "${line#*=}")"
+        command*=*|auth_command*=*)
+          if [ -z "${CODEX_REVIEW_SUPPRESS_LEGACY_WARNINGS:-}" ]; then
+            echo "==> NOTE: [review.local] is ignored in Touchstone 2.0.0." >&2
+            echo "    Register your command as a Conductor custom provider" >&2
+            echo "    (roadmap: v0.3). Silence with CODEX_REVIEW_SUPPRESS_LEGACY_WARNINGS=1." >&2
+            CODEX_REVIEW_SUPPRESS_LEGACY_WARNINGS=1
           fi
           ;;
       esac
@@ -546,24 +653,79 @@ DEFAULT_BRANCH="$(resolve_default_branch)"
 BASE="${CODEX_REVIEW_BASE:-origin/$DEFAULT_BRANCH}"
 NO_AUTOFIX="$(normalize_bool "$NO_AUTOFIX")"
 
-# Default reviewer cascade: codex-only (backward compat with existing configs).
-if [ "${#REVIEWER_CASCADE[@]}" -eq 0 ]; then
-  REVIEWER_CASCADE=("codex")
+# Legacy-config migration: v1.x used `[review].reviewers = [...]` (an ordered
+# cascade of codex/claude/gemini/local). Touchstone 2.0 routes through a
+# single Conductor adapter; Conductor's auto-router handles cross-provider
+# selection. If an older config is detected, translate + warn (one-time).
+if [ "${#REVIEWER_CASCADE[@]}" -gt 0 ]; then
+  LEGACY_CASCADE="${REVIEWER_CASCADE[*]}"
+  # If the legacy cascade was just ("conductor") we leave it alone.
+  if [ "${LEGACY_CASCADE}" != "conductor" ]; then
+    echo "==> NOTE: [review].reviewers = [${LEGACY_CASCADE// /, }] is a v1.x config." >&2
+    echo "    Touchstone 2.0 uses a single reviewer ('conductor') and delegates" >&2
+    echo "    per-provider selection to the Conductor router. Migrating to:" >&2
+    echo "        reviewer = \"conductor\"" >&2
+    echo "        [review.conductor]" >&2
+    echo "          prefer = \"best\"" >&2
+    echo "          effort = \"max\"" >&2
+    echo "    Update .codex-review.toml at your convenience. See CHANGELOG for details." >&2
+  fi
 fi
 
-# Default peer helpers, used only when review.assist is enabled. The active
-# primary reviewer is skipped at runtime, so this order favors a different CLI.
-if [ "${#ASSIST_HELPERS[@]}" -eq 0 ]; then
-  ASSIST_HELPERS=("codex" "gemini" "claude")
-fi
-ASSIST_ENABLED="$(normalize_bool "$ASSIST_ENABLED")"
+# Default reviewer: conductor.
+REVIEWER_CASCADE=("conductor")
+
+# v1.x peer-review (ASSIST_HELPERS) is disabled in 2.0.0 and returns in v2.1
+# via `conductor call --exclude <primary_provider>`. Users who had it enabled
+# get a warning; the setting is ignored rather than throwing.
+ASSIST_HELPERS=()  # 1.x helpers field is ignored — Conductor picks the peer.
+
 REVIEW_ENABLED="$(normalize_bool "$REVIEW_ENABLED")"
 ROUTING_ENABLED="$(normalize_bool "$ROUTING_ENABLED")"
 
-# TOUCHSTONE_REVIEWER env var overrides the cascade with a single forced reviewer.
+# TOUCHSTONE_REVIEWER env var is deprecated in 2.0.0. It was a v1.x-era
+# single-reviewer override (codex | claude | gemini | local); today the only
+# valid reviewer is 'conductor' itself. Users who want to pin a specific
+# underlying provider should use TOUCHSTONE_CONDUCTOR_WITH=<provider>.
 if [ -n "${TOUCHSTONE_REVIEWER:-}" ]; then
-  REVIEWER_CASCADE=("$TOUCHSTONE_REVIEWER")
+  case "$TOUCHSTONE_REVIEWER" in
+    conductor)
+      : # canonical — no translation needed
+      ;;
+    local)
+      # Touchstone 2.0 retired the `local` reviewer; Conductor has no
+      # provider by that name, so a raw translation (`--with local`) would
+      # fail with "unknown provider". The closest 2.0 analog is ollama.
+      # Warn and offer the migration; don't silently pin to something that
+      # crashes at call-time.
+      echo "==> NOTE: TOUCHSTONE_REVIEWER=local is deprecated in 2.0.0." >&2
+      echo "    The 1.x 'local' reviewer is retired; Conductor has no provider by that name." >&2
+      echo "    Migrating to: TOUCHSTONE_CONDUCTOR_WITH=ollama (the closest 2.0 analog)." >&2
+      echo "    If you had a custom local command, register it as a Conductor custom" >&2
+      echo "    provider when v0.3 ships: conductor providers add --name local --shell '<cmd>'" >&2
+      # TOUCHSTONE_REVIEWER is env-scoped, so it trumps the TOML `with=` pin.
+      CONDUCTOR_WITH="ollama"
+      ;;
+    codex|claude|gemini)
+      echo "==> NOTE: TOUCHSTONE_REVIEWER=$TOUCHSTONE_REVIEWER is deprecated in 2.0.0." >&2
+      echo "    Pin an underlying provider with: TOUCHSTONE_CONDUCTOR_WITH=$TOUCHSTONE_REVIEWER" >&2
+      CONDUCTOR_WITH="$TOUCHSTONE_REVIEWER"
+      ;;
+    *)
+      echo "==> WARNING: TOUCHSTONE_REVIEWER=$TOUCHSTONE_REVIEWER is not a known legacy value." >&2
+      echo "    Ignoring; Conductor will auto-route. To pin a provider, use" >&2
+      echo "    TOUCHSTONE_CONDUCTOR_WITH=<provider> directly." >&2
+      ;;
+  esac
+  REVIEWER_CASCADE=("conductor")
 fi
+
+# Env overrides for the conductor adapter (take precedence over .codex-review.toml).
+CONDUCTOR_WITH="${TOUCHSTONE_CONDUCTOR_WITH:-${CONDUCTOR_WITH:-}}"
+CONDUCTOR_PREFER="${TOUCHSTONE_CONDUCTOR_PREFER:-${CONDUCTOR_PREFER:-best}}"
+CONDUCTOR_EFFORT="${TOUCHSTONE_CONDUCTOR_EFFORT:-${CONDUCTOR_EFFORT:-max}}"
+CONDUCTOR_TAGS="${TOUCHSTONE_CONDUCTOR_TAGS:-${CONDUCTOR_TAGS:-code-review}}"
+CONDUCTOR_EXCLUDE="${TOUCHSTONE_CONDUCTOR_EXCLUDE:-${CONDUCTOR_EXCLUDE:-}}"
 
 # --------------------------------------------------------------------------
 # Mode resolution
@@ -737,113 +899,89 @@ ASSIST_EOF
 # --------------------------------------------------------------------------
 # Reviewer adapters
 # --------------------------------------------------------------------------
-# Each reviewer exposes three functions:
-#   reviewer_<id>_available  — exit 0 if the CLI is installed
-#   reviewer_<id>_auth_ok    — exit 0 if auth is configured
+# Every reviewer exposes three functions:
+#   reviewer_<id>_available  — exit 0 if the reviewer can be invoked
+#   reviewer_<id>_auth_ok    — exit 0 if at least one underlying model is authed
 #   reviewer_<id>_exec PROMPT — run the review; stdout = output, exit code = success
+#
+# Touchstone 2.0 ships a single reviewer, `conductor`, which wraps the
+# autumn-garage/conductor CLI. Conductor owns the per-provider translation
+# (`--sandbox`, `--allowedTools`, `--yolo`, etc. are entirely its concern);
+# Touchstone just declares capability-level intent (what tools, what sandbox)
+# and lets the router pick.
 
-reviewer_codex_available() { command -v codex >/dev/null 2>&1; }
-reviewer_codex_auth_ok()   { codex login status >/dev/null 2>&1; }
-reviewer_codex_exec() {
-  # Codex sandbox: read-only (no file writes) or workspace-write (edits allowed).
-  # Codex cannot selectively disable command execution, so diff-only and no-tests
-  # degrade: diff-only → read-only sandbox, no-tests → workspace-write sandbox.
-  # The prompt still instructs the reviewer, but enforcement is filesystem-only.
-  local sandbox="read-only"
-  if [ "$REVIEW_MODE" = "fix" ] || [ "$REVIEW_MODE" = "no-tests" ]; then
-    sandbox="workspace-write"
-  fi
-  if [ "$REVIEW_MODE" = "diff-only" ] || [ "$REVIEW_MODE" = "no-tests" ]; then
-    printf "  ${C_DIM}(codex: '%s' enforced via sandbox=%s + prompt; command restriction is prompt-level only)${C_RESET}\n" \
-      "$REVIEW_MODE" "$sandbox" >&2
-  fi
-  CODEX_REVIEW_IN_PROGRESS=1 codex exec \
-    --sandbox "$sandbox" --ephemeral "$1" 2>/dev/null
+reviewer_conductor_available() {
+  command -v conductor >/dev/null 2>&1
 }
 
-reviewer_claude_available() { command -v claude >/dev/null 2>&1; }
-reviewer_claude_auth_ok()   { claude auth status >/dev/null 2>&1; }
-reviewer_claude_exec() {
-  # Claude has fine-grained --allowedTools: all four modes are fully enforced.
-  local tools
-  case "$REVIEW_MODE" in
-    diff-only)    tools="Read,Grep,Glob" ;;
-    review-only)  tools="Read,Grep,Glob,Bash" ;;
-    no-tests)     tools="Read,Grep,Glob,Edit,Write" ;;
-    fix)          tools="Read,Grep,Glob,Bash,Edit,Write" ;;
-  esac
-  CODEX_REVIEW_IN_PROGRESS=1 claude -p \
-    --allowedTools "$tools" \
-    --output-format text \
-    "$1" 2>/dev/null
+reviewer_conductor_auth_ok() {
+  # Delegate to `conductor doctor --json` — cheap check, makes no upstream
+  # calls, confirms at least one provider is configured.
+  local doctor_json
+  doctor_json=$(conductor doctor --json 2>/dev/null) || return 1
+  echo "$doctor_json" | grep -q '"configured"[[:space:]]*:[[:space:]]*true'
 }
 
-reviewer_gemini_available() { command -v gemini >/dev/null 2>&1; }
-reviewer_gemini_auth_ok() {
-  [ -n "${GEMINI_API_KEY:-}" ] && return 0
-  command -v gcloud >/dev/null 2>&1 && gcloud auth print-access-token >/dev/null 2>&1
-}
-reviewer_gemini_exec() {
-  # Gemini: --yolo (full auto-approve) or not (no auto-approve).
-  # Only fix mode uses --yolo. diff-only, review-only, and no-tests all run
-  # without --yolo. no-tests cannot be fully enforced (edits without commands)
-  # since Gemini lacks granular tool control.
-  if [ "$REVIEW_MODE" = "fix" ]; then
-    CODEX_REVIEW_IN_PROGRESS=1 gemini -p "$1" --yolo 2>/dev/null
+reviewer_conductor_exec() {
+  local prompt="$1"
+  local -a args=()
+  local subcommand
+
+  # Provider selection: --with <id> pins a specific provider; otherwise --auto
+  # lets the router pick based on prefer + effort + tags.
+  if [ -n "${CONDUCTOR_WITH:-}" ]; then
+    args+=(--with "$CONDUCTOR_WITH")
   else
-    if [ "$REVIEW_MODE" = "no-tests" ]; then
-      printf "  ${C_DIM}(gemini: 'no-tests' mode degrades to review-only; gemini lacks granular tool control)${C_RESET}\n" >&2
-    fi
-    CODEX_REVIEW_IN_PROGRESS=1 gemini -p "$1" 2>/dev/null
-  fi
-}
-
-reviewer_local_available() {
-  [ -n "$LOCAL_REVIEWER_COMMAND" ]
-}
-reviewer_local_auth_ok() {
-  [ -z "$LOCAL_REVIEWER_AUTH_COMMAND" ] && return 0
-  bash -c "$LOCAL_REVIEWER_AUTH_COMMAND" >/dev/null 2>&1
-}
-append_local_context_file() {
-  local title="$1"
-  local file="$2"
-
-  [ -f "$file" ] || return 0
-  printf '\n## %s\n\n' "$title"
-  printf '```markdown\n'
-  cat "$file"
-  printf '\n```\n'
-}
-build_local_reviewer_prompt() {
-  local base_prompt="$1"
-
-  cat <<LOCAL_PROMPT_EOF
-$base_prompt
-
-## Local reviewer input
-
-You are running as a local command that receives only this stdin payload.
-Use the embedded project context and diff below; do not assume you can call
-repo-aware tools unless your wrapper command explicitly provides them.
-LOCAL_PROMPT_EOF
-
-  append_local_context_file "AGENTS.md" "$REPO_ROOT/AGENTS.md"
-  append_local_context_file "CLAUDE.md" "$REPO_ROOT/CLAUDE.md"
-  if [ -n "$REVIEW_CONTEXT_FILE" ]; then
-    append_local_context_file "$(basename "$REVIEW_CONTEXT_FILE")" "$REVIEW_CONTEXT_FILE"
+    args+=(--auto)
+    args+=(--prefer "${CONDUCTOR_PREFER:-best}")
+    [ -n "${CONDUCTOR_TAGS:-}" ] && args+=(--tags "$CONDUCTOR_TAGS")
+    [ -n "${CONDUCTOR_EXCLUDE:-}" ] && args+=(--exclude "$CONDUCTOR_EXCLUDE")
   fi
 
-  printf '\n## Diff\n\n'
-  printf '```diff\n'
-  git diff "$MERGE_BASE"..HEAD 2>/dev/null || true
-  printf '\n```\n'
-}
-reviewer_local_exec() {
-  local local_prompt
-  printf "  ${C_DIM}(local: running configured command; prompt is provided on stdin)${C_RESET}\n" >&2
-  local_prompt="$(build_local_reviewer_prompt "$1")"
-  CODEX_REVIEW_IN_PROGRESS=1 bash -c "$LOCAL_REVIEWER_COMMAND" <<< "$local_prompt"
+  # Effort applies whether manual-provider or auto-routed.
+  args+=(--effort "${CONDUCTOR_EFFORT:-max}")
+
+  # REVIEW_MODE → subcommand + tools + sandbox. Conductor translates these
+  # portable names into each provider's native flag dialect.
+  local tools sandbox
+  case "$REVIEW_MODE" in
+    diff-only)
+      # Single-turn call — the diff is already embedded in the prompt.
+      subcommand="call"
+      ;;
+    review-only)
+      subcommand="exec"
+      tools="Read,Grep,Glob,Bash"
+      sandbox="read-only"
+      ;;
+    no-tests)
+      subcommand="exec"
+      tools="Read,Grep,Glob,Edit,Write"
+      sandbox="workspace-write"
+      ;;
+    fix)
+      subcommand="exec"
+      tools="Read,Grep,Glob,Bash,Edit,Write"
+      sandbox="workspace-write"
+      ;;
+    *)
+      subcommand="exec"
+      tools="Read,Grep,Glob,Bash"
+      sandbox="read-only"
+      ;;
+  esac
+
+  if [ "$subcommand" = "exec" ]; then
+    args+=(--tools "$tools")
+    args+=(--sandbox "$sandbox")
+    args+=(--timeout "${CODEX_REVIEW_TIMEOUT:-300}")
+  fi
+
+  # Pass the prompt via stdin. Avoids argv length limits on large diffs and
+  # matches Conductor's established stdin-fallback path.
+  CODEX_REVIEW_IN_PROGRESS=1 \
+    printf '%s' "$prompt" \
+    | conductor "$subcommand" "${args[@]}"
 }
 
 # --------------------------------------------------------------------------
@@ -864,15 +1002,32 @@ resolve_reviewer() {
       continue
     fi
     if ! "reviewer_${reviewer}_available"; then
-      if [ "$reviewer" = "local" ]; then
-        REVIEWER_STATUS="${REVIEWER_STATUS}    local: command not configured\n"
-      else
-        REVIEWER_STATUS="${REVIEWER_STATUS}    ${reviewer}: CLI not installed\n"
-      fi
+      case "$reviewer" in
+        conductor)
+          REVIEWER_STATUS="${REVIEWER_STATUS}    conductor: CLI not found on PATH\n"
+          REVIEWER_STATUS="${REVIEWER_STATUS}      → brew install autumngarage/conductor/conductor\n"
+          REVIEWER_STATUS="${REVIEWER_STATUS}      → conductor init   (configure providers interactively)\n"
+          ;;
+        local)
+          REVIEWER_STATUS="${REVIEWER_STATUS}    local: command not configured\n"
+          ;;
+        *)
+          REVIEWER_STATUS="${REVIEWER_STATUS}    ${reviewer}: CLI not installed\n"
+          ;;
+      esac
       continue
     fi
     if ! "reviewer_${reviewer}_auth_ok"; then
-      REVIEWER_STATUS="${REVIEWER_STATUS}    ${reviewer}: auth check failed\n"
+      case "$reviewer" in
+        conductor)
+          REVIEWER_STATUS="${REVIEWER_STATUS}    conductor: no provider is configured\n"
+          REVIEWER_STATUS="${REVIEWER_STATUS}      → conductor doctor    (diagnose what's missing)\n"
+          REVIEWER_STATUS="${REVIEWER_STATUS}      → conductor init      (guided provider setup)\n"
+          ;;
+        *)
+          REVIEWER_STATUS="${REVIEWER_STATUS}    ${reviewer}: auth check failed\n"
+          ;;
+      esac
       continue
     fi
     ACTIVE_REVIEWER="$reviewer"
@@ -927,8 +1082,12 @@ apply_review_routing() {
       ;;
   esac
 
+  # Legacy 1.x cascade arrays survive for back-compat; 2.0 routing lives in
+  # the per-bucket CONDUCTOR_* overrides. In 2.0 the cascade is always
+  # ("conductor") after migration, so the array swap is a no-op — the real
+  # routing choice is the CONDUCTOR_WITH / PREFER / EFFORT / TAGS swap.
   if [ "${#ROUTING_SMALL_REVIEWERS[@]}" -eq 0 ]; then
-    ROUTING_SMALL_REVIEWERS=("local" "${REVIEWER_CASCADE[@]}")
+    ROUTING_SMALL_REVIEWERS=("${REVIEWER_CASCADE[@]}")
   fi
   if [ "${#ROUTING_LARGE_REVIEWERS[@]}" -eq 0 ]; then
     ROUTING_LARGE_REVIEWERS=("${REVIEWER_CASCADE[@]}")
@@ -937,11 +1096,22 @@ apply_review_routing() {
   if [ "$diff_lines" -le "$ROUTING_SMALL_MAX_DIFF_LINES" ] 2>/dev/null; then
     REVIEWER_CASCADE=("${ROUTING_SMALL_REVIEWERS[@]}")
     ROUTING_DECISION="small"
-    echo "==> Review routing: small diff ($diff_lines <= $ROUTING_SMALL_MAX_DIFF_LINES) — trying: ${REVIEWER_CASCADE[*]}"
+    # Apply 2.0 small-bucket overrides. Non-empty fields win; env still
+    # trumps via the earlier cascade (TOUCHSTONE_CONDUCTOR_* set on the
+    # command line or in the shell override the config-driven bucket).
+    [ -n "$ROUTING_SMALL_WITH" ]   && CONDUCTOR_WITH="${TOUCHSTONE_CONDUCTOR_WITH:-$ROUTING_SMALL_WITH}"
+    [ -n "$ROUTING_SMALL_PREFER" ] && CONDUCTOR_PREFER="${TOUCHSTONE_CONDUCTOR_PREFER:-$ROUTING_SMALL_PREFER}"
+    [ -n "$ROUTING_SMALL_EFFORT" ] && CONDUCTOR_EFFORT="${TOUCHSTONE_CONDUCTOR_EFFORT:-$ROUTING_SMALL_EFFORT}"
+    [ -n "$ROUTING_SMALL_TAGS" ]   && CONDUCTOR_TAGS="${TOUCHSTONE_CONDUCTOR_TAGS:-$ROUTING_SMALL_TAGS}"
+    echo "==> Review routing: small diff ($diff_lines <= $ROUTING_SMALL_MAX_DIFF_LINES) — with=${CONDUCTOR_WITH:-auto} prefer=$CONDUCTOR_PREFER effort=$CONDUCTOR_EFFORT"
   else
     REVIEWER_CASCADE=("${ROUTING_LARGE_REVIEWERS[@]}")
     ROUTING_DECISION="large"
-    echo "==> Review routing: larger diff ($diff_lines > $ROUTING_SMALL_MAX_DIFF_LINES) — trying: ${REVIEWER_CASCADE[*]}"
+    [ -n "$ROUTING_LARGE_WITH" ]   && CONDUCTOR_WITH="${TOUCHSTONE_CONDUCTOR_WITH:-$ROUTING_LARGE_WITH}"
+    [ -n "$ROUTING_LARGE_PREFER" ] && CONDUCTOR_PREFER="${TOUCHSTONE_CONDUCTOR_PREFER:-$ROUTING_LARGE_PREFER}"
+    [ -n "$ROUTING_LARGE_EFFORT" ] && CONDUCTOR_EFFORT="${TOUCHSTONE_CONDUCTOR_EFFORT:-$ROUTING_LARGE_EFFORT}"
+    [ -n "$ROUTING_LARGE_TAGS" ]   && CONDUCTOR_TAGS="${TOUCHSTONE_CONDUCTOR_TAGS:-$ROUTING_LARGE_TAGS}"
+    echo "==> Review routing: larger diff ($diff_lines > $ROUTING_SMALL_MAX_DIFF_LINES) — with=${CONDUCTOR_WITH:-auto} prefer=$CONDUCTOR_PREFER effort=$CONDUCTOR_EFFORT"
   fi
 }
 
@@ -951,11 +1121,8 @@ run_reviewer() {
 
 reviewer_label_for() {
   case "$1" in
-    codex)  printf 'Codex' ;;
-    claude) printf 'Claude' ;;
-    gemini) printf 'Gemini' ;;
-    local)  printf 'Local command' ;;
-    *)      printf '%s' "$1" ;;
+    conductor) printf 'Conductor' ;;
+    *)         printf '%s' "$1" ;;
   esac
 }
 
@@ -969,7 +1136,8 @@ reviewer_label() {
 
 REVIEW_OUTPUT_FILE="$(mktemp "${TMPDIR:-/tmp}/touchstone-review-output.XXXXXX")"
 ASSIST_OUTPUT_FILE="$(mktemp "${TMPDIR:-/tmp}/touchstone-review-assist-output.XXXXXX")"
-trap 'rm -f "$REVIEW_OUTPUT_FILE" "$ASSIST_OUTPUT_FILE"' EXIT
+REVIEW_STDERR_FILE="$(mktemp "${TMPDIR:-/tmp}/touchstone-review-stderr.XXXXXX")"
+trap 'rm -f "$REVIEW_OUTPUT_FILE" "$ASSIST_OUTPUT_FILE" "$REVIEW_STDERR_FILE"' EXIT
 
 kill_process_tree() {
   local pid="$1"
@@ -992,15 +1160,21 @@ run_reviewer_with_timeout() {
   local prompt="${2:-$REVIEW_PROMPT}"
   local output_file="${3:-$REVIEW_OUTPUT_FILE}"
 
+  # Capture stderr separately — conductor emits its route-log there, which
+  # we want to surface in the transcript. Pre-2.0 reviewers wrote noise to
+  # stderr, hence the historical /dev/null redirect; capturing instead is
+  # safe because non-[conductor] lines are filtered before display.
+  : > "$REVIEW_STDERR_FILE"
+
   # No timeout: run directly
   if [ "$timeout_secs" -le 0 ] 2>/dev/null; then
-    run_reviewer "$prompt" > "$output_file" 2>/dev/null
+    run_reviewer "$prompt" > "$output_file" 2>>"$REVIEW_STDERR_FILE"
     return $?
   fi
 
   # Run reviewer in background, kill if it exceeds timeout.
   (
-    run_reviewer "$prompt" > "$output_file" 2>/dev/null &
+    run_reviewer "$prompt" > "$output_file" 2>>"$REVIEW_STDERR_FILE" &
     local reviewer_pid=$!
 
     terminate_reviewer() {
@@ -1063,6 +1237,24 @@ if should_skip_pre_push_review; then
   exit 0
 fi
 
+# First-push exemption: a pre-push to the default branch with a single commit
+# on HEAD is the initial scaffold push. Reviewing AI-generated template files
+# has near-zero signal and spends quota that belongs to real PRs. Skip with a
+# visible line so the absent safety boundary is not silent. Defensive: if
+# `git rev-list` fails for any reason (no commits, detached state, etc.), fall
+# through to the normal review path instead of silently skipping.
+if is_pre_push_hook && ! is_truthy "${CODEX_REVIEW_FORCE:-false}"; then
+  _firstpush_remote_branch="$(short_ref_name "${PRE_COMMIT_REMOTE_BRANCH:-}")"
+  _firstpush_default_branch="$(short_ref_name "$DEFAULT_BRANCH")"
+  if [ "$_firstpush_remote_branch" = "$_firstpush_default_branch" ]; then
+    if _firstpush_commit_count="$(git rev-list --count HEAD 2>/dev/null)" \
+      && [ "$_firstpush_commit_count" = "1" ]; then
+      echo "==> Codex review skipped — first push on a fresh scaffold (HEAD is the initial commit)."
+      exit 0
+    fi
+  fi
+fi
+
 if ! is_truthy "$REVIEW_ENABLED"; then
   echo "==> AI review disabled by .codex-review.toml — skipping review."
   exit 0
@@ -1099,11 +1291,14 @@ if ! resolve_reviewer; then
   if [ -n "${TOUCHSTONE_REVIEWER:-}" ]; then
     echo "ERROR: TOUCHSTONE_REVIEWER=$TOUCHSTONE_REVIEWER but that reviewer is not available:" >&2
     printf '%b' "$REVIEWER_STATUS" >&2
+    echo "  Set TOUCHSTONE_CONDUCTOR_WITH=<provider> to pin an underlying provider," >&2
+    echo "  or unset TOUCHSTONE_REVIEWER to let Conductor auto-route." >&2
     exit 1
   fi
-  echo "==> No reviewer available — skipping review."
+  echo "==> No reviewer available — push will proceed without AI review."
   printf '%b' "$REVIEWER_STATUS"
-  echo "    Install at least one: codex, claude, or gemini CLI; or configure [review.local].command."
+  echo "    Touchstone 2.0 routes every review through the \`conductor\` CLI."
+  echo "    Fix above, then re-run \`git push\` to trigger review again."
   exit 0
 fi
 REVIEWER_LABEL="$(reviewer_label)"
@@ -1204,29 +1399,45 @@ append_cache_file() {
 }
 
 review_cache_key() {
+  # Use the `${VAR:-}` default-to-empty form for every variable: with
+  # `set -u` active, an unset reference would abort the subshell partway
+  # through and silently truncate the cache-key input. (Pre-2.0 the
+  # function half-broke this way — only the first few fields contributed
+  # to the hash, so adding new fields had no effect on cache invalidation.
+  # Keep this defensive on every line.)
   {
-    printf 'touchstone-codex-review-cache-v2\n'
-    printf 'reviewer=%s\n' "$ACTIVE_REVIEWER"
-    printf 'review_route=%s\n' "$ROUTING_DECISION"
-    printf 'review_enabled=%s\n' "$REVIEW_ENABLED"
-    printf 'local_reviewer_command=%s\n' "$LOCAL_REVIEWER_COMMAND"
-    printf 'base=%s\n' "$BASE"
-    printf 'merge_base=%s\n' "$MERGE_BASE"
-    printf 'worktree_dirty_before_review=%s\n' "$WORKTREE_DIRTY_BEFORE_REVIEW"
-    printf 'assist_enabled=%s\n' "$ASSIST_ENABLED"
-    printf 'assist_timeout=%s\n' "$ASSIST_TIMEOUT"
-    printf 'assist_max_rounds=%s\n' "$ASSIST_MAX_ROUNDS"
-    printf 'assist_helpers=%s\n' "${ASSIST_HELPERS[*]}"
-    printf '\n-- prompt --\n%s\n' "$REVIEW_PROMPT"
-    append_cache_file "AGENTS.md" "$REPO_ROOT/AGENTS.md"
-    append_cache_file "CLAUDE.md" "$REPO_ROOT/CLAUDE.md"
-    append_cache_file ".codex-review.toml" "$CONFIG_FILE"
+    printf 'touchstone-codex-review-cache-v3\n'
+    printf 'reviewer=%s\n' "${ACTIVE_REVIEWER:-}"
+    printf 'review_mode=%s\n' "${REVIEW_MODE:-}"
+    printf 'review_route=%s\n' "${ROUTING_DECISION:-}"
+    printf 'review_enabled=%s\n' "${REVIEW_ENABLED:-}"
+    printf 'local_reviewer_command=%s\n' "${LOCAL_REVIEWER_COMMAND:-}"
+    printf 'base=%s\n' "${BASE:-}"
+    printf 'merge_base=%s\n' "${MERGE_BASE:-}"
+    printf 'worktree_dirty_before_review=%s\n' "${WORKTREE_DIRTY_BEFORE_REVIEW:-}"
+    printf 'assist_enabled=%s\n' "${ASSIST_ENABLED:-}"
+    printf 'assist_timeout=%s\n' "${ASSIST_TIMEOUT:-}"
+    printf 'assist_max_rounds=%s\n' "${ASSIST_MAX_ROUNDS:-}"
+    printf 'assist_helpers=%s\n' "${ASSIST_HELPERS[*]:-}"
+    # Conductor knobs (CLI-effective values, post env+config resolution).
+    # Without these, a review at prefer=cheapest/effort=minimal would
+    # silently satisfy a later push expecting prefer=best/effort=max
+    # because the diff hash matches.
+    printf 'conductor_with=%s\n' "${CONDUCTOR_WITH:-}"
+    printf 'conductor_prefer=%s\n' "${CONDUCTOR_PREFER:-}"
+    printf 'conductor_effort=%s\n' "${CONDUCTOR_EFFORT:-}"
+    printf 'conductor_tags=%s\n' "${CONDUCTOR_TAGS:-}"
+    printf 'conductor_exclude=%s\n' "${CONDUCTOR_EXCLUDE:-}"
+    printf '\n-- prompt --\n%s\n' "${REVIEW_PROMPT:-}"
+    append_cache_file "AGENTS.md" "${REPO_ROOT:-}/AGENTS.md"
+    append_cache_file "CLAUDE.md" "${REPO_ROOT:-}/CLAUDE.md"
+    append_cache_file ".codex-review.toml" "${CONFIG_FILE:-}"
     append_cache_file "codex-review.sh" "$0"
-    if [ -n "$REVIEW_CONTEXT_FILE" ]; then
+    if [ -n "${REVIEW_CONTEXT_FILE:-}" ]; then
       append_cache_file "codex-review-context" "$REVIEW_CONTEXT_FILE"
     fi
     printf '\n-- branch diff --\n'
-    git diff --binary "$MERGE_BASE"..HEAD
+    git diff --binary "${MERGE_BASE:-HEAD}"..HEAD
   } | hash_stdin
 }
 
@@ -1467,6 +1678,113 @@ phase() {
   printf "  ${C_DIM}[%s] %s${C_RESET}\n" "$(date +%H:%M:%S)" "$1"
 }
 
+# Extract Conductor's route-log lines from REVIEW_STDERR_FILE and print
+# them into the transcript. The log tells the user which provider was
+# picked, how hard it thought, how long it took, and what it cost —
+# the observability promise of the Conductor integration.
+print_route_log() {
+  [ -f "$REVIEW_STDERR_FILE" ] || return 0
+  # Conductor's route-log lines all start with `[conductor]`; subsequent
+  # wrapped lines (the cost/token summary) start with whitespace. Continue
+  # printing while indented continuation lines follow; reset on any other
+  # line. Tolerates conductor's varied wrap-line punctuation (· vs · vs .)
+  # and any traceback/warning text on stderr (those reset the state).
+  local log
+  log="$(awk '/^\[conductor\]/ { emit=1; print; next } emit && /^[[:space:]]/ { print; next } { emit=0 }' "$REVIEW_STDERR_FILE")"
+  [ -n "$log" ] || return 0
+  # Indent to align with the other phase/banner lines.
+  printf '%s\n' "$log" | while IFS= read -r line; do
+    printf "  ${C_DIM}%s${C_RESET}\n" "$line"
+  done
+}
+
+# --------------------------------------------------------------------------
+# Peer review ([review.assist], v2.1) — second-opinion pass via Conductor.
+# --------------------------------------------------------------------------
+
+# Parse the provider Conductor picked for the most recent primary call.
+# Reads the route-log line from REVIEW_STDERR_FILE. Returns the provider
+# name on stdout, or empty if not found. Tolerates both real conductor's
+# unicode arrow and ASCII-fallback shapes.
+#
+# shellcheck disable=SC2120  # $1 is intentionally optional with a default.
+parse_primary_provider() {
+  local stderr_file="${1:-$REVIEW_STDERR_FILE}"
+  [ -f "$stderr_file" ] || { printf ''; return; }
+  local line
+  line="$(grep -m1 '^\[conductor\]' "$stderr_file" 2>/dev/null || true)"
+  [ -n "$line" ] || { printf ''; return; }
+  # Extract the provider name following the arrow. Handles:
+  #   [conductor] auto (...) → claude (tier: ...)
+  #   [conductor] auto (...) -> claude (tier: ...)
+  # `sed -nE` treats `(a|b)` as ERE alternation.
+  printf '%s' "$line" | sed -nE 's/.*(→|-> ?)([a-zA-Z0-9_.-]+).*/\2/p' | head -1
+}
+
+# Run a peer review via Conductor, excluding the primary's provider.
+# Advisory — peer output appears in the transcript but does not gate the
+# merge. When the primary provider can't be identified (missing or
+# unparseable route-log), skip rather than invoke `conductor` without
+# --exclude (which could reuse the primary).
+run_peer_review() {
+  local primary_output="$1"
+  local primary_provider
+  primary_provider="$(parse_primary_provider)"
+
+  if [ -z "$primary_provider" ]; then
+    phase "peer review skipped — couldn't identify primary provider"
+    return 0
+  fi
+
+  phase "peer review — asking Conductor for a second opinion (excluding $primary_provider)"
+
+  local peer_prompt
+  peer_prompt="$(build_peer_review_prompt "$primary_output")"
+
+  # Peer is single-turn (no tools). `conductor call` sees the primary's
+  # findings + a framing prompt; the router picks a non-primary provider.
+  local peer_output
+  # ASSIST_TIMEOUT config applies via the outer run_reviewer_with_timeout
+  # wrapper when the primary timed out; peer call runs synchronously and
+  # relies on conductor's own per-provider timeout (currently 300s default).
+  peer_output="$(printf '%s' "$peer_prompt" \
+    | conductor call --auto \
+        --exclude "$primary_provider" \
+        --tags code-review \
+        --effort medium \
+        --silent-route \
+        2>/dev/null || true)"
+
+  if [ -z "$peer_output" ]; then
+    phase "peer review produced no output (skipped)"
+    return 0
+  fi
+
+  printf "\n  ${C_DIM}── peer review (excluded %s) ──${C_RESET}\n" "$primary_provider"
+  printf '%s\n' "$peer_output" | sed 's/^/  /'
+  printf "\n"
+  ASSIST_ROUNDS_DONE=$((${ASSIST_ROUNDS_DONE:-0} + 1))
+}
+
+build_peer_review_prompt() {
+  local primary_output="$1"
+  cat <<EOF
+You are a peer code reviewer giving a second opinion on another AI reviewer's output.
+You are asked to be a QUICK second opinion, NOT to redo the review from scratch.
+
+The primary reviewer examined a code change and produced the output below. Your job:
+  1. Do you AGREE or DISAGREE with the primary's overall verdict (CLEAN / FIXED / BLOCKED)?
+  2. Anything the primary MISSED that you'd flag?
+  3. Anything the primary FLAGGED that you think is a false positive?
+
+Keep your response under 300 words. Lead with AGREE or DISAGREE on a line by itself.
+
+--- Primary reviewer output: ---
+$primary_output
+--- End primary output ---
+EOF
+}
+
 # --------------------------------------------------------------------------
 # Worktree invariant checking
 # --------------------------------------------------------------------------
@@ -1536,23 +1854,104 @@ print_summary() {
 }
 
 # Colors (respect NO_COLOR).
+# shellcheck disable=SC2034  # C_GREEN / C_CYAN kept for palette parity;
+# other color vars are referenced in printf statements above and below.
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_DIM='\033[2m' C_GREEN='\033[0;32m'
   C_YELLOW='\033[0;33m' C_RED='\033[0;31m' C_CYAN='\033[0;36m' C_RESET='\033[0m'
+  C_TTY=1
 else
   C_DIM='' C_GREEN='' C_YELLOW='' C_RED='' C_CYAN='' C_RESET=''
+  C_TTY=0
 fi
+
+# --------------------------------------------------------------------------
+# Branded UI — double-rail verdicts signed "touchstone".
+# Mirrors lib/ui.sh; kept inline so this hook stays self-contained when
+# synced into downstream projects as scripts/codex-review.sh.
+# --------------------------------------------------------------------------
+
+TK_BRAND_ORANGE="#FF6B35"
+TK_BRAND_LIME="#A3E635"
+TK_BRAND_RED="#EF4444"
+TK_BRAND_DIM="#6B7280"
+
+tk_have_gum() { command -v gum >/dev/null 2>&1; }
+
+tk_paint() {
+  # tk_paint <hex> <bold|plain> <text...>
+  # Falls back to plain text if gum is missing, disabled, or fails —
+  # the hook is running under `set -euo pipefail`, so silent gum failure
+  # would otherwise produce empty strings in the verdict lines.
+  local color="$1"; shift
+  local flag="$1"; shift
+  local rendered=""
+  if [ "$C_TTY" = "1" ] && tk_have_gum; then
+    if [ "$flag" = "bold" ]; then
+      rendered="$(gum style --foreground "$color" --bold "$*" 2>/dev/null || true)"
+    else
+      rendered="$(gum style --foreground "$color" "$*" 2>/dev/null || true)"
+    fi
+  fi
+  if [ -n "$rendered" ]; then
+    printf '%s' "$rendered"
+  else
+    printf '%s' "$*"
+  fi
+}
+
+tk_rail() {
+  local rendered=""
+  if [ "$C_TTY" = "1" ] && tk_have_gum; then
+    rendered="$(gum style --foreground "$TK_BRAND_ORANGE" "▌▌" 2>/dev/null || true)"
+  fi
+  if [ -n "$rendered" ]; then
+    printf '%s' "$rendered"
+  else
+    printf '▌▌'
+  fi
+}
+
+tk_signature_line() {
+  # Dim "touchstone vX.Y.Z" line; version resolved via TOUCHSTONE_ROOT when set.
+  local version=""
+  if [ -n "${TOUCHSTONE_ROOT:-}" ] && [ -f "$TOUCHSTONE_ROOT/VERSION" ]; then
+    version="$(tr -d '[:space:]' < "$TOUCHSTONE_ROOT/VERSION" 2>/dev/null || true)"
+  fi
+  if [ -n "$version" ]; then
+    tk_paint "$TK_BRAND_DIM" plain "touchstone v${version}"
+  else
+    tk_paint "$TK_BRAND_DIM" plain "touchstone"
+  fi
+}
+
+tk_verdict() {
+  # tk_verdict <ok|fail|info> <headline> [subtitle]
+  local state="$1" headline="$2" subtitle="${3:-}"
+  local rail mark painted_headline
+  rail="$(tk_rail)"
+
+  case "$state" in
+    ok)   mark="$(tk_paint "$TK_BRAND_LIME" plain "✓")"
+          painted_headline="$(tk_paint "$TK_BRAND_LIME" bold "$headline")" ;;
+    fail) mark="$(tk_paint "$TK_BRAND_RED"  plain "✗")"
+          painted_headline="$(tk_paint "$TK_BRAND_RED"  bold "$headline")" ;;
+    *)    mark="$(tk_paint "$TK_BRAND_DIM"  plain "•")"
+          painted_headline="$(tk_paint "$TK_BRAND_DIM"  bold "$headline")" ;;
+  esac
+
+  printf '\n  %s  %s  %s\n' "$rail" "$painted_headline" "$mark"
+  if [ -n "$subtitle" ]; then
+    printf '  %s  %s\n' "$rail" "$(tk_paint "$TK_BRAND_DIM" plain "$subtitle")"
+  fi
+  printf '  %s  %s\n\n' "$rail" "$(tk_signature_line)"
+}
 
 print_banner() {
   [ "$BANNER_PRINTED" = false ] || return 0
   local label
   label="$(reviewer_label)"
-  printf "${C_CYAN}"
-  printf '\n  ╔══════════════════════════════════════╗\n'
-  printf '  ║         ⚡ TOUCHSTONE REVIEW ⚡        ║\n'
-  printf '  ║     %s merge code review%s║\n' "$label" "$(printf '%*s' $((23 - ${#label})) '')"
-  printf '  ╚══════════════════════════════════════╝\n\n'
-  printf "${C_RESET}"
+  tk_verdict info "REVIEW STARTING" "${label} · merge code review"
   BANNER_PRINTED=true
 }
 
@@ -1585,6 +1984,21 @@ for iter in $(seq 1 "$MAX_ITERATIONS"); do
   EXIT=$?
   set -e
   OUTPUT="$(cat "$REVIEW_OUTPUT_FILE" 2>/dev/null || true)"
+
+  # Surface Conductor's route-log (provider, cost, tokens, duration). If
+  # the reviewer isn't Conductor the filter matches nothing and this is a
+  # no-op, so it's safe to call unconditionally.
+  print_route_log
+
+  # Peer review (v2.1): when [review.assist].enabled=true, ask Conductor
+  # for a second opinion excluding the primary provider. Advisory — the
+  # peer's verdict does NOT gate the merge; the primary's sentinel wins.
+  # Fires once per iteration, respects ASSIST_MAX_ROUNDS.
+  if is_truthy "${ASSIST_ENABLED:-false}" \
+      && [ "${ASSIST_ROUNDS_DONE:-0}" -lt "${ASSIST_MAX_ROUNDS:-1}" ] \
+      && [ -n "$OUTPUT" ]; then
+    run_peer_review "$OUTPUT" || true
+  fi
 
   # Check worktree invariants in non-fix modes.
   # This is a hard failure regardless of on_error policy — a reviewer that
@@ -1660,18 +2074,11 @@ for iter in $(seq 1 "$MAX_ITERATIONS"); do
   case "$LAST_LINE" in
     CODEX_REVIEW_CLEAN)
       phase "done — clean"
-      echo ""
-      printf "${C_GREEN}"
-      cat <<'PASS'
-  ╔══════════════════════════════════════╗
-  ║           ✅ ALL CLEAR              ║
-  ║         Push approved.              ║
-  ╚══════════════════════════════════════╝
-PASS
-      printf "${C_RESET}"
+      clean_subtitle="${REVIEWER_LABEL} · ${DIFF_LINE_COUNT} lines · push approved"
       if [ "$FIX_COMMITS" -gt 0 ]; then
-        printf "  ${C_DIM}($FIX_COMMITS auto-fix commit(s) applied)${C_RESET}\n"
+        clean_subtitle="${clean_subtitle} · ${FIX_COMMITS} auto-fix commit(s)"
       fi
+      tk_verdict ok "ALL CLEAR" "$clean_subtitle"
       REVIEW_EXIT_REASON="clean"
       print_summary
       write_clean_review_cache "$REVIEW_CACHE_KEY" "$DIFF_LINE_COUNT"
@@ -1726,14 +2133,8 @@ PASS
     CODEX_REVIEW_BLOCKED)
       phase "done — blocked"
       REVIEW_FINDINGS_COUNT="$(printf '%s\n' "$OUTPUT" | grep -c '^- ' || true)"
-      echo ""
-      printf "${C_RED}"
-      printf '  ╔══════════════════════════════════════╗\n'
-      printf '  ║          🚫 PUSH BLOCKED           ║\n'
-      printf '  ║  %s found issues to address%s║\n' "$REVIEWER_LABEL" "$(printf '%*s' $((25 - ${#REVIEWER_LABEL})) '')"
-      printf '  ╚══════════════════════════════════════╝\n'
-      printf "${C_RESET}"
-      echo ""
+      blocked_subtitle="${REVIEWER_LABEL} flagged issues to address · push refused"
+      tk_verdict fail "PUSH BLOCKED" "$blocked_subtitle"
       printf '%s\n' "$OUTPUT" | sed 's/^/    /'
       echo ""
       if [ "$FIX_COMMITS" -gt 0 ]; then
