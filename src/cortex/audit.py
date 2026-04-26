@@ -102,6 +102,7 @@ class JournalEntry:
     date: datetime
     type_: str | None
     trigger: str | None
+    tag: str | None = None
 
 
 @dataclass(frozen=True)
@@ -318,29 +319,31 @@ def load_journal_entries(project_root: Path) -> list[JournalEntry]:
         if not match:
             continue
         entry_date = datetime.fromisoformat(match.group(1)).replace(tzinfo=UTC)
-        type_, trigger = _journal_header_fields(path)
+        type_, trigger, tag = _journal_header_fields(path)
         entries.append(
             JournalEntry(
                 path=path,
                 date=entry_date,
                 type_=type_,
                 trigger=trigger,
+                tag=tag,
             )
         )
     return entries
 
 
-def _journal_header_fields(path: Path) -> tuple[str | None, str | None]:
-    """Return ``(Type, Trigger)`` for a Journal entry.
+def _journal_header_fields(path: Path) -> tuple[str | None, str | None, str | None]:
+    """Return ``(Type, Trigger, Tag)`` for a Journal entry.
 
-    Both fields accept YAML frontmatter or bold-inline (SPEC § 6). Missing
-    fields return None. ``Trigger`` only appears on Protocol-triggered
-    entries; human-authored entries leave it unset.
+    All three fields accept YAML frontmatter or bold-inline (SPEC § 6).
+    Missing fields return None. ``Trigger`` only appears on Protocol-
+    triggered entries; ``Tag`` only appears on ``Type: release`` entries
+    naming the specific git tag the release record describes.
     """
     try:
         text = path.read_text()
     except OSError:
-        return None, None
+        return None, None, None
     frontmatter, _body = parse_frontmatter(text)
     header = "\n".join(text.splitlines()[:40])
 
@@ -360,7 +363,8 @@ def _journal_header_fields(path: Path) -> tuple[str | None, str | None]:
         # Allow values like "T1.3 (Plan status changed)" or a bare "T1.3".
         t_match = re.match(r"(T\d+\.\d+)", raw_trigger)
         trigger = t_match.group(1) if t_match else raw_trigger
-    return type_, trigger
+    tag = _from_either("Tag")
+    return type_, trigger, tag
 
 
 def _best_matching_entry(
@@ -368,6 +372,8 @@ def _best_matching_entry(
     trigger: Trigger,
     expected_type: str,
     candidates: Iterable[JournalEntry],
+    *,
+    tag_name: str | None = None,
 ) -> JournalEntry | None:
     """Return the nearest in-window candidate for this fire, or None.
 
@@ -376,6 +382,15 @@ def _best_matching_entry(
     trigger. Human-authored Protocol entries without a ``Trigger:`` still
     count as valid matches (Type-only) so teams aren't forced to retrofit
     the field.
+
+    For T1.10 (release) fires, ``tag_name`` is required and the entry's
+    structured ``**Tag:**`` field must equal it. This prevents one
+    ``Type: release`` entry from accidentally satisfying every nearby
+    release tag — each release entry has to declare which tag it records.
+    Entries without a ``Tag:`` field are not considered for T1.10 matches
+    when a tag_name is in scope (the writer is expected to set the field;
+    cortex doctor would otherwise pass a stale or generic release entry
+    against any tag).
     """
     window = timedelta(hours=JOURNAL_MATCH_WINDOW_HOURS)
     best: JournalEntry | None = None
@@ -385,6 +400,9 @@ def _best_matching_entry(
             continue
         if entry.trigger is not None and entry.trigger != trigger.value:
             continue
+        if trigger is Trigger.T1_10 and tag_name is not None:
+            if entry.tag != tag_name:
+                continue
         delta = abs(entry.date - source_date)
         if delta <= best_delta:
             best = entry
@@ -423,7 +441,13 @@ def audit(
     ordered_fires.sort(key=lambda f: f[0])
     for source_date, trigger, commit, tag in ordered_fires:
         available = [e for e in journal if e.path not in consumed]
-        entry = _best_matching_entry(source_date, trigger, EXPECTED_TYPE[trigger], available)
+        entry = _best_matching_entry(
+            source_date,
+            trigger,
+            EXPECTED_TYPE[trigger],
+            available,
+            tag_name=tag.name if tag is not None else None,
+        )
         if entry is not None:
             consumed.add(entry.path)
         report.fires.append(

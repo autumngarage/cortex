@@ -1,17 +1,20 @@
 ---
-Status: active
+Status: shipped
 Written: 2026-04-25
+Shipped: 2026-04-26
 Author: claude-session-2026-04-25
 Goal-hash: 08364e1a
 Updated-by:
   - 2026-04-25T19:00 claude-session-2026-04-25 (spawned from plans/cortex-v1.md ### v0.3.0 sub-section as a session-scoped sub-plan; same pattern as plans/init-ux-fixes-from-touchstone — sub-plan exists to drive a focused multi-PR session, parent plan tracks the v0.3.0 → v1.0.0 arc)
   - 2026-04-26T00:05 claude-session-2026-04-25 (work-item PRs #44-#47 merged; release-prep PR #48 opened — version bump + uv.lock + README + state.md. Plan stays Status: active until the release artifact (tag + GitHub Release + Homebrew tap bump via release.yml) actually lands; on artifact landing this plan flips to Status: shipped with Promoted-to journal/<date>-v0.3.0-released)
-Cites: ../../SPEC.md, ../../.cortex/protocol.md, plans/cortex-v1, ../doctrine/0001-why-cortex-exists, ../doctrine/0003-spec-is-the-artifact, ../../docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md
+  - 2026-04-26T01:15 claude-session-2026-04-25 (Status: active → shipped — PR #48 merged; tag v0.3.0 pushed; GitHub Release published; release.yml fired and auto-bumped the homebrew-cortex formula. Closure recorded in journal/2026-04-26-v0.3.0-released)
+Promoted-to: journal/2026-04-26-v0.3.0-released
+Cites: ../../SPEC.md, ../../.cortex/protocol.md, plans/cortex-v1, ../doctrine/0001-why-cortex-exists, ../doctrine/0003-spec-is-the-artifact, ../../docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md, journal/2026-04-26-v0.3.0-released
 ---
 
 # Ship Cortex v0.3.0 Write-Side Foundation
 
-> **Work-item PRs all merged on main as of 2026-04-25 (#44 T1.10 + release template, #45 `cortex journal draft`, #46 `cortex plan spawn`, #47 orphan-deferral check). Release-prep PR #48 in flight. Post-merge sequence: manual `git tag v0.3.0 && gh release create v0.3.0`; the `release-published` event then fires the existing `release.yml` workflow, which auto-bumps the Homebrew formula's url + sha256 (the workflow handles the formula bump only — tagging and release creation stay manual). Plan flips to `Status: shipped` once the artifact lands and a `release` Journal entry records it.**
+> **Shipped 2026-04-26.** All five PRs landed (#44 T1.10 + release template, #45 `cortex journal draft`, #46 `cortex plan spawn`, #47 orphan-deferral check, #48 v0.3.0 release prep). Tag `v0.3.0` pushed; [GitHub Release](https://github.com/autumngarage/cortex/releases/tag/v0.3.0) published; `release.yml` auto-bumped the `autumngarage/homebrew-cortex` formula. Closure recorded in [`journal/2026-04-26-v0.3.0-released`](../journal/2026-04-26-v0.3.0-released.md). v0.4.0 (read-side foundation: deterministic `refresh-state`, `cortex next` MVP, `cortex plan status`) is the next active sub-section of [`plans/cortex-v1`](./cortex-v1.md).
 
 ## Why (grounding)
 
@@ -116,10 +119,9 @@ This plan is done when v0.3.0 is tagged, released, and on Homebrew, with all fiv
 - [x] Update `.cortex/state.md` `## Shipped recently` to record v0.3.0 (release-prep entry).
 - [x] In the parent [`plans/cortex-v1.md`](./cortex-v1.md), check off the v0.3.0 Work-item PRs and add an Updated-by line.
 - [x] Open the release-prep PR (#48).
-- [ ] (post-merge) Tag `v0.3.0`, push tag, `gh release create v0.3.0 --generate-notes`. The `release.yml` workflow fires on the `release-published` event (not on merge) and bumps the Homebrew formula's `url` + `sha256` automatically.
-- [ ] (post-release-published) Verify `brew upgrade autumngarage/cortex/cortex` reports `0.3.0`.
-- [ ] (post-tag) Hand-author a `release` Journal entry under `.cortex/journal/<release-date>-v0.3.0-released.md` using the new template — dogfoods the keystone command and supplies the matching `Type: release / Trigger: T1.10` entry the doctor audit looks for.
-- [ ] (post-release-entry) Mark this plan `Status: shipped` with `Promoted-to: journal/<release-date>-v0.3.0-released`, and tick the v0.3.0 release work-item in `plans/cortex-v1.md`.
+- [x] (post-merge) Tag `v0.3.0`, push tag, `gh release create v0.3.0 --generate-notes`. The `release.yml` workflow fires on the `release-published` event and bumps the Homebrew formula's `url` + `sha256` automatically.
+- [x] (post-tag) Hand-author the `release` Journal entry via `cortex journal draft release` (dogfooded the keystone) — supplies the matching `Type: release / Trigger: T1.10` entry the doctor audit looks for. Entry: [`journal/2026-04-26-v0.3.0-released`](../journal/2026-04-26-v0.3.0-released.md).
+- [x] (post-release-entry) Mark this plan `Status: shipped` with `Promoted-to: journal/2026-04-26-v0.3.0-released` (this commit).
 
 ## Follow-ups (deferred)
 
@@ -128,3 +130,4 @@ Each item resolves to [`journal/2026-04-24-production-release-rerank`](../journa
 - **Retrofit historical T1.10 fires** — running `cortex doctor --audit` after PR 1 lands will surface ~10 unmatched T1.10 fires (one per existing Cortex tag from v0.1.0 to v0.2.7). Mirrors the T1.9 historical-fires situation that was parked at item #5 in [`journal/2026-04-24-v1-followups-parked`](../journal/2026-04-24-v1-followups-parked.md). Decision: same park, same revisit condition (only retrofit if/when historical entries become load-bearing for any synthesis); resolves to that journal entry. No new entry needed.
 - **`cortex plan spawn` interactive title prompt** — first cut takes `--title` as a flag. Prompted entry (`prompt_toolkit` or click prompt) is parked to the v1.x interactive-flow follow-up at item #6 in [`journal/2026-04-24-production-release-rerank`](../journal/2026-04-24-production-release-rerank.md).
 - **`cortex journal draft` template-customization story** — projects can already drop a custom template in `.cortex/templates/journal/<type>.md` and `journal draft` resolves it first. A future-proofing concern (per-project template fields, validation against the bundled template's required-field list) is not in v0.3.0 scope; resolves to [`plans/cortex-v1.md`](./cortex-v1.md) `## Follow-ups (deferred)` (mutability of templates is implicit in SPEC § 5).
+- **End-to-end Homebrew verification on a fresh terminal** — `brew upgrade autumngarage/cortex/cortex` should report `0.3.0` once the tap formula bump propagates. The release-published-event fired and `release.yml` ran, but verifying on a fresh shell rounds out the deploy. Captured for next-session attention; resolves to [`journal/2026-04-26-v0.3.0-released`](../journal/2026-04-26-v0.3.0-released.md) (the same release entry calls out the verification as routine post-deploy hygiene rather than a v0.3.0 success criterion).
