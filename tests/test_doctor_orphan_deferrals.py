@@ -262,6 +262,20 @@ def test_orphan_warns_when_path_pattern_appears_without_slash(cortex_project: Pa
     assert len(_orphan_warnings(cortex_project, plan)) == 1
 
 
+def test_orphan_warns_on_self_citation(cortex_project: Path) -> None:
+    """SPEC § 4.2 requires resolution to ANOTHER durable-layer entry. A
+    plan that cites its own slug is still an orphan — the deferral has
+    nowhere external to live."""
+    plan = _write_plan(
+        cortex_project,
+        "self-cite",
+        "active",
+        "- Tracked here: see plans/self-cite for current state.\n",
+    )
+    warnings = _orphan_warnings(cortex_project, plan)
+    assert len(warnings) == 1, warnings
+
+
 def test_orphan_handles_asterisk_bullets(cortex_project: Path) -> None:
     plan = _write_plan(
         cortex_project,

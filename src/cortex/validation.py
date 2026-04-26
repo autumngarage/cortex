@@ -528,13 +528,18 @@ def check_plans(project_root: Path) -> list[Issue]:
                         )
                         continue
                     # Citation-shape match found; verify at least one cited
-                    # target actually exists. SPEC § 4.2 mandates resolution
-                    # to a *durable-layer entry*, not just a path-shaped
-                    # string — dangling citations are still orphans.
-                    if not any(
-                        _resolves_to_existing_layer_entry(cortex_dir, m.group(0))
+                    # target actually exists AND is not the plan itself.
+                    # SPEC § 4.2 requires resolution to *another* durable-
+                    # layer entry; a plan citing its own slug is still an
+                    # orphan deferral disguised as a self-reference.
+                    plan_self_path = f"plans/{plan.stem}"
+                    resolutions = [
+                        m.group(0)
                         for m in matches
-                    ):
+                        if _normalize_layer_path(m.group(0)) != plan_self_path
+                        and _resolves_to_existing_layer_entry(cortex_dir, m.group(0))
+                    ]
+                    if not resolutions:
                         cited = ", ".join(m.group(0) for m in matches)
                         issues.append(
                             Issue(
@@ -558,6 +563,19 @@ def check_plans(project_root: Path) -> list[Issue]:
                 )
             )
     return issues
+
+
+def _normalize_layer_path(citation: str) -> str:
+    """Normalize ``layer/slug(.md)`` to ``layer/slug`` (no extension, no
+    sentence-final period). Used for self-reference detection so a plan
+    can't pass the orphan-deferral check by citing itself.
+    """
+    layer, sep, slug = citation.partition("/")
+    if not sep:
+        return citation
+    slug = slug.rstrip(".")
+    slug = slug[:-3] if slug.endswith(".md") else slug
+    return f"{layer}/{slug}"
 
 
 def _resolves_to_existing_layer_entry(cortex_dir: Path, citation: str) -> bool:
