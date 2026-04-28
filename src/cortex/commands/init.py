@@ -178,9 +178,7 @@ def _derived_stub(
         sources_yaml = "  - (none — scaffolded placeholder, no synthesis yet)"
         corpus_line = "Corpus: 0 files (no synthesis yet)"
         incomplete_line = (
-            f"Incomplete:\n"
-            f"  - All sources — scaffolded at project init; "
-            f"{refresh_clause}"
+            f"Incomplete:\n  - All sources — scaffolded at project init; {refresh_clause}"
         )
     return f"""---
 Generated: {now}
@@ -984,9 +982,7 @@ def init_command(
     # markdown sources, so the scan can't enrich it usefully — that's
     # `cortex refresh-map`'s job in v1.x.
     state_sources = [
-        f.relative
-        for f in scan.findings
-        if f.category in ("map_ref", "reference", "doctrine")
+        f.relative for f in scan.findings if f.category in ("map_ref", "reference", "doctrine")
     ]
     for layer, title in (
         ("map", "Project Map"),
@@ -1117,10 +1113,7 @@ def init_command(
                 click.echo(f"  Updated {gitignore_path.name} with Cortex entries.")
         else:
             if local_only:
-                click.echo(
-                    f"  {gitignore_path.name} already ignores `.cortex/` "
-                    "(local-only mode)."
-                )
+                click.echo(f"  {gitignore_path.name} already ignores `.cortex/` (local-only mode).")
             else:
                 click.echo(f"  {gitignore_path.name} already ignores Cortex transient paths.")
 
@@ -1149,12 +1142,16 @@ def init_command(
             # explicitly rather than falling through to the "not published"
             # success message — false assurance is worse than no answer.
             lsfiles_cmd = git_remediation_cmd(
-                "ls-files", ".cortex",
+                "ls-files",
+                ".cortex",
                 target=target_path,
                 anchor_to_target=path_differs_from_cwd,
             )
             untrack_cmd = git_remediation_cmd(
-                "rm", "--cached", "-r", ".cortex/",
+                "rm",
+                "--cached",
+                "-r",
+                ".cortex/",
                 target=target_path,
                 anchor_to_target=path_differs_from_cwd,
             )
@@ -1169,12 +1166,17 @@ def init_command(
             )
         elif tracked:
             untrack_cmd = git_remediation_cmd(
-                "rm", "--cached", "-r", ".cortex/",
+                "rm",
+                "--cached",
+                "-r",
+                ".cortex/",
                 target=target_path,
                 anchor_to_target=path_differs_from_cwd,
             )
             commit_cmd = git_remediation_cmd(
-                "commit", "-m", "chore: untrack .cortex/ (local-only)",
+                "commit",
+                "-m",
+                "chore: untrack .cortex/ (local-only)",
                 target=target_path,
                 anchor_to_target=path_differs_from_cwd,
             )
@@ -1201,8 +1203,7 @@ def init_command(
         # and returned no files AND no dangling imports remain.
         if tracked == [] and not dangling_import_files:
             click.echo(
-                "  Doctrine, plans, journals, and state will not be published "
-                "with this project."
+                "  Doctrine, plans, journals, and state will not be published with this project."
             )
 
     # Build the Next-steps list contiguously (Fix #7 from
