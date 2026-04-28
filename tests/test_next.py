@@ -11,7 +11,9 @@ from pathlib import Path
 from click.testing import CliRunner, Result
 
 from cortex.cli import cli
+from cortex.commands.init import init_command
 from cortex.goal_hash import normalize_goal_hash
+from cortex.ranking import is_placeholder_text
 
 
 def _init_cortex(project: Path) -> None:
@@ -84,6 +86,10 @@ def _next(project: Path, *extra: str) -> Result:
     result = CliRunner().invoke(cli, ["next", "--path", str(project), *extra])
     assert result.exit_code == 0, result.output
     return result
+
+
+def _band_texts(data: dict[str, list[dict[str, object]]], band: str) -> list[str]:
+    return [str(item["text"]) for item in data[band]]
 
 
 def test_stable_ordering_produces_byte_identical_output(tmp_path: Path) -> None:
@@ -212,3 +218,100 @@ def test_path_targets_arbitrary_project(tmp_path: Path) -> None:
     assert result.exit_code == 0, result.output
     data = json.loads(result.output)
     assert data["p0"][0]["text"] == "arbitrary path item"
+
+
+def test_plan_placeholder_items_do_not_enter_p0(tmp_path: Path) -> None:
+    _init_cortex(tmp_path)
+    _write_plan(tmp_path, "placeholder", work_items="- [ ] {{ task }}\n")
+
+    data = json.loads(_next(tmp_path, "--json").output)
+
+    assert "task" not in _band_texts(data, "p0")
+    assert all(item["source"] != "plans/placeholder.md" for item in data["p0"])
+
+
+def test_plan_mixed_real_and_placeholder_items_only_ranks_real_work(tmp_path: Path) -> None:
+    _init_cortex(tmp_path)
+    _write_plan(
+        tmp_path,
+        "mixed",
+        work_items="- [ ] Implement retry logic\n- [ ] {{ first concrete task }}\n",
+    )
+
+    data = json.loads(_next(tmp_path, "--json").output)
+
+    assert _band_texts(data, "p0") == ["Implement retry logic"]
+
+
+def test_state_open_questions_placeholder_bullets_are_filtered(tmp_path: Path) -> None:
+    _init_cortex(tmp_path)
+    _write_state(
+        tmp_path,
+        open_questions="- {{ unresolved question }}\n- Confirm release ordering\n",
+    )
+
+    data = json.loads(_next(tmp_path, "--json").output)
+
+    assert _band_texts(data, "p1") == ["Confirm release ordering"]
+
+
+def test_plan_with_only_placeholders_warns_in_human_output_only(tmp_path: Path) -> None:
+    _init_cortex(tmp_path)
+    _write_plan(
+        tmp_path,
+        "placeholder-only",
+        work_items="- [ ] {{ first concrete task }}\n- [ ] {{ second concrete task }}\n",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["next", "--path", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert "plans/placeholder-only.md" in result.stderr
+    assert "all are {{ placeholder }}" in result.stderr
+
+    json_result = runner.invoke(cli, ["next", "--path", str(tmp_path), "--json"])
+    assert json_result.exit_code == 0, json_result.output
+    assert json_result.stderr == ""
+
+
+def test_spawned_plan_placeholders_do_not_enter_next_json(tmp_path: Path) -> None:
+    init_result = CliRunner().invoke(init_command, ["--path", str(tmp_path)])
+    assert init_result.exit_code == 0, init_result.output
+    spawn_result = CliRunner().invoke(
+        cli,
+        [
+            "plan",
+            "spawn",
+            "dogfood-test",
+            "--title",
+            "Dogfood placeholder filtering",
+            "--path",
+            str(tmp_path),
+        ],
+    )
+    assert spawn_result.exit_code == 0, spawn_result.output
+
+    data = json.loads(_next(tmp_path, "--json").output)
+
+    assert not any(
+        item["source"] == "plans/dogfood-test.md" and "{{" in item["text"]
+        for band in ("p0", "p1", "p2")
+        for item in data[band]
+    )
+
+
+def test_is_placeholder_text() -> None:
+    cases = {
+        "{{ task }}": True,
+        "{{ first concrete task — link to issue/PR when filed }}": True,
+        "Implement retry logic with {{ optional flag }}": False,
+        "plain task": False,
+        "": False,
+        "  ": False,
+        "{{ }} {{ }}": True,
+        "foo{{x}}bar": False,
+    }
+
+    for text, expected in cases.items():
+        assert is_placeholder_text(text) is expected
