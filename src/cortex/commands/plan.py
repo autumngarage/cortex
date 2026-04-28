@@ -22,6 +22,7 @@ from pathlib import Path
 
 import click
 
+from cortex.commands.plan_status import status_command
 from cortex.compat import require_compatible
 from cortex.goal_hash import normalize_goal_hash
 
@@ -187,3 +188,4 @@ def plan_group() -> None:
 
 
 plan_group.add_command(spawn_command)
+plan_group.add_command(status_command)
