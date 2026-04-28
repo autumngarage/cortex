@@ -18,6 +18,18 @@ def test_version_prints_cli_version() -> None:
     assert f"cortex {__version__}" in result.output
 
 
+def test_root_version_flag_prints_short_version() -> None:
+    result = CliRunner().invoke(cli, ["--version"])
+    assert result.exit_code == 0, result.output
+    assert result.output == f"cortex {__version__}\n"
+
+
+def test_root_short_version_flag_prints_short_version() -> None:
+    result = CliRunner().invoke(cli, ["-V"])
+    assert result.exit_code == 0, result.output
+    assert result.output == f"cortex {__version__}\n"
+
+
 def test_version_prints_supported_spec_versions() -> None:
     result = CliRunner().invoke(cli, ["version"])
     assert result.exit_code == 0

@@ -46,6 +46,7 @@ def _detect_install_method() -> str:
     context_settings={"help_option_names": ["-h", "--help"]},
     invoke_without_command=True,
 )
+@click.version_option(__version__, "-V", "--version", prog_name="cortex", message="%(prog)s %(version)s")
 @click.option(
     "--status-only",
     is_flag=True,

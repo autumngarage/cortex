@@ -106,6 +106,8 @@ cortex grep --layer doctrine --frontmatter Load-priority:always
 cortex grep "retry" --frontmatter Status:Accepted -- -i -C 2
 ```
 
+Template files under `.cortex/templates/` are skipped by default because they are scaffolding, not user memory content, and can otherwise satisfy frontmatter filters such as `Type:decision`. Use `--include-templates` to opt back into searching the template library with a normal `.cortex/` search, or use `--layer templates` when templates are the deliberate target.
+
 ## Boundaries
 
 Filters are conjunction-only. There is no OR syntax.

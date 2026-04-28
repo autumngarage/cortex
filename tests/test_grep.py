@@ -281,6 +281,106 @@ def test_frontmatter_single_filter_matches_yaml_and_bold_inline(minimal_cortex_p
     assert "plans/shipped.md" not in result.output
 
 
+def test_frontmatter_filter_skips_templates_by_default(minimal_cortex_project: Path) -> None:
+    _write_cortex_file(
+        minimal_cortex_project,
+        "journal/decision.md",
+        "---\nType: decision\n---\n# Real Decision\n",
+    )
+    _write_cortex_file(
+        minimal_cortex_project,
+        "templates/journal/decision.md",
+        "---\nType: decision\n---\n# Decision Template\n",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["grep", "", "--frontmatter", "Type:decision", "--path", str(minimal_cortex_project)],
+    )
+    assert result.exit_code == 0, result.output
+    assert "journal/decision.md" in result.output
+    assert "templates/journal/decision.md" not in result.output
+
+
+def test_include_templates_allows_frontmatter_template_matches(minimal_cortex_project: Path) -> None:
+    _write_cortex_file(
+        minimal_cortex_project,
+        "templates/journal/decision.md",
+        "---\nType: decision\n---\n# Decision Template\n",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "grep",
+            "",
+            "--frontmatter",
+            "Type:decision",
+            "--include-templates",
+            "--path",
+            str(minimal_cortex_project),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "templates/journal/decision.md" in result.output
+
+
+def test_layer_templates_overrides_default_template_exclusion(minimal_cortex_project: Path) -> None:
+    _write_cortex_file(
+        minimal_cortex_project,
+        "journal/decision.md",
+        "---\nType: decision\n---\n# Real Decision\n",
+    )
+    _write_cortex_file(
+        minimal_cortex_project,
+        "templates/journal/decision.md",
+        "---\nType: decision\n---\n# Decision Template\n",
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "grep",
+            "",
+            "--layer",
+            "templates",
+            "--frontmatter",
+            "Type:decision",
+            "--path",
+            str(minimal_cortex_project),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "templates/journal/decision.md" in result.output
+    assert ".cortex/journal/decision.md" not in result.output
+
+
+def test_rg_search_excludes_templates_by_default(scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _install_fake_rg(monkeypatch, "")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["grep", "decision", "--path", str(scaffolded_project)])
+    assert result.exit_code == 0
+    assert calls
+    assert "--glob" in calls[0]
+    assert "!.cortex/templates/**" in calls[0]
+    assert "!templates/**" in calls[0]
+    assert "!**/templates/**" in calls[0]
+
+
+def test_rg_search_include_templates_skips_template_exclusion(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls = _install_fake_rg(monkeypatch, "")
+    runner = CliRunner()
+    result = runner.invoke(cli, ["grep", "decision", "--include-templates", "--path", str(scaffolded_project)])
+    assert result.exit_code == 0
+    assert calls
+    assert "!.cortex/templates/**" not in calls[0]
+
+
 def test_frontmatter_filters_are_conjunctive(minimal_cortex_project: Path) -> None:
     _write_cortex_file(
         minimal_cortex_project,
