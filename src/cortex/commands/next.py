@@ -26,6 +26,12 @@ def run_next(project_root: Path, *, as_json: bool, limit: int | None, since_days
     if as_json:
         click.echo(json.dumps(ranked.to_dict(), indent=2))
     else:
+        for plan in ranked.placeholder_only_plans:
+            click.echo(
+                f"warning: {plan} has open items but all are {{{{ placeholder }}}} — "
+                "fill in concrete tasks or check off the stubs.",
+                err=True,
+            )
         click.echo(format_next_human(ranked), nl=False)
 
 

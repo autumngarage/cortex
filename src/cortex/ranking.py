@@ -18,6 +18,7 @@ _CHECKBOX_LINE_RE = re.compile(r"^(?P<prefix>\s*[-*]\s+\[(?P<mark>[ xX~])\]\s+)(
 _BULLET_LINE_RE = re.compile(r"^\s*[-*]\s+(?P<text>.+?)\s*$")
 _H1_RE = re.compile(r"^#\s+")
 _H2_RE = re.compile(r"^##\s+")
+_PLACEHOLDER_SEGMENT_RE = re.compile(r"\{\{.*?\}\}")
 
 SECTION_ANCHORS = {
     "## Current work": "state.md#current-work",
@@ -46,11 +47,17 @@ class RankedNext:
     p0: list[RankedItem]
     p1: list[RankedItem]
     p2: list[RankedItem]
+    placeholder_only_plans: tuple[str, ...] = ()
 
     def limited(self, limit: int | None) -> RankedNext:
         if limit is None:
             return self
-        return RankedNext(p0=self.p0[:limit], p1=self.p1[:limit], p2=self.p2[:limit])
+        return RankedNext(
+            p0=self.p0[:limit],
+            p1=self.p1[:limit],
+            p2=self.p2[:limit],
+            placeholder_only_plans=self.placeholder_only_plans,
+        )
 
     def to_dict(self) -> dict[str, list[dict[str, object]]]:
         return {
@@ -60,23 +67,30 @@ class RankedNext:
         }
 
 
+@dataclass(frozen=True)
+class _PlanCheckboxes:
+    items: list[RankedItem]
+    had_open_items: bool
+
+
 def collect_next_items(project_root: Path, *, since_days: int = 30) -> RankedNext:
     """Collect ranked work candidates from Cortex primary sources."""
     project_root = project_root.resolve()
     plans = collect_plan_statuses(project_root)
 
-    p0 = [
-        item
-        for plan in plans
-        if plan.status == "active" and not plan.stale
-        for item in _open_plan_checkboxes(plan, project_root)
-    ]
-    p1 = [
-        item
-        for plan in plans
-        if plan.status == "active" and plan.stale
-        for item in _open_plan_checkboxes(plan, project_root)
-    ]
+    p0: list[RankedItem] = []
+    p1: list[RankedItem] = []
+    placeholder_only_plans: list[str] = []
+    for plan in plans:
+        if plan.status != "active":
+            continue
+        checkboxes = _open_plan_checkboxes(plan, project_root)
+        if checkboxes.had_open_items and not checkboxes.items:
+            placeholder_only_plans.append(plan.path.relative_to(project_root / ".cortex").as_posix())
+        if plan.stale:
+            p1.extend(checkboxes.items)
+        else:
+            p0.extend(checkboxes.items)
 
     state_path = project_root / ".cortex" / "state.md"
     if state_path.exists():
@@ -90,6 +104,7 @@ def collect_next_items(project_root: Path, *, since_days: int = 30) -> RankedNex
         p0=_stable_sort(p0),
         p1=_stable_sort(p1),
         p2=_stable_sort(p2),
+        placeholder_only_plans=tuple(sorted(placeholder_only_plans)),
     )
 
 
@@ -135,9 +150,10 @@ def _stable_sort(items: list[RankedItem]) -> list[RankedItem]:
     return sorted(items, key=lambda item: (item.source, item.line_start or 0, item.text))
 
 
-def _open_plan_checkboxes(plan: PlanStatus, project_root: Path) -> list[RankedItem]:
+def _open_plan_checkboxes(plan: PlanStatus, project_root: Path) -> _PlanCheckboxes:
     lines = plan.path.read_text().splitlines()
     items: list[RankedItem] = []
+    had_open_items = False
     in_work_items = False
     for idx, line in enumerate(lines, start=1):
         stripped = line.strip()
@@ -151,15 +167,19 @@ def _open_plan_checkboxes(plan: PlanStatus, project_root: Path) -> list[RankedIt
         match = _CHECKBOX_LINE_RE.match(line)
         if not match or match.group("mark") != " ":
             continue
+        had_open_items = True
+        text = _clean_item_text(match.group("text"))
+        if is_placeholder_text(text):
+            continue
         items.append(
             RankedItem(
-                text=_clean_item_text(match.group("text")),
+                text=text,
                 source=plan.path.relative_to(project_root / ".cortex").as_posix(),
                 line_start=idx,
                 line_end=idx,
             )
         )
-    return items
+    return _PlanCheckboxes(items=items, had_open_items=had_open_items)
 
 
 def _section_items(text: str, heading: str, source: str) -> list[RankedItem]:
@@ -173,12 +193,14 @@ def _section_items(text: str, heading: str, source: str) -> list[RankedItem]:
             continue
         checkbox = _CHECKBOX_LINE_RE.match(line)
         if checkbox:
-            items.append(RankedItem(text=_clean_item_text(checkbox.group("text")), source=source))
+            text_value = _clean_item_text(checkbox.group("text"))
+            if not is_placeholder_text(text_value):
+                items.append(RankedItem(text=text_value, source=source))
             continue
         bullet = _BULLET_LINE_RE.match(line)
         if bullet:
             text_value = _clean_item_text(bullet.group("text"))
-            if text_value.lower() != "none":
+            if text_value.lower() != "none" and not is_placeholder_text(text_value):
                 items.append(RankedItem(text=text_value, source=source))
     return items
 
@@ -245,3 +267,19 @@ def _clean_item_text(text: str) -> str:
     cleaned = re.sub(r"`([^`]+)`", r"\1", cleaned)
     cleaned = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", cleaned)
     return re.sub(r"\s+", " ", cleaned)
+
+
+def is_placeholder_text(text: str) -> bool:
+    stripped = text.strip()
+    if not stripped:
+        return False
+    if stripped.startswith("{{") and stripped.endswith("}}"):
+        return True
+
+    if not _PLACEHOLDER_SEGMENT_RE.search(stripped):
+        return False
+
+    outside_placeholders = _PLACEHOLDER_SEGMENT_RE.sub("", stripped)
+    if not outside_placeholders.strip():
+        return True
+    return not any(char.isalnum() for char in outside_placeholders)
