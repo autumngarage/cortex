@@ -93,7 +93,7 @@ def iter_plan_files(project_root: Path) -> list[Path]:
         return []
     return [
         path
-        for path in sorted(plans_dir.glob("*.md"))
+        for path in sorted(plans_dir.rglob("*.md"))
         if path.name != "template.md" and "_archived" not in path.relative_to(plans_dir).parts
     ]
 
@@ -168,11 +168,14 @@ def parse_plan_status(path: Path, project_root: Path, *, today: date | None = No
     last_update = _parse_update_date(updates[-1]) if updates else None
     age_days = (today - last_update).days if last_update is not None else None
     status = _scalar(frontmatter, "Status")
+    # An active plan with open items is stale when the last update is older
+    # than STALENESS_DAYS. Missing or unparseable Updated-by is itself a
+    # staleness signal (the plan can't even prove it's been touched
+    # recently) — treat as stale so --stale-only surfaces it.
     stale = (
         status == "active"
-        and age_days is not None
-        and age_days > STALENESS_DAYS
         and counts.open > 0
+        and (age_days is None or age_days > STALENESS_DAYS)
     )
 
     return PlanStatus(
