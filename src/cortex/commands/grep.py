@@ -22,7 +22,8 @@ from pathlib import Path
 import click
 
 from cortex.compat import warn_if_incompatible
-from cortex.frontmatter import parse_frontmatter
+from cortex.frontmatter import FrontmatterValue, parse_frontmatter
+from cortex.grep_filter import FrontmatterFilter, matches_all, parse_frontmatter_filter
 
 LAYER_CHOICES = ("doctrine", "plans", "journal", "procedures", "templates")
 
@@ -65,13 +66,8 @@ def _parse_rg_json(stdout: str) -> tuple[dict[str, list[tuple[str, int, str]]], 
     return grouped, malformed
 
 
-def _summarize_file(path: Path, project_root: Path) -> str:
-    """One-line metadata summary extracted from ``path``'s frontmatter.
-
-    On read failure we still emit a header line (so match lines are not
-    orphaned) and surface the error on stderr — silent failure would
-    violate the "No silent failures" principle.
-    """
+def _extract_metadata(path: Path, project_root: Path) -> tuple[dict[str, FrontmatterValue], dict[str, str]] | None:
+    """Extract YAML frontmatter and bold-inline metadata from ``path``."""
     try:
         text = path.read_text()
     except OSError as exc:
@@ -83,8 +79,7 @@ def _summarize_file(path: Path, project_root: Path) -> str:
             f"warning: could not read {rel_path} for metadata summary: {exc}",
             err=True,
         )
-        return f"{rel_path}  [metadata unavailable: {exc.__class__.__name__}]"
-    rel = path.relative_to(project_root)
+        return None
     frontmatter, _body = parse_frontmatter(text)
 
     # Bold-inline scalars that Doctrine/Journal/Procedures use (SPEC § 6).
@@ -94,6 +89,21 @@ def _summarize_file(path: Path, project_root: Path) -> str:
         if line.startswith("**") and ":**" in line:
             key, _, value = line[2:].partition(":**")
             bold_fields[key.strip()] = value.strip()
+    return frontmatter, bold_fields
+
+
+def _summarize_file(path: Path, project_root: Path) -> str:
+    """One-line metadata summary extracted from ``path``'s frontmatter.
+
+    On read failure we still emit a header line (so match lines are not
+    orphaned) and surface the error on stderr — silent failure would
+    violate the "No silent failures" principle.
+    """
+    rel = path.relative_to(project_root)
+    metadata = _extract_metadata(path, project_root)
+    if metadata is None:
+        return f"{rel}  [metadata unavailable: OSError]"
+    frontmatter, bold_fields = metadata
 
     candidates = ["Status", "Type", "Date", "Written", "Load-priority"]
     pairs: list[str] = []
@@ -110,11 +120,41 @@ def _summarize_file(path: Path, project_root: Path) -> str:
     return f"{rel}  [{meta}]"
 
 
+def _file_matches_filters(path: Path, project_root: Path, filters: tuple[FrontmatterFilter, ...]) -> bool:
+    metadata = _extract_metadata(path, project_root)
+    if metadata is None:
+        return False
+    frontmatter, bold_fields = metadata
+    return matches_all(filters, frontmatter, bold_fields)
+
+
+def _iter_filter_candidates(search_root: Path) -> list[Path]:
+    return sorted(path for path in search_root.rglob("*.md") if path.is_file())
+
+
+def _render_filter_only_matches(
+    *,
+    search_root: Path,
+    target_path: Path,
+    filters: tuple[FrontmatterFilter, ...],
+) -> None:
+    matched = [
+        path
+        for path in _iter_filter_candidates(search_root)
+        if _file_matches_filters(path, target_path, filters)
+    ]
+    if not matched:
+        click.echo(f"no matches for frontmatter filters under {search_root.relative_to(target_path)}")
+        return
+    for path in matched:
+        click.echo(_summarize_file(path, target_path))
+
+
 @click.command(
     "grep",
     context_settings={"ignore_unknown_options": True, "help_option_names": ["-h", "--help"]},
 )
-@click.argument("pattern")
+@click.argument("pattern", required=False)
 @click.option(
     "--layer",
     type=click.Choice(LAYER_CHOICES),
@@ -129,8 +169,30 @@ def _summarize_file(path: Path, project_root: Path) -> str:
     show_default="current directory",
     help="Project root containing `.cortex/`.",
 )
+@click.option(
+    "--frontmatter",
+    "frontmatter_filters",
+    multiple=True,
+    metavar="KEY:VALUE",
+    help=(
+        "Filter by frontmatter or bold-inline metadata. Repeat for AND. "
+        "Keys are case-insensitive; values are exact/case-sensitive. "
+        "Use key:* for non-empty presence, !key:value for negation, and "
+        "list values match any element. Omit PATTERN for filter-only file "
+        "lists. Examples: rejected:true, status:active + type:plan, "
+        "superseded-by:*, Load-priority:always, !Status:Superseded, "
+        "tags:read-side. See docs/grep.md."
+    ),
+)
 @click.argument("rg_args", nargs=-1, type=click.UNPROCESSED)
-def grep_command(*, pattern: str, layer: str | None, target_path: Path, rg_args: tuple[str, ...]) -> None:
+def grep_command(
+    *,
+    pattern: str | None,
+    layer: str | None,
+    target_path: Path,
+    frontmatter_filters: tuple[str, ...],
+    rg_args: tuple[str, ...],
+) -> None:
     """Search `.cortex/` for PATTERN with ripgrep, annotated with per-file frontmatter.
 
     Extra arguments after ``--`` are forwarded to ``rg`` so that flags like
@@ -138,7 +200,18 @@ def grep_command(*, pattern: str, layer: str | None, target_path: Path, rg_args:
     composed. Example::
 
         cortex grep "retry backoff" -- -i -C 2
+
+        cortex grep --frontmatter status:active --frontmatter type:plan
     """
+    pattern_is_empty = pattern is None or pattern == ""
+    if pattern_is_empty and not frontmatter_filters:
+        raise click.UsageError("Missing argument 'PATTERN' unless --frontmatter is provided.")
+
+    try:
+        filters = tuple(parse_frontmatter_filter(raw) for raw in frontmatter_filters)
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from exc
+
     target_path = Path(target_path).resolve()
     cortex_dir = target_path / ".cortex"
     if not cortex_dir.exists():
@@ -147,15 +220,6 @@ def grep_command(*, pattern: str, layer: str | None, target_path: Path, rg_args:
             err=True,
         )
         sys.exit(2)
-
-    rg = _find_rg()
-    if rg is None:
-        click.echo(
-            "error: ripgrep (`rg`) not found on PATH. Install it via `brew install ripgrep` "
-            "(or your OS package manager) and retry.",
-            err=True,
-        )
-        sys.exit(3)
 
     warn_if_incompatible(cortex_dir)
 
@@ -166,6 +230,20 @@ def grep_command(*, pattern: str, layer: str | None, target_path: Path, rg_args:
             err=True,
         )
         return
+
+    if pattern_is_empty:
+        _render_filter_only_matches(search_root=search_root, target_path=target_path, filters=filters)
+        return
+
+    rg = _find_rg()
+    if rg is None:
+        click.echo(
+            "error: ripgrep (`rg`) not found on PATH. Install it via `brew install ripgrep` "
+            "(or your OS package manager) and retry.",
+            err=True,
+        )
+        sys.exit(3)
+    assert pattern is not None
 
     # ``--json`` gives newline-delimited records with ``{type: match|context|...}``
     # so context lines (emitted by ``-C/-A/-B``) are unambiguous instead of
@@ -191,10 +269,17 @@ def grep_command(*, pattern: str, layer: str | None, target_path: Path, rg_args:
         click.echo(f"no matches for {pattern!r} under {search_root.relative_to(target_path)}")
         return
 
+    emitted = False
     for file_path, lines in grouped.items():
-        summary = _summarize_file(Path(file_path), target_path)
+        path = Path(file_path)
+        if filters and not _file_matches_filters(path, target_path, filters):
+            continue
+        summary = _summarize_file(path, target_path)
         if summary:
             click.echo(summary)
+            emitted = True
         for kind, line_no, text in lines:
             marker = ":" if kind == "match" else "-"
             click.echo(f"  {line_no}{marker}{text.rstrip()}")
+    if not emitted:
+        click.echo(f"no matches for {pattern!r} with frontmatter filters under {search_root.relative_to(target_path)}")

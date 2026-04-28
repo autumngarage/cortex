@@ -63,13 +63,15 @@ cortex init                 # scaffold .cortex/ in a project (idempotent); scans
                             # absorb each one (Y/n) into Doctrine or Plans, citing the source
                             # via `Imported-from:` frontmatter — no flag needed
 cortex manifest --budget N  # token-budgeted session-start slice per Protocol § 1
-cortex grep <pattern>       # frontmatter-aware ripgrep wrapper
+cortex grep <pattern>       # frontmatter-aware ripgrep wrapper; see docs/grep.md
 cortex doctor               # validate .cortex/ against SPEC
 cortex doctor --audit       # check Tier-1 Protocol triggers have matching Journal entries
 cortex doctor --audit-digests
 cortex promote <id>         # stub pending v0.6.0 .index.json writer + promote writer
 cortex version
 ```
+
+See [`docs/grep.md`](./docs/grep.md) for `cortex grep --frontmatter` filter syntax and examples.
 
 What the full interactive flow will look like once v0.6.0 ships the `.cortex/.index.json` writer and the `cortex promote` end-to-end writer (the per-candidate prompt UX itself is deferred from the v1.0 path to v1.x — see [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) `## Follow-ups (deferred)` #6):
 
