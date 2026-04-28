@@ -73,6 +73,8 @@ cortex version
 
 See [`docs/grep.md`](./docs/grep.md) for `cortex grep --frontmatter` filter syntax and examples.
 
+External tools can seed their own default Doctrine without making Cortex opinionated: `cortex init --seed-from <dir>` copies one-level Markdown packs into `.cortex/doctrine/`, preserving bytes and frontmatter exactly. Numbered pack files keep their requested `NNNN-` prefix; unnumbered files are assigned from `0100` upward using their H1 slug. By default Cortex aborts before copying if a destination Doctrine entry or requested number already exists; `--merge skip-existing` makes pack installs idempotent for cases like Sentinel's planned baseline Doctrine pack.
+
 What the full interactive flow will look like once v0.6.0 ships the `.cortex/.index.json` writer and the `cortex promote` end-to-end writer (the per-candidate prompt UX itself is deferred from the v1.0 path to v1.x — see [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) `## Follow-ups (deferred)` #6):
 
 ```
