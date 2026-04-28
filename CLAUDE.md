@@ -112,7 +112,7 @@ Too new for project-specific lessons. The spec's design rules are themselves dis
 - **Silent staleness in aggregators** (sigint's resolution-pipeline death, 2026-04-05 through 04-09) → SPEC.md requires `Generated:` headers with source lists on every derived layer; stale-beyond-threshold surfaces as warning.
 - **Scattered deferrals with no consolidation** (sigint's multiple plans) → SPEC.md §4.2 requires deferred items to resolve to another Plan, Journal entry, or Doctrine entry in the same commit.
 
-<!-- conductor:begin v0.8.1 -->
+<!-- conductor:begin v0.8.2 -->
 ## Conductor delegation
 
 This project has [conductor](https://github.com/autumngarage/conductor)
