@@ -4,7 +4,7 @@ Each ``check_*`` function takes a path rooted at the project and returns a
 list of :class:`Issue` objects. Checks are additive and independent — the
 command orchestrator aggregates and sorts.
 
-Checks implemented here (first slice — SPEC.md v0.3.1-dev):
+Checks implemented here (current slice — SPEC.md v0.4.0-dev):
 
 - Scaffold structure (SPEC_VERSION, protocol.md, templates/, subdirs)
 - Seven-field metadata contract on derived layers (map.md, state.md) per § 4.5
@@ -13,10 +13,10 @@ Checks implemented here (first slice — SPEC.md v0.3.1-dev):
   Updated-by; required sections; grounding citation per §§ 3.4, 4.1, 4.3, 4.9
 - Journal filename ``YYYY-MM-DD-<slug>.md`` per § 3.5
 
-Deferred to Phase E (tracked in .cortex/plans/cortex-v1.md ### Phase E):
-promotion-queue invariants (`.index.json` not yet emitted), single-authority-rule
-drift detection (§ 4.8), and the full Tier-1 audit expansion. The first-slice
-`cortex doctor --audit` (T1.1 / T1.5 / T1.8 / T1.9) ships separately.
+Deferred on the v1.0 release path:
+promotion-queue invariants (`.index.json` lands in v0.6.0), single-authority-rule
+drift detection (§ 4.8), claim-trace audit expansion, and remaining git-derived
+Tier-1 checks. Runtime-state Tier-1 triggers stay deferred to v1.x.
 """
 
 from __future__ import annotations
@@ -300,7 +300,7 @@ def _check_doctrine_entry_body(rel: str, text: str) -> list[Issue]:
 
     Doctrine is immutable-with-supersede (SPEC § 3.1). Historical entries
     whose Status is ``Superseded-by <n>`` predate any post-hoc requirement
-    such as ``Load-priority:`` (added in v0.3.1-dev); retrofitting them would
+    such as ``Load-priority:`` (added in v0.4.0-dev); retrofitting them would
     violate immutability. The validator therefore exempts superseded entries
     from ``Load-priority`` but still requires Status and Date.
     """
@@ -597,6 +597,7 @@ def _resolves_to_existing_layer_entry(cortex_dir: Path, citation: str) -> bool:
     if not slug:
         return False
     filename = f"{slug}.md"
+    candidates: tuple[Path, ...]
     if layer == "plans":
         candidates = (
             cortex_dir / "plans" / filename,

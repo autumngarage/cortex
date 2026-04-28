@@ -13,6 +13,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from cortex.cli import cli
@@ -278,6 +279,41 @@ def test_custom_pattern_taught_persists(tmp_path: Path) -> None:
     matched = [f for f in second_scan.findings if f.relative == "INVESTMENT_THESIS.md"]
     assert matched, "second scan didn't surface the taught file"
     assert matched[0].category == "map_ref"
+
+
+def test_malformed_discover_toml_surfaces_scan_warning(tmp_path: Path) -> None:
+    discover = tmp_path / ".cortex" / ".discover.toml"
+    discover.parent.mkdir()
+    discover.write_text("[[pattern]\n")
+
+    result = scan_project(tmp_path)
+    assert result.warnings
+    assert ".cortex/.discover.toml ignored" in result.warnings[0]
+
+    cli_result = CliRunner().invoke(
+        cli,
+        ["init", "--path", str(tmp_path), "--yes", "--force"],
+    )
+    assert cli_result.exit_code == 0, cli_result.output
+    assert "Scan warnings" in cli_result.output
+    assert ".cortex/.discover.toml ignored" in cli_result.output
+
+
+def test_git_check_ignore_failure_surfaces_scan_warning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _git_init(tmp_path)
+    (tmp_path / ".gitignore").write_text("ignored.md\n")
+    (tmp_path / "ignored.md").write_text("# Ignored\n\n## Body\n\n" + "x" * 1024)
+
+    def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(args=["git"], returncode=128, stdout="", stderr="boom\n")
+
+    monkeypatch.setattr("cortex.init_scan.subprocess.run", fake_run)
+
+    result = scan_project(tmp_path)
+    assert any("git check-ignore" in warning for warning in result.warnings)
 
 
 # --- Non-TTY behavior preservation ----------------------------------------

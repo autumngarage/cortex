@@ -308,7 +308,11 @@ def test_t1_10_journal_must_name_the_tag(git_project: Path) -> None:
         f"# Release v0.3.0\n\n**Date:** {date}\n**Type:** release\n**Trigger:** T1.10\n**Tag:** v0.3.0\n\nbody\n"
     )
     report = audit(git_project, since_days=30)
-    t1_10 = {f.tag.name: f.matched for f in report.fires if f.trigger == Trigger.T1_10}
+    t1_10 = {
+        f.tag.name: f.matched
+        for f in report.fires
+        if f.trigger == Trigger.T1_10 and f.tag is not None
+    }
     assert t1_10 == {"v0.3.0": True, "v0.2.4": False}, t1_10
 
 
@@ -348,6 +352,18 @@ def test_cli_audit_flag_runs_without_error(git_project: Path) -> None:
     assert result.exit_code == 0, result.output + (getattr(result, "stderr", "") or "")
     combined = result.output + (getattr(result, "stderr", "") or "")
     assert "--audit" in combined
+
+
+def test_cli_audit_warns_not_crashes_on_non_git_project(tmp_path: Path) -> None:
+    runner = CliRunner()
+    result = runner.invoke(init_command, ["--path", str(tmp_path)])
+    assert result.exit_code == 0, result.output
+
+    result = runner.invoke(cli, ["doctor", "--audit", "--path", str(tmp_path)])
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert result.exit_code == 0, combined
+    assert "commit audit unavailable" in combined
+    assert "tag audit unavailable" in combined
 
 
 def test_cli_audit_digests_flag(git_project: Path) -> None:

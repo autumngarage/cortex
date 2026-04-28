@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from cortex.cli import cli
@@ -604,7 +605,10 @@ def test_local_only_detects_tracked_files_in_monorepo_subdir(tmp_path: Path) -> 
     assert f"git -C {subdir.resolve()} rm --cached -r .cortex/" in result.output
 
 
-def test_local_only_warns_when_git_check_fails(tmp_path: Path, monkeypatch) -> None:
+def test_local_only_warns_when_git_check_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """When `git ls-files` fails for an unexpected reason (not a "not a
     repo" exit — that's a known-safe state — but a genuine subprocess
     error or corrupted repo), we cannot know whether `.cortex/` is
@@ -635,7 +639,8 @@ def test_local_only_warns_when_git_check_fails(tmp_path: Path, monkeypatch) -> N
 
 
 def test_local_only_check_failed_uses_plain_form_when_target_equals_cwd(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Regression: when cwd matches the target, the uncertainty warning
     drops the `-C` prefix for readability — parallel to the tracked

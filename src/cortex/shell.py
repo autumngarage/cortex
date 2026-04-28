@@ -1,8 +1,8 @@
 """Shell subprocess helpers shared across Cortex commands.
 
-Cortex shells out to external tools (today ``git``; Phase C adds the
-``claude`` CLI; Phase E may add Sentinel / Touchstone pokes) whenever the
-answer lives outside Python. Two patterns kept recurring during the PR #27
+Cortex shells out to external tools when the answer lives outside Python
+(today ``git``; future hooks may query sibling tools through their CLIs).
+Two patterns kept recurring during the PR #27
 ``--local-only`` review loop and each one was a load-bearing fix:
 
 **Tri-state returns for subprocess queries.** "Did git say zero files?"

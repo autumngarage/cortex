@@ -10,10 +10,10 @@ what a human or agent would ask "where is this project?" to learn:
 - promotion-queue summary from ``.cortex/.index.json`` when present
 
 The README shows a richer interactive flow (promotion review prompts, digest
-generation prompts); those depend on a populated ``.index.json`` and a
-digest generator that land in Phase C. This module emits a structured
-payload so both the human-readable formatter and a future JSON emitter can
-share the same source of truth.
+generation prompts); those depend on the v0.6.0 lifecycle layer populating
+``.index.json`` and the follow-up retention/digest work. This module emits a
+structured payload so both the human-readable formatter and a future JSON
+emitter can share the same source of truth.
 """
 
 from __future__ import annotations
@@ -262,7 +262,7 @@ def format_status(status: Status) -> str:
     if not status.promotion_index_present:
         lines.append(
             "Promotion queue: not yet initialised (`.cortex/.index.json` absent; "
-            "populated by Phase C refresh commands)"
+            "populated by the v0.6.0 lifecycle commands)"
         )
     elif status.promotion_index_error:
         lines.append(

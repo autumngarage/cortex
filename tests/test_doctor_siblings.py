@@ -41,7 +41,7 @@ def test_siblings_block_rendered_when_both_absent(
 ) -> None:
     """With neither sibling on PATH, doctor still succeeds and prints
     the sibling block with informational 'not installed' lines."""
-    monkeypatch.setattr(siblings_module.shutil, "which", lambda _name: None)
+    monkeypatch.setattr("cortex.siblings.shutil.which", lambda _name: None)
     exit_code, output = _run_doctor(scaffolded_project)
     assert exit_code == 0
     assert "Autumn Garage siblings:" in output
@@ -65,9 +65,7 @@ def test_siblings_block_rendered_when_both_installed(
         "/fake/bin/touchstone": "touchstone 1.1.0\n",
         "/fake/bin/sentinel": "sentinel version 0.2.0 (python)\n",
     }
-    monkeypatch.setattr(
-        siblings_module.shutil, "which", lambda name: fake_paths.get(name)
-    )
+    monkeypatch.setattr("cortex.siblings.shutil.which", lambda name: fake_paths.get(name))
 
     def fake_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         stdout = version_outputs[cmd[0]]
@@ -75,7 +73,7 @@ def test_siblings_block_rendered_when_both_installed(
             args=cmd, returncode=0, stdout=stdout, stderr=""
         )
 
-    monkeypatch.setattr(siblings_module.subprocess, "run", fake_run)
+    monkeypatch.setattr("cortex.siblings.subprocess.run", fake_run)
 
     exit_code, output = _run_doctor(scaffolded_project)
     assert exit_code == 0
@@ -90,7 +88,7 @@ def test_project_marker_present_reported(
     (scaffolded_project / ".touchstone-config").write_text("profile=default\n")
     (scaffolded_project / ".sentinel").mkdir()
     (scaffolded_project / ".sentinel" / "config.toml").write_text("# sentinel\n")
-    monkeypatch.setattr(siblings_module.shutil, "which", lambda _name: None)
+    monkeypatch.setattr("cortex.siblings.shutil.which", lambda _name: None)
 
     _exit_code, output = _run_doctor(scaffolded_project)
     assert ".touchstone-config present" in output
@@ -103,15 +101,14 @@ def test_version_timeout_is_non_fatal(
     """A hanging `<tool> version` invocation must not fail doctor; the
     sibling is reported as installed with 'version unknown'."""
     monkeypatch.setattr(
-        siblings_module.shutil,
-        "which",
+        "cortex.siblings.shutil.which",
         lambda name: "/fake/bin/" + name if name == "touchstone" else None,
     )
 
     def fake_run(cmd: list[str], timeout: float | None = None, **_kwargs: object) -> subprocess.CompletedProcess[str]:
         raise subprocess.TimeoutExpired(cmd=cmd, timeout=timeout or 0.0)
 
-    monkeypatch.setattr(siblings_module.subprocess, "run", fake_run)
+    monkeypatch.setattr("cortex.siblings.subprocess.run", fake_run)
 
     exit_code, output = _run_doctor(scaffolded_project)
     assert exit_code == 0
@@ -126,8 +123,7 @@ def test_version_parsed_from_stderr(
     """Some CLIs (older bash-based) print the banner to stderr. We
     parse the semver from combined output so those still surface."""
     monkeypatch.setattr(
-        siblings_module.shutil,
-        "which",
+        "cortex.siblings.shutil.which",
         lambda name: "/fake/bin/touchstone" if name == "touchstone" else None,
     )
 
@@ -136,7 +132,7 @@ def test_version_parsed_from_stderr(
             args=cmd, returncode=0, stdout="", stderr="touchstone 1.1.0\n"
         )
 
-    monkeypatch.setattr(siblings_module.subprocess, "run", fake_run)
+    monkeypatch.setattr("cortex.siblings.subprocess.run", fake_run)
 
     _exit_code, output = _run_doctor(scaffolded_project)
     assert "✓ touchstone 1.1.0 (installed)" in output

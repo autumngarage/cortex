@@ -218,7 +218,18 @@ def _promotion_summary(cortex_dir: Path) -> str:
         data = json.loads(index_path.read_text())
     except json.JSONDecodeError as exc:
         return f"Promotion-queue: unreadable (`.cortex/.index.json` JSON error: {exc})."
+    if not isinstance(data, dict):
+        return "Promotion-queue: unreadable (`.cortex/.index.json` top-level value is not an object)."
     queue = data.get("promotion_queue", [])
+    if not isinstance(queue, list):
+        return "Promotion-queue: unreadable (`.cortex/.index.json` `promotion_queue` is not a list)."
+    bad_item_count = sum(1 for c in queue if not isinstance(c, dict))
+    if bad_item_count:
+        return (
+            "Promotion-queue: unreadable (`.cortex/.index.json` "
+            f"contains {bad_item_count} non-object queue item"
+            f"{'s' if bad_item_count != 1 else ''})."
+        )
     proposed = sum(1 for c in queue if c.get("state") == "proposed")
     stale = sum(1 for c in queue if c.get("state") == "stale-proposed")
     return f"Promotion-queue: {proposed} proposed, {stale} stale."

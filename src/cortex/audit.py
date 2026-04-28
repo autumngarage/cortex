@@ -24,10 +24,10 @@ First-slice coverage:
   ``git tag --list`` rather than ``git log``; the tag's commit date
   defines the 72h match window. Expects ``Type: release``.
 
-Deferred to Phase E (tracked in .cortex/plans/cortex-v1.md ### Phase E):
+Deferred off the current git-derived audit slice:
 
 - T1.2 (test failure), T1.6 (Sentinel cycle), T1.7 (Touchstone pre-merge)
-  — these need runtime session state, not git state.
+  — these need runtime session state or hooks, so they are v1.x work.
 - T1.3 (Plan ``Status:`` change) and T1.4 (file deletion >100 lines) —
   need per-commit diff parsing.
 """
@@ -152,6 +152,7 @@ class AuditReport:
     commits_examined: int
     tags_examined: int = 0
     fires: list[TriggerFire] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
 
     @property
     def unmatched(self) -> list[TriggerFire]:
@@ -416,13 +417,23 @@ def audit(
     branch: str | None = None,
     tag_pattern: re.Pattern[str] = DEFAULT_TAG_PATTERN,
 ) -> AuditReport:
-    commits = load_commits(project_root, since_days, branch=branch)
-    tags = load_tags(project_root, since_days, pattern=tag_pattern)
+    warnings: list[str] = []
+    try:
+        commits = load_commits(project_root, since_days, branch=branch)
+    except (FileNotFoundError, OSError, subprocess.CalledProcessError) as exc:
+        warnings.append(f"commit audit unavailable: {_format_subprocess_error(exc)}")
+        commits = []
+    try:
+        tags = load_tags(project_root, since_days, pattern=tag_pattern)
+    except (FileNotFoundError, OSError, subprocess.CalledProcessError) as exc:
+        warnings.append(f"tag audit unavailable: {_format_subprocess_error(exc)}")
+        tags = []
     journal = load_journal_entries(project_root)
     report = AuditReport(
         since=datetime.now(UTC) - timedelta(days=since_days),
         commits_examined=len(commits),
         tags_examined=len(tags),
+        warnings=warnings,
     )
     # A Journal entry is one event per file (SPEC § 3.5) — each entry can
     # satisfy at most one trigger fire. Process fires oldest-first so the
@@ -432,20 +443,20 @@ def audit(
     # Build the unified, oldest-first fire stream across commit-sourced and
     # tag-sourced triggers. Each entry is (source_date, trigger, commit_or_None, tag_or_None).
     ordered_fires: list[tuple[datetime, Trigger, Commit | None, Tag | None]] = []
-    for commit in commits:
-        for trigger in classify(commit):
-            ordered_fires.append((commit.date, trigger, commit, None))
-    for tag in tags:
-        ordered_fires.append((tag.date, Trigger.T1_10, None, tag))
+    for commit_item in commits:
+        for trigger in classify(commit_item):
+            ordered_fires.append((commit_item.date, trigger, commit_item, None))
+    for tag_item in tags:
+        ordered_fires.append((tag_item.date, Trigger.T1_10, None, tag_item))
     ordered_fires.sort(key=lambda f: f[0])
-    for source_date, trigger, commit, tag in ordered_fires:
+    for source_date, trigger, fire_commit, fire_tag in ordered_fires:
         available = [e for e in journal if e.path not in consumed]
         entry = _best_matching_entry(
             source_date,
             trigger,
             EXPECTED_TYPE[trigger],
             available,
-            tag_name=tag.name if tag is not None else None,
+            tag_name=fire_tag.name if fire_tag is not None else None,
         )
         if entry is not None:
             consumed.add(entry.path)
@@ -454,11 +465,23 @@ def audit(
                 trigger=trigger,
                 matched=entry is not None,
                 matched_entry=entry.path if entry else None,
-                commit=commit,
-                tag=tag,
+                commit=fire_commit,
+                tag=fire_tag,
             )
         )
     return report
+
+
+def _format_subprocess_error(exc: BaseException) -> str:
+    """Return a compact user-facing reason for a failed git audit query."""
+    if isinstance(exc, subprocess.CalledProcessError):
+        stderr = (exc.stderr or "").strip()
+        if stderr:
+            return stderr.splitlines()[-1]
+        return f"git exited {exc.returncode}"
+    if isinstance(exc, FileNotFoundError):
+        return "git not installed or working directory missing"
+    return str(exc)
 
 
 _DIGEST_CITATION_RE = re.compile(r"journal/[A-Za-z0-9._-]+")

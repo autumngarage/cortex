@@ -1,4 +1,4 @@
-"""Tests for `cortex init` — scaffolding a SPEC-v0.3.1-dev-conformant `.cortex/`.
+"""Tests for `cortex init` — scaffolding a SPEC-v0.4.0-dev-conformant `.cortex/`.
 
 All tests operate on a `tmp_path` fixture (real filesystem, no mocks). They
 invoke the real click entrypoint via `CliRunner`, then assert on file-system
@@ -125,7 +125,7 @@ def test_init_stubs_map_and_state_with_seven_fields(tmp_path: Path) -> None:
         for field in ("Generated:", "Generator:", "Sources:", "Corpus:", "Omitted:", "Incomplete:", "Conflicts-preserved:"):
             assert field in content, f"missing {field} in {layer}.md"
         # Stub body steers the user toward hand-editing until refresh-{layer}
-        # ships in Phase C — consistent opening phrase across both stubs so a
+        # ships in v0.4.0 — consistent opening phrase across both stubs so a
         # reader who sees one immediately recognizes the other.
         assert "Hand-authored placeholder" in content, f"{layer}.md missing hand-editable guidance"
         assert f"cortex refresh-{layer}" in content, f"{layer}.md missing pointer at refresh-{layer}"

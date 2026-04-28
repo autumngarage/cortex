@@ -1,6 +1,6 @@
 """`cortex doctor` — validate a project's `.cortex/` against the SPEC.
 
-First-slice scope (SPEC v0.3.1-dev):
+Current structural scope (SPEC v0.4.0-dev):
 
 - Scaffold structure (SPEC_VERSION, protocol.md, templates/, subdirs)
 - Seven-field metadata contract on derived layers (§ 4.5)
@@ -8,8 +8,8 @@ First-slice scope (SPEC v0.3.1-dev):
 - Plan frontmatter + Goal-hash recomputation + required sections (§§ 3.4, 4.1, 4.3, 4.9)
 - Journal filenames (§ 3.5)
 
-The ``--audit`` variants (session-window Tier-1 compliance, digest claim
-sampling) ship in a follow-up PR and are deliberately not wired here.
+The ``--audit`` variants run independent Tier-1 and digest checks on top of
+the structural pass.
 """
 
 from __future__ import annotations
@@ -126,6 +126,8 @@ def _print_audit(project_root: Path, since_days: int) -> None:
         f"{report.tags_examined} tag(s) in the last {since_days} days; "
         f"{len(report.fires)} trigger fires, {len(report.unmatched)} unmatched."
     )
+    for warning in report.warnings:
+        click.echo(f"WARNING  {warning}", err=True)
     for fire in report.unmatched:
         click.echo(
             f"WARNING  {fire.trigger} {fire.short_sha} "

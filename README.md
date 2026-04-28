@@ -52,7 +52,7 @@ Projects import `.cortex/protocol.md` into `AGENTS.md`. Any agent that reads `AG
 
 ## UX — one command
 
-> **Status:** v0.2.3 ships status, structural validation, audit, retrieval, an interactive `cortex init` wizard with scan-and-absorb for existing repos (one screen of "here's what I found", per-file Y/n on Doctrine/Plan candidates, taught patterns persist to `.cortex/.discover.toml`), Autumn Garage sibling surfacing in `cortex doctor`, and the unscoped-LLM/API-constraint warning in `cortex doctor`. The fully interactive per-candidate promotion prompts shown below depend on `.cortex/.index.json` being populated, which lands with **v0.6.0** (the lifecycle layer alongside the `cortex promote` real writer) per the 2026-04-24 production-release rerank — v0.3.0 is write-side authoring, v0.4.0 is read-side foundation (`refresh-state` + `cortex next` + `plan status`), v0.5.0 is trust + automation (`--audit-instructions` + Touchstone post-merge), v0.6.0 is lifecycle (.index.json + promote + remaining doctor invariants), v0.9.0 is the external dogfood gate. Track progress in [`.cortex/state.md`](./.cortex/state.md).
+> **Status:** v0.3.0 ships status, structural validation, audit, retrieval, an interactive `cortex init` wizard with scan-and-absorb for existing repos, Autumn Garage sibling surfacing in `cortex doctor`, the unscoped-LLM/API-constraint warning, write-side authoring via `cortex journal draft <type>` and `cortex plan spawn <slug>`, release-event audit coverage, and orphan-deferral validation. The fully interactive per-candidate promotion prompts shown below depend on `.cortex/.index.json` being populated, which lands with **v0.6.0** (the lifecycle layer alongside the `cortex promote` real writer) per the 2026-04-24 production-release rerank — v0.4.0 is read-side foundation (`refresh-state` + `cortex next` + `plan status`), v0.5.0 is trust + automation (`--audit-instructions` + Touchstone post-merge), v0.6.0 is lifecycle (.index.json + promote + remaining doctor invariants), v0.9.0 is the external dogfood gate. Track progress in [`.cortex/state.md`](./.cortex/state.md).
 
 What ships today:
 
@@ -75,7 +75,7 @@ What the full interactive flow will look like once v0.6.0 ships the `.cortex/.in
 
 ```
 $ cortex
-Cortex — your-project   spec v0.3.1-dev   state: fresh (regenerated 2h ago)
+Cortex — your-project   spec v0.4.0-dev   state: fresh (regenerated 2h ago)
 
 ▸ 7 Journal entries since last check
 ▸ 3 promotion candidates (1 stale, 2 proposed)

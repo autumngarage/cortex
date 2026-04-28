@@ -268,6 +268,7 @@ class ScanResult:
 
     project_root: Path
     findings: list[Finding] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
     sibling_signals: SiblingSignals = field(default_factory=SiblingSignals)
     # Count of unscoped CLAUDE.md/AGENTS.md constraints (validation reuses
     # the existing ``check_claude_agents`` heuristic). This is a count for
@@ -289,11 +290,11 @@ class ScanResult:
 # --- Pattern loading & glob matching ----------------------------------------
 
 
-def _load_user_patterns(project_root: Path) -> list[Pattern]:
+def _load_user_patterns(project_root: Path, warnings: list[str]) -> list[Pattern]:
     """Parse ``.cortex/.discover.toml`` if present; never raise on bad input.
 
-    A malformed file logs nothing (we don't want to gate ``cortex init`` on a
-    user-edited TOML) — we silently fall back to built-ins. Schema is::
+    A malformed file does not gate ``cortex init`` on user-edited TOML; the
+    scan records a warning and falls back to built-ins. Schema is::
 
         [[pattern]]
         glob = "agent/*_THESIS.md"
@@ -303,33 +304,48 @@ def _load_user_patterns(project_root: Path) -> list[Pattern]:
     ``category = "skip"`` is special — it adds to ``ALWAYS_SKIP`` semantics for
     the next scan (we still let users opt out of a built-in match by teaching
     a skip rule on the same glob). The "skip" category is not surfaced as a
-    finding; it just suppresses matches.
+    finding; it just suppresses matches. Parse/schema failures are reported
+    through ``warnings`` so init does not silently ignore user configuration.
     """
     discover_toml = project_root / ".cortex" / ".discover.toml"
     if not discover_toml.exists():
         return []
     try:
         data = tomllib.loads(discover_toml.read_text())
-    except (tomllib.TOMLDecodeError, OSError):
-        # Malformed or unreadable — surface nothing rather than crashing init.
-        # Doctrine 0002: degrade gracefully. The user can re-author the file.
+    except (tomllib.TOMLDecodeError, OSError) as exc:
+        warnings.append(f"{discover_toml.relative_to(project_root)} ignored: {exc}")
         return []
 
     raw_patterns = data.get("pattern", [])
     if not isinstance(raw_patterns, list):
+        warnings.append(
+            f"{discover_toml.relative_to(project_root)} ignored: `pattern` must be a list."
+        )
         return []
 
     valid_categories: set[str] = {"doctrine", "plan", "reference", "map_ref", "skip"}
     patterns: list[Pattern] = []
-    for entry in raw_patterns:
+    discover_rel = discover_toml.relative_to(project_root)
+    for idx, entry in enumerate(raw_patterns):
         if not isinstance(entry, dict):
+            warnings.append(
+                f"{discover_rel} entry {idx} ignored: must be a table."
+            )
             continue
         glob = entry.get("glob")
         category = entry.get("category")
         description = entry.get("description", "(user-taught)")
         if not isinstance(glob, str) or not isinstance(category, str):
+            warnings.append(
+                f"{discover_rel} entry {idx} ignored: "
+                "`glob` and `category` must be strings."
+            )
             continue
         if category not in valid_categories:
+            warnings.append(
+                f"{discover_rel} entry {idx} ignored: "
+                f"unsupported category {category!r}."
+            )
             continue
         # Narrow `category` for the type checker — we just validated it above.
         narrowed: PatternCategory = category  # type: ignore[assignment]
@@ -344,7 +360,11 @@ def _load_user_patterns(project_root: Path) -> list[Pattern]:
     return patterns
 
 
-def _git_ignored_paths(project_root: Path, candidates: list[Path]) -> set[Path]:
+def _git_ignored_paths(
+    project_root: Path,
+    candidates: list[Path],
+    warnings: list[str],
+) -> set[Path]:
     """Ask git which of ``candidates`` are ignored. Empty when git is absent.
 
     Calls ``git -C <root> check-ignore --stdin -z`` once with the full list to
@@ -357,8 +377,12 @@ def _git_ignored_paths(project_root: Path, candidates: list[Path]) -> set[Path]:
         return set()
     git_path = shutil.which("git")
     if git_path is None:
+        if (project_root / ".gitignore").exists():
+            warnings.append("git not found; `.gitignore` was not consulted during scan.")
         return set()
     if not (project_root / ".git").exists():
+        if (project_root / ".gitignore").exists():
+            warnings.append("not a git repository; `.gitignore` was not consulted during scan.")
         return set()
     payload = "\0".join(str(p.relative_to(project_root)) for p in candidates) + "\0"
     try:
@@ -370,11 +394,17 @@ def _git_ignored_paths(project_root: Path, candidates: list[Path]) -> set[Path]:
             timeout=_GIT_CHECK_TIMEOUT_SECONDS,
             check=False,
         )
-    except (subprocess.TimeoutExpired, OSError):
+    except subprocess.TimeoutExpired:
+        warnings.append("`git check-ignore` timed out; ignored files may appear in scan results.")
+        return set()
+    except OSError as exc:
+        warnings.append(f"`git check-ignore` failed: {exc}; ignored files may appear in scan results.")
         return set()
     # `check-ignore` exits 0 when at least one path matched, 1 when none did,
     # 128 on usage errors. Treat any non-fatal exit as "use what stdout gave".
     if completed.returncode not in (0, 1):
+        reason = completed.stderr.strip().splitlines()[-1] if completed.stderr.strip() else f"exit {completed.returncode}"
+        warnings.append(f"`git check-ignore` failed ({reason}); ignored files may appear in scan results.")
         return set()
     ignored: set[Path] = set()
     for raw in completed.stdout.split("\0"):
@@ -577,7 +607,7 @@ def scan_project(project_root: Path) -> ScanResult:
     candidates = _iter_candidate_files(project_root)
 
     # Ask git which ones are ignored — single shell-out for the whole list.
-    ignored = _git_ignored_paths(project_root, candidates)
+    ignored = _git_ignored_paths(project_root, candidates, result.warnings)
 
     # Detect sibling integrations early so the main scan loop can reclassify
     # Touchstone-managed Doctrine candidates (``principles/*.md`` etc.) as
@@ -595,7 +625,8 @@ def scan_project(project_root: Path) -> ScanResult:
     # Merge built-in + user-taught patterns; user-taught come second so the
     # built-in description wins when both match. (User patterns can still
     # *add* matches that built-ins missed, which is the common case.)
-    all_patterns: list[Pattern] = list(BUILT_IN_PATTERNS) + _load_user_patterns(project_root)
+    user_patterns = _load_user_patterns(project_root, result.warnings)
+    all_patterns: list[Pattern] = list(BUILT_IN_PATTERNS) + user_patterns
     skip_patterns = [p for p in all_patterns if p.category == "skip"]
     match_patterns = [p for p in all_patterns if p.category != "skip"]
     # User-taught doctrine patterns — used to override the built-in
@@ -603,9 +634,7 @@ def scan_project(project_root: Path) -> ScanResult:
     # a README.md file we'd normally reclassify as meta_doc, but if a
     # user-taught doctrine pattern ALSO matches, the user's explicit
     # instruction wins.
-    user_doctrine_patterns = [
-        p for p in _load_user_patterns(project_root) if p.category == "doctrine"
-    ]
+    user_doctrine_patterns = [p for p in user_patterns if p.category == "doctrine"]
 
     classified_paths: set[Path] = set()
     for path in candidates:

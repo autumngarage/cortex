@@ -1,4 +1,4 @@
-"""`cortex init` — scaffold a SPEC-v0.3.1-dev-conformant `.cortex/` directory
+"""`cortex init` — scaffold a SPEC-v0.4.0-dev-conformant `.cortex/` directory
 and absorb existing project structure (principles/, decisions/, ROADMAP.md,
 …) into it via per-file interactive prompts.
 
@@ -247,7 +247,7 @@ _STATE_IMPORT_MARKER = "@.cortex/state.md"
 _GITIGNORE_ENTRIES: tuple[str, ...] = (
     # Auto-maintained Cortex index; transient per SPEC § 2 — never committed.
     ".cortex/.index.json",
-    # Placeholder for the Phase E write path; present pre-emptively so the
+    # Placeholder for the future pending-write path; present pre-emptively so the
     # directory never leaks into commits once consumers start dropping files.
     ".cortex/pending/",
 )
@@ -630,6 +630,12 @@ def _print_scan_summary(scan: ScanResult) -> None:
             click.echo(f"    {f.relative}")
         click.echo("")
 
+    if scan.warnings:
+        click.echo("  Scan warnings:")
+        for warning in scan.warnings:
+            click.echo(f"    ! {warning}")
+        click.echo("")
+
     sig = scan.sibling_signals
     touchstone_bits: list[str] = []
     if sig.has_codex_review_toml:
@@ -821,7 +827,7 @@ def init_command(
     local_only: bool,
     assume_yes: bool,
 ) -> None:
-    """Scaffold a SPEC-v0.3.1-dev-conformant `.cortex/` directory in the target project."""
+    """Scaffold a SPEC-v0.4.0-dev-conformant `.cortex/` directory in the target project."""
     # `--local-only` and `--no-gitignore` are mutually exclusive: the former
     # says "gitignore all of .cortex/", the latter says "don't touch
     # .gitignore at all". Silently preferring one over the other would

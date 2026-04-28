@@ -35,5 +35,12 @@ build/
 .next/
 out/
 
+# Python tooling
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
 # Touchstone
 *.bak

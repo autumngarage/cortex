@@ -130,6 +130,26 @@ def test_promotion_summary_with_index(scaffolded_project: Path) -> None:
     assert "Promotion-queue: 1 proposed, 1 stale." in output
 
 
+def test_promotion_summary_with_non_object_index_is_visible(scaffolded_project: Path) -> None:
+    (scaffolded_project / ".cortex" / ".index.json").write_text("[]")
+    exit_code, output = _run_manifest(scaffolded_project, 8000)
+    assert exit_code == 0
+    assert "Promotion-queue: unreadable" in output
+    assert "top-level value is not an object" in output
+
+
+def test_promotion_summary_with_non_object_queue_items_is_visible(
+    scaffolded_project: Path,
+) -> None:
+    (scaffolded_project / ".cortex" / ".index.json").write_text(
+        '{"promotion_queue": ["bad"]}'
+    )
+    exit_code, output = _run_manifest(scaffolded_project, 8000)
+    assert exit_code == 0
+    assert "Promotion-queue: unreadable" in output
+    assert "non-object queue item" in output
+
+
 def test_unsupported_spec_version_warns(scaffolded_project: Path) -> None:
     (scaffolded_project / ".cortex" / "SPEC_VERSION").write_text("9.9.0\n")
     runner = CliRunner()

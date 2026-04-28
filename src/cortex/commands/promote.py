@@ -1,8 +1,8 @@
 """`cortex promote <id>` — promote a Journal candidate into Doctrine.
 
-Promotion depends on ``.cortex/.index.json``, which is populated by Phase C
-refresh commands. Until that ships, this command is an honest stub that
-tells the user what's missing instead of failing silently.
+Promotion depends on ``.cortex/.index.json``, which is populated by the v0.6.0
+lifecycle layer. Until that ships, this command is an honest stub that tells
+the user what's missing instead of failing silently.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ def promote_command(*, candidate_id: str, target_path: Path) -> None:
     """Promote a queued candidate into a new Doctrine entry.
 
     This slice only surfaces the state of the promotion queue — the actual
-    promotion write path lands alongside the Phase C refresh commands that
+    promotion write path lands alongside the v0.6.0 lifecycle commands that
     populate ``.cortex/.index.json``.
     """
     cortex_dir = Path(target_path).resolve() / ".cortex"
@@ -47,7 +47,7 @@ def promote_command(*, candidate_id: str, target_path: Path) -> None:
     if not index_path.exists():
         click.echo(
             f"error: `.cortex/.index.json` is absent; the promotion queue is not "
-            f"populated yet. Phase C `cortex refresh-*` commands will emit the "
+            f"populated yet. v0.6.0 lifecycle commands will emit the "
             f"index. Cannot promote {candidate_id!r}.",
             err=True,
         )
@@ -92,6 +92,6 @@ def promote_command(*, candidate_id: str, target_path: Path) -> None:
         f"note: candidate {candidate_id!r} found (state={match.get('state')!r}) but the "
         "promotion writer is not yet implemented. Run `cortex doctor` for validation "
         "and open an issue when you hit this path in a real project; tracked as a "
-        "Phase C follow-up to the `.index.json` refresh commands."
+        "v0.6.0 follow-up to the `.index.json` lifecycle commands."
     )
     sys.exit(3)
