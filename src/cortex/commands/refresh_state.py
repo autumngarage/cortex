@@ -14,6 +14,8 @@ from pathlib import Path
 import click
 
 from cortex.compat import require_compatible
+from cortex.config import load_refresh_index_config
+from cortex.index import refresh_index
 from cortex.state_render import build_state_inputs, render_state
 
 
@@ -45,6 +47,8 @@ def refresh_state_command(*, dry_run: bool, target_path: Path) -> None:
 
     require_compatible(cortex_dir)
     deterministic = os.environ.get("CORTEX_DETERMINISTIC") == "1"
+    if not dry_run:
+        _refresh_index_after_write(project_root)
     rendered = render_state(build_state_inputs(project_root, deterministic=deterministic))
 
     if dry_run:
@@ -53,3 +57,16 @@ def refresh_state_command(*, dry_run: bool, target_path: Path) -> None:
 
     (cortex_dir / "state.md").write_text(rendered)
     click.echo(str(cortex_dir / "state.md"))
+
+
+def _refresh_index_after_write(project_root: Path) -> None:
+    """Best-effort inline index refresh; silent on success."""
+
+    config = load_refresh_index_config(project_root)
+    try:
+        result = refresh_index(project_root, config)
+    except Exception as exc:
+        click.echo(f"warning: could not refresh .cortex/.index.json: {exc}", err=True)
+        return
+    for warning in result.warnings:
+        click.echo(f"warning: {warning}", err=True)

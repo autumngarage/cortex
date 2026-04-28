@@ -85,10 +85,10 @@ def test_status_reads_promotion_queue(scaffolded: Path) -> None:
     (scaffolded / ".cortex" / ".index.json").write_text(
         json.dumps(
             {
-                "promotion_queue": [
-                    {"id": "a", "state": "proposed"},
-                    {"id": "b", "state": "stale-proposed"},
-                    {"id": "c", "state": "approved"},
+                "candidates": [
+                    {"id": "a", "promoted_to": None, "age_days": 1},
+                    {"id": "b", "promoted_to": None, "age_days": 15},
+                    {"id": "c", "promoted_to": "doctrine/0001-c"},
                 ]
             }
         )
@@ -146,13 +146,13 @@ def test_status_reports_missing_promotion_queue_field(scaffolded: Path) -> None:
 
 
 def test_status_reports_non_list_promotion_queue(scaffolded: Path) -> None:
-    (scaffolded / ".cortex" / ".index.json").write_text('{"promotion_queue": "oops"}')
+    (scaffolded / ".cortex" / ".index.json").write_text('{"candidates": "oops"}')
     status = compute_status(scaffolded)
     assert status.promotion_index_error is not None
 
 
 def test_promote_malformed_index_errors(scaffolded: Path) -> None:
-    (scaffolded / ".cortex" / ".index.json").write_text('{"promotion_queue": "oops"}')
+    (scaffolded / ".cortex" / ".index.json").write_text('{"candidates": "oops"}')
     runner = CliRunner()
     result = runner.invoke(cli, ["promote", "j-a", "--path", str(scaffolded)])
     assert result.exit_code == 2
@@ -162,7 +162,7 @@ def test_promote_malformed_index_errors(scaffolded: Path) -> None:
 
 def test_promote_warns_on_unsupported_spec(scaffolded: Path) -> None:
     (scaffolded / ".cortex" / "SPEC_VERSION").write_text("9.9.0\n")
-    (scaffolded / ".cortex" / ".index.json").write_text('{"promotion_queue": []}')
+    (scaffolded / ".cortex" / ".index.json").write_text('{"candidates": []}')
     runner = CliRunner()
     result = runner.invoke(cli, ["promote", "j-a", "--path", str(scaffolded)])
     # still exits 2 (no such candidate), but must have warned on stderr.
@@ -180,7 +180,7 @@ def test_promote_without_index_errors(scaffolded: Path) -> None:
 
 def test_promote_unknown_candidate_errors(scaffolded: Path) -> None:
     (scaffolded / ".cortex" / ".index.json").write_text(
-        '{"promotion_queue": [{"id": "x", "state": "proposed"}]}'
+        '{"candidates": [{"id": "x", "promoted_to": null}]}'
     )
     runner = CliRunner()
     result = runner.invoke(cli, ["promote", "j-missing", "--path", str(scaffolded)])
@@ -191,7 +191,7 @@ def test_promote_unknown_candidate_errors(scaffolded: Path) -> None:
 
 def test_promote_known_candidate_is_stub(scaffolded: Path) -> None:
     (scaffolded / ".cortex" / ".index.json").write_text(
-        '{"promotion_queue": [{"id": "j-abc", "state": "proposed"}]}'
+        '{"candidates": [{"id": "j-abc", "promoted_to": null}]}'
     )
     runner = CliRunner()
     result = runner.invoke(cli, ["promote", "j-abc", "--path", str(scaffolded)])

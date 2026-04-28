@@ -62,17 +62,19 @@ def promote_command(*, candidate_id: str, target_path: Path) -> None:
         )
         sys.exit(2)
 
-    if not isinstance(data, dict) or "promotion_queue" not in data:
+    if not isinstance(data, dict) or (
+        "candidates" not in data and "promotion_queue" not in data
+    ):
         click.echo(
             "error: `.cortex/.index.json` is malformed (missing top-level "
-            "`promotion_queue`). Repair or regenerate before promoting.",
+            "`candidates`). Repair or regenerate before promoting.",
             err=True,
         )
         sys.exit(2)
-    queue = data["promotion_queue"]
+    queue = data["candidates"] if "candidates" in data else data["promotion_queue"]
     if not isinstance(queue, list):
         click.echo(
-            "error: `.cortex/.index.json` is malformed (`promotion_queue` is "
+            "error: `.cortex/.index.json` is malformed (`candidates` is "
             "not a list). Repair or regenerate before promoting.",
             err=True,
         )
