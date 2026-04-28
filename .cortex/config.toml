@@ -1,2 +1,9 @@
 [manifest]
 verified_threshold_days = 90
+
+[refresh-index]
+candidate_patterns = [
+  "we decided",
+  "doctrine candidate",
+  "this is load-bearing",
+]

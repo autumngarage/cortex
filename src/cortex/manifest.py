@@ -223,9 +223,14 @@ def _promotion_summary(cortex_dir: Path) -> str:
         return f"Promotion-queue: unreadable (`.cortex/.index.json` JSON error: {exc})."
     if not isinstance(data, dict):
         return "Promotion-queue: unreadable (`.cortex/.index.json` top-level value is not an object)."
-    queue = data.get("promotion_queue", [])
+    if "candidates" in data:
+        queue = data["candidates"]
+        legacy_queue = False
+    else:
+        queue = data.get("promotion_queue", [])
+        legacy_queue = True
     if not isinstance(queue, list):
-        return "Promotion-queue: unreadable (`.cortex/.index.json` `promotion_queue` is not a list)."
+        return "Promotion-queue: unreadable (`.cortex/.index.json` `candidates` is not a list)."
     bad_item_count = sum(1 for c in queue if not isinstance(c, dict))
     if bad_item_count:
         return (
@@ -233,8 +238,26 @@ def _promotion_summary(cortex_dir: Path) -> str:
             f"contains {bad_item_count} non-object queue item"
             f"{'s' if bad_item_count != 1 else ''})."
         )
-    proposed = sum(1 for c in queue if c.get("state") == "proposed")
-    stale = sum(1 for c in queue if c.get("state") == "stale-proposed")
+    if legacy_queue:
+        proposed = sum(1 for c in queue if c.get("state") == "proposed")
+        stale = sum(1 for c in queue if c.get("state") == "stale-proposed")
+        return f"Promotion-queue: {proposed} proposed, {stale} stale."
+    proposed = sum(
+        1
+        for c in queue
+        if c.get("promoted_to") is None
+        and (
+            not isinstance(c.get("age_days"), int)
+            or c["age_days"] <= 14
+        )
+    )
+    stale = sum(
+        1
+        for c in queue
+        if c.get("promoted_to") is None
+        and isinstance(c.get("age_days"), int)
+        and c["age_days"] > 14
+    )
     return f"Promotion-queue: {proposed} proposed, {stale} stale."
 
 

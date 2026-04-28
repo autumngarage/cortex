@@ -21,6 +21,7 @@ from cortex.commands.manifest import manifest_command
 from cortex.commands.next import next_command
 from cortex.commands.plan import plan_group
 from cortex.commands.promote import promote_command
+from cortex.commands.refresh_index import refresh_index_command
 from cortex.commands.refresh_state import refresh_state_command
 from cortex.commands.status import run_status, status_command
 
@@ -101,6 +102,7 @@ cli.add_command(manifest_command)
 cli.add_command(grep_command)
 cli.add_command(status_command)
 cli.add_command(promote_command)
+cli.add_command(refresh_index_command)
 cli.add_command(refresh_state_command)
 cli.add_command(next_command)
 cli.add_command(journal_group)

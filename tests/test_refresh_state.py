@@ -161,7 +161,7 @@ def test_refresh_state_seven_field_header_complete(tmp_path: Path) -> None:
     assert "Generator: cortex refresh-state v" in text
     assert "Sources:\n  - HEAD sha:" in text
     assert "Corpus: 2 Journal entries, 2 Plans, 1 Doctrine entries, 1 Templates, 1 Case studies" in text
-    assert "Omitted:\n  - .cortex/.index.json" in text
+    assert "Omitted:\n  []" in text
     assert "Incomplete:\n  []" in text
     assert "Conflicts-preserved: []" in text
     assert "Spec: 0.4.0-dev" in text

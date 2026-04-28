@@ -33,6 +33,8 @@ from pathlib import Path
 import click
 
 from cortex.compat import require_compatible
+from cortex.config import load_refresh_index_config
+from cortex.index import refresh_index
 
 _DATE_PLACEHOLDER = "{{ YYYY-MM-DD }}"
 _H1_TEMPLATE_RE = re.compile(r"^# \{\{[^}]+\}\}.*$", re.MULTILINE)
@@ -271,6 +273,7 @@ def draft_command(
                 err=True,
             )
             sys.exit(2)
+        _refresh_index_after_write(project_root)
         click.echo(str(target))
         return
 
@@ -324,6 +327,7 @@ def draft_command(
                 err=True,
             )
             sys.exit(2)
+        _refresh_index_after_write(project_root)
         click.echo(str(target))
         preserve_tmp = False
     finally:
@@ -333,6 +337,19 @@ def draft_command(
         # "draft preserved at <tmp>" promise on every error path.
         if not preserve_tmp and tmp.exists():
             tmp.unlink()
+
+
+def _refresh_index_after_write(project_root: Path) -> None:
+    """Best-effort inline index refresh; silent on success."""
+
+    config = load_refresh_index_config(project_root)
+    try:
+        result = refresh_index(project_root, config)
+    except Exception as exc:
+        click.echo(f"warning: could not refresh .cortex/.index.json: {exc}", err=True)
+        return
+    for warning in result.warnings:
+        click.echo(f"warning: {warning}", err=True)
 
 
 @click.group("journal")

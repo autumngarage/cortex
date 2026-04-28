@@ -182,19 +182,46 @@ def _read_promotion_index(cortex_dir: Path) -> _PromotionIndexRead:
             present=True, proposed=None, stale=None,
             error="top-level JSON value is not an object",
         )
-    if "promotion_queue" not in data:
+    if "candidates" in data:
+        queue = data["candidates"]
+        legacy_queue = False
+    elif "promotion_queue" in data:
+        queue = data["promotion_queue"]
+        legacy_queue = True
+    else:
         return _PromotionIndexRead(
             present=True, proposed=None, stale=None,
-            error="`promotion_queue` field missing",
+            error="`candidates` field missing",
         )
-    queue = data["promotion_queue"]
     if not isinstance(queue, list):
         return _PromotionIndexRead(
             present=True, proposed=None, stale=None,
-            error="`promotion_queue` is not a list",
+            error="`candidates` is not a list",
         )
-    proposed = sum(1 for c in queue if isinstance(c, dict) and c.get("state") == "proposed")
-    stale = sum(1 for c in queue if isinstance(c, dict) and c.get("state") == "stale-proposed")
+    if legacy_queue:
+        proposed = sum(1 for c in queue if isinstance(c, dict) and c.get("state") == "proposed")
+        stale = sum(
+            1 for c in queue if isinstance(c, dict) and c.get("state") == "stale-proposed"
+        )
+        return _PromotionIndexRead(present=True, proposed=proposed, stale=stale, error=None)
+    proposed = sum(
+        1
+        for c in queue
+        if isinstance(c, dict)
+        and c.get("promoted_to") is None
+        and (
+            not isinstance(c.get("age_days"), int)
+            or c["age_days"] <= 14
+        )
+    )
+    stale = sum(
+        1
+        for c in queue
+        if isinstance(c, dict)
+        and c.get("promoted_to") is None
+        and isinstance(c.get("age_days"), int)
+        and c["age_days"] > 14
+    )
     return _PromotionIndexRead(present=True, proposed=proposed, stale=stale, error=None)
 
 

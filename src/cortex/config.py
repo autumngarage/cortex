@@ -24,6 +24,14 @@ class AuditInstructionsConfig:
     warnings: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class RefreshIndexConfig:
+    """Configuration for `cortex refresh-index`."""
+
+    candidate_patterns: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+
+
 def load_audit_instructions_config(project_root: Path) -> AuditInstructionsConfig:
     """Load `.cortex/config.toml`'s `[audit-instructions]` section.
 
@@ -57,6 +65,27 @@ def load_audit_instructions_config(project_root: Path) -> AuditInstructionsConfi
         scan_files=scan_files,
         discovery_mode=False,
     )
+
+
+def load_refresh_index_config(project_root: Path) -> RefreshIndexConfig:
+    """Load `.cortex/config.toml`'s `[refresh-index]` section."""
+
+    path = project_root / ".cortex" / "config.toml"
+    if not path.is_file():
+        return RefreshIndexConfig()
+
+    try:
+        data = tomllib.loads(path.read_text())
+    except OSError as exc:
+        return RefreshIndexConfig(warnings=(f"could not read .cortex/config.toml: {exc}",))
+    except tomllib.TOMLDecodeError as exc:
+        return RefreshIndexConfig(warnings=(f"could not parse .cortex/config.toml: {exc}",))
+
+    raw = data.get("refresh-index")
+    if not isinstance(raw, dict):
+        return RefreshIndexConfig()
+
+    return RefreshIndexConfig(candidate_patterns=_string_tuple(raw.get("candidate_patterns")))
 
 
 def _optional_string(value: Any) -> str | None:
