@@ -167,6 +167,51 @@ def test_refresh_state_seven_field_header_complete(tmp_path: Path) -> None:
     assert "Spec: 0.5.0" in text
 
 
+def test_refresh_state_sources_line_uses_python_manifest(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    result = _run_refresh(tmp_path)
+    assert result.exit_code == 0, result.output
+    text = (tmp_path / ".cortex" / "state.md").read_text()
+    assert "pyproject.toml: 9.9.9 + cortex package version:" in text
+
+
+def test_refresh_state_sources_line_uses_swift_manifest(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    (tmp_path / "pyproject.toml").unlink()
+    (tmp_path / "Package.swift").write_text(
+        "// swift-tools-version: 5.10\n"
+        "import PackageDescription\n\n"
+        'let package = Package(name: "AutumnMail", products: [])\n'
+    )
+
+    result = _run_refresh(tmp_path)
+    assert result.exit_code == 0, result.output
+    text = (tmp_path / ".cortex" / "state.md").read_text()
+    assert "Package.swift: AutumnMail + cortex package version:" in text
+    assert "pyproject.toml" not in text
+
+
+def test_refresh_state_sources_line_handles_missing_manifest(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    (tmp_path / "pyproject.toml").unlink()
+
+    result = _run_refresh(tmp_path)
+    assert result.exit_code == 0, result.output
+    text = (tmp_path / ".cortex" / "state.md").read_text()
+    assert "(no project manifest detected) + cortex package version:" in text
+
+
+def test_refresh_state_manifest_preference_uses_python_before_node(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    (tmp_path / "package.json").write_text('{"name": "node-project", "version": "1.2.3"}\n')
+
+    result = _run_refresh(tmp_path)
+    assert result.exit_code == 0, result.output
+    text = (tmp_path / ".cortex" / "state.md").read_text()
+    assert "pyproject.toml: 9.9.9 + cortex package version:" in text
+    assert "package.json" not in text
+
+
 def test_refresh_state_dry_run_does_not_write(tmp_path: Path) -> None:
     _write_fixture(tmp_path)
     state = tmp_path / ".cortex" / "state.md"

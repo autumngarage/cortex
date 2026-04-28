@@ -16,6 +16,7 @@ from pathlib import Path
 
 from cortex import __version__
 from cortex.frontmatter import FrontmatterValue, parse_frontmatter
+from cortex.manifests import ManifestInfo, detect_project_manifest
 
 DETERMINISTIC_GENERATED = "2000-01-01T00:00:00+00:00"
 STALE_PLAN_DAYS = 14
@@ -41,7 +42,7 @@ class StateInputs:
     generated: str
     head_sha: str | None
     spec_version: str | None
-    pyproject_version: str | None
+    project_manifest: ManifestInfo | None
     package_version: str
     previous_state: str
     plans: list[SourceFile] = field(default_factory=list)
@@ -105,7 +106,9 @@ def build_state_inputs(project_root: Path, *, deterministic: bool = False) -> St
 
     previous_state = read_optional(cortex_dir / "state.md")
     spec_version = _read_spec_version(project_root, incomplete)
-    pyproject_version = _read_pyproject_version(project_root, incomplete)
+    project_manifest = detect_project_manifest(project_root)
+    if project_manifest and project_manifest.error:
+        incomplete.append(f"{project_manifest.filename} — unreadable: {project_manifest.error}")
     head_sha = _read_head_sha(project_root, incomplete)
     omitted = []
     if not (cortex_dir / ".index.json").exists():
@@ -120,7 +123,7 @@ def build_state_inputs(project_root: Path, *, deterministic: bool = False) -> St
         ),
         head_sha=head_sha,
         spec_version=spec_version,
-        pyproject_version=pyproject_version,
+        project_manifest=project_manifest,
         package_version=__version__,
         previous_state=previous_state,
         plans=_read_tree(project_root, cortex_dir / "plans", "*.md", incomplete),
@@ -200,11 +203,15 @@ def _source_lines(inputs: StateInputs) -> list[str]:
         f".cortex/templates/**/*.md ({len(inputs.templates)} templates)",
         f"docs/case-studies/*.md ({len(inputs.case_studies)} case studies)",
         f"SPEC version: {inputs.spec_version or 'unknown'}",
-        (
-            "pyproject.toml + cortex package version: "
-            f"{inputs.pyproject_version or 'unknown'} / {inputs.package_version}"
-        ),
+        _manifest_source_line(inputs.project_manifest, inputs.package_version),
     ]
+
+
+def _manifest_source_line(manifest: ManifestInfo | None, package_version: str) -> str:
+    if manifest is None:
+        return f"(no project manifest detected) + cortex package version: {package_version}"
+    detail = f": {manifest.detail}" if manifest.detail else ""
+    return f"{manifest.filename}{detail} + cortex package version: {package_version}"
 
 
 def _render_active_plans(plans: list[PlanState]) -> list[str]:
@@ -357,20 +364,6 @@ def _read_spec_version(project_root: Path, incomplete: list[str]) -> str | None:
                 return match.group(1)
     except OSError as exc:
         incomplete.append(f"{_rel(project_root, spec)} — unreadable: {exc}")
-    return None
-
-
-def _read_pyproject_version(project_root: Path, incomplete: list[str]) -> str | None:
-    pyproject = project_root / "pyproject.toml"
-    try:
-        if not pyproject.exists():
-            return None
-        for line in pyproject.read_text().splitlines():
-            match = re.match(r'^version\s*=\s*"([^"]+)"\s*$', line)
-            if match:
-                return match.group(1)
-    except OSError as exc:
-        incomplete.append(f"{_rel(project_root, pyproject)} — unreadable: {exc}")
     return None
 
 

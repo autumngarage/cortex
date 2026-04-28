@@ -128,8 +128,20 @@ def _file_matches_filters(path: Path, project_root: Path, filters: tuple[Frontma
     return matches_all(filters, frontmatter, bold_fields)
 
 
-def _iter_filter_candidates(search_root: Path) -> list[Path]:
-    return sorted(path for path in search_root.rglob("*.md") if path.is_file())
+def _is_template_path(path: Path, project_root: Path) -> bool:
+    try:
+        rel = path.relative_to(project_root)
+    except ValueError:
+        return False
+    return len(rel.parts) >= 3 and rel.parts[0] == ".cortex" and rel.parts[1] == "templates"
+
+
+def _iter_filter_candidates(search_root: Path, project_root: Path, *, include_templates: bool) -> list[Path]:
+    return sorted(
+        path
+        for path in search_root.rglob("*.md")
+        if path.is_file() and (include_templates or not _is_template_path(path, project_root))
+    )
 
 
 def _render_filter_only_matches(
@@ -137,10 +149,11 @@ def _render_filter_only_matches(
     search_root: Path,
     target_path: Path,
     filters: tuple[FrontmatterFilter, ...],
+    include_templates: bool,
 ) -> None:
     matched = [
         path
-        for path in _iter_filter_candidates(search_root)
+        for path in _iter_filter_candidates(search_root, target_path, include_templates=include_templates)
         if _file_matches_filters(path, target_path, filters)
     ]
     if not matched:
@@ -184,6 +197,12 @@ def _render_filter_only_matches(
         "tags:read-side. See docs/grep.md."
     ),
 )
+@click.option(
+    "--include-templates",
+    is_flag=True,
+    default=False,
+    help="Include `.cortex/templates/` in default searches. `--layer templates` always searches templates.",
+)
 @click.argument("rg_args", nargs=-1, type=click.UNPROCESSED)
 def grep_command(
     *,
@@ -191,6 +210,7 @@ def grep_command(
     layer: str | None,
     target_path: Path,
     frontmatter_filters: tuple[str, ...],
+    include_templates: bool,
     rg_args: tuple[str, ...],
 ) -> None:
     """Search `.cortex/` for PATTERN with ripgrep, annotated with per-file frontmatter.
@@ -224,6 +244,7 @@ def grep_command(
     warn_if_incompatible(cortex_dir)
 
     search_root = cortex_dir / layer if layer else cortex_dir
+    search_templates = include_templates or layer == "templates"
     if not search_root.exists():
         click.echo(
             f"warning: {search_root} does not exist; nothing to search.",
@@ -232,7 +253,12 @@ def grep_command(
         return
 
     if pattern_is_empty:
-        _render_filter_only_matches(search_root=search_root, target_path=target_path, filters=filters)
+        _render_filter_only_matches(
+            search_root=search_root,
+            target_path=target_path,
+            filters=filters,
+            include_templates=search_templates,
+        )
         return
 
     rg = _find_rg()
@@ -250,7 +276,12 @@ def grep_command(
     # being line-noise-separated from match lines.
     # ``--`` terminator so patterns beginning with `-` (e.g. ``- [ ]`` for
     # Markdown checkboxes) are not parsed as ripgrep flags.
-    cmd = [rg, "--json", *rg_args, "--", pattern, str(search_root)]
+    template_globs = (
+        []
+        if search_templates
+        else ["--glob", "!.cortex/templates/**", "--glob", "!templates/**", "--glob", "!**/templates/**"]
+    )
+    cmd = [rg, "--json", *template_globs, *rg_args, "--", pattern, str(search_root)]
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
 
     if result.returncode == 2:
