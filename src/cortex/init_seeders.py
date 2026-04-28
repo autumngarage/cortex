@@ -24,27 +24,25 @@ rules apply throughout:
 
 from __future__ import annotations
 
-import re
 from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
 
+from cortex.doctrine import (
+    AUTO_IMPORT_DOCTRINE_FLOOR,
+    extract_h1,
+    next_doctrine_number,
+    slugify,
+)
 from cortex.frontmatter import parse_frontmatter
 from cortex.goal_hash import normalize_goal_hash
 
 # --- Shared helpers ---------------------------------------------------------
 
 
-_SLUG_NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
-_DOCTRINE_FILENAME_RE = re.compile(r"^(\d{4})-")
-_H1_RE = re.compile(r"^#\s+(.+)$", re.MULTILINE)
-
-
 def _slugify(text: str) -> str:
     """Filename-safe slug: lowercase ASCII, dashes for separators, no leading/trailing dashes."""
-    lowered = text.lower()
-    cleaned = _SLUG_NON_ALNUM_RE.sub("-", lowered).strip("-")
-    return cleaned or "untitled"
+    return slugify(text)
 
 
 def _today_iso() -> str:
@@ -63,15 +61,7 @@ def _extract_h1(path: Path) -> str | None:
     *first* H1 in the body text. Returns the title text (without the ``#``)
     stripped of trailing whitespace.
     """
-    try:
-        text = path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return None
-    _, body = parse_frontmatter(text)
-    match = _H1_RE.search(body)
-    if match is None:
-        return None
-    return match.group(1).strip()
+    return extract_h1(path)
 
 
 def _git_user_email(project_root: Path) -> str:
@@ -127,7 +117,7 @@ def _existing_imported_sources(cortex_layer_dir: Path) -> set[str]:
 # --- Doctrine seeder --------------------------------------------------------
 
 
-_AUTO_IMPORT_DOCTRINE_FLOOR: int = 100
+_AUTO_IMPORT_DOCTRINE_FLOOR: int = AUTO_IMPORT_DOCTRINE_FLOOR
 """Auto-imported Doctrine entries start at 0100, not 0001.
 
 Reserved range 0001-0099 is for **human-authored** Doctrine — the canonical
@@ -157,26 +147,7 @@ def _next_doctrine_id(doctrine_dir: Path) -> int:
     Hand-authored entries below the floor never block auto-import
     numbering — they're tracked but the floor is the lower bound.
     """
-    highest = 0
-    if doctrine_dir.is_dir():
-        for entry in doctrine_dir.iterdir():
-            if not entry.is_file() or entry.suffix != ".md":
-                continue
-            match = _DOCTRINE_FILENAME_RE.match(entry.name)
-            if match is None:
-                continue
-            try:
-                value = int(match.group(1))
-            except ValueError:
-                continue
-            highest = max(highest, value)
-    # If existing IDs include any at or above the floor, continue from the
-    # highest. Otherwise (empty doctrine_dir or only hand-authored entries
-    # below the floor), start from the floor itself so we don't allocate
-    # below 0100 for an auto-import.
-    if highest >= _AUTO_IMPORT_DOCTRINE_FLOOR:
-        return highest + 1
-    return _AUTO_IMPORT_DOCTRINE_FLOOR
+    return next_doctrine_number(doctrine_dir)
 
 
 def _doctrine_body(title: str, source_relative: str) -> str:

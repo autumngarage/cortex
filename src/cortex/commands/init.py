@@ -82,6 +82,7 @@ from cortex.init_scan import (
     scan_project,
 )
 from cortex.init_seeders import seed_doctrine, seed_plan, seed_plans
+from cortex.seed import SeedConflictError, SeedSourceError, seed_doctrine_from
 from cortex.shell import git_remediation_cmd, run_git
 
 CURRENT_SPEC_VERSION = "0.5.0-dev"
@@ -733,6 +734,8 @@ def _format_equivalent_command(
     did_local_only: bool,
     force: bool,
     path_arg: str | None,
+    seed_from_arg: str | None,
+    merge_mode: str | None,
 ) -> str:
     """Return the single-line flag-form command that reproduces this run.
 
@@ -756,6 +759,10 @@ def _format_equivalent_command(
     parts.append("--yes")
     if force:
         parts.append("--force")
+    if seed_from_arg is not None:
+        parts.append(f"--seed-from {shlex.quote(seed_from_arg)}")
+    if merge_mode is not None:
+        parts.append(f"--merge {shlex.quote(merge_mode)}")
     return " ".join(parts)
 
 
@@ -817,6 +824,26 @@ def _format_equivalent_command(
     help="Accept all interactive defaults without prompting (doctrine 0002 § 4). "
     "Equivalent to running the wizard and pressing Enter at every step.",
 )
+@click.option(
+    "--seed-from",
+    "seed_from",
+    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
+    default=None,
+    help="Copy one-level `*.md` Doctrine pack entries from DIR into `.cortex/doctrine/` "
+    "after scaffolding. Numbered files keep their requested NNNN prefix; unnumbered "
+    "files are assigned the next available number at or above 0100 from their H1 slug. "
+    "Example: Sentinel can ship a default Doctrine pack and projects can run "
+    "`cortex init --seed-from ../sentinel/doctrine-pack`.",
+)
+@click.option(
+    "--merge",
+    "merge_mode",
+    type=click.Choice(["skip-existing"]),
+    default=None,
+    help="Conflict handling for `--seed-from`. Default aborts before copying any seed "
+    "entry if a requested destination or Doctrine number already exists. "
+    "`--merge skip-existing` skips conflicts and copies the rest.",
+)
 def init_command(
     *,
     force: bool,
@@ -826,6 +853,8 @@ def init_command(
     add_gitignore: bool | None,
     local_only: bool,
     assume_yes: bool,
+    seed_from: Path | None,
+    merge_mode: str | None,
 ) -> None:
     """Scaffold a SPEC-v0.4.0-dev-conformant `.cortex/` directory in the target project."""
     # `--local-only` and `--no-gitignore` are mutually exclusive: the former
@@ -836,6 +865,13 @@ def init_command(
         click.echo(
             "error: --local-only and --no-gitignore conflict. "
             "--local-only requires writing `.cortex/` to .gitignore.",
+            err=True,
+        )
+        sys.exit(2)
+
+    if seed_from is not None and not seed_from.expanduser().resolve().is_dir():
+        click.echo(
+            f"error: seed source is not a directory: {seed_from.expanduser().resolve()}",
             err=True,
         )
         sys.exit(2)
@@ -963,6 +999,40 @@ def init_command(
     _absorb_doctrine(target_path, scan, will_prompt=will_prompt, assume_yes=assume_yes)
     _absorb_plans(target_path, scan, will_prompt=will_prompt, assume_yes=assume_yes)
     _absorb_unknowns(target_path, scan, will_prompt=will_prompt, assume_yes=assume_yes)
+
+    if seed_from is not None:
+        try:
+            seed_result = seed_doctrine_from(
+                seed_from,
+                target_path,
+                merge_mode=merge_mode,
+            )
+        except SeedSourceError as exc:
+            click.echo(f"error: {exc}", err=True)
+            sys.exit(2)
+        except SeedConflictError as exc:
+            click.echo("error: Doctrine seed conflicts; no seed files copied:", err=True)
+            for conflict in exc.result.conflicts:
+                click.echo(f"  {conflict}", err=True)
+            click.echo(
+                "Use `--merge skip-existing` to skip existing entries and copy the rest.",
+                err=True,
+            )
+            sys.exit(4)
+
+        if not seed_result.copied and not seed_result.skipped:
+            click.echo(
+                f"  no doctrine entries found in {seed_from.expanduser().resolve()}", err=True
+            )
+        else:
+            for skipped in seed_result.skipped:
+                click.echo(f"  skipped existing Doctrine entry: {skipped}", err=True)
+            if seed_result.copied:
+                click.echo(
+                    f"  Seeded {len(seed_result.copied)} Doctrine entr"
+                    f"{'y' if len(seed_result.copied) == 1 else 'ies'} "
+                    f"from {seed_from.expanduser().resolve()}."
+                )
 
     # Interactive follow-ups (doctrine 0002). Each step is gated on the
     # relevant target file existing — if CLAUDE.md / AGENTS.md / .gitignore
@@ -1158,6 +1228,8 @@ def init_command(
         did_local_only=local_only,
         force=force,
         path_arg=str(target_path) if path_differs_from_cwd else None,
+        seed_from_arg=str(seed_from.expanduser().resolve()) if seed_from is not None else None,
+        merge_mode=merge_mode,
     )
     click.echo("")
     click.echo("==> Equivalent to rerun:")
