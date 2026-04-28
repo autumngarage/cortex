@@ -4,7 +4,7 @@ Each ``check_*`` function takes a path rooted at the project and returns a
 list of :class:`Issue` objects. Checks are additive and independent — the
 command orchestrator aggregates and sorts.
 
-Checks implemented here (current slice — SPEC.md v0.4.0-dev):
+Checks implemented here (current slice — SPEC.md v0.5.0):
 
 - Scaffold structure (SPEC_VERSION, protocol.md, templates/, subdirs)
 - Seven-field metadata contract on derived layers (map.md, state.md) per § 4.5
@@ -300,7 +300,7 @@ def _check_doctrine_entry_body(rel: str, text: str) -> list[Issue]:
 
     Doctrine is immutable-with-supersede (SPEC § 3.1). Historical entries
     whose Status is ``Superseded-by <n>`` predate any post-hoc requirement
-    such as ``Load-priority:`` (added in v0.4.0-dev); retrofitting them would
+    such as ``Load-priority:`` (added in v0.4.0); retrofitting them would
     violate immutability. The validator therefore exempts superseded entries
     from ``Load-priority`` but still requires Status and Date.
     """

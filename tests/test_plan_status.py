@@ -15,8 +15,8 @@ from cortex.goal_hash import normalize_goal_hash
 def _init_cortex(project: Path) -> None:
     cortex_dir = project / ".cortex"
     (cortex_dir / "plans").mkdir(parents=True)
-    (cortex_dir / "SPEC_VERSION").write_text("0.4.0-dev\n")
-    (cortex_dir / "protocol.md").write_text("**Protocol version:** 0.4.0-dev\n")
+    (cortex_dir / "SPEC_VERSION").write_text("0.5.0\n")
+    (cortex_dir / "protocol.md").write_text("**Protocol version:** 0.5.0\n")
 
 
 def _write_plan(

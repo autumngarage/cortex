@@ -16,7 +16,7 @@ This directory is the project's Cortex memory. Six layers follow the Cortex spec
 
 Everything except `.index.json` is plain Markdown you can edit in any editor. A few notes:
 
-- `state.md` and `map.md` ship as hand-authored placeholders — edit them freely. `state.md` gets an auto-generated core once `cortex refresh-state` ships in v0.4.0; hand-authored P0/P1/P2 regions between `<!-- cortex:hand -->` markers are preserved by the refresh. `map.md` becomes automation-managed once `cortex refresh-map` ships in v1.x.
+- `state.md` and `map.md` ship as hand-authored placeholders — edit them freely. `state.md` can be regenerated with `cortex refresh-state`; hand-authored P0/P1/P2 regions between `<!-- cortex:hand -->` markers are preserved by the refresh. `map.md` becomes automation-managed once `cortex refresh-map` ships in v1.x.
 - Never edit an existing `journal/` entry in place. If new information changes an old conclusion, write a new entry that cites and revises the old one.
 - Never edit an accepted `doctrine/` entry's body. Supersede by writing a new entry with `Supersedes: <nnnn>` and flipping the old entry's `Status:` to `Superseded-by <n>` in the same commit.
 - `.index.json` is machine-maintained; hand-editing it is a spec violation.

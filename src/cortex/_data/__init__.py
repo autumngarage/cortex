@@ -1,7 +1,7 @@
 """Package-data resources shipped with the Cortex CLI.
 
 Holds a copy of the canonical `.cortex/protocol.md` and `.cortex/templates/`
-tree so `cortex init` can scaffold a SPEC-v0.4.0-dev-conformant project
+tree so `cortex init` can scaffold a SPEC-v0.5.0-conformant project
 without depending on a specific source layout at install time.
 
 The repo's `.cortex/protocol.md` is the single source of truth; this

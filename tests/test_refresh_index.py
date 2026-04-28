@@ -15,7 +15,7 @@ def _project(tmp_path: Path) -> Path:
     cortex = tmp_path / ".cortex"
     for rel in ("journal", "doctrine", "templates/journal"):
         (cortex / rel).mkdir(parents=True, exist_ok=True)
-    (cortex / "SPEC_VERSION").write_text("0.5.0-dev\n")
+    (cortex / "SPEC_VERSION").write_text("0.5.0\n")
     return tmp_path
 
 
@@ -55,7 +55,7 @@ def test_refresh_index_empty_journal(tmp_path: Path) -> None:
     assert code == 0, output
 
     data = json.loads((project / ".cortex" / ".index.json").read_text())
-    assert data["spec"] == "0.5.0-dev"
+    assert data["spec"] == "0.5.0"
     assert data["candidates"] == []
 
 
@@ -120,7 +120,7 @@ def test_write_index_atomic_write_ignores_partial_tempfile(tmp_path: Path) -> No
     partial = target.parent / ".index.json.partial.tmp"
     partial.write_text('{"candidates": [')
 
-    write_index(target, {"spec": "0.5.0-dev", "generated": "now", "candidates": []})
+    write_index(target, {"spec": "0.5.0", "generated": "now", "candidates": []})
 
     assert partial.read_text() == '{"candidates": ['
     assert read_index(target)["candidates"] == []
