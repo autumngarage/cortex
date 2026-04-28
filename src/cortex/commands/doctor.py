@@ -1,6 +1,6 @@
 """`cortex doctor` — validate a project's `.cortex/` against the SPEC.
 
-Current structural scope (SPEC v0.4.0-dev):
+Current structural scope (SPEC v0.5.0):
 
 - Scaffold structure (SPEC_VERSION, protocol.md, templates/, subdirs)
 - Seven-field metadata contract on derived layers (§ 4.5)

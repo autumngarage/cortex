@@ -14,7 +14,7 @@ def _write_fixture(project: Path) -> None:
     for rel in ("plans", "journal", "doctrine", "templates/journal", "templates/plans"):
         (cortex / rel).mkdir(parents=True, exist_ok=True)
     (project / "docs" / "case-studies").mkdir(parents=True, exist_ok=True)
-    (cortex / "SPEC_VERSION").write_text("0.4.0-dev\n")
+    (cortex / "SPEC_VERSION").write_text("0.5.0\n")
     (project / "pyproject.toml").write_text('[project]\nversion = "9.9.9"\n')
     (cortex / "doctrine" / "0001-test.md").write_text("# Doctrine\n")
     (cortex / "templates" / "journal" / "decision.md").write_text("# Template\n")
@@ -28,7 +28,7 @@ def _write_fixture(project: Path) -> None:
         "Omitted:\n  []\n"
         "Incomplete:\n  []\n"
         "Conflicts-preserved: []\n"
-        "Spec: 0.4.0-dev\n"
+        "Spec: 0.5.0\n"
         "---\n\n"
         "# Project State\n\n"
         "<!-- cortex:hand -->\n"
@@ -164,7 +164,7 @@ def test_refresh_state_seven_field_header_complete(tmp_path: Path) -> None:
     assert "Omitted:\n  []" in text
     assert "Incomplete:\n  []" in text
     assert "Conflicts-preserved: []" in text
-    assert "Spec: 0.4.0-dev" in text
+    assert "Spec: 0.5.0" in text
 
 
 def test_refresh_state_dry_run_does_not_write(tmp_path: Path) -> None:

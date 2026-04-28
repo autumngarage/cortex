@@ -106,6 +106,8 @@ def test_cli_bare_runs_status(scaffolded: Path, monkeypatch: pytest.MonkeyPatch)
     assert result.exit_code == 0, result.output
     assert "Project:" in result.output
     assert "Active plans" in result.output
+    assert "cortex refresh-index" in result.output
+    assert "lifecycle commands" not in result.output
 
 
 def test_cli_status_subcommand_json(scaffolded: Path) -> None:

@@ -1,8 +1,8 @@
 """`cortex promote <id>` — promote a Journal candidate into Doctrine.
 
-Promotion depends on ``.cortex/.index.json``, which is populated by the v0.6.0
-lifecycle layer. Until that ships, this command is an honest stub that tells
-the user what's missing instead of failing silently.
+Promotion depends on ``.cortex/.index.json``, which is populated by
+``cortex refresh-index``. The promotion write path remains an honest stub that
+tells the user what's missing instead of failing silently.
 """
 
 from __future__ import annotations
@@ -30,8 +30,8 @@ def promote_command(*, candidate_id: str, target_path: Path) -> None:
     """Promote a queued candidate into a new Doctrine entry.
 
     This slice only surfaces the state of the promotion queue — the actual
-    promotion write path lands alongside the v0.6.0 lifecycle commands that
-    populate ``.cortex/.index.json``.
+    promotion write path is still deferred, but ``cortex refresh-index`` now
+    populates ``.cortex/.index.json``.
     """
     cortex_dir = Path(target_path).resolve() / ".cortex"
     if not cortex_dir.exists():
@@ -47,8 +47,8 @@ def promote_command(*, candidate_id: str, target_path: Path) -> None:
     if not index_path.exists():
         click.echo(
             f"error: `.cortex/.index.json` is absent; the promotion queue is not "
-            f"populated yet. v0.6.0 lifecycle commands will emit the "
-            f"index. Cannot promote {candidate_id!r}.",
+            f"populated yet. Run `cortex refresh-index` to emit the index. "
+            f"Cannot promote {candidate_id!r}.",
             err=True,
         )
         sys.exit(2)

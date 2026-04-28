@@ -1,4 +1,4 @@
-"""`cortex init` — scaffold a SPEC-v0.4.0-dev-conformant `.cortex/` directory
+"""`cortex init` — scaffold a SPEC-v0.5.0-conformant `.cortex/` directory
 and absorb existing project structure (principles/, decisions/, ROADMAP.md,
 …) into it via per-file interactive prompts.
 
@@ -71,6 +71,7 @@ from pathlib import Path
 
 import click
 
+from cortex import SPEC_VERSION_LITERAL
 from cortex import (
     __version__ as CORTEX_VERSION,  # noqa: N812 — namespaced re-export, deliberate caps.
 )
@@ -85,7 +86,7 @@ from cortex.init_seeders import seed_doctrine, seed_plan, seed_plans
 from cortex.seed import SeedConflictError, SeedSourceError, seed_doctrine_from
 from cortex.shell import git_remediation_cmd, run_git
 
-CURRENT_SPEC_VERSION = "0.5.0-dev"
+CURRENT_SPEC_VERSION = SPEC_VERSION_LITERAL
 
 SCAFFOLD_SUBDIRS = ("doctrine", "plans", "journal", "procedures")
 
@@ -112,10 +113,9 @@ _STUB_BODIES: dict[str, str] = {
         "> **Hand-authored placeholder.** `cortex init` wrote this as a scaffolded "
         "starting point. Edit it freely — describe the current priorities, open "
         "questions, and load-bearing context you want agents to load at session "
-        "start. When the deterministic `cortex refresh-state` command ships in "
-        "v0.4.0 (per the 2026-04-24 production-release rerank), it will "
-        "regenerate this layer from the journal and plans automatically; until "
-        "then, hand-editing is the intended workflow."
+        "start. Run `cortex refresh-state` to regenerate this layer from the "
+        "journal, plans, doctrine, templates, case studies, and preserved "
+        "hand-authored regions."
     ),
     "map": (
         "> **Hand-authored placeholder.** `cortex init` wrote this as a scaffolded "
@@ -140,10 +140,10 @@ def _derived_stub(
 
     The seven-field frontmatter is load-bearing — `cortex doctor` validates it
     (SPEC § 4.5). Only the prose body is user-facing guidance, and it's phrased
-    for the hand-editing workflow that's expected until `cortex refresh-{layer}`
-    ships. Per the 2026-04-24 production-release rerank: deterministic
-    `cortex refresh-state` ships in **v0.4.0**; LLM `cortex refresh-map` is
-    **deferred from the v1.0 path to v1.x**.
+    for the hand-editing workflow that's expected where synthesis is still
+    deferred. Per the 2026-04-24 production-release rerank: deterministic
+    `cortex refresh-state` is shipped; LLM `cortex refresh-map` is **deferred
+    from the v1.0 path to v1.x**.
 
     ``sources`` is a list of relative paths the scan classified as ``map_ref``
     or ``reference`` and that the State layer should cite. When non-empty,
@@ -154,19 +154,25 @@ def _derived_stub(
     now = _now_iso()
     body = _STUB_BODIES[layer]
     # Per the 2026-04-24 production-release rerank: deterministic
-    # `cortex refresh-state` ships in v0.4.0; LLM `cortex refresh-map`
-    # is deferred from v1.0 to v1.x. Each stub names its own arrival
+    # `cortex refresh-state` is shipped; LLM `cortex refresh-map`
+    # is deferred from v1.0 to v1.x. Each stub names its own state
     # framing so users reading the scaffolded file don't get stale
     # guidance from a cortex version that was generated before the
     # rerank landed.
-    refresh_phase = "v0.4.0" if layer == "state" else "v1.x (deferred from v1.0 path)"
+    refresh_phase = "available now" if layer == "state" else "v1.x (deferred from v1.0 path)"
+    if layer == "state":
+        refresh_clause = "run `cortex refresh-state` to regenerate this layer from primary sources."
+        generator_clause = "`cortex refresh-state` can regenerate this layer"
+    else:
+        refresh_clause = f"`cortex refresh-{layer}` will synthesize them in {refresh_phase}."
+        generator_clause = f"`cortex refresh-{layer}` ships in {refresh_phase}"
     if sources:
         sources_yaml = "\n".join(f"  - {src}" for src in sources)
         corpus_line = f"Corpus: {len(sources)} files (scan-discovered, not synthesized)"
         incomplete_line = (
             f"Incomplete:\n"
             f"  - All sources — listed by `cortex init` from a project scan; "
-            f"`cortex refresh-{layer}` will synthesize them in {refresh_phase}."
+            f"{refresh_clause}"
         )
     else:
         sources_yaml = "  - (none — scaffolded placeholder, no synthesis yet)"
@@ -174,11 +180,11 @@ def _derived_stub(
         incomplete_line = (
             f"Incomplete:\n"
             f"  - All sources — scaffolded at project init; "
-            f"`cortex refresh-{layer}` will regenerate from primary sources in {refresh_phase}."
+            f"{refresh_clause}"
         )
     return f"""---
 Generated: {now}
-Generator: {generator} (scaffolded by `cortex init`; hand-editable until `cortex refresh-{layer}` ships in {refresh_phase})
+Generator: {generator} (scaffolded by `cortex init`; hand-editable; {generator_clause})
 Sources:
 {sources_yaml}
 {corpus_line}
@@ -856,7 +862,7 @@ def init_command(
     seed_from: Path | None,
     merge_mode: str | None,
 ) -> None:
-    """Scaffold a SPEC-v0.4.0-dev-conformant `.cortex/` directory in the target project."""
+    """Scaffold a SPEC-v0.5.0-conformant `.cortex/` directory in the target project."""
     # `--local-only` and `--no-gitignore` are mutually exclusive: the former
     # says "gitignore all of .cortex/", the latter says "don't touch
     # .gitignore at all". Silently preferring one over the other would
