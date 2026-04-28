@@ -14,12 +14,17 @@ the structural pass.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
 import click
 
 from cortex.audit import DEFAULT_WINDOW_DAYS, EXPECTED_TYPE, audit, audit_digests
+from cortex.audit_instructions import (
+    audit_instructions,
+    format_audit_instructions_human,
+)
 from cortex.siblings import detect_siblings, format_sibling_block
 from cortex.validation import Issue, Severity, run_all_checks
 
@@ -58,6 +63,26 @@ def _format_issue(issue: Issue) -> str:
     "`journal/...` citations (SPEC § 5.4).",
 )
 @click.option(
+    "--audit-instructions",
+    "run_audit_instructions",
+    is_flag=True,
+    default=False,
+    help="Also verify external-artifact claims in CLAUDE.md, AGENTS.md, and README.md.",
+)
+@click.option(
+    "--strict",
+    is_flag=True,
+    default=False,
+    help="Exit 1 when informational audit warnings are present.",
+)
+@click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    default=False,
+    help="Emit machine-readable JSON for --audit-instructions.",
+)
+@click.option(
     "--since-days",
     type=int,
     default=DEFAULT_WINDOW_DAYS,
@@ -69,6 +94,9 @@ def doctor_command(
     target_path: Path,
     run_audit: bool,
     run_audit_digests: bool,
+    run_audit_instructions: bool,
+    strict: bool,
+    as_json: bool,
     since_days: int,
 ) -> None:
     """Validate a project's `.cortex/` directory against SPEC.md.
@@ -82,6 +110,19 @@ def doctor_command(
     entries without being blocked from shipping.
     """
     target_path = Path(target_path).resolve()
+    if as_json and not run_audit_instructions:
+        raise click.UsageError("--json is currently supported with --audit-instructions")
+    if as_json:
+        instruction_warnings = _print_audit_instructions(target_path, as_json=True)
+        if strict and instruction_warnings:
+            sys.exit(1)
+        return
+    if run_audit_instructions and not run_audit and not run_audit_digests:
+        instruction_warnings = _print_audit_instructions(target_path, as_json=False)
+        if strict and instruction_warnings:
+            sys.exit(1)
+        return
+
     issues = run_all_checks(target_path)
 
     errors = [i for i in issues if i.severity is Severity.ERROR]
@@ -101,10 +142,15 @@ def doctor_command(
         _print_audit(target_path, since_days)
     if run_audit_digests:
         _print_audit_digests(target_path)
+    instruction_warnings = 0
+    if run_audit_instructions:
+        click.echo("")
+        instruction_warnings = _print_audit_instructions(target_path, as_json=as_json)
 
-    _print_siblings(target_path)
+    if not as_json:
+        _print_siblings(target_path)
 
-    if errors:
+    if errors or (strict and (warnings or instruction_warnings)):
         sys.exit(1)
 
 
@@ -146,3 +192,12 @@ def _print_audit_digests(project_root: Path) -> None:
     click.echo("\ncortex doctor --audit-digests:")
     for line in warnings:
         click.echo(f"WARNING  {line}", err=True)
+
+
+def _print_audit_instructions(project_root: Path, *, as_json: bool) -> int:
+    report = audit_instructions(project_root)
+    if as_json:
+        click.echo(json.dumps(report.to_json(project_root), sort_keys=True))
+    else:
+        click.echo(format_audit_instructions_human(report, project_root))
+    return len(report.warnings)
