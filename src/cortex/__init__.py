@@ -1,6 +1,6 @@
 """Cortex — a file-format protocol for per-project memory, and the reference CLI."""
 
-__version__ = "0.5.0"
+__version__ = "0.5.1"
 SPEC_VERSION_LITERAL = "0.5.0"
 
 SUPPORTED_SPEC_VERSIONS: tuple[str, ...] = ("0.3", "0.4", "0.5")
