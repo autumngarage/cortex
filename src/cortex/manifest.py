@@ -26,11 +26,13 @@ from __future__ import annotations
 
 import json
 import re
+import tomllib
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from cortex.frontmatter import parse_frontmatter
+from cortex.verified import VERIFIED_RE, bullet_age_days, format_warning, parse_verified
 
 CHARS_PER_TOKEN = 4
 
@@ -39,6 +41,7 @@ WIDE_JOURNAL_BUDGET = 15000
 
 DEFAULT_JOURNAL_HOURS = 72
 WIDE_JOURNAL_HOURS = 24 * 7
+DEFAULT_VERIFIED_THRESHOLD_DAYS = 90
 
 JOURNAL_DATE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})-")
 DOCTRINE_FILENAME_RE = re.compile(r"^\d{4}-[a-z0-9][a-z0-9._-]*\.md$")
@@ -235,7 +238,52 @@ def _promotion_summary(cortex_dir: Path) -> str:
     return f"Promotion-queue: {proposed} proposed, {stale} stale."
 
 
-def _concat_files(entries: list[Path], budget_chars: int) -> tuple[str, int, int]:
+def _verified_threshold_days(cortex_dir: Path) -> int:
+    config_path = cortex_dir / "config.toml"
+    if not config_path.exists():
+        return DEFAULT_VERIFIED_THRESHOLD_DAYS
+    data = tomllib.loads(config_path.read_text())
+    manifest_config = data.get("manifest", {})
+    if not isinstance(manifest_config, dict):
+        raise ValueError(f"{config_path}: [manifest] must be a table")
+    threshold = manifest_config.get("verified_threshold_days", DEFAULT_VERIFIED_THRESHOLD_DAYS)
+    if isinstance(threshold, bool) or not isinstance(threshold, int) or threshold < 0:
+        raise ValueError(
+            f"{config_path}: [manifest].verified_threshold_days must be a non-negative integer"
+        )
+    return int(threshold)
+
+
+def _annotate_verified_tags(text: str, *, today: date, threshold_days: int) -> str:
+    lines: list[str] = []
+    for line in text.splitlines(keepends=True):
+        content = line.removesuffix("\n")
+        newline = "\n" if line.endswith("\n") else ""
+        verified = parse_verified(content)
+        if verified is None:
+            lines.append(line)
+            continue
+        warning = format_warning(bullet_age_days(verified, today), threshold_days)
+        if warning is None:
+            lines.append(line)
+            continue
+        match = VERIFIED_RE.search(content)
+        if match is None:
+            lines.append(line)
+            continue
+        prefix = content[: match.start()].rstrip()
+        marker = content[match.start() :].strip()
+        lines.append(f"{prefix} {warning} {marker}{newline}")
+    return "".join(lines)
+
+
+def _concat_files(
+    entries: list[Path],
+    budget_chars: int,
+    *,
+    verified_today: date | None = None,
+    verified_threshold_days: int = DEFAULT_VERIFIED_THRESHOLD_DAYS,
+) -> tuple[str, int, int]:
     """Return ``(body, included_count, truncated_count)`` for the given entries.
 
     Strict budget enforcement: an entry is only included if it fits. If the
@@ -248,6 +296,12 @@ def _concat_files(entries: list[Path], budget_chars: int) -> tuple[str, int, int
     included = 0
     for entry in entries:
         text = entry.read_text()
+        if verified_today is not None:
+            text = _annotate_verified_tags(
+                text,
+                today=verified_today,
+                threshold_days=verified_threshold_days,
+            )
         size = len(text) + 16  # separator and heading overhead
         if used + size > budget_chars:
             break
@@ -263,9 +317,16 @@ def build_manifest(project_root: Path, budget_tokens: int, *, now: datetime | No
     cortex_dir = project_root / ".cortex"
     degraded = budget_tokens < DEGRADED_BUDGET
     journal_hours = WIDE_JOURNAL_HOURS if budget_tokens >= WIDE_JOURNAL_BUDGET else DEFAULT_JOURNAL_HOURS
+    verified_threshold_days = _verified_threshold_days(cortex_dir)
+    verified_today = now.date()
 
     state_file = cortex_dir / "state.md"
     state_body = state_file.read_text() if state_file.exists() else "> state.md missing — run `cortex init`.\n"
+    state_body = _annotate_verified_tags(
+        state_body,
+        today=verified_today,
+        threshold_days=verified_threshold_days,
+    )
     state_section = ManifestSection(title="state.md", body=state_body, included=1, truncated=0)
 
     manifest = Manifest(
@@ -284,7 +345,12 @@ def build_manifest(project_root: Path, budget_tokens: int, *, now: datetime | No
     remaining_chars = max(0, budget_tokens * CHARS_PER_TOKEN - estimate_tokens(state_body) * CHARS_PER_TOKEN)
 
     doctrine_budget = int(remaining_chars * 0.40)
-    doctrine_body, doctrine_in, doctrine_cut = _concat_files(_doctrine_order(_doctrine_entries(cortex_dir)), doctrine_budget)
+    doctrine_body, doctrine_in, doctrine_cut = _concat_files(
+        _doctrine_order(_doctrine_entries(cortex_dir)),
+        doctrine_budget,
+        verified_today=verified_today,
+        verified_threshold_days=verified_threshold_days,
+    )
     manifest.sections.append(
         ManifestSection(
             title="Doctrine (Load-priority `always` first; then recency)",
