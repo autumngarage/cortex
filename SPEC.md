@@ -2,7 +2,7 @@
 
 > **Cortex is a file-format protocol for project memory.** Six layers of documents per project, each with a mechanical, authoring, and retrieval contract. Consumed by humans and AI coding agents. The CLI named `cortex` is one implementation; other tools (Sentinel, Touchstone, Claude Code sessions, humans) read and write the same files by the same rules.
 
-**Spec version:** 0.4.0-dev (draft)
+**Spec version:** 0.5.0-dev (draft)
 **Status:** Proposed
 **Protocol companion:** [`.cortex/protocol.md`](./.cortex/protocol.md) defines when and how agents write; SPEC.md defines what the files look like.
 
@@ -305,6 +305,18 @@ Every promotion sets `Promoted-from:` on the **new** entry (the promotee). Wheth
 ### 4.5 Generated layers declare seven metadata fields
 `Generated`, `Generator`, `Sources`, `Corpus`, `Omitted`, `Incomplete`, `Conflicts-preserved`. Missing fields fail `cortex doctor`. See § 3.2, § 3.3, and § 5 for details.
 
+### 4.5.1 Per-fact verification timestamps (additive)
+
+A bullet inside a generated layer (`state.md`, `doctrine/*.md`, digest entries) may carry a trailing `Verified: <ISO-8601 date>` tag indicating when the asserted fact was last verified against its source of truth. The tag is invisible to consumers that don't parse it (it's plain markdown text). Consumers that do parse it (e.g., `cortex manifest`) surface a warning when `today - Verified:` exceeds a project-configured staleness threshold (default 90 days).
+
+Shape:
+
+    - The Homebrew tap is `autumngarage/cortex`. Verified: 2026-04-26
+
+The `Verified:` marker MUST appear at end-of-bullet. Multi-line bullets keep the marker on the last line. The date is ISO-8601 (`YYYY-MM-DD`); a full timestamp is also accepted but the date portion is what's compared.
+
+This is an additive amendment per § 7 (compatibility); SPEC bumps from v0.4.0-dev to v0.5.0-dev.
+
 ### 4.6 Typed links, not free links
 Cross-layer links use named relations in frontmatter or inline annotations: `supersedes`, `superseded-by`, `promoted-from`, `promoted-to`, `grounds-in`, `implements`, `blocked-by`, `verifies`, `derives-from`, `cites`. Raw markdown links are allowed but discouraged for contractual connections.
 
@@ -411,6 +423,8 @@ Tools must declare which spec major versions they support. Readers encountering 
 **v0.3.1-dev is a clarification patch.** It rewrites § 4.4 promotion semantics and tightens § 4.6 typed-links usage. No implementable behavior changes: the prior § 4.4 text required retroactive `Promoted-to:` writes on source Journal entries, which contradicted § 3.5 (Journal is append-only); no conforming tool could have satisfied both. v0.3.1-dev resolves the contradiction by layer-mutability: `Promoted-to:` is allowed on mutable sources (Plans, Procedures) where retroactive writes were already permitted, and forbidden on append-only/immutable sources (Journal, Doctrine) where retroactive writes violate existing invariants. The § 4.6 list keeps `promoted-to` but clarifies its scope. Also fixes the `supersded-by` typo (now `superseded-by`). Because the implementable surface for each layer is unchanged, this stays a patch bump under the § 7 rule that patch = clarification without behavior change.
 
 **v0.4.0-dev adds T1.10 plus the § 4.2 Doctrine-resolution clarification.** Protocol § 2 gains a tenth Tier-1 trigger — `T1.10: A tagged release / distribution artifact shipped` — paired with a new `journal/release.md` template and a new `release` value in the § 3.5 `Type:` enum. Rationale grounded in the conductor case study (`docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md`): downstream documentation references *released* artifacts, not merged commits, and a release without a journal record is how the conductor incident's stale `CLAUDE.md` claim about the Homebrew tap survived eight subsequent releases. T1.10's audit walks `git tag --list` and matches each tag against a `Type: release` journal entry within 72h whose **`Tag:`** scalar (a new release-specific bold-inline / frontmatter field) equals the tag name — so one release entry resolves exactly one tag. Without the Tag field, an entry is ambiguous about which tag it records and the matcher declines to satisfy any T1.10 fire on its behalf, forcing the writer to be explicit. § 4.2 also formalizes Doctrine entries as a valid deferral resolution target alongside Plans and Journal entries — the practical pattern when a follow-up resolves to "out of scope per Doctrine N" rather than to a piece of work being tracked elsewhere. Additive change — no existing fields, layouts, or invariants are modified. Bumped as a minor under § 7's "new Protocol triggers" rule (consumers need to opt into the new trigger and `release` enum value, so it is not a clarification patch).
+
+**v0.5.0-dev adds per-fact `Verified:` timestamps (§ 4.5.1).** Generated-layer bullets may now carry an optional end-of-bullet verification date, and consumers such as `cortex manifest` may surface stale verification warnings inline. Additive change — unparsed tags remain plain markdown, and existing generated layers without tags remain valid.
 
 **Protocol version relationship.** [`.cortex/protocol.md`](./.cortex/protocol.md) carries its own version. A Protocol version is compatible with one or more SPEC.md versions, declared in the Protocol's header. A major SPEC bump always requires a Protocol review; a minor SPEC bump may or may not trigger a Protocol bump depending on whether new triggers are needed.
 
