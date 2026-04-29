@@ -1,17 +1,13 @@
 ---
-Status: council-reviewed — ready for execution
+Status: active
 Written: 2026-04-29
 Author: claude-code (Henry Modisett)
-Goal-hash: cxRetr01
+Goal-hash: b57f6355
 Updated-by:
   - 2026-04-29 claude-code (initial draft — design for opt-in semantic retrieval as a derived layer Cortex owns the interface for; supersedes Doctrine 0005 #1)
   - 2026-04-29 claude-code (council review applied — fixed critical invalidation bug for uncommitted edits; preserved pure-grep floor by keeping `cortex grep` untouched and adding `--mode bm25` alongside; removed auto-resolve to Conductor in favor of explicit opt-in; controlled model cache path; tightened doctrine supersede to declare index "hazmat" + interface non-normative; smaller default chunk size; cross-platform install gaps documented as risks)
-Cites:
-  - .cortex/doctrine/0005-scope-boundaries-v2.md (the entry being superseded by this design — specifically #1)
-  - .cortex/protocol.md § 1 (manifest behavior; mid-session retrieval = grep)
-  - .cortex/plans/cortex-v1.md (current Tier 4 work; this plan is sibling, not absorbed)
-  - autumngarage/sentinel/.cortex/plans/sentinel-autonomous-engineer.md (downstream consumer; Sentinel's memory differentiator depends on this scaling)
-  - autumngarage/sentinel/.cortex/plans/sentinel-trust-controls.md (T6 derived-state drift — index staleness covered by this plan's invalidation contract)
+  - 2026-04-29 claude-code (frontmatter SPEC compliance — Status enum + Cites scalar + auto-computed Goal-hash + required section headers added to satisfy `cortex doctor`)
+Cites: .cortex/doctrine/0005-scope-boundaries-v2.md, .cortex/doctrine/0006-scope-boundaries-v3.md, .cortex/protocol.md, .cortex/plans/cortex-v1.md
 ---
 
 > **Council-applied deltas (2026-04-29).** This plan was reviewed by a 3-member council (Gemini-pro / Kimi / DeepSeek-v4) with synthesis. The following changes were folded back from the council critique:
@@ -29,13 +25,13 @@ Cites:
 
 > The canonical store stays markdown + git + grep — that doctrine is load-bearing, not negotiable. But once a project's `.cortex/` accumulates ~50–100+ entries, recency-by-grep stops being enough: agents miss the entry that *would* answer their question because it uses different terminology. This plan adds `cortex retrieve` as an opt-in derived layer Cortex owns the *interface* for — semantic search via a local index that is gitignored, rebuildable from `.cortex/`, and works without network or paid services. Source of truth never changes; retrieval quality scales.
 
-## Why now
+## Why (grounding)
 
 Three forcing functions, in order of weight:
 
 1. **Memory differentiator stops scaling at ~100 cycles.** Sentinel's pitch is "drop-in autonomous engineer that ships with project memory." That promise holds for the first dozens of cycles where recency + grep cover the cases. Past ~100, agents repeatedly miss prior decisions because grep needs the *exact term* the historical entry used. The Planner re-proposes a previously-rejected work item under different phrasing; the Reviewer grades a cache-invalidation diff without surfacing the prior staleness/freshness/TTL discussions. That's not a Cortex problem until users put autonomous agents on top of Cortex — at which point it becomes Cortex's product moat.
 2. **The on-demand retrieval pattern is more efficient than manifest stuffing.** Today the manifest pre-loads ~6k tokens of recency-ranked Doctrine + Journal at session start, paid by every role × every cycle. The mature pattern (Anthropic agentic guidance, RAG community 2024-2026) is: thin always-on slice + tools that retrieve on demand. `cortex retrieve` becomes that tool. Direct token savings every cycle; same dep weight whether index runs or not.
-3. **Cortex Doctrine 0005 #1 was written to push back against "every memory tool is a vector DB" — and that pushback was correct.** The doctrine's spirit: storage is durable, portable, grep-able; semantic retrieval is a separate concern. This plan honors that spirit while accepting the original framing was too strict — *consumer-side* indexing left every consumer (Sentinel, future tools) to re-implement the same logic against the same format. Owning the *interface* in Cortex while keeping the *storage* unchanged is the right resolution.
+3. **[`doctrine/0005-scope-boundaries-v2`](../doctrine/0005-scope-boundaries-v2.md) #1 was written to push back against "every memory tool is a vector DB" — and that pushback was correct.** The doctrine's spirit: storage is durable, portable, grep-able; semantic retrieval is a separate concern. This plan honors that spirit while accepting the original framing was too strict — *consumer-side* indexing left every consumer (Sentinel, future tools) to re-implement the same logic against the same format. Owning the *interface* in Cortex while keeping the *storage* unchanged is the right resolution. The narrowing lands as [`doctrine/0006-scope-boundaries-v3`](../doctrine/0006-scope-boundaries-v3.md) (shipped alongside this plan).
 
 ## Doctrine implications
 
@@ -54,7 +50,11 @@ What changes:
 - "External indexing is fine, storing vectors inside `.cortex/` is not" → "Internal indexing is fine *as a derived layer* under `.cortex/.index/`, never as part of canonical content."
 - Cortex's CLI surface gains `cortex retrieve` and `cortex index` subcommands.
 
-## Design principles
+## Approach
+
+Layer an opt-in retrieval interface (`cortex retrieve`) over the existing markdown + git + grep storage substrate. The substrate is unchanged and remains canonical. The interface is non-normative — part of the Cortex CLI distribution, not part of the Cortex Protocol / SPEC. Consumers are free to bypass it. Implementation is sliced (S0–S4 below under Work items) so each slice is independently shippable and prior slices unblock later ones.
+
+### Design principles
 
 1. **Source of truth is markdown.** The index is a cache. `rm -rf .cortex/.index/ && cortex index --build` recovers everything. No information is durable in the index that isn't durable in `.cortex/` markdown.
 2. **Default works without setup.** A user who runs `cortex retrieve "..."` on a fresh `.cortex/` — no index, no embedder configured, no network — gets grep results. Semantic is an upgrade path, never a prerequisite.
@@ -63,7 +63,7 @@ What changes:
 5. **Hybrid retrieval beats vector-only.** BM25 (lexical) + vector (semantic) + optional cross-encoder rerank is the production-quality default. Vector-only misses exact-term queries ("Doctrine 0003"); BM25-only misses semantic phrasings.
 6. **Install experience is the gate.** Any design choice that breaks brand-new-repo install or makes existing-repo adoption surprising loses, even if it improves retrieval quality. See § Install experience.
 
-## Architecture
+### Architecture
 
 ### Storage layout
 
@@ -291,7 +291,7 @@ $ cortex retrieve "..." --semantic
 - **`.cortex/config.toml` schema**: new `[retrieve]` section is fully optional. Existing configs continue to validate.
 - **`.gitignore`**: Cortex's `cortex init` updates `.gitignore` to add `.cortex/.index/` if not present. Existing repos: `cortex doctor` warns if `.cortex/.index/` is in the repo's git tree (would mean someone committed the index by mistake) and suggests `git rm --cached -r .cortex/.index/`.
 
-## Success criteria
+## Success Criteria
 
 This plan is done when all hold:
 
@@ -307,7 +307,7 @@ This plan is done when all hold:
 9. **Sentinel consumes via `cortex retrieve --json`** in at least one role (Planner most likely) and demonstrates measurably better behavior on a multi-cycle dogfood (memory-usefulness gate from Sentinel master plan).
 10. **Zero-config default**: a user who never edits `.cortex/config.toml` gets sensible behavior (grep by default; semantic if and only if they opt in via `--semantic` or build an index).
 
-## Slices
+## Work items
 
 Five slices. Each is independently shippable; prior slices unblock later ones.
 
