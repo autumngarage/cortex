@@ -7,6 +7,7 @@ Updated-by:
   - 2026-04-29 claude-code (initial draft — design for opt-in semantic retrieval as a derived layer Cortex owns the interface for; supersedes Doctrine 0005 #1)
   - 2026-04-29 claude-code (council review applied — fixed critical invalidation bug for uncommitted edits; preserved pure-grep floor by keeping `cortex grep` untouched and adding `--mode bm25` alongside; removed auto-resolve to Conductor in favor of explicit opt-in; controlled model cache path; tightened doctrine supersede to declare index "hazmat" + interface non-normative; smaller default chunk size; cross-platform install gaps documented as risks)
   - 2026-04-29 claude-code (frontmatter SPEC compliance — Status enum + Cites scalar + auto-computed Goal-hash + required section headers added to satisfy `cortex doctor`)
+  - 2026-04-29 claude-code (Conductor removed from retrieve path entirely — clear tool responsibility separation: Conductor = LLM routing; Cortex owns embedder choice end-to-end. v0.1 ships builtin only; future cloud embedders ship as direct Cortex-internal adapters when/if added. Slice S3 dropped; renumbered S4 → S3.)
 Cites: .cortex/doctrine/0005-scope-boundaries-v2.md, .cortex/doctrine/0006-scope-boundaries-v3.md, .cortex/protocol.md, .cortex/plans/cortex-v1.md
 ---
 
@@ -14,7 +15,7 @@ Cites: .cortex/doctrine/0005-scope-boundaries-v2.md, .cortex/doctrine/0006-scope
 >
 > 1. **Invalidation correctness fix.** Original design used `git ls-tree -r HEAD` for the fast path — which only sees committed files. A user editing `.cortex/journal/foo.md` without committing would get stale retrieval results. Replaced with mtime+size check against the working tree (see § Index lifecycle).
 > 2. **True grep floor preserved.** The original Slice 1 deprecated `cortex grep` in favor of `cortex retrieve --mode bm25`. Council reversed this: `cortex grep` stays untouched as a zero-dependency path that doesn't load sqlite-vec or ONNX. `cortex retrieve --mode bm25` ships alongside, layered on the FTS5 index.
-> 3. **No silent Conductor selection.** Original `auto` resolution would prefer Conductor when configured. Council rejected this — auto-routing to a paid API without consent is hostile. Resolution is now explicit: `flag > config > builtin > grep-only`, with a CLI suggestion when Conductor is detected but unconfigured.
+> 3. **Conductor removed from the retrieve path entirely.** Council originally framed this as "no silent Conductor selection — explicit opt-in only." A subsequent design pass (2026-04-29) went further: embedding is not Conductor's concern (Conductor is purpose-built for LLM provider routing). Cortex owns its embedder choice end-to-end. v0.1 ships `builtin` only; future cloud embedders (Voyage / Cohere / etc.) — if added — ship as direct Cortex-internal adapters, never via Conductor.
 > 4. **Controlled model cache path.** fastembed default cache locations can collide with permissions. Force `~/.cache/cortex/models/` (XDG-respectful) or per-project `.cortex/.index/models/`.
 > 5. **Doctrine tightening.** Index declared "hazmat" — consumers must use `cortex retrieve`, not query the SQLite directly. Interface declared **non-normative** reference implementation; custom consumers may bypass and re-index.
 > 6. **Smaller default chunks.** 500–800 tokens with 100–150 overlap (down from 1000 / 200), to match Cortex entries' actual density. Measure on `autumn-mail` corpus before S2 freeze.
@@ -41,7 +42,7 @@ What carries forward unchanged:
 
 - **Markdown + git is the canonical store.** Removing `.cortex/.index/` loses nothing not regeneratable from `.cortex/` markdown content.
 - **Grep is the always-available retrieval primitive.** Default `cortex retrieve` is grep/BM25; semantic is opt-in.
-- **No cloud dependency for core function.** A user can install Cortex, run grep retrieval, never touch a network. Semantic retrieval *can* use Conductor for cloud embedders but ships with a CPU-only local default.
+- **No cloud dependency for core function.** A user can install Cortex, run grep retrieval, never touch a network. Semantic retrieval ships with a CPU-only local default (`fastembed` + `BAAI/bge-small-en-v1.5`); first model download requires network once, then offline-capable forever.
 - **One project per `.cortex/`.** Cross-project indexing stays out of scope.
 
 What changes:
@@ -58,7 +59,7 @@ Layer an opt-in retrieval interface (`cortex retrieve`) over the existing markdo
 
 1. **Source of truth is markdown.** The index is a cache. `rm -rf .cortex/.index/ && cortex index --build` recovers everything. No information is durable in the index that isn't durable in `.cortex/` markdown.
 2. **Default works without setup.** A user who runs `cortex retrieve "..."` on a fresh `.cortex/` — no index, no embedder configured, no network — gets grep results. Semantic is an upgrade path, never a prerequisite.
-3. **Embedder is pluggable, not bundled-and-frozen.** Cortex ships with a small CPU-only built-in default (`fastembed` + `BAAI/bge-small-en-v1.5`, ~25MB ONNX model) for users who want semantic-out-of-the-box. Power users route through Conductor for cloud embedders or alternate local models.
+3. **Embedder is pluggable, not bundled-and-frozen.** Cortex ships with a small CPU-only built-in default (`fastembed` + `BAAI/bge-small-en-v1.5`, ~25MB ONNX model) for users who want semantic-out-of-the-box. The embedder layer is a Cortex-internal abstraction; future direct adapters (Voyage / Cohere / Ollama-embed) can land as needed without touching Conductor or any other tool.
 4. **Index is gitignored, not committed.** Vectors are derived from markdown. Committing the index would (a) bloat the repo with binary blobs, (b) create a second source of truth, (c) tie all team members to one embedder choice. `.cortex/.index/` is `.gitignore`d.
 5. **Hybrid retrieval beats vector-only.** BM25 (lexical) + vector (semantic) + optional cross-encoder rerank is the production-quality default. Vector-only misses exact-term queries ("Doctrine 0003"); BM25-only misses semantic phrasings.
 6. **Install experience is the gate.** Any design choice that breaks brand-new-repo install or makes existing-repo adoption surprising loses, even if it improves retrieval quality. See § Install experience.
@@ -87,22 +88,21 @@ A single SQLite file holds vectors (via `sqlite-vec`'s `vec0` virtual table) and
 
 ### Embedder selection
 
-Three options, exposed as a config axis with sensible defaults:
+Two options, exposed as a config axis with sensible defaults. **Cortex owns its embedder choice end-to-end — embedding is not routed through Conductor**, which is purpose-built for LLM provider routing and would dilute its identity if extended to embeddings. If cloud-quality embedders are ever added (Voyage, Cohere, etc.), they ship as direct Cortex-internal adapters, not through Conductor.
 
 | Provider | Use case | Dep weight | Network |
 |---|---|---|---|
-| **`builtin`** (default for semantic if available) | Brand-new install, no Conductor, no API keys | `fastembed` package (~50MB on first use, includes onnxruntime); ONNX model `BAAI/bge-small-en-v1.5` (~25MB, lazy-downloaded on first index, cached at `~/.cache/cortex/models/`) | First model download only |
-| **`conductor`** (opt-in only) | Garage users with Conductor; better-quality embedders (Voyage, Cohere, Ollama) | Conductor binary | Per-provider; Ollama local, Voyage/Cohere remote (paid) |
-| **`grep-only`** (always available, no Python ML imports) | No embedder configured; offline; degraded mode | None | None |
+| **`builtin`** (the default for semantic mode) | All semantic retrieval in v0.1 | `fastembed` package (~50MB on first use, includes onnxruntime); ONNX model `BAAI/bge-small-en-v1.5` (~25MB, lazy-downloaded on first index, cached at `~/.cache/cortex/models/`) | First model download only |
+| **`grep-only`** (always available, no Python ML imports) | No embedder configured; offline; degraded mode; aarch64 Linux fallback | None | None |
 
-Resolution order at runtime (no auto-selection of paid services):
+Resolution order at runtime:
 
 1. If `cortex retrieve --embedder <name>` flag passed, use that.
 2. Else if `.cortex/config.toml` has `[retrieve] embedder = "..."`, use that.
 3. Else if `fastembed` Python package importable, use `builtin`.
 4. Else fall through to `grep-only` with a one-time message.
 
-If `conductor` binary is on PATH AND has an embed-capable provider configured, `cortex retrieve --semantic` (without explicit embedder selection) prints a one-time **suggestion** ("conductor is available with embed-capable providers; opt in with `cortex config set retrieve.embedder conductor` or `--embedder conductor`") and falls through to step 3. **Never silently routes to a paid API.**
+**Future cloud embedders (deferred to v1.x or later).** If/when measured demand exists for higher-quality embedders, Cortex grows direct adapters: `--embedder voyage`, `--embedder cohere`, etc. These are small HTTP-with-API-key integrations (~50 lines each); they live inside Cortex's `src/cortex/retrieve/embedders/` and never delegate to Conductor. Out of scope for v0.1 — v0.1 ships `builtin` only.
 
 **Lazy imports.** The `cortex retrieve --mode grep` command path **must not import `sqlite-vec`, `fastembed`, or `onnxruntime`** at startup. The grep path is the always-available floor; missing or broken native extensions in the semantic path must not crash grep mode. Imports are deferred until the semantic / hybrid path is actually invoked, and ImportError surfaces as a clear "semantic mode unavailable: <reason>; falling back to grep" rather than a CLI-wide crash.
 
@@ -137,7 +137,7 @@ The fast path is sub-second on a 1000-file `.cortex/` even when no changes occur
 
 Default query path:
 
-1. Embed query (~50-200ms with built-in embedder; ~50ms with Conductor cloud).
+1. Embed query (~50-200ms with the built-in embedder on M-series CPU; future cloud adapters would be ~50-100ms over network).
 2. Vector top-K=20 from `chunks.vec` via sqlite-vec.
 3. BM25 top-K=20 from `chunks` FTS5 table.
 4. **Reciprocal-rank fusion** to merge the two lists (RRF, k=60 — well-studied default).
@@ -189,16 +189,13 @@ Suppressed thereafter; user can clear with `cortex config set retrieve._notice_s
 ```toml
 [retrieve]
 mode = "hybrid"                  # hybrid | semantic | grep — default for `cortex retrieve` calls
-embedder = "auto"                # auto | builtin | conductor | grep-only
+embedder = "builtin"             # builtin | grep-only (v0.1); future: voyage | cohere | ...
 top_k = 5
 rerank = false
 include_procedures = false       # exclude .cortex/procedures/ from index by default
 
 [retrieve.builtin]
 model = "BAAI/bge-small-en-v1.5"
-
-[retrieve.conductor]
-provider = "voyage"              # any conductor provider with embed capability
 ```
 
 All keys optional; defaults are listed above. `cortex init` does *not* write this section by default (zero-config is the default experience).
@@ -207,7 +204,7 @@ All keys optional; defaults are listed above. `cortex init` does *not* write thi
 
 Five paths, all must work cleanly.
 
-### Path 1 — Brand-new repo, brew-installed Cortex, no Conductor
+### Path 1 — Brand-new repo, brew-installed Cortex
 
 ```
 $ brew install autumngarage/cortex/cortex
@@ -250,19 +247,7 @@ $ cortex retrieve "stale fixture"
 - Building the index is a single explicit command, idempotent, with a progress bar and bounded time.
 - After build, hybrid mode is the default for `cortex retrieve` calls (configurable to opt out via `[retrieve] mode = "grep"`).
 
-### Path 3 — Garage user with Conductor configured
-
-```
-$ # Conductor already installed and configured with embed-capable providers
-$ cortex retrieve "..."
-[hybrid via conductor (voyage) — 5 results]
-```
-
-**Guarantees:**
-- Auto-detection picks Conductor when available; no config edits required.
-- Cost is logged to stderr ("estimated $0.0001 for query embedding") so operators see what Conductor is spending.
-
-### Path 4 — User with no internet
+### Path 3 — User with no internet
 
 ```
 $ cortex retrieve "..."
@@ -276,7 +261,7 @@ $ cortex retrieve "..." --semantic
 - Built-in embedder (after first model download) works offline.
 - Cloud embedders require network; failure is loud and explicit.
 
-### Path 5 — Cross-platform install (Linux, macOS Intel, macOS ARM)
+### Path 4 — Cross-platform install (Linux, macOS Intel, macOS ARM)
 
 **Guarantees:**
 - `sqlite-vec` ships pre-compiled wheels for all three platforms via PyPI; no source build at install.
@@ -301,7 +286,7 @@ This plan is done when all hold:
 4. **Cross-platform install** (Linux x86_64, macOS Intel, macOS ARM) succeeds via brew + pip with no source builds. **Lazy imports verified**: `cortex retrieve --mode grep` works on a system where `sqlite-vec` and/or `fastembed` are missing or broken (CLI does not crash; returns grep results). aarch64 Linux gracefully degrades to grep with a clear platform-not-supported message.
 5. **Hybrid retrieval beats grep alone** on a hand-built golden set (~30 query/expected-entry pairs from real cycles) by ≥20% Recall@5.
 6. **Invalidation is correct against uncommitted edits.** A user editing `.cortex/journal/foo.md` and running `cortex retrieve` *without committing* gets up-to-date results — the working-tree fingerprint catches the edit. A `git rebase` / amend / `git checkout` likewise triggers per-file re-embed only for files whose content actually changed (mtime-only changes don't force re-embed).
-6a. **No silent paid-API calls.** With Conductor configured, `cortex retrieve --semantic` (no `--embedder` flag, no `[retrieve] embedder` config) uses `builtin`, not Conductor. The Conductor opt-in suggestion appears once; never enables itself.
+6a. **No paid-API calls in v0.1.** v0.1 ships `builtin` only; no cloud embedder paths exist. If future adapters land, they default to off; explicit opt-in required.
 7. **Doctrine supersede landed.** Doctrine 0005 #1 carries `Status: Superseded-by 0007` (or whichever number); new entry explains the carry-forward / changes split.
 8. **`cortex doctor` reports active retrieve state.** "Retrieve: hybrid via builtin (model: bge-small-en-v1.5, index: 312 chunks, age: 14m)" — concrete and actionable.
 9. **Sentinel consumes via `cortex retrieve --json`** in at least one role (Planner most likely) and demonstrates measurably better behavior on a multi-cycle dogfood (memory-usefulness gate from Sentinel master plan).
@@ -337,16 +322,7 @@ Five slices. Each is independently shippable; prior slices unblock later ones.
 - Manifest tracks model + chunk-strategy version.
 - **Acceptance**: hybrid Recall@5 ≥ grep-only + 20% on the golden set; first-time index build on a 1000-entry repo completes in <60s.
 
-### S3 — Conductor integration + alternate embedders (explicit opt-in)
-
-- `cortex retrieve --embedder conductor` invokes `conductor embed --with <provider>`.
-- `[retrieve] embedder = "conductor"` config recognized.
-- **No auto-selection of paid services.** When Conductor is detected with embed-capable providers but no explicit opt-in is configured, emit a one-time **suggestion** message ("conductor with embed-capable provider X detected; opt in via `cortex config set retrieve.embedder conductor` or `--embedder conductor`") and continue with `builtin`. Council recommendation: explicit consent before paid API calls.
-- Cost-tracking output on every `cortex retrieve` call routed to a paid provider; aggregated in `cortex doctor`.
-- This slice depends on Conductor shipping the `embed` capability axis (not yet shipped; tracked as `autumngarage/conductor#XXX`).
-- **Acceptance**: same query returns comparable results across builtin and conductor-routed embedders; no API calls made without explicit user opt-in; cost-tracking visible per call.
-
-### S4 — Filters, rerank, polish
+### S3 — Filters, rerank, polish
 
 - `--filter`, `--since`, `--top-k` flag completion.
 - Optional cross-encoder rerank (`[retrieve] rerank = true`).
@@ -357,7 +333,7 @@ Five slices. Each is independently shippable; prior slices unblock later ones.
 ## Out of scope (explicitly)
 
 - **Cross-project indexing.** One project per `.cortex/` (Doctrine 0005 #4). Sharing index across repos is a v1.x+ Lighthouse-conversation concern.
-- **Custom embedders defined in user code.** Embedders come from the resolution-order list; users wanting weird embedders use Conductor providers.
+- **Custom embedders defined in user code.** Embedders come from the resolution-order list (built-in v0.1; direct Cortex-internal adapters in future versions if/when added). User-defined plugin embedders are out of scope.
 - **Online learning / fine-tuning embedders on user data.** Cold-only models for v0.x.
 - **Network-side index hosting.** Doctrine 0005 #7 (not cloud-hosted) holds. The index is local files only.
 - **Index sharding for very large `.cortex/`.** A single SQLite file is fine up to many thousands of chunks; if a project hits that scale, that's a v1.x problem.
@@ -367,7 +343,7 @@ Five slices. Each is independently shippable; prior slices unblock later ones.
 
 The original 10 open questions have council-recommended answers folded into the design above. Summary:
 
-1. **Auto-resolution order.** **Resolved: explicit only.** No silent routing to paid Conductor APIs. `flag > config > builtin > grep-only`; Conductor surfaces as a CLI suggestion when detected with embed-capable providers, never auto-selected. Reflected in § Embedder selection.
+1. **Auto-resolution order.** **Resolved: simplified — Conductor removed entirely.** Embedding is not Conductor's concern (LLM routing only). v0.1 ships `builtin` as the single semantic option with `grep-only` as the offline floor; future cloud embedders ship as direct Cortex-internal adapters. Resolution order: `flag > config > builtin > grep-only`. Reflected in § Embedder selection.
 2. **Vendor sqlite-vec vs pip wheels.** **Resolved: pip wheels with graceful fallback.** Standard pip wheels for normal install paths; if native extension fails to load, fall back cleanly to `cortex grep` (zero-dep floor). Don't vendor the binary — pip wheels are the standard distribution path and simpler.
 3. **Default chunk size + overlap.** **Resolved: 600/100 (smaller than original 1000/200).** Cortex entries are denser and shorter than typical RAG corpora. Measure on `autumn-mail` corpus before S2 freeze; adjust if golden-set Recall@5 wants different. Tokenizer locked to tiktoken cl100k_base.
 4. **Memory of surfaced entries (diversity-aware retrieval).** **Resolved: deferred to v1.x.** Stateful retrieval over a stateless layer adds complexity that v0 doesn't justify.
@@ -386,9 +362,9 @@ The original 10 open questions have council-recommended answers folded into the 
 2. **Index gets out of sync with markdown.** Mitigation: two-level invalidation (working-tree fingerprint via mtime+size + per-file content-hash) catches uncommitted edits, `git rebase`, amends, and stat-only changes. Worst case, `cortex index --clear && cortex retrieve` recovers.
 3. **fastembed model quality regressions.** ONNX models occasionally update with subtle behavior shifts. Mitigation: pin model version in `manifest.json`; user-controlled bumps; new `chunk_strategy_version` triggers rebuild.
 4. **Cross-platform `sqlite-vec` issues.** sqlite-vec pre-compiles for the major platforms but edge cases (musl Linux, Windows/WSL) may miss. Mitigation: graceful fallback to `grep` mode with a clear warning; **`cortex grep` is the always-available floor and never imports `sqlite-vec`**; CI tests Linux + macOS Intel + macOS ARM as Tier 1.
-5. **Embedding cost surprises in Conductor mode.** Voyage / Cohere are paid services. Mitigation: cost-tracking output on every `cortex retrieve` call routed to a paid provider; **never auto-route to paid services without explicit opt-in**; `cortex doctor` flags when cumulative spend exceeds a configurable threshold.
+5. **Cloud embedder costs (deferred to v1.x).** v0.1 ships `builtin` only — no API calls, no surprises. If/when Cortex grows direct cloud embedder adapters (Voyage, Cohere) in v1.x, mitigation: cost-tracking output on every paid call; `cortex doctor` flags cumulative spend over a configurable threshold; never default to paid embedder. **Embedding never routes through Conductor** — Conductor is for LLM provider routing, not embedding services.
 6. **Hybrid retrieval introduces noise on small corpora.** If `.cortex/` has 10 entries, hybrid + RRF over 5 vector + 5 BM25 is essentially returning everything. Mitigation: at <50 chunks, `cortex retrieve` defaults to `--mode bm25` regardless of `mode = hybrid` setting; one-line warning.
-7. **`onnxruntime` aarch64 Linux gap.** No standard PyPI wheels for ARM Linux (Graviton, Pi, some K8s). Users on these platforms hit ImportError on `fastembed` install. Mitigation: graceful fallback to grep with a clear "platform not supported by builtin embedder; use --embedder conductor or stick with grep" message; document as a known gap; track upstream. **No CLI crash** — lazy imports ensure `cortex retrieve --mode grep` works regardless.
+7. **`onnxruntime` aarch64 Linux gap.** No standard PyPI wheels for ARM Linux (Graviton, Pi, some K8s). Users on these platforms hit ImportError on `fastembed` install. Mitigation: graceful fallback to grep with a clear "platform not supported by builtin embedder; semantic mode unavailable on this platform; using grep" message; document as a known gap; track upstream. **No CLI crash** — lazy imports ensure `cortex retrieve --mode grep` works regardless.
 8. **Brew + pip + python@3.11 fragility.** Brew's `python@3.11` dependency can break on `brew upgrade` when the system Python migrates. fastembed and sqlite-vec installed via post-install hooks may end up with broken native extensions. Mitigation: install Python deps into a Cortex-managed venv (separate from system Python), bypass brew's Python-package fragility; document as a known consideration; `cortex doctor` checks for broken native extensions and surfaces clear remediation.
 9. **fastembed model cache permission errors.** Default cache locations may collide with multi-user installs or read-only filesystems. Mitigation: force `~/.cache/cortex/models/` (XDG-respectful), or per-project `.cortex/.index/models/` if `~/.cache/` unwritable; document the override env var.
 10. **Cortex scope-creep one-way door.** Council flagged: maintaining ONNX models, chunkers, and rerankers shifts Cortex from a file-format protocol toward an ML-ops sidecar. **Mitigation:** the `cortex retrieve` interface is **non-normative** (per doctrine supersede); Cortex's protocol/SPEC stays storage-only; semantic features ship as opt-in CLI surface. Re-evaluate at v1.x if maintenance burden grows.
