@@ -1,11 +1,11 @@
-# markdownfs council review — outward positioning + Journal accretion gap
+# markdownfs council review — outward positioning add only; council's "accretion blind spot" was a brief-coverage error
 
 **Date:** 2026-04-28
 **Type:** decision
 **Trigger:** T1.1 (diff touches `.cortex/plans/cortex-v1.md`)
 **Cites:** plans/cortex-v1, journal/2026-04-28-codesight-cross-pollination-and-council-review, doctrine/0005-scope-boundaries-v2
 
-> User pointed at https://github.com/subramanya1997/markdownfs as a recently-discovered adjacent project; asked which ideas (if any) Cortex should absorb. A 3-member council via conductor (Gemini Pro, Kimi, DeepSeek V4 with Gemini+GPT synthesis) pushed back on the initial framing — markdownfs is a *different category* (workspace-as-database / infrastructure) that just shares "markdown" as a surface, not a competitor — and surfaced one genuine blind spot (Journal accretion) plus one outward-facing positioning gap that activates at v0.9.0.
+> User pointed at https://github.com/subramanya1997/markdownfs as a recently-discovered adjacent project; asked which ideas (if any) Cortex should absorb. A 3-member council via conductor (Gemini Pro, Kimi, DeepSeek V4 with Gemini+GPT synthesis) pushed back on the initial framing — markdownfs is a *different category* (workspace-as-database / infrastructure) that just shares "markdown" as a surface, not a competitor. The single durable plan add is an outward-facing positioning paragraph for the v0.9.0 install PRs. The council also surfaced what it framed as a "Journal accretion / archival" blind spot — but Codex review on PR #77 caught that this was a brief-coverage artifact: SPEC § 5.1 already specifies hot/warm/cold archival to `journal/archive/<year>/`, and the implementation gap is already deferred via the existing "Retention automation (cleanup, not visibility)" item. No accretion add to the plan; reaffirmation pointer added to the existing Retention-automation deferral instead.
 
 ## Context
 

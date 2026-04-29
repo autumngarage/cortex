@@ -5,7 +5,7 @@
 **Trigger:** T1.1 (diff touches `.cortex/plans/cortex-v1.md`)
 **Cites:** plans/cortex-v1, journal/2026-04-28-markdownfs-council-review, journal/2026-04-28-codesight-cross-pollination-and-council-review, doctrine/0005-scope-boundaries-v2
 
-> User asked whether Cortex would benefit from runtime dependencies (markdown / YAML / git / schema-validation / observability libraries) and whether it should be rewritten in Rust before v1.0. A 3-member council via conductor (Gemini Pro, Kimi, DeepSeek V4 with Gemini+GPT synthesis) returned a unanimous "no Rust rewrite — ever — by the solo maintainer" plus mostly-NO on dependencies, with two corrections to the maintainer's brief and two genuinely-new items the brief missed: `cortex_spec_version` field on generated artifacts (small now, unfixable later) and Python-native single-binary distribution via `zipapp`/`shiv`/`pex` as a deferred alternative to a Rust port.
+> User asked whether Cortex would benefit from runtime dependencies (markdown / YAML / git / schema-validation / observability libraries) and whether it should be rewritten in Rust before v1.0. A 3-member council via conductor (Gemini Pro, Kimi, DeepSeek V4 with Gemini+GPT synthesis) returned a unanimous "no Rust rewrite — ever — by the solo maintainer" plus mostly-NO on dependencies, with two corrections to the maintainer's brief and two items the brief missed: formalizing the `Spec:` field on generated-artifact provenance headers (already implemented in `state.md` and `.index.json`; the gap is contractual — SPEC § 4.3 doesn't list `Spec:` as required), and Python-native single-binary distribution via `zipapp`/`shiv`/`pex` as a deferred alternative to a Rust port.
 
 ## Context
 
