@@ -2,7 +2,7 @@
 
 > Cortex is a file-format protocol + reference CLI for per-project memory. Multiple adjacent categories (vector stores, agent frameworks, cloud memory services, knowledge graphs, portfolio tools, observability platforms) solve adjacent problems; Cortex composes with them but does not become them. This entry names the boundaries so future scope drift is catchable. **v2 differs from 0004 only on #1** — it corrects a factual claim about `cortex manifest`'s default read behavior that contradicted the Protocol when Protocol § 1 was rewritten to eliminate semantic retrieval at session start.
 
-**Status:** Accepted
+**Status:** Superseded-by 0006
 **Date:** 2026-04-17
 **Supersedes:** 0004
 **Promoted-from:** drafts/vision-draft-v3.md § 9 (original promotion); supersede driven by `.cortex/protocol.md` § 1 rewrite in the same PR

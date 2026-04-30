@@ -26,9 +26,9 @@ The manifest is a token-budgeted slice of `.cortex/`, not the whole store. Defau
 | Journal entries from last 72h + latest digest | ~1.5k | By date |
 | Promotion-queue depth summary | ~100t | Count only |
 
-**No semantic retrieval at session start.** Cortex storage is markdown + git + grep — not a vector store (Doctrine 0005 #1, supersedes 0004). The default manifest loads Doctrine by `Load-priority: always` pins plus recency, never by embedding similarity. Projects that want semantic retrieval wire up their own index over `.cortex/` as a read-side layer; that index is out of scope for the Protocol.
+**No semantic retrieval at session start.** Cortex storage is markdown + git + grep — not a vector store (Doctrine 0006 #1, supersedes 0005). The default manifest loads Doctrine by `Load-priority: always` pins plus recency, never by embedding similarity. Cortex's CLI ships an opt-in `cortex retrieve` interface (non-normative reference implementation, gitignored derived index — see Doctrine 0006 #1) for projects that want semantic retrieval over `.cortex/` without rolling their own; the Protocol itself does not include retrieval, and consumers may bypass `cortex retrieve` entirely.
 
-**Mid-session retrieval is grep.** When the agent needs Doctrine or Journal content not in the manifest, it greps `.cortex/` directly or uses `cortex grep` (a frontmatter-aware wrapper shipping in Phase B). Protocol-aware tooling may provide typed-link traversal; the primitive is ripgrep.
+**Mid-session retrieval is grep, optionally hybrid.** When the agent needs Doctrine or Journal content not in the manifest, it greps `.cortex/` directly or uses `cortex grep` (a frontmatter-aware wrapper shipping in Phase B). Once `cortex retrieve` ships (see `.cortex/plans/cortex-retrieve.md`), agents may also call `cortex retrieve --json` for hybrid (BM25 + semantic) retrieval over the derived index — but this is opt-in convenience, not Protocol contract. The Protocol primitive is ripgrep; everything else layers on top.
 
 **Graceful degradation.** At 32k context, the manifest falls back to State only. At 100k+, it may include Journal from last 7d. The CLI computes the slice; the agent receives the output.
 
