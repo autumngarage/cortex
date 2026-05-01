@@ -25,6 +25,7 @@ from cortex.audit_instructions import (
     audit_instructions,
     format_audit_instructions_human,
 )
+from cortex.banner import SUBTITLE_DOCTOR, cortex_version, print_banner
 from cortex.siblings import detect_siblings, format_sibling_block
 from cortex.validation import Issue, Severity, run_all_checks
 
@@ -122,6 +123,8 @@ def doctor_command(
         if strict and instruction_warnings:
             sys.exit(1)
         return
+
+    print_banner(SUBTITLE_DOCTOR, cortex_version())
 
     issues = run_all_checks(target_path)
 

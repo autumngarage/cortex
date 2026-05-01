@@ -75,6 +75,7 @@ from cortex import SPEC_VERSION_LITERAL
 from cortex import (
     __version__ as CORTEX_VERSION,  # noqa: N812 — namespaced re-export, deliberate caps.
 )
+from cortex.banner import SUBTITLE_INIT, cortex_version, print_banner
 from cortex.init_scan import (
     Category,
     Finding,
@@ -861,6 +862,8 @@ def init_command(
     merge_mode: str | None,
 ) -> None:
     """Scaffold a SPEC-v0.5.0-conformant `.cortex/` directory in the target project."""
+    print_banner(SUBTITLE_INIT, cortex_version())
+
     # `--local-only` and `--no-gitignore` are mutually exclusive: the former
     # says "gitignore all of .cortex/", the latter says "don't touch
     # .gitignore at all". Silently preferring one over the other would
