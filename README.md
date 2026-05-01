@@ -1,3 +1,15 @@
+```text
+  ____           _
+ / ___|___  _ __| |_ _____  __
+| |   / _ \| '__| __/ _ \ \/ /
+| |__| (_) | |  | ||  __/>  <
+ \____\___/|_|   \__\___/_/\_\
+```
+
+> *Project memory for AI-assisted work.*
+>
+> by **[Autumn Garage](https://github.com/autumngarage/autumn-garage)** · alongside [Touchstone](https://github.com/autumngarage/touchstone) · [Sentinel](https://github.com/autumngarage/sentinel) · [Conductor](https://github.com/autumngarage/conductor)
+
 # Cortex
 
 > **A protocol for agents to continuously journal what's happening on a project, and for humans to promote what matters.** The reflective layer of the autumngarage composition — Touchstone is the foundation (universal policy), Sentinel is the loop (autonomous execution), Cortex is the memory (project-local reasoning).
