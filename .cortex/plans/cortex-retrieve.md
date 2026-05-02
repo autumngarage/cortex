@@ -11,6 +11,8 @@ Updated-by:
 Cites: .cortex/doctrine/0005-scope-boundaries-v2.md, .cortex/doctrine/0006-scope-boundaries-v3.md, .cortex/protocol.md, .cortex/plans/cortex-v1.md
 ---
 
+> **Sub-plan banner (added 2026-05-02).** This plan is the **v0.7.0 sub-plan** of [`plans/cortex-v1.md`](./cortex-v1.md). Sequencing (where v0.7.0 sits between v0.6.0 Tier-4 close and the v0.9.0 dogfood gate) and acceptance gates (standalone + Sentinel-consumer) live in the master plan's `### v0.7.0 — Retrieval interface` section. Design + slice details (S0–S3, stack choices, invalidation semantics, council deltas) live here. If the two ever disagree, the master plan wins for sequencing; this plan wins for design.
+
 > **Council-applied deltas (2026-04-29).** This plan was reviewed by a 3-member council (Gemini-pro / Kimi / DeepSeek-v4) with synthesis. The following changes were folded back from the council critique:
 >
 > 1. **Invalidation correctness fix.** Original design used `git ls-tree -r HEAD` for the fast path — which only sees committed files. A user editing `.cortex/journal/foo.md` without committing would get stale retrieval results. Replaced with mtime+size check against the working tree (see § Index lifecycle).

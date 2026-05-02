@@ -2,7 +2,7 @@
 
 > The set of rules an agent follows to read and write `.cortex/`. Projects import this file into `AGENTS.md` (or `CLAUDE.md`) so every agent working on the project follows the same contract.
 
-**Protocol version:** 0.2.1 (ships with SPEC.md v0.5.0)
+**Protocol version:** 0.2.2 (ships with SPEC.md v0.5.0; § 1 adds canonical-ownership requirement per Doctrine 0007 — additive minor per SPEC § 6)
 **Status:** Active
 **Imports:** this file is imported into `AGENTS.md` via `@.cortex/protocol.md`
 
@@ -43,6 +43,8 @@ The manifest is a token-budgeted slice of `.cortex/`, not the whole store. Defau
 The agent imports those two files at session start via the host's `@path` mechanism. This yields Protocol + State without the budgeted Doctrine/Journal/Plans slice — degraded but correct. The rest of `.cortex/` remains available via grep. `cortex doctor` warns when a project ships this fallback-only configuration against a corpus large enough that recency-by-grep is insufficient (default threshold: >20 Doctrine entries or >100 Journal entries).
 
 **The agent does not read `.cortex/` directory contents directly at session start unless the user asks or the fallback configuration is in use.** Post-session-start, grep and targeted reads are expected. This keeps Time To First Token bounded and prevents accidental full-directory loads on large corpora.
+
+**Canonical ownership** (per [Cortex Doctrine 0007](https://github.com/autumngarage/cortex/blob/main/.cortex/doctrine/0007-canonical-ownership-of-state-and-plans.md)): `.cortex/state.md` is the canonical answer to *"where are we?"* and the active master plan in `.cortex/plans/` is the canonical answer to *"what's next?"* — for *every* Cortex-using project. README and other public-facing docs link to these files; they do not restate them. Repo-root files like `ROADMAP.md`, `STATUS.md`, `PLAN.md`, `NEXT.md`, `TODO.md` that duplicate state or plan content are anti-pattern; `cortex doctor` warns on them in v0.6.0+. The override path is explicit, per-project, and lives in `.cortex/config.toml` `[doctrine.0007]` — never silent. This rule exists because Cortex itself fell into the trap on 2026-05-02 (an agent cleaning up drift created `ROADMAP.md` at repo root), and the dogfood evidence promoted the rule from an internal principle to enforceable doctrine.
 
 ---
 

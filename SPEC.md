@@ -357,7 +357,7 @@ Plans carry `Author:`, `Goal-hash:`, and `Updated-by:` frontmatter fields (§ 3.
 
 Example: `# Sharpen Cortex's Vision` → normalized string `"sharpen cortexs vision"` → `Goal-hash: 1cc12b25`.
 
-Rationale: title is the stablest signal of intent across writers, and the normalization is conservative enough that two independent writers describing the same effort tend to converge while genuinely distinct efforts diverge. The normalization is deliberately not semantic (no embeddings, no synonym expansion) — that would require a vector store (out of scope per Doctrine 0005). Collisions under this rule are the floor, not the ceiling; two plans with distinct hashes may still collide semantically, and human review is the backstop.
+Rationale: title is the stablest signal of intent across writers, and the normalization is conservative enough that two independent writers describing the same effort tend to converge while genuinely distinct efforts diverge. Normalization is deliberately non-semantic (no embeddings, no synonym expansion) at the **identity** layer — Goal-hash is a stable identifier that must be derivable from the title alone with zero dependencies. Semantic similarity belongs in the *retrieval* layer (`cortex retrieve`, per Doctrine 0006), not in identifier derivation. Collisions under this rule are the floor, not the ceiling; two plans with distinct hashes may still collide semantically, and human review is the backstop.
 
 ---
 
@@ -446,12 +446,13 @@ SPEC.md specifies *what the files look like* — the directory layout (§ 2), la
 
 ## 9. What Cortex explicitly does not do
 
-The boundaries that keep Cortex composable rather than all-encompassing. Rationale for each category is in [Doctrine 0005](./.cortex/doctrine/0005-scope-boundaries-v2.md) (supersedes 0004).
+The boundaries that keep Cortex composable rather than all-encompassing. Rationale for each category is in [Doctrine 0006](./.cortex/doctrine/0006-scope-boundaries-v3.md) (supersedes 0005).
 
 - **Does not execute work.** That's Sentinel. Cortex is state + memory only.
 - **Does not enforce engineering standards.** That's Touchstone. Cortex Doctrine may cite Touchstone principles via `grounds-in:` but doesn't define them.
 - **Does not replace git.** Git is authoritative for code state; Cortex is authoritative for the *reasoning layer* around the code. Cortex reads git; git doesn't read Cortex.
 - **Does not synthesize without permission.** An agent writing to `.cortex/` must be either (a) explicitly invoked by a human, or (b) acting on a declared Tier 1 Protocol trigger. Silent discretionary background writes are forbidden. The Protocol IS the permission because it's a visible, versioned, declared contract.
-- **Does not maintain a vector store, database, or knowledge graph.** See Doctrine 0005.
+- **Does not store vectors inside the canonical layer.** No embeddings inside `.cortex/` markdown content; storage is markdown + git + grep, never an opaque format. Cortex *does* ship `cortex retrieve` as an opt-in retrieval interface that builds a gitignored derived index at `.cortex/.index/` (declared "hazmat" — consumers must use the CLI, not query the SQLite directly). The retrieval interface is non-normative; consumers may bypass and build their own. See Doctrine 0006.
+- **Does not maintain a database or knowledge graph.** See Doctrine 0006.
 - **Does not aggregate across projects.** One project per `.cortex/`. Portfolio views are deliberately out of scope for v0.x.
 - **Does not host anything in the cloud.** Local files, git, nothing else. Synthesis commands may call external LLM CLIs (`claude -p`, etc.) as implementation details of regeneration; storage is always local.
