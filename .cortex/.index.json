@@ -1,13 +1,13 @@
 {
   "spec": "0.5.0",
-  "generated": "2026-04-28T14:16:34-04:00",
+  "generated": "2026-05-02T16:47:49-07:00",
   "candidates": [
     {
       "id": "2026-04-17-competitive-positioning-and-claude-code-risk",
       "source": ".cortex/journal/2026-04-17-competitive-positioning-and-claude-code-risk.md",
       "type": "decision",
       "last_touched": "2026-04-17",
-      "age_days": 11,
+      "age_days": 15,
       "tags": [],
       "supersedes": null,
       "promoted_to": null
@@ -17,7 +17,7 @@
       "source": ".cortex/journal/2026-04-17-protocol-sharpened-and-drafts-archived.md",
       "type": "decision",
       "last_touched": "2026-04-17",
-      "age_days": 11,
+      "age_days": 15,
       "tags": [],
       "supersedes": null,
       "promoted_to": null
@@ -27,7 +27,7 @@
       "source": ".cortex/journal/2026-04-17-spec-v0.1.0-drafted.md",
       "type": "decision",
       "last_touched": "2026-04-17",
-      "age_days": 11,
+      "age_days": 15,
       "tags": [],
       "supersedes": null,
       "promoted_to": null
@@ -37,7 +37,7 @@
       "source": ".cortex/journal/2026-04-17-vision-critique-round-1.md",
       "type": "decision",
       "last_touched": "2026-04-17",
-      "age_days": 11,
+      "age_days": 15,
       "tags": [],
       "supersedes": null,
       "promoted_to": null
@@ -47,7 +47,7 @@
       "source": ".cortex/journal/2026-04-18-open-phase-c-plan-and-update-build-docs.md",
       "type": "decision",
       "last_touched": "2026-04-18",
-      "age_days": 10,
+      "age_days": 14,
       "tags": [],
       "supersedes": null,
       "promoted_to": null
@@ -57,7 +57,7 @@
       "source": ".cortex/journal/2026-04-23-derive-success-from-preconditions.md",
       "type": "decision",
       "last_touched": "2026-04-23",
-      "age_days": 5,
+      "age_days": 9,
       "tags": [],
       "supersedes": null,
       "promoted_to": null
@@ -67,7 +67,7 @@
       "source": ".cortex/journal/2026-04-24-case-study-driven-roadmap.md",
       "type": "decision",
       "last_touched": "2026-04-24",
-      "age_days": 4,
+      "age_days": 8,
       "tags": [],
       "supersedes": null,
       "promoted_to": null
@@ -77,7 +77,7 @@
       "source": ".cortex/journal/2026-04-24-dogfood-target-touchstone.md",
       "type": "decision",
       "last_touched": "2026-04-24",
-      "age_days": 4,
+      "age_days": 8,
       "tags": [],
       "supersedes": null,
       "promoted_to": null
@@ -87,7 +87,7 @@
       "source": ".cortex/journal/2026-04-24-init-ux-fixes-plan-decision.md",
       "type": "decision",
       "last_touched": "2026-04-24",
-      "age_days": 4,
+      "age_days": 8,
       "tags": [],
       "supersedes": null,
       "promoted_to": null
@@ -97,7 +97,7 @@
       "source": ".cortex/journal/2026-04-24-plan-md-deleted-as-redundant.md",
       "type": "decision",
       "last_touched": "2026-04-24",
-      "age_days": 4,
+      "age_days": 8,
       "tags": [],
       "supersedes": null,
       "promoted_to": null
@@ -107,7 +107,7 @@
       "source": ".cortex/journal/2026-04-24-production-release-rerank.md",
       "type": "decision",
       "last_touched": "2026-04-24",
-      "age_days": 4,
+      "age_days": 8,
       "tags": [],
       "supersedes": null,
       "promoted_to": null
@@ -117,7 +117,7 @@
       "source": ".cortex/journal/2026-04-24-v1-followups-parked.md",
       "type": "decision",
       "last_touched": "2026-04-24",
-      "age_days": 4,
+      "age_days": 8,
       "tags": [],
       "supersedes": null,
       "promoted_to": null
@@ -127,7 +127,7 @@
       "source": ".cortex/journal/2026-04-25-readme-drift-detection-feature-request.md",
       "type": "decision",
       "last_touched": "2026-04-25",
-      "age_days": 3,
+      "age_days": 7,
       "tags": [],
       "supersedes": null,
       "promoted_to": null
@@ -137,7 +137,7 @@
       "source": ".cortex/journal/2026-04-25-v0.2.4-touchstone-re-test-clean.md",
       "type": "decision",
       "last_touched": "2026-04-25",
-      "age_days": 3,
+      "age_days": 7,
       "tags": [],
       "supersedes": null,
       "promoted_to": null
@@ -147,7 +147,7 @@
       "source": ".cortex/journal/2026-04-27-refresh-state-hand-marker-convention.md",
       "type": "decision",
       "last_touched": "2026-04-27",
-      "age_days": 1,
+      "age_days": 5,
       "tags": [],
       "supersedes": null,
       "promoted_to": null
@@ -157,6 +157,46 @@
       "source": ".cortex/journal/2026-04-28-codesight-cross-pollination-and-council-review.md",
       "type": "decision",
       "last_touched": "2026-04-28",
+      "age_days": 4,
+      "tags": [],
+      "supersedes": null,
+      "promoted_to": null
+    },
+    {
+      "id": "2026-04-28-deps-rust-council-review",
+      "source": ".cortex/journal/2026-04-28-deps-rust-council-review.md",
+      "type": "decision",
+      "last_touched": "2026-04-28",
+      "age_days": 4,
+      "tags": [],
+      "supersedes": null,
+      "promoted_to": null
+    },
+    {
+      "id": "2026-04-28-markdownfs-council-review",
+      "source": ".cortex/journal/2026-04-28-markdownfs-council-review.md",
+      "type": "decision",
+      "last_touched": "2026-04-28",
+      "age_days": 4,
+      "tags": [],
+      "supersedes": null,
+      "promoted_to": null
+    },
+    {
+      "id": "2026-05-02-canonical-ownership-doctrine-and-doctor-check",
+      "source": ".cortex/journal/2026-05-02-canonical-ownership-doctrine-and-doctor-check.md",
+      "type": "decision",
+      "last_touched": "2026-05-02",
+      "age_days": 0,
+      "tags": [],
+      "supersedes": null,
+      "promoted_to": null
+    },
+    {
+      "id": "2026-05-02-promote-retrieval-onto-launch-path-and-doc-cleanup",
+      "source": ".cortex/journal/2026-05-02-promote-retrieval-onto-launch-path-and-doc-cleanup.md",
+      "type": "decision",
+      "last_touched": "2026-05-02",
       "age_days": 0,
       "tags": [],
       "supersedes": null,
