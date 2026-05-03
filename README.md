@@ -195,6 +195,15 @@ Each tool writes to its own files and reads the others only as best-effort. Noth
 
 ---
 
+## Documentation
+
+- **[`SPEC.md`](./SPEC.md)** — The normative specification for the `.cortex/` file format and protocol.
+- **[`docs/spec-conformance.md`](./docs/spec-conformance.md)** — The SPEC-to-test traceability matrix, proving CLI conformance.
+- **[`docs/PITCH.md`](./docs/PITCH.md)** — A plain-language overview of Cortex.
+- **[`docs/PRIOR_ART.md`](./docs/PRIOR_ART.md)** — Research and influences.
+
+---
+
 ## Status and plan
 
 Single active plan (see [`.cortex/state.md`](./.cortex/state.md) `## Current work` for the canonical surface): [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) — Ship Cortex v1.0 (six release-driven sub-sections; v0.3.0 shipped 2026-04-26, v0.4.0 read-side foundation is next). The session-scoped sub-plan [`cortex-v0.3.0`](./.cortex/plans/cortex-v0.3.0.md) closed `Status: shipped` with full PR sequence and post-tag closure recorded in [`journal/2026-04-26-v0.3.0-released`](./.cortex/journal/2026-04-26-v0.3.0-released.md). The v0.2.4 → v0.2.5 init UX patch series ([`init-ux-fixes-from-touchstone.md`](./.cortex/plans/init-ux-fixes-from-touchstone.md)) shipped 2026-04-25. Phases A (foundation + spec) and B (walking-skeleton CLI — `init` / `status` / `doctor` / `manifest` / `grep` / `promote` stub + `doctor --audit`) shipped as v0.1.0 on Homebrew; currently on v0.3.0. The remaining roadmap to v1.0 is sequenced as **six release-driven sub-sections** under a single forcing function: install Cortex on a real project, work for a week, no surprises (full rationale in [`.cortex/journal/2026-04-24-production-release-rerank.md`](./.cortex/journal/2026-04-24-production-release-rerank.md), supersedes the 2026-04-23 phase reorder for sequencing decisions). The **v0.9.0 dogfood target is touchstone** (`autumngarage/touchstone`, locked 2026-04-24 per [`.cortex/journal/2026-04-24-dogfood-target-touchstone.md`](./.cortex/journal/2026-04-24-dogfood-target-touchstone.md)) — chosen over conductor (the case study subject) because composition validation between sibling autumngarage tools is a stronger v1.0 gate than verifying a single known incident; the conductor case study ([`docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md`](./docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md)) still informs trust-layer design but the v0.9.0 test exercises the *class* of fix on a sibling tool rather than the specific incident.
