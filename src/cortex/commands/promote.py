@@ -190,16 +190,13 @@ def promote_command(
         _mark_promoted(data, candidate_id, doctrine.rel)
         write_index(index_path, data)
     except FileExistsError as exc:
-        _rollback_created(created)
-        click.echo(f"error: refusing to overwrite existing Cortex entry: {exc}", err=True)
+        _report_partial_failure(created, exc)
         sys.exit(2)
     except OSError as exc:
-        _rollback_created(created)
-        click.echo(f"error: promotion write failed: {exc}", err=True)
+        _report_partial_failure(created, exc)
         sys.exit(2)
     except ValueError as exc:
-        _rollback_created(created)
-        click.echo(f"error: promotion index update failed: {exc}", err=True)
+        _report_partial_failure(created, exc)
         sys.exit(2)
 
     click.echo(str(doctrine.path))
@@ -314,12 +311,35 @@ def _write_journal(journal: PromotionJournal) -> None:
         f.write(journal.text)
 
 
-def _rollback_created(paths: list[Path]) -> None:
-    for path in reversed(paths):
-        try:
-            path.unlink(missing_ok=True)
-        except OSError as exc:
-            click.echo(
-                f"warning: promotion rollback could not remove {path}: {exc}",
-                err=True,
-            )
+def _report_partial_failure(created: list[Path], cause: BaseException) -> None:
+    """Surface a mid-promotion failure without deleting Doctrine/Journal artifacts.
+
+    Cortex's layer contracts (SPEC.md §4.1, §4.2) make Journal append-only and
+    Doctrine immutable. A rollback that deletes those files would violate the
+    invariants the rest of the system relies on. Instead, we leave the partial
+    state in place and tell the operator exactly what to inspect and what to
+    finish by hand. The promotion exits non-zero so the caller (and any audit
+    pass) sees the failure.
+    """
+    click.echo(f"error: promotion failed mid-write: {cause}", err=True)
+    if not created:
+        click.echo(
+            "no Cortex artifacts were written; safe to retry `cortex promote`.",
+            err=True,
+        )
+        return
+    click.echo(
+        "Cortex left the following partial artifacts in place "
+        "(Journal is append-only and Doctrine is immutable; manual review "
+        "is required before retrying):",
+        err=True,
+    )
+    for path in created:
+        click.echo(f"  - {path}", err=True)
+    click.echo(
+        "Inspect the artifacts above, finish the promotion by hand, then "
+        "run `cortex refresh-index` to bring the queue back in sync. "
+        "If the partial write should be discarded, do so deliberately "
+        "with git (e.g. `git restore` / `git rm`) — never via `cortex promote`.",
+        err=True,
+    )

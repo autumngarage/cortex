@@ -237,3 +237,67 @@ def test_promote_missing_promotion_template_exits_clearly(
     assert result.exit_code == 2, _combined(result)
     assert "no template for journal type 'promotion'" in _combined(result)
     assert not list((project / ".cortex" / "doctrine").glob("*.md"))
+
+
+def test_promote_partial_failure_preserves_doctrine_and_journal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If `_mark_promoted` fails after Doctrine + Journal are written, those
+    files MUST be preserved (Journal append-only per SPEC.md §4.1, Doctrine
+    immutable per §4.2). The CLI must surface the partial state and exit
+    non-zero — never silently delete promoted artifacts.
+    """
+    project = _project(tmp_path)
+    candidate_id = _write_candidate(project)
+
+    import cortex.commands.promote as promote_mod
+
+    def _boom(*_args: object, **_kwargs: object) -> None:
+        raise ValueError("simulated index corruption")
+
+    monkeypatch.setattr(promote_mod, "_mark_promoted", _boom)
+
+    result = _promote(project, candidate_id)
+
+    assert result.exit_code == 2, _combined(result)
+    combined = _combined(result)
+    assert "promotion failed mid-write" in combined
+    assert "Journal is append-only" in combined
+    assert "Doctrine is immutable" in combined
+
+    doctrine = project / ".cortex" / "doctrine" / "0100-load-bearing-lesson.md"
+    assert doctrine.exists(), "Doctrine entry must NOT be deleted on rollback"
+    journals = list(
+        (project / ".cortex" / "journal").glob("*promotion-0100-load-bearing-lesson.md")
+    )
+    assert len(journals) == 1, "Journal entry must NOT be deleted on rollback"
+
+    # Both preserved paths must be reported to the operator so they can
+    # finish or discard by hand.
+    assert str(doctrine) in combined
+    assert str(journals[0]) in combined
+
+
+def test_promote_failure_before_any_write_reports_safe_to_retry(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If the very first write (Doctrine) fails, no partial artifacts exist;
+    the operator should be told it's safe to retry.
+    """
+    project = _project(tmp_path)
+    candidate_id = _write_candidate(project)
+
+    import cortex.commands.promote as promote_mod
+
+    def _boom(_doctrine: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(promote_mod, "write_doctrine_entry", _boom)
+
+    result = _promote(project, candidate_id)
+
+    assert result.exit_code == 2, _combined(result)
+    combined = _combined(result)
+    assert "promotion failed mid-write" in combined
+    assert "safe to retry" in combined
+    assert not list((project / ".cortex" / "doctrine").glob("*.md"))
