@@ -26,6 +26,7 @@ from cortex.audit_instructions import (
     format_audit_instructions_human,
 )
 from cortex.banner import SUBTITLE_DOCTOR, cortex_version, print_banner
+from cortex.doctor_checks import run_audit_checks, run_plain_checks
 from cortex.siblings import detect_siblings, format_sibling_block
 from cortex.validation import Issue, Severity, run_all_checks
 
@@ -127,6 +128,10 @@ def doctor_command(
     print_banner(SUBTITLE_DOCTOR, cortex_version())
 
     issues = run_all_checks(target_path)
+    issues.extend(run_plain_checks(target_path))
+    if run_audit:
+        issues.extend(run_audit_checks(target_path, since_days=since_days))
+    issues = sorted(issues, key=lambda i: (i.severity.value, i.path, i.message))
 
     errors = [i for i in issues if i.severity is Severity.ERROR]
     warnings = [i for i in issues if i.severity is Severity.WARNING]
