@@ -402,3 +402,58 @@ def test_promote_refuses_path_traversal_source(tmp_path: Path) -> None:
 
     assert result.exit_code == 2, _combined(result)
     assert "not under .cortex/journal/" in _combined(result)
+
+
+def test_promote_canonicalizes_source_ref_for_promoted_from_link(
+    tmp_path: Path,
+) -> None:
+    """A candidate `source` containing non-canonical components (`./`, `../`)
+    must NOT propagate into Doctrine's `Promoted-from:` field. The reverse
+    link is what `cortex refresh-index` and the duplicate-promotion check
+    compare against; if it differs by a single `./`, the same Journal entry
+    could be promoted twice. The `Promoted-from:` value must be derived
+    from the canonical (resolved) path.
+    """
+    project = _project(tmp_path)
+    # Create the real Journal file at the canonical location.
+    canonical_id = "2026-04-23-load-bearing-lesson"
+    canonical_path = project / ".cortex" / "journal" / f"{canonical_id}.md"
+    canonical_path.write_text(
+        "---\n"
+        "Date: 2026-04-23\n"
+        "Type: decision\n"
+        "Cites: [plans/cortex-v1, doctrine/0001]\n"
+        "Tags: [candidate-doctrine]\n"
+        "---\n\n"
+        "# Load-bearing lesson\n\n"
+        "This decision should be promoted.\n"
+    )
+    # Index lists the source with a non-canonical `./` component.
+    write_index(
+        project / ".cortex" / ".index.json",
+        {
+            "spec": "0.5.0",
+            "generated": "2026-04-23T00:00:00-07:00",
+            "candidates": [
+                {
+                    "id": canonical_id,
+                    "source": f".cortex/journal/./{canonical_id}.md",
+                    "type": "decision",
+                    "last_touched": "2026-04-23",
+                    "age_days": 1,
+                    "tags": ["candidate-doctrine"],
+                    "supersedes": None,
+                    "promoted_to": None,
+                }
+            ],
+        },
+    )
+
+    result = _promote(project, canonical_id)
+    assert result.exit_code == 0, _combined(result)
+
+    doctrine = project / ".cortex" / "doctrine" / "0100-load-bearing-lesson.md"
+    text = doctrine.read_text()
+    # Promoted-from MUST be the canonical journal/<id> form, no `./`.
+    assert f"**Promoted-from:** journal/{canonical_id}" in text
+    assert "./" not in text.split("**Promoted-from:**", 1)[1].split("\n", 1)[0]

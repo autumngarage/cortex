@@ -237,17 +237,16 @@ def _candidate_source(project_root: Path, candidate: dict[str, Any]) -> tuple[Pa
     rel = raw.strip()
     if rel.startswith(".cortex/"):
         candidate_path = project_root / rel
-        source_ref = rel.removeprefix(".cortex/").removesuffix(".md")
     else:
         candidate_path = project_root / ".cortex" / rel
-        source_ref = rel.removesuffix(".md")
 
     # Constrain the candidate to `.cortex/journal/<...>.md` inside the
     # project root. A stale or malformed `.index.json` could otherwise
     # name a path that traverses out of `.cortex/` (e.g. `../etc/passwd`)
     # or points at non-Journal layers (Doctrine, Plans, templates) that
     # are not promotion sources. Refuse rather than silently promoting.
-    journal_root = (project_root / ".cortex" / "journal").resolve()
+    cortex_root = (project_root / ".cortex").resolve()
+    journal_root = cortex_root / "journal"
     try:
         resolved = candidate_path.resolve(strict=False)
         resolved.relative_to(journal_root)
@@ -266,6 +265,16 @@ def _candidate_source(project_root: Path, candidate: dict[str, Any]) -> tuple[Pa
             err=True,
         )
         sys.exit(2)
+
+    # Derive `source_ref` from the RESOLVED path (relative to `.cortex/`).
+    # The raw index string can carry non-canonical components like
+    # `journal/./2026-foo.md` or `journal/sub/../2026-foo.md`. If we
+    # passed those through into Doctrine's `Promoted-from:` field, the
+    # link would not byte-match what `cortex refresh-index` writes, so
+    # duplicate-promotion detection (which compares `Promoted-from:`
+    # strings) would silently fail and the same Journal entry could be
+    # promoted twice.
+    source_ref = resolved.relative_to(cortex_root).with_suffix("").as_posix()
 
     return candidate_path, source_ref
 
