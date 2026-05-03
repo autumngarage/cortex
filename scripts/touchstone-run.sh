@@ -159,7 +159,7 @@ has_package_script() {
 run_shell_command() {
   local command="$1"
   info "$command"
-  bash -c "$command"
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_PREFIX bash -c "$command"
 }
 
 configured_command_for_action() {
