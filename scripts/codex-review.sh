@@ -98,6 +98,19 @@ extract_review_sentinel() {
       sentinel = line
       count++
     }
+    /^[[:space:]]*"response"[[:space:]]*:/ {
+      line = $0
+      gsub(/\r/, "", line)
+      sub(/^[[:space:]]*"response"[[:space:]]*:[[:space:]]*"/, "", line)
+      while (match(line, /(^|\\n)CODEX_REVIEW_(CLEAN|FIXED|BLOCKED)(\\n|")/)) {
+        candidate = substr(line, RSTART, RLENGTH)
+        sub(/^\\n/, "", candidate)
+        sub(/(\\n|")$/, "", candidate)
+        sentinel = candidate
+        count++
+        line = substr(line, RSTART + RLENGTH)
+      }
+    }
     END {
       if (count == 1) {
         print sentinel
@@ -112,6 +125,100 @@ extract_review_sentinel() {
 # pipeline.
 if [ "${CODEX_REVIEW_TEST_SENTINEL:-0}" = "1" ]; then
   extract_review_sentinel
+  exit 0
+fi
+
+# --------------------------------------------------------------------------
+# Sentinel-cycle journal detection helpers
+# --------------------------------------------------------------------------
+
+# Returns 0 (truthy) when .sentinel/runs/ contains at least one .md artifact.
+is_sentinel_authored_branch() {
+  [ -d .sentinel/runs ] && find .sentinel/runs -name '*.md' -type f -print -quit | grep -q .
+}
+
+# Prints the path of the most-recently-modified sentinel run artifact.
+find_latest_sentinel_run() {
+  # ls -t is the simplest portable mtime sort; filenames here are controlled.
+  # shellcheck disable=SC2012
+  ls -t .sentinel/runs/*.md 2>/dev/null | head -1
+}
+
+# Extracts the cycle-id frontmatter field from a sentinel run artifact.
+get_cycle_id_from_run() {
+  local run_file="$1"
+  awk '/^---$/{f=1-f; next} f && /^cycle-id:/{print $2; exit}' "$run_file"
+}
+
+# Returns the path of the journal entry whose filename contains cycle-id $1.
+find_journal_entry_by_cycle_id() {
+  local cycle_id="$1"
+  find .cortex/journal -maxdepth 1 -name "*sentinel-cycle-${cycle_id}.md" -type f 2>/dev/null \
+    | head -1
+}
+
+# Returns path to the most recent sentinel-cycle journal entry by mtime.
+find_latest_sentinel_journal_entry() {
+  # shellcheck disable=SC2012
+  ls -t .cortex/journal/*sentinel-cycle*.md 2>/dev/null | head -1
+}
+
+# Returns path to the best-matching sentinel cycle journal entry:
+#   1. If the latest run artifact has a cycle-id field, prefer the journal
+#      entry whose filename contains that id (per sentinel#97 convention).
+#   2. Fall back to the most recently modified sentinel-cycle journal entry.
+find_sentinel_journal_entry() {
+  local run_file cycle_id matched
+  run_file="$(find_latest_sentinel_run)"
+  if [ -n "$run_file" ]; then
+    cycle_id="$(get_cycle_id_from_run "$run_file")"
+    if [ -n "$cycle_id" ]; then
+      matched="$(find_journal_entry_by_cycle_id "$cycle_id")"
+      if [ -n "$matched" ]; then
+        echo "$matched"
+        return 0
+      fi
+    fi
+  fi
+  # Fallback: most recent journal entry by mtime.
+  find_latest_sentinel_journal_entry || true
+}
+
+# Prints the <sentinel-cycle-context> block to stdout when this branch is
+# sentinel-authored and a cycle journal entry can be resolved. Prints nothing
+# (and warns to stderr) when detection fails, the journal is missing, or the
+# journal cannot be read.
+build_sentinel_journal_context() {
+  if ! is_sentinel_authored_branch; then
+    return 0
+  fi
+  local journal_entry
+  journal_entry="$(find_sentinel_journal_entry)"
+  if [ -z "$journal_entry" ] || [ ! -f "$journal_entry" ]; then
+    echo "WARNING: sentinel branch detected but no cycle journal entry found in .cortex/journal/; reviewing without cycle context." >&2
+    return 0
+  fi
+  if [ ! -r "$journal_entry" ]; then
+    echo "WARNING: sentinel journal found at $journal_entry but could not be read; reviewing without cycle context." >&2
+    return 0
+  fi
+  local journal_content
+  if ! journal_content="$(cat "$journal_entry" 2>/dev/null)"; then
+    echo "WARNING: sentinel journal found at $journal_entry but could not be read; reviewing without cycle context." >&2
+    return 0
+  fi
+  printf '<sentinel-cycle-context>\n'
+  printf 'This diff was authored by an autonomous Sentinel cycle. The cycle'"'"'s journal entry follows; read it for the planner'"'"'s reasoning, the coder'"'"'s attempts, and any rejections handled mid-cycle. Review the diff against this context.\n\n'
+  printf '%s\n' "$journal_content"
+  printf '</sentinel-cycle-context>\n'
+}
+
+# Test entry-point for sentinel journal context helpers.
+# When CODEX_REVIEW_TEST_SENTINEL_CONTEXT=1, print the sentinel context block
+# to stdout (empty if detection fails) and exit without running the full
+# review pipeline.
+if [ "${CODEX_REVIEW_TEST_SENTINEL_CONTEXT:-0}" = "1" ]; then
+  build_sentinel_journal_context
   exit 0
 fi
 
@@ -1082,10 +1189,10 @@ reviewer_conductor_exec() {
   # REVIEW_MODE → subcommand + tools + sandbox. Conductor translates these
   # portable names into each provider's native flag dialect.
   local tools sandbox
+  subcommand="$(conductor_subcommand_for_mode)"
   case "$REVIEW_MODE" in
     diff-only)
       # Single-turn call — the diff is already embedded in the prompt.
-      subcommand="call"
       ;;
     review-only)
       subcommand="exec"
@@ -1120,6 +1227,13 @@ reviewer_conductor_exec() {
   CODEX_REVIEW_IN_PROGRESS=1 \
     printf '%s' "$prompt" \
     | conductor "$subcommand" "${args[@]}"
+}
+
+conductor_subcommand_for_mode() {
+  case "$REVIEW_MODE" in
+    diff-only) printf 'call' ;;
+    *)         printf 'exec' ;;
+  esac
 }
 
 # --------------------------------------------------------------------------
@@ -1358,6 +1472,9 @@ handle_error() {
     log_skip_event conductor-error "fail-closed:${reason}"
     exit 1
   else
+    if [ "$reason" = "malformed sentinel" ]; then
+      echo "[review:fail-open] missing sentinel — policy permits merge but the review verdict is untrustworthy" >&2
+    fi
     echo "==> ERROR ($reason) — not blocking push (on_error=fail-open)."
     echo "    Set on_error = \"fail-closed\" in .codex-review.toml to block on errors."
     log_skip_event conductor-error "fail-open:${reason}"
@@ -1517,7 +1634,19 @@ If you emit CODEX_REVIEW_BLOCKED, list each blocking issue on its own line in th
 If you emit CODEX_REVIEW_FIXED, briefly describe what you fixed (one line per fix).
 
 Do not invent new sentinels. Do not output anything after the sentinel line.
+This is a strict gate contract: the very last physical line of the entire response must be exactly one sentinel token and nothing else.
 PROMPT_EOF
+
+# --------------------------------------------------------------------------
+# Inject sentinel-cycle journal context into the reviewer prompt (if any)
+# --------------------------------------------------------------------------
+SENTINEL_JOURNAL_CONTEXT="$(build_sentinel_journal_context)"
+if [ -n "$SENTINEL_JOURNAL_CONTEXT" ]; then
+  REVIEW_PROMPT="${SENTINEL_JOURNAL_CONTEXT}
+
+${REVIEW_PROMPT}"
+  echo "==> Sentinel cycle journal injected into reviewer context."
+fi
 
 # --------------------------------------------------------------------------
 # Clean-review cache
@@ -1606,6 +1735,46 @@ clean_review_cache_dir() {
 clean_review_cache_file() {
   local key="$1"
   printf '%s/%s.clean' "$(clean_review_cache_dir)" "$key"
+}
+
+review_clean_marker_branch() {
+  local branch="${CODEX_REVIEW_BRANCH_NAME:-}"
+  if [ -z "$branch" ]; then
+    branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')"
+  fi
+  [ "$branch" != "HEAD" ] || branch=""
+  printf '%s' "$branch"
+}
+
+review_clean_marker_key() {
+  local branch="$1"
+  printf '%s' "$branch" | sed 's/[^A-Za-z0-9._-]/_/g'
+}
+
+review_clean_marker_dir() {
+  git rev-parse --git-path touchstone/reviewer-clean
+}
+
+write_clean_review_marker() {
+  local line_count="$1"
+  local branch marker_dir marker_file
+
+  branch="$(review_clean_marker_branch)"
+  [ -n "$branch" ] || return 0
+
+  marker_dir="$(review_clean_marker_dir)"
+  marker_file="$marker_dir/$(review_clean_marker_key "$branch").clean"
+
+  mkdir -p "$marker_dir" 2>/dev/null || return 0
+  {
+    printf 'result=CODEX_REVIEW_CLEAN\n'
+    printf 'branch=%s\n' "$branch"
+    printf 'base=%s\n' "$BASE"
+    printf 'merge_base=%s\n' "$MERGE_BASE"
+    printf 'head=%s\n' "$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+    printf 'diff_lines=%s\n' "$line_count"
+    printf 'reviewed_at=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  } > "$marker_file" 2>/dev/null || true
 }
 
 write_clean_review_cache() {
@@ -1878,6 +2047,29 @@ parse_primary_provider() {
   #   [conductor] auto (...) -> claude (tier: ...)
   # `sed -nE` treats `(a|b)` as ERE alternation.
   printf '%s' "$line" | sed -nE 's/.*(→|-> ?)([a-zA-Z0-9_.-]+).*/\2/p' | head -1
+}
+
+conductor_invocation_label() {
+  local conductor_path subcommand
+  conductor_path="$(command -v conductor 2>/dev/null || printf 'conductor')"
+  subcommand="$(conductor_subcommand_for_mode)"
+  printf '%s %s' "$conductor_path" "$subcommand"
+}
+
+print_malformed_sentinel_diagnostics() {
+  if [ "$ACTIVE_REVIEWER" != "conductor" ]; then
+    return 0
+  fi
+
+  local selected_provider
+  selected_provider="$(parse_primary_provider)"
+  if [ -z "$selected_provider" ] && [ -n "${CONDUCTOR_WITH:-}" ]; then
+    selected_provider="$CONDUCTOR_WITH"
+  fi
+  [ -n "$selected_provider" ] || selected_provider="unknown"
+
+  echo "    Conductor selected provider: $selected_provider"
+  echo "    Conductor command invoked: $(conductor_invocation_label)"
 }
 
 # Run a peer review via Conductor, excluding the primary's provider.
@@ -2243,6 +2435,7 @@ for iter in $(seq 1 "$MAX_ITERATIONS"); do
       REVIEW_EXIT_REASON="clean"
       print_summary
       write_clean_review_cache "$REVIEW_CACHE_KEY" "$DIFF_LINE_COUNT"
+      write_clean_review_marker "$DIFF_LINE_COUNT"
       # The "ran" denominator: a successful review actually executed.
       # skip-rate = log_skip_count / (log_skip_count + log_ran_count).
       log_skip_event ran "clean:iter=${iter}:lines=${DIFF_LINE_COUNT}:fix-commits=${FIX_COMMITS}"
@@ -2323,6 +2516,7 @@ for iter in $(seq 1 "$MAX_ITERATIONS"); do
       else
         echo "    No unique standalone sentinel line was found."
       fi
+      print_malformed_sentinel_diagnostics
       echo "    Last non-blank line was: '$LAST_LINE'"
       echo "    Raw output (first 20 lines):"
       printf '%s\n' "$OUTPUT" | head -20 | sed 's/^/    /'
