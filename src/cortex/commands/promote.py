@@ -181,10 +181,9 @@ def promote_command(
         )
         return
 
-    created: list[Path] = []
+    candidate_paths = (doctrine.path, journal.path)
     try:
         write_doctrine_entry(doctrine)
-        created.append(doctrine.path)
         # Mutate the index BEFORE writing the Journal entry. The Journal
         # entry's prose claims the index was updated; if the index write
         # fails after the Journal is on disk, that preserved Journal entry
@@ -193,15 +192,14 @@ def promote_command(
         _mark_promoted(data, candidate_id, doctrine.rel)
         write_index(index_path, data)
         _write_journal(journal)
-        created.append(journal.path)
-    except FileExistsError as exc:
-        _report_partial_failure(created, exc)
-        sys.exit(2)
-    except OSError as exc:
-        _report_partial_failure(created, exc)
-        sys.exit(2)
-    except ValueError as exc:
-        _report_partial_failure(created, exc)
+    except (FileExistsError, OSError, ValueError) as exc:
+        # Track existence by inspecting the filesystem, not by appending to
+        # a `created` list — a partial write inside `write_doctrine_entry`
+        # or `_write_journal` can leave a file on disk before control
+        # returns, and a list-based tracker would falsely claim "safe to
+        # retry." Detect what actually exists, then report.
+        existing = [path for path in candidate_paths if path.exists()]
+        _report_partial_failure(existing, exc)
         sys.exit(2)
 
     click.echo(str(doctrine.path))

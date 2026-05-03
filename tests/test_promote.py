@@ -457,3 +457,44 @@ def test_promote_canonicalizes_source_ref_for_promoted_from_link(
     # Promoted-from MUST be the canonical journal/<id> form, no `./`.
     assert f"**Promoted-from:** journal/{canonical_id}" in text
     assert "./" not in text.split("**Promoted-from:**", 1)[1].split("\n", 1)[0]
+
+
+def test_promote_partial_write_inside_function_is_still_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If a write helper creates the file on disk and THEN fails (e.g. an
+    OSError during write or close after the file was opened), the partial
+    artifact must still be surfaced to the operator. The previous tracker
+    only recorded paths after the helper returned successfully, so a
+    crash mid-write would falsely report "safe to retry" and the orphan
+    file would silently linger.
+    """
+    project = _project(tmp_path)
+    candidate_id = _write_candidate(project)
+
+    import cortex.commands.promote as promote_mod
+
+    real_doctrine_dir = project / ".cortex" / "doctrine"
+
+    def _half_write(promotion: object) -> None:
+        # Simulate write-then-fail: create the target file, then raise
+        # before the wrapper returns. This is the exact race the simple
+        # `created.append(path)` pattern misses.
+        target = real_doctrine_dir / "0100-load-bearing-lesson.md"
+        target.write_text("partially written doctrine\n")
+        raise OSError("disk full mid-write")
+
+    monkeypatch.setattr(promote_mod, "write_doctrine_entry", _half_write)
+
+    result = _promote(project, candidate_id)
+
+    assert result.exit_code == 2, _combined(result)
+    combined = _combined(result)
+    assert "promotion failed mid-write" in combined
+
+    orphan = real_doctrine_dir / "0100-load-bearing-lesson.md"
+    assert orphan.exists(), "the partially-written file is still on disk"
+
+    # Must NOT say it's safe to retry — there's an orphan to deal with.
+    assert "safe to retry" not in combined
+    assert str(orphan) in combined
