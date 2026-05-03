@@ -161,6 +161,26 @@ def test_promote_already_promoted_refuses_and_force_yes_proceeds(tmp_path: Path)
     assert updated["candidates"][0]["promoted_to"] == "doctrine/0101-load-bearing-lesson"
 
 
+def test_promote_stale_index_refuses_when_doctrine_reverse_link_exists(
+    tmp_path: Path,
+) -> None:
+    project = _project(tmp_path)
+    candidate_id = _write_candidate(project)
+    (project / ".cortex" / "doctrine" / "0100-existing.md").write_text(
+        "# Existing\n\n"
+        "**Status:** Accepted\n"
+        "**Date:** 2026-04-23\n"
+        "**Promoted-from:** journal/2026-04-23-load-bearing-lesson\n"
+        "**Load-priority:** default\n"
+    )
+
+    result = _promote(project, candidate_id)
+
+    assert result.exit_code == 1, _combined(result)
+    assert "already promoted to doctrine/0100-existing" in _combined(result)
+    assert not (project / ".cortex" / "doctrine" / "0101-load-bearing-lesson.md").exists()
+
+
 def test_promote_slug_numbering_reserves_low_range(tmp_path: Path) -> None:
     project = _project(tmp_path)
     candidate_id = _write_candidate(project)

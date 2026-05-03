@@ -133,11 +133,48 @@ def write_doctrine_entry(promotion: DoctrinePromotion) -> None:
         f.write(promotion.text)
 
 
+def promoted_doctrine_for_source(cortex_dir: Path, source_rel: str) -> str | None:
+    """Return an existing Doctrine promotion for ``source_rel``, if present."""
+
+    wanted = _normalize_promoted_from(source_rel)
+    doctrine_dir = cortex_dir / "doctrine"
+    if not doctrine_dir.is_dir():
+        return None
+    for entry in sorted(doctrine_dir.glob("*.md")):
+        text = entry.read_text()
+        promoted_from = _read_promoted_from(text)
+        if promoted_from is None:
+            continue
+        if _normalize_promoted_from(promoted_from) == wanted:
+            return f"doctrine/{entry.stem}"
+    return None
+
+
 def _source_title(source_path: Path, fallback_slug: str) -> str:
     h1 = extract_h1(source_path)
     if h1:
         return h1.removeprefix("#").strip()
     return fallback_slug.replace("-", " ").title()
+
+
+def _normalize_promoted_from(value: str) -> str:
+    value = value.strip()
+    if value.startswith(".cortex/"):
+        value = value.removeprefix(".cortex/")
+    return value.removesuffix(".md")
+
+
+def _read_promoted_from(text: str) -> str | None:
+    frontmatter, _body = parse_frontmatter(text)
+    value = frontmatter.get("Promoted-from")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    for line in text.splitlines()[:60]:
+        stripped = line.strip()
+        if stripped.startswith("**Promoted-from:**"):
+            promoted_from = stripped.removeprefix("**Promoted-from:**").strip()
+            return promoted_from or None
+    return None
 
 
 def _resolve_candidate_template(cortex_dir: Path) -> str:

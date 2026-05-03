@@ -21,6 +21,7 @@ from cortex.commands.journal import (
 from cortex.compat import require_compatible
 from cortex.doctrine import (
     DoctrinePromotion,
+    promoted_doctrine_for_source,
     render_promoted_doctrine,
     write_doctrine_entry,
 )
@@ -121,7 +122,14 @@ def promote_command(
         )
         sys.exit(1)
 
-    promoted_to = candidate.get("promoted_to")
+    source_path, source_rel = _candidate_source(project_root, candidate)
+    try:
+        existing_promotion = promoted_doctrine_for_source(cortex_dir, source_rel)
+    except OSError as exc:
+        click.echo(f"error: could not scan existing Doctrine promotions: {exc}", err=True)
+        sys.exit(2)
+
+    promoted_to = candidate.get("promoted_to") or existing_promotion
     if promoted_to and not force:
         click.echo(
             f"error: candidate {candidate_id!r} is already promoted to {promoted_to}; "
@@ -136,7 +144,6 @@ def promote_command(
             abort=True,
         )
 
-    source_path, source_rel = _candidate_source(project_root, candidate)
     source_text = _read_source(source_path)
     cites = _source_cites(source_text)
     doctrine = render_promoted_doctrine(
