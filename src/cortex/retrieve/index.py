@@ -19,6 +19,8 @@ from cortex.retrieve.cache import index_path, temp_index_path
 from cortex.retrieve.chunker import chunk_markdown
 
 SCHEMA_VERSION = 1
+INDEXED_DIRS = frozenset(("doctrine", "journal", "plans", "digests"))
+INDEXED_TOP_LEVEL_FILES = frozenset(("map.md", "state.md"))
 
 
 class FTS5UnavailableError(RuntimeError):
@@ -224,7 +226,11 @@ def _discover_sources(cortex_dir: Path) -> list[SourceFile]:
 
 def _is_excluded(path: Path, cortex_dir: Path) -> bool:
     rel_parts = path.relative_to(cortex_dir).parts
-    return any(part.startswith(".") for part in rel_parts)
+    if any(part.startswith(".") for part in rel_parts):
+        return True
+    if len(rel_parts) == 1:
+        return rel_parts[0] not in INDEXED_TOP_LEVEL_FILES
+    return rel_parts[0] not in INDEXED_DIRS
 
 
 def _existing_file_fingerprints(conn: sqlite3.Connection) -> dict[str, tuple[float, int]]:

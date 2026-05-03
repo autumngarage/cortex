@@ -58,6 +58,19 @@ def test_build_index_from_tiny_corpus_and_query(tmp_path: Path) -> None:
     assert hits[0].path.startswith("doctrine/0001-why.md:")
 
 
+def test_index_excludes_support_docs_and_templates(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    _write(project, "doctrine/0001.md", "## Doctrine\ncanonical memory token\n")
+    _write(project, "protocol.md", "## Protocol\nsupport doc token\n")
+    _write(project, "templates/journal/decision.md", "## Template\nsupport template token\n")
+
+    rebuild_index(project)
+
+    paths = {row["path"] for row in _rows(retrieve_index_path(project))}
+    assert paths == {"doctrine/0001.md"}
+    assert query_bm25(project, "support", top_k=5) == []
+
+
 def test_incremental_rebuild_replaces_only_edited_file_chunks(tmp_path: Path) -> None:
     project = _project(tmp_path)
     edited = _write(project, "doctrine/0001.md", "## One\nalpha only\n")
