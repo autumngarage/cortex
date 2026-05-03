@@ -41,7 +41,7 @@ def query_bm25(project_root: Path, query: str, *, top_k: int) -> list[RetrieveHi
             ORDER BY rank
             LIMIT ?
             """,
-            (query, max(top_k * 20, top_k)),
+            (_fts5_match_query(query), max(top_k * 20, top_k)),
         ).fetchall()
     finally:
         conn.close()
@@ -110,3 +110,21 @@ def _score(path: str, content: str, query: str, rank: float) -> float:
         if term in content_lower:
             score += 1.0
     return score
+
+
+def _fts5_match_query(query: str) -> str:
+    """Return a literal-term FTS5 MATCH expression.
+
+    Raw Cortex queries often contain punctuation (`v0.3.0`, dates, paths).
+    Quoting each whitespace-delimited term preserves FTS5 tokenization without
+    letting punctuation be parsed as query syntax.
+    """
+
+    terms = [term for term in query.split() if term.strip()]
+    if not terms:
+        return '""'
+    quoted: list[str] = []
+    for term in terms:
+        escaped = term.replace('"', '""')
+        quoted.append(f'"{escaped}"')
+    return " ".join(quoted)

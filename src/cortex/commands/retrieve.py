@@ -108,7 +108,7 @@ def retrieve_command(
             hits = query_bm25(project_root, query, top_k=top_k)
     except FTS5UnavailableError:
         click.echo(FTS5_FALLBACK_MESSAGE, err=True)
-        _run_grep_fallback(project_root, query)
+        _run_grep_fallback(project_root, query, as_json=as_json)
         return
     except Exception as exc:
         click.echo(f"error: cortex retrieve failed: {exc}", err=True)
@@ -127,7 +127,7 @@ def retrieve_command(
         click.echo()
 
 
-def _run_grep_fallback(project_root: Path, query: str) -> None:
+def _run_grep_fallback(project_root: Path, query: str, *, as_json: bool) -> None:
     result = subprocess.run(
         [
             sys.executable,
@@ -142,6 +142,22 @@ def _run_grep_fallback(project_root: Path, query: str) -> None:
         text=True,
         check=False,
     )
+    if as_json:
+        excerpt = result.stdout.strip()
+        hits = []
+        if excerpt:
+            hits.append(
+                {
+                    "path": "cortex grep fallback",
+                    "score": 0.0,
+                    "frontmatter": None,
+                    "excerpt": excerpt,
+                }
+            )
+        click.echo(json.dumps(hits))
+        if result.stderr:
+            click.echo(result.stderr, err=True, nl=False)
+        return
     if result.stdout:
         click.echo(result.stdout, nl=False)
     if result.stderr:

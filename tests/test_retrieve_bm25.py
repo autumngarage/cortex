@@ -198,6 +198,24 @@ def test_json_output_schema(tmp_path: Path) -> None:
     assert isinstance(data[0]["excerpt"], str)
 
 
+def test_punctuation_query_is_treated_as_literal_text(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    _write(project, "journal/2026-05-01-release.md", "## Release\nv0.3.0 shipped on 2026-05-01.\n")
+    _write(project, "plans/cache.md", "## Cache\n.cortex/.index stores derived chunks.\n")
+    rebuild_index(project)
+
+    version = CliRunner().invoke(cli, ["retrieve", "v0.3.0", "--json", "--path", str(project)])
+    date_result = CliRunner().invoke(cli, ["retrieve", "2026-05-01", "--json", "--path", str(project)])
+    path_result = CliRunner().invoke(cli, ["retrieve", ".cortex/.index", "--json", "--path", str(project)])
+
+    assert version.exit_code == 0, version.output
+    assert date_result.exit_code == 0, date_result.output
+    assert path_result.exit_code == 0, path_result.output
+    assert json.loads(version.output)
+    assert json.loads(date_result.output)
+    assert json.loads(path_result.output)
+
+
 def test_fts5_missing_falls_back_to_grep(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     project = _project(tmp_path)
     import cortex.retrieve.index as index_mod
@@ -227,6 +245,33 @@ def test_fts5_missing_falls_back_to_grep(tmp_path: Path, monkeypatch: pytest.Mon
     assert "FTS5 extension not available" in (result.output + (getattr(result, "stderr", "") or ""))
     assert "grep fallback output" in result.output
     assert calls and "grep" in calls[0]
+
+
+def test_fts5_missing_json_fallback_preserves_json_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = _project(tmp_path)
+    import cortex.retrieve.index as index_mod
+
+    monkeypatch.setattr(
+        index_mod,
+        "is_stale",
+        lambda _project: (_ for _ in ()).throw(index_mod.FTS5UnavailableError("missing")),
+    )
+
+    def fake_run(_cmd: list[str], **_kwargs: object) -> object:
+        class Completed:
+            stdout = "grep fallback output\n"
+            stderr = ""
+            returncode = 0
+
+        return Completed()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = CliRunner().invoke(cli, ["retrieve", "needle", "--json", "--path", str(project)])
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert set(data[0]) == {"path", "score", "frontmatter", "excerpt"}
+    assert data[0]["excerpt"] == "grep fallback output"
 
 
 def test_cortex_grep_unaffected_by_retrieve_index_and_sqlite_import(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
