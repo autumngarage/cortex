@@ -186,16 +186,17 @@ def test_promote_unknown_candidate_errors(scaffolded: Path) -> None:
     )
     runner = CliRunner()
     result = runner.invoke(cli, ["promote", "j-missing", "--path", str(scaffolded)])
-    assert result.exit_code == 2
+    assert result.exit_code == 1
     combined = result.output + (getattr(result, "stderr", "") or "")
     assert "j-missing" in combined
 
 
-def test_promote_known_candidate_is_stub(scaffolded: Path) -> None:
+def test_promote_candidate_without_source_errors(scaffolded: Path) -> None:
     (scaffolded / ".cortex" / ".index.json").write_text(
         '{"candidates": [{"id": "j-abc", "promoted_to": null}]}'
     )
     runner = CliRunner()
     result = runner.invoke(cli, ["promote", "j-abc", "--path", str(scaffolded)])
-    assert result.exit_code == 3
-    assert "not yet implemented" in result.output
+    assert result.exit_code == 2
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "missing `source`" in combined
