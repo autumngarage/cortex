@@ -195,9 +195,13 @@ Each tool writes to its own files and reads the others only as best-effort. Noth
 
 ---
 
-## Configuration
+## Documentation
 
-Per-project configuration lives in `.cortex/config.toml` (optional; defaults cover the no-config case). See [`docs/config-reference.md`](./docs/config-reference.md) for the full schema, every key, and a worked example.
+- **[`SPEC.md`](./SPEC.md)** — The normative specification for the `.cortex/` file format and protocol.
+- **[`docs/config-reference.md`](./docs/config-reference.md)** — Per-project `.cortex/config.toml` schema reference (every key, type, default, worked example).
+- **[`docs/spec-conformance.md`](./docs/spec-conformance.md)** — The SPEC-to-test traceability matrix, proving CLI conformance.
+- **[`docs/PITCH.md`](./docs/PITCH.md)** — A plain-language overview of Cortex.
+- **[`docs/PRIOR_ART.md`](./docs/PRIOR_ART.md)** — Research and influences.
 
 ---
 
