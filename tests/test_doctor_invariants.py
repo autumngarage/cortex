@@ -250,6 +250,31 @@ def test_canonical_ownership_warning_and_overrides(tmp_path: Path) -> None:
     assert any(issue.path == "roadmap.md" for issue in issues)
 
 
+def test_generated_layers_scans_digest_journal_entries_per_spec_5_2(tmp_path: Path) -> None:
+    _scaffold(tmp_path)
+    digest = tmp_path / ".cortex" / "journal" / "2026-05-01-monthly-digest.md"
+    digest.write_text(
+        "---\n"
+        "Date: 2026-05-01\n"
+        "Type: digest\n"
+        "---\n\n"
+        "# April digest\n\nMissing all seven provenance fields.\n"
+    )
+    plain = tmp_path / ".cortex" / "journal" / "2026-05-02-decision.md"
+    plain.write_text(
+        "---\nDate: 2026-05-02\nType: decision\n---\n\n# Decision\n\nNot a digest.\n"
+    )
+    legacy_dir = tmp_path / ".cortex" / "digests"
+    legacy_dir.mkdir()
+    (legacy_dir / "ignored.md").write_text("# legacy path\n")
+
+    issues = check_generated_layers(tmp_path)
+    flagged_paths = {issue.path for issue in issues}
+    assert any(p.endswith("2026-05-01-monthly-digest.md") for p in flagged_paths)
+    assert not any(p.endswith("2026-05-02-decision.md") for p in flagged_paths)
+    assert not any("digests/ignored.md" in p for p in flagged_paths)
+
+
 def test_canonical_ownership_runs_on_plain_doctor(tmp_path: Path) -> None:
     _scaffold(tmp_path)
     _write_valid_active_plan(tmp_path)

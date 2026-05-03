@@ -39,7 +39,7 @@ DEFAULT_FALLBACK_DOCTRINE_THRESHOLD = 20
 DEFAULT_FALLBACK_JOURNAL_THRESHOLD = 100
 DEFAULT_DELETION_LINE_THRESHOLD = 100
 DEFAULT_GENERATED_FRESHNESS_DAYS = 7
-DEFAULT_RETENTION_DAYS = 90
+DEFAULT_RETENTION_DAYS = 30
 DEFAULT_JOURNAL_WARM_MAX = 200
 
 
@@ -96,7 +96,7 @@ def check_immutable_doctrine(project_root: Path) -> list[Issue]:
         return issues
     for entry in sorted(doctrine_dir.glob("*.md")):
         for sha in _modified_commits(project_root, entry):
-            if _diff_only_allowed_frontmatter(project_root, sha, entry, None):
+            if _diff_only_allowed_frontmatter(project_root, sha, entry, {"Status"}):
                 continue
             issues.append(
                 Issue(
@@ -287,9 +287,9 @@ def check_generated_layers(project_root: Path) -> list[Issue]:
             if field not in frontmatter:
                 issues.append(
                     Issue(
-                        Severity.WARNING,
+                        Severity.ERROR,
                         rel,
-                        f"generated layer missing `{field}` provenance field (SPEC § 4.3)",
+                        f"generated layer missing `{field}` provenance field (SPEC § 4.5)",
                     )
                 )
         generated = _parse_datetime(frontmatter.get("Generated"))
@@ -328,6 +328,8 @@ def check_config_toml_schema(project_root: Path) -> list[Issue]:
             "pypi_package": "optional-string",
             "gh_release": "optional-string",
             "urls": "optional-string-list",
+            "scan_files": "optional-string-list",
+            "github_repos": "optional-string-list",
         }
         issues.extend(_validate_table(rel, "audit-instructions", audit, audit_schema))
     doctrine = data.get(DOCTRINE_0007_SECTION[0])
@@ -433,6 +435,28 @@ def _modified_commits(project_root: Path, path: Path) -> list[str]:
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
 
+_BOLD_FIELD_RE = re.compile(r"^\*\*(?P<key>[^:*]+):\*\*\s*(?P<value>.+?)\s*$", re.MULTILINE)
+
+
+def _extract_metadata(text: str) -> tuple[dict[str, Any], str]:
+    """Return (combined_metadata, body_without_bold_fields).
+
+    Cortex doctrine + journal entries declare metadata two ways:
+    YAML frontmatter (`---` block) and bold-inline (`**Field:** value`)
+    per SPEC § 6. The `_diff_only_allowed_frontmatter` predicate must
+    treat both as metadata so a `**Status:**` flip on a markdown-style
+    doctrine entry isn't falsely flagged as a body mutation.
+    """
+    frontmatter, body = parse_frontmatter(text)
+    metadata: dict[str, Any] = dict(frontmatter or {})
+    for match in _BOLD_FIELD_RE.finditer(body):
+        key = match.group("key").strip()
+        if key not in metadata:
+            metadata[key] = match.group("value").strip()
+    body_without_bold = _BOLD_FIELD_RE.sub("", body)
+    return metadata, body_without_bold
+
+
 def _diff_only_allowed_frontmatter(
     project_root: Path,
     sha: str,
@@ -444,14 +468,14 @@ def _diff_only_allowed_frontmatter(
     new_text = _git_show_text(project_root, f"{sha}:{rel}")
     if old_text is None or new_text is None:
         return False
-    old_frontmatter, old_body = parse_frontmatter(old_text)
-    new_frontmatter, new_body = parse_frontmatter(new_text)
-    if old_body != new_body or not old_frontmatter or not new_frontmatter:
+    old_metadata, old_body = _extract_metadata(old_text)
+    new_metadata, new_body = _extract_metadata(new_text)
+    if old_body != new_body or not old_metadata or not new_metadata:
         return False
     changed_keys = {
         key
-        for key in set(old_frontmatter) | set(new_frontmatter)
-        if old_frontmatter.get(key) != new_frontmatter.get(key)
+        for key in set(old_metadata) | set(new_metadata)
+        if old_metadata.get(key) != new_metadata.get(key)
     }
     if not changed_keys:
         return False
@@ -514,9 +538,15 @@ def _deleted_files(
 def _generated_layer_paths(project_root: Path) -> list[Path]:
     cortex_dir = project_root / ".cortex"
     paths = [p for p in (cortex_dir / "state.md", cortex_dir / "map.md") if p.exists()]
-    digests = cortex_dir / "digests"
-    if digests.exists():
-        paths.extend(sorted(digests.glob("*.md")))
+    journal_dir = cortex_dir / "journal"
+    if journal_dir.exists():
+        for entry in sorted(journal_dir.glob("*.md")):
+            try:
+                fields, _body = parse_frontmatter(entry.read_text())
+            except OSError:
+                continue
+            if _field_str(fields, "Type") == "digest":
+                paths.append(entry)
     return paths
 
 
