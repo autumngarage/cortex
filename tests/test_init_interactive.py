@@ -62,6 +62,7 @@ def test_yes_creates_or_updates_gitignore(tmp_path: Path) -> None:
     _invoke(tmp_path, "--yes")
     gi = (tmp_path / ".gitignore").read_text()
     assert ".cortex/.index.json" in gi
+    assert ".cortex/.index/" in gi
     assert ".cortex/pending/" in gi
 
 
@@ -88,6 +89,7 @@ def test_yes_is_idempotent_for_gitignore(tmp_path: Path) -> None:
     after_second = (tmp_path / ".gitignore").read_text()
     # Two lines total after both entries are ensured; pending/ added once.
     assert after_first.count(".cortex/.index.json") == 1
+    assert after_second.count(".cortex/.index/") == 1
     assert after_second.count(".cortex/.index.json") == 1
     assert after_second.count(".cortex/pending/") == 1
 
@@ -718,4 +720,5 @@ def test_default_init_still_commits_cortex_dir(tmp_path: Path) -> None:
     lines = {line.strip() for line in (tmp_path / ".gitignore").read_text().splitlines()}
     assert ".cortex/" not in lines
     assert ".cortex/.index.json" in lines
+    assert ".cortex/.index/" in lines
     assert ".cortex/pending/" in lines

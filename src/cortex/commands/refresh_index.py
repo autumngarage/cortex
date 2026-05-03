@@ -14,6 +14,13 @@ from cortex.index import refresh_index
 
 @click.command("refresh-index")
 @click.option(
+    "--retrieve",
+    "include_retrieve",
+    is_flag=True,
+    default=False,
+    help="Also rebuild the derived `.cortex/.index/chunks.sqlite` retrieve index.",
+)
+@click.option(
     "--path",
     "target_path",
     type=click.Path(file_okay=False, dir_okay=True, exists=True, path_type=Path),
@@ -21,7 +28,7 @@ from cortex.index import refresh_index
     show_default="current directory",
     help="Project root containing `.cortex/`.",
 )
-def refresh_index_command(*, target_path: Path) -> None:
+def refresh_index_command(*, include_retrieve: bool, target_path: Path) -> None:
     """Regenerate `.cortex/.index.json` from primary Cortex sources."""
 
     project_root = Path(target_path).resolve()
@@ -38,4 +45,12 @@ def refresh_index_command(*, target_path: Path) -> None:
     result = refresh_index(project_root, config)
     for warning in result.warnings:
         click.echo(f"warning: {warning}", err=True)
+    if include_retrieve:
+        try:
+            from cortex.retrieve.index import rebuild_index
+
+            rebuild_index(project_root)
+        except Exception as exc:
+            click.echo(f"error: could not rebuild retrieve index: {exc}", err=True)
+            sys.exit(1)
     click.echo(str(result.path))

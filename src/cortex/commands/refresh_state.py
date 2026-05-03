@@ -56,6 +56,7 @@ def refresh_state_command(*, dry_run: bool, target_path: Path) -> None:
         return
 
     (cortex_dir / "state.md").write_text(rendered)
+    _refresh_retrieve_index_if_present(project_root)
     click.echo(str(cortex_dir / "state.md"))
 
 
@@ -70,3 +71,14 @@ def _refresh_index_after_write(project_root: Path) -> None:
         return
     for warning in result.warnings:
         click.echo(f"warning: {warning}", err=True)
+
+
+def _refresh_retrieve_index_if_present(project_root: Path) -> None:
+    try:
+        from cortex.retrieve.index import rebuild_index, retrieve_index_exists
+
+        if not retrieve_index_exists(project_root):
+            return
+        rebuild_index(project_root)
+    except Exception as exc:
+        click.echo(f"warning: could not refresh .cortex/.index/chunks.sqlite: {exc}", err=True)

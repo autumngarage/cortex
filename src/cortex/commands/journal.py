@@ -350,6 +350,18 @@ def _refresh_index_after_write(project_root: Path) -> None:
         return
     for warning in result.warnings:
         click.echo(f"warning: {warning}", err=True)
+    _refresh_retrieve_index_if_present(project_root)
+
+
+def _refresh_retrieve_index_if_present(project_root: Path) -> None:
+    try:
+        from cortex.retrieve.index import rebuild_index, retrieve_index_exists
+
+        if not retrieve_index_exists(project_root):
+            return
+        rebuild_index(project_root)
+    except Exception as exc:
+        click.echo(f"warning: could not refresh .cortex/.index/chunks.sqlite: {exc}", err=True)
 
 
 @click.group("journal")

@@ -253,6 +253,8 @@ _STATE_IMPORT_MARKER = "@.cortex/state.md"
 _GITIGNORE_ENTRIES: tuple[str, ...] = (
     # Auto-maintained Cortex index; transient per SPEC § 2 — never committed.
     ".cortex/.index.json",
+    # Derived retrieve index; chunks.sqlite is rebuildable from .cortex/ markdown.
+    ".cortex/.index/",
     # Placeholder for the future pending-write path; present pre-emptively so the
     # directory never leaks into commits once consumers start dropping files.
     ".cortex/pending/",

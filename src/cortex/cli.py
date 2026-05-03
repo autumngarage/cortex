@@ -23,6 +23,7 @@ from cortex.commands.plan import plan_group
 from cortex.commands.promote import promote_command
 from cortex.commands.refresh_index import refresh_index_command
 from cortex.commands.refresh_state import refresh_state_command
+from cortex.commands.retrieve import retrieve_command
 from cortex.commands.status import run_status, status_command
 
 
@@ -105,6 +106,7 @@ cli.add_command(status_command)
 cli.add_command(promote_command)
 cli.add_command(refresh_index_command)
 cli.add_command(refresh_state_command)
+cli.add_command(retrieve_command)
 cli.add_command(next_command)
 cli.add_command(journal_group)
 cli.add_command(plan_group)
