@@ -362,16 +362,32 @@ def check_config_toml_schema(project_root: Path) -> list[Issue]:
     issues: list[Issue] = []
     audit = data.get("audit-instructions")
     if isinstance(audit, dict):
+        # gh_release intentionally absent — it was schema-validated but not
+        # parsed by config.AuditInstructionsConfig; removed in cortex#93. The
+        # audit uses github_repos (list of repos) instead. Keys here must
+        # match what config.load_audit_instructions_config actually reads.
         audit_schema: dict[str, str] = {
             "homebrew_tap": "optional-string",
             "siblings": "optional-string-list",
             "pypi_package": "optional-string",
-            "gh_release": "optional-string",
             "urls": "optional-string-list",
             "scan_files": "optional-string-list",
             "github_repos": "optional-string-list",
         }
         issues.extend(_validate_table(rel, "audit-instructions", audit, audit_schema))
+    refresh_index = data.get("refresh-index")
+    if isinstance(refresh_index, dict):
+        # Schema mirrors config.RefreshIndexConfig fields. Added in cortex#94
+        # (was consumed by config.py but missing here, so unknown keys
+        # silently passed and typos in candidate_patterns went undetected).
+        issues.extend(
+            _validate_table(
+                rel,
+                "refresh-index",
+                refresh_index,
+                {"candidate_patterns": "optional-string-list"},
+            )
+        )
     doctrine = data.get(DOCTRINE_0007_SECTION[0])
     doctrine_0007 = doctrine.get(DOCTRINE_0007_SECTION[1]) if isinstance(doctrine, dict) else None
     if isinstance(doctrine_0007, dict):

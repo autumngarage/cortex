@@ -210,6 +210,53 @@ def test_config_toml_schema_type_and_unknown_key(tmp_path: Path) -> None:
     assert any(issue.severity == "warning" and "unknown_key" in issue.message for issue in issues)
 
 
+def test_config_toml_schema_gh_release_no_longer_silently_accepted(tmp_path: Path) -> None:
+    """Regression for cortex#93 — `gh_release` was schema-validated but never
+    parsed by config.AuditInstructionsConfig. Now it warns as unknown so users
+    move to `github_repos` instead of silently misconfiguring."""
+
+    _scaffold(tmp_path)
+    (tmp_path / ".cortex" / "config.toml").write_text(
+        '[audit-instructions]\ngh_release = "https://example.com/releases"\n'
+    )
+    issues = check_config_toml_schema(tmp_path)
+    assert any(issue.severity == "warning" and "gh_release" in issue.message for issue in issues)
+
+
+def test_config_toml_schema_validates_refresh_index_section(tmp_path: Path) -> None:
+    """Regression for cortex#94 — `[refresh-index]` was consumed by
+    config.RefreshIndexConfig but absent from the doctor schema, so unknown
+    keys silently passed and typos went undetected."""
+
+    _scaffold(tmp_path)
+    # Valid known key — no warnings.
+    (tmp_path / ".cortex" / "config.toml").write_text(
+        "[refresh-index]\ncandidate_patterns = [\"decision\", \"incident\"]\n"
+    )
+    issues = check_config_toml_schema(tmp_path)
+    assert not any("refresh-index" in issue.message for issue in issues)
+
+    # Typo on the known key — must surface as unknown.
+    (tmp_path / ".cortex" / "config.toml").write_text(
+        '[refresh-index]\ncandidate_pattern = ["decision"]\n'
+    )
+    issues = check_config_toml_schema(tmp_path)
+    assert any(
+        issue.severity == "warning" and "candidate_pattern" in issue.message
+        for issue in issues
+    )
+
+    # Wrong type — must surface as error.
+    (tmp_path / ".cortex" / "config.toml").write_text(
+        '[refresh-index]\ncandidate_patterns = "not-a-list"\n'
+    )
+    issues = check_config_toml_schema(tmp_path)
+    assert any(
+        issue.severity == "error" and "candidate_patterns" in issue.message
+        for issue in issues
+    )
+
+
 def test_retention_visibility_plan_and_warm_journal(tmp_path: Path) -> None:
     _scaffold(tmp_path)
     plan = tmp_path / ".cortex" / "plans" / "old.md"
