@@ -15,6 +15,16 @@ set -euo pipefail
 ACTION="${1:-validate}"
 
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+# Git hooks export repository-local variables such as GIT_DIR and
+# GIT_WORK_TREE. Validation runs tests that create nested temporary git
+# repositories; inheriting the parent hook context makes those tests operate
+# on this repo instead of their tmpdir. Capture the root first, then clear the
+# hook-local environment before running project commands.
+while IFS= read -r git_var; do
+  [ -n "$git_var" ] && unset "$git_var"
+done < <(git rev-parse --local-env-vars 2>/dev/null || true)
+
 cd "$REPO_ROOT"
 
 CONFIG_FILE="${TOUCHSTONE_CONFIG_FILE:-.touchstone-config}"
