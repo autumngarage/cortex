@@ -239,13 +239,14 @@ def test_promote_missing_promotion_template_exits_clearly(
     assert not list((project / ".cortex" / "doctrine").glob("*.md"))
 
 
-def test_promote_partial_failure_preserves_doctrine_and_journal(
+def test_promote_partial_failure_preserves_doctrine_when_index_write_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """If `_mark_promoted` fails after Doctrine + Journal are written, those
-    files MUST be preserved (Journal append-only per SPEC.md §4.1, Doctrine
-    immutable per §4.2). The CLI must surface the partial state and exit
-    non-zero — never silently delete promoted artifacts.
+    """If the index mutation fails after the Doctrine entry is written,
+    the Doctrine entry MUST be preserved (Doctrine immutable per
+    SPEC.md §4.2). With the corrected write order (Doctrine → index →
+    Journal), an index failure leaves Doctrine on disk and no Journal
+    entry — so any preserved artifact remains truthful.
     """
     project = _project(tmp_path)
     candidate_id = _write_candidate(project)
@@ -267,15 +268,51 @@ def test_promote_partial_failure_preserves_doctrine_and_journal(
 
     doctrine = project / ".cortex" / "doctrine" / "0100-load-bearing-lesson.md"
     assert doctrine.exists(), "Doctrine entry must NOT be deleted on rollback"
+
+    # Journal must NOT exist yet — its prose claims the index was updated,
+    # which would be a lie if persisted before the index actually changed.
     journals = list(
         (project / ".cortex" / "journal").glob("*promotion-0100-load-bearing-lesson.md")
     )
-    assert len(journals) == 1, "Journal entry must NOT be deleted on rollback"
+    assert journals == [], (
+        "Journal entry must not be written before the index mutation succeeds"
+    )
 
-    # Both preserved paths must be reported to the operator so they can
-    # finish or discard by hand.
     assert str(doctrine) in combined
-    assert str(journals[0]) in combined
+
+
+def test_promote_partial_failure_preserves_doctrine_and_index_when_journal_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If the Journal write fails after Doctrine + index already changed,
+    both Doctrine and the updated index MUST be preserved. The operator
+    is told to finish the Journal by hand.
+    """
+    project = _project(tmp_path)
+    candidate_id = _write_candidate(project)
+
+    import cortex.commands.promote as promote_mod
+
+    def _boom(_journal: object) -> None:
+        raise OSError("simulated journal-write failure")
+
+    monkeypatch.setattr(promote_mod, "_write_journal", _boom)
+
+    result = _promote(project, candidate_id)
+
+    assert result.exit_code == 2, _combined(result)
+    combined = _combined(result)
+    assert "promotion failed mid-write" in combined
+
+    doctrine = project / ".cortex" / "doctrine" / "0100-load-bearing-lesson.md"
+    assert doctrine.exists(), "Doctrine entry must NOT be deleted on rollback"
+
+    # Index reflects the promotion so a follow-up retry sees the candidate
+    # already promoted and refuses to double-write Doctrine.
+    data = json.loads((project / ".cortex" / ".index.json").read_text())
+    assert data["candidates"][0]["promoted_to"] == "doctrine/0100-load-bearing-lesson"
+
+    assert str(doctrine) in combined
 
 
 def test_promote_failure_before_any_write_reports_safe_to_retry(
@@ -301,3 +338,67 @@ def test_promote_failure_before_any_write_reports_safe_to_retry(
     assert "promotion failed mid-write" in combined
     assert "safe to retry" in combined
     assert not list((project / ".cortex" / "doctrine").glob("*.md"))
+
+
+def test_promote_refuses_source_outside_journal(tmp_path: Path) -> None:
+    """A stale or malformed `.index.json` whose candidate `source` points
+    outside `.cortex/journal/` must refuse to promote — never silently
+    promote a Doctrine entry, plan, template, or path-traversal target.
+    """
+    project = _project(tmp_path)
+    # Write an index with a candidate whose source escapes journal/.
+    write_index(
+        project / ".cortex" / ".index.json",
+        {
+            "spec": "0.5.0",
+            "generated": "2026-04-23T00:00:00-07:00",
+            "candidates": [
+                {
+                    "id": "2026-04-23-evil",
+                    "source": ".cortex/doctrine/0001-existing.md",
+                    "type": "decision",
+                    "last_touched": "2026-04-23",
+                    "age_days": 1,
+                    "tags": ["candidate-doctrine"],
+                    "supersedes": None,
+                    "promoted_to": None,
+                }
+            ],
+        },
+    )
+    result = _promote(project, "2026-04-23-evil")
+
+    assert result.exit_code == 2, _combined(result)
+    assert "not under .cortex/journal/" in _combined(result)
+    # No Doctrine entry was created.
+    assert not list((project / ".cortex" / "doctrine").glob("*.md"))
+
+
+def test_promote_refuses_path_traversal_source(tmp_path: Path) -> None:
+    """Candidate sources that try to traverse out of `.cortex/journal/`
+    via `..` must be refused.
+    """
+    project = _project(tmp_path)
+    write_index(
+        project / ".cortex" / ".index.json",
+        {
+            "spec": "0.5.0",
+            "generated": "2026-04-23T00:00:00-07:00",
+            "candidates": [
+                {
+                    "id": "2026-04-23-traverse",
+                    "source": ".cortex/journal/../../escape.md",
+                    "type": "decision",
+                    "last_touched": "2026-04-23",
+                    "age_days": 1,
+                    "tags": ["candidate-doctrine"],
+                    "supersedes": None,
+                    "promoted_to": None,
+                }
+            ],
+        },
+    )
+    result = _promote(project, "2026-04-23-traverse")
+
+    assert result.exit_code == 2, _combined(result)
+    assert "not under .cortex/journal/" in _combined(result)

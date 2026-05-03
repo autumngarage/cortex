@@ -185,10 +185,15 @@ def promote_command(
     try:
         write_doctrine_entry(doctrine)
         created.append(doctrine.path)
-        _write_journal(journal)
-        created.append(journal.path)
+        # Mutate the index BEFORE writing the Journal entry. The Journal
+        # entry's prose claims the index was updated; if the index write
+        # fails after the Journal is on disk, that preserved Journal entry
+        # would be a lie. Order the writes so any preserved partial state
+        # remains truthful: Doctrine + index, then Journal last.
         _mark_promoted(data, candidate_id, doctrine.rel)
         write_index(index_path, data)
+        _write_journal(journal)
+        created.append(journal.path)
     except FileExistsError as exc:
         _report_partial_failure(created, exc)
         sys.exit(2)
@@ -231,12 +236,38 @@ def _candidate_source(project_root: Path, candidate: dict[str, Any]) -> tuple[Pa
 
     rel = raw.strip()
     if rel.startswith(".cortex/"):
-        path = project_root / rel
+        candidate_path = project_root / rel
         source_ref = rel.removeprefix(".cortex/").removesuffix(".md")
     else:
-        path = project_root / ".cortex" / rel
+        candidate_path = project_root / ".cortex" / rel
         source_ref = rel.removesuffix(".md")
-    return path, source_ref
+
+    # Constrain the candidate to `.cortex/journal/<...>.md` inside the
+    # project root. A stale or malformed `.index.json` could otherwise
+    # name a path that traverses out of `.cortex/` (e.g. `../etc/passwd`)
+    # or points at non-Journal layers (Doctrine, Plans, templates) that
+    # are not promotion sources. Refuse rather than silently promoting.
+    journal_root = (project_root / ".cortex" / "journal").resolve()
+    try:
+        resolved = candidate_path.resolve(strict=False)
+        resolved.relative_to(journal_root)
+    except (OSError, ValueError):
+        click.echo(
+            f"error: promotion candidate source {raw!r} is not under "
+            f".cortex/journal/. Cortex only promotes Journal entries; "
+            "run `cortex refresh-index` to rebuild the queue.",
+            err=True,
+        )
+        sys.exit(2)
+    if resolved.suffix != ".md":
+        click.echo(
+            f"error: promotion candidate source {raw!r} is not a "
+            ".md file; only Journal markdown entries can be promoted.",
+            err=True,
+        )
+        sys.exit(2)
+
+    return candidate_path, source_ref
 
 
 def _read_source(source_path: Path) -> str:
