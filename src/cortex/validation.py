@@ -43,8 +43,8 @@ SEVEN_FIELDS = (
 SCAFFOLD_SUBDIRS = ("doctrine", "plans", "journal", "procedures")
 
 DOCTRINE_REQUIRED_FIELDS = ("Status", "Date", "Load-priority")
-DOCTRINE_LOAD_PRIORITY_VALUES = ("normal", "default", "always")
-DOCTRINE_STATUS_RE = re.compile(r"^(Active|Proposed|Accepted|Superseded-by\s+\d+)\s*$")
+DOCTRINE_LOAD_PRIORITY_VALUES = ("default", "always")
+DOCTRINE_STATUS_RE = re.compile(r"^(Proposed|Accepted|Superseded-by\s+\d+)\s*$")
 
 PLAN_REQUIRED_FIELDS = ("Status", "Written", "Author", "Goal-hash", "Updated-by", "Cites")
 PLAN_STATUS_VALUES = ("active", "shipped", "cancelled", "deferred", "blocked")
@@ -316,7 +316,7 @@ def _check_doctrine_entry_body(rel: str, text: str) -> list[Issue]:
                 Severity.ERROR,
                 rel,
                 f"Doctrine `Status: {status}` is invalid; SPEC § 3.1 requires "
-                "`Active`, `Proposed`, `Accepted`, or `Superseded-by <n>`.",
+                "`Proposed`, `Accepted`, or `Superseded-by <n>`.",
             )
         )
 

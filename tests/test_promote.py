@@ -21,11 +21,11 @@ def _project(tmp_path: Path) -> Path:
         "# {{ nnnn }} - {{ Title - active-voice claim }}\n\n"
         "> {{ One-sentence claim in active voice. This is the summary that loads "
         "into context when an agent grep-hits this entry. Make it readable standalone. }}\n\n"
-        "**Status:** Active\n"
+        "**Status:** Proposed\n"
         "**Date:** {{ YYYY-MM-DD }}\n"
         "**Promoted-from:** {{ journal/<date>-<slug> or plans/<slug> or - (direct authoring) }}\n"
         "**Cites:** {{ Cites }}\n"
-        "**Load-priority:** normal\n\n"
+        "**Load-priority:** {{ always | default }}\n\n"
         "## Context\n\n"
         "{{ What situation or pattern produced this claim? What alternatives were weighed? "
         "Link to the supporting Journal entries, Plans, or Procedures. An editor reviewing "
@@ -109,8 +109,8 @@ def test_promote_round_trip_writes_doctrine_index_and_journal(tmp_path: Path) ->
     doctrine = project / ".cortex" / "doctrine" / "0100-load-bearing-lesson.md"
     assert doctrine.exists()
     doctrine_text = doctrine.read_text()
-    assert "**Status:** Active" in doctrine_text
-    assert "**Load-priority:** normal" in doctrine_text
+    assert "**Status:** Accepted" in doctrine_text
+    assert "**Load-priority:** default" in doctrine_text
     assert "**Promoted-from:** journal/2026-04-23-load-bearing-lesson" in doctrine_text
     assert "**Cites:** plans/cortex-v1, doctrine/0001" in doctrine_text
 
@@ -145,9 +145,9 @@ def test_promote_already_promoted_refuses_and_force_yes_proceeds(tmp_path: Path)
     write_index(project / ".cortex" / ".index.json", data)
     (project / ".cortex" / "doctrine" / "0100-existing.md").write_text(
         "# Existing\n\n"
-        "**Status:** Active\n"
+        "**Status:** Accepted\n"
         "**Date:** 2026-04-23\n"
-        "**Load-priority:** normal\n"
+        "**Load-priority:** default\n"
     )
 
     refused = _promote(project, candidate_id)
@@ -166,15 +166,15 @@ def test_promote_slug_numbering_reserves_low_range(tmp_path: Path) -> None:
     candidate_id = _write_candidate(project)
     (project / ".cortex" / "doctrine" / "0001-canonical.md").write_text(
         "# Canonical\n\n"
-        "**Status:** Active\n"
+        "**Status:** Accepted\n"
         "**Date:** 2026-04-23\n"
-        "**Load-priority:** normal\n"
+        "**Load-priority:** default\n"
     )
     (project / ".cortex" / "doctrine" / "0099-reserved.md").write_text(
         "# Reserved\n\n"
-        "**Status:** Active\n"
+        "**Status:** Accepted\n"
         "**Date:** 2026-04-23\n"
-        "**Load-priority:** normal\n"
+        "**Load-priority:** default\n"
     )
 
     result = _promote(project, candidate_id)

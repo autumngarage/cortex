@@ -172,7 +172,7 @@ def _render_candidate_template(
         "{{ journal/<date>-<slug> or plans/<slug> or - (direct authoring) }}": source_ref,
         "{{ touchstone/principles/<file>.md#<section> — omit if not applicable }}": "-",
         "{{ touchstone/principles/<file>.md#<section> - omit if not applicable }}": "-",
-        "{{ always | default }}": "normal",
+        "{{ always | default }}": "default",
         "{{ Cites }}": cites or "-",
         "{{ What situation or pattern produced this claim? What alternatives were weighed? Link to the supporting Journal entries, Plans, or Procedures. An editor reviewing this candidate should be able to judge from Context alone whether the claim generalizes. }}": f"Promotion source: {source_ref}.",
         "{{ We will / we won't — stated as a claim, not a recommendation. Include the specific boundary: what falls inside this decision and what falls outside. }}": title,
@@ -183,7 +183,7 @@ def _render_candidate_template(
     rendered = template
     for placeholder, value in replacements.items():
         rendered = rendered.replace(placeholder, value)
-    rendered = rendered.replace("**Status:** Proposed", "**Status:** Active")
+    rendered = rendered.replace("**Status:** Proposed", "**Status:** Accepted")
     if "**Cites:**" not in rendered:
         rendered = rendered.replace(
             f"**Promoted-from:** {source_ref}\n",

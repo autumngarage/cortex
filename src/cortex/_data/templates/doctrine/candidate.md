@@ -2,12 +2,12 @@
 
 > {{ One-sentence claim in active voice. This is the summary that loads into context when an agent grep-hits this entry. Make it readable standalone. }}
 
-**Status:** Active
+**Status:** Proposed
 **Date:** {{ YYYY-MM-DD }}
 **Promoted-from:** {{ journal/<date>-<slug> or plans/<slug> or - (direct authoring) }}
 **Cites:** {{ Cites }}
 **Grounds-in:** {{ touchstone/principles/<file>.md#<section> - omit if not applicable }}
-**Load-priority:** normal
+**Load-priority:** {{ always | default }}
 
 ## Context
 
