@@ -7,11 +7,13 @@
 # Always uses the project's PR template if one exists.
 #
 # Usage:
-#   bash scripts/open-pr.sh                # title from last commit; base = default branch
-#   bash scripts/open-pr.sh --auto-merge   # open + Codex review + squash-merge
-#   bash scripts/open-pr.sh --draft        # same, opened as draft
-#   bash scripts/open-pr.sh --base feat/X  # stacked PR: base this PR on feat/X, not main
-#   bash scripts/open-pr.sh "Custom title" # explicit title
+#   bash scripts/open-pr.sh                          # title from last commit; base = default branch
+#   bash scripts/open-pr.sh --auto-merge             # open + Codex review + squash-merge
+#   bash scripts/open-pr.sh --auto-merge \
+#                            --cleanup-worktree       # auto-merge, then remove this feature worktree
+#   bash scripts/open-pr.sh --draft                  # same, opened as draft
+#   bash scripts/open-pr.sh --base feat/X            # stacked PR: base this PR on feat/X, not main
+#   bash scripts/open-pr.sh "Custom title"           # explicit title
 #
 # Exit contract (--auto-merge):
 #   exit 0 ⇔ `gh pr view <n> --json mergedAt --jq .mergedAt` is non-empty.
@@ -98,6 +100,92 @@ verify_pr_merged() {
   return 1
 }
 
+# Locate the worktree that has the default branch checked out, by parsing
+# `git worktree list --porcelain`. Returns empty when no sibling worktree
+# owns the default branch (single-checkout case).
+default_branch_worktree_path() {
+  local default_branch="$1"
+  local current_path=""
+  awk -v target="refs/heads/$default_branch" '
+    /^worktree / { path = substr($0, length("worktree ") + 1) }
+    /^branch /   { if ($2 == target) { print path; exit } }
+  ' < <(git worktree list --porcelain)
+}
+
+# Remove the current feature worktree from the default-branch worktree.
+# Called after a successful auto-merge when --cleanup-worktree is set.
+# The cleanup is a best-effort convenience: failures are reported but do
+# not fail the script — the merge already happened, and a leftover
+# worktree is recoverable via `scripts/cleanup-worktrees.sh`.
+cleanup_feature_worktree() {
+  local current_path default_path
+  current_path="$(git rev-parse --show-toplevel)"
+  default_path="$(default_branch_worktree_path "$DEFAULT_BRANCH")"
+
+  if [ -z "$default_path" ]; then
+    echo "==> --cleanup-worktree: no sibling worktree owns $DEFAULT_BRANCH; nothing to remove."
+    return 0
+  fi
+  if [ "$current_path" = "$default_path" ]; then
+    echo "==> --cleanup-worktree: already in $DEFAULT_BRANCH worktree; nothing to remove."
+    return 0
+  fi
+
+  echo "==> Removing feature worktree $current_path (from $default_path) ..."
+  if ( cd "$default_path" && git worktree remove "$current_path" ); then
+    echo "==> Worktree removed."
+  else
+    echo "WARNING: git worktree remove failed for $current_path." >&2
+    echo "         Run 'bash scripts/cleanup-worktrees.sh' from $default_path to inspect and clean up." >&2
+  fi
+}
+
+find_base_merge_commit() {
+  local base_branch="$1"
+  local ref
+  for ref in "origin/$base_branch" "$base_branch"; do
+    if git rev-parse --verify "$ref^{commit}" >/dev/null 2>&1; then
+      git merge-base HEAD "$ref"
+      return 0
+    fi
+  done
+  return 1
+}
+
+find_issue_closing_refs() {
+  local base_branch="$1"
+  local merge_base
+  if ! merge_base="$(find_base_merge_commit "$base_branch")"; then
+    echo "WARNING: could not find merge-base for $base_branch; skipping linked-issue detection" >&2
+    return 0
+  fi
+
+  # Invariant: only commits unique to this PR branch are scanned; base-branch
+  # history must not contribute stale issue references to new PR bodies.
+  git log "$merge_base..HEAD" --format='%b' | awk '
+    {
+      line = tolower($0)
+      should_scan = 0
+      if (line ~ /^[[:space:]]*(closes-issue|closes|fixes|refs):[[:space:]]*/) {
+        should_scan = 1
+      }
+      if (line ~ /(^|[^[:alnum:]_-])(close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)[[:space:]]+#[0-9]+/) {
+        should_scan = 1
+      }
+      if (should_scan) {
+        rest = line
+        while (match(rest, /#[0-9]+/)) {
+          issue = substr(rest, RSTART + 1, RLENGTH - 1)
+          if (!seen[issue]++) {
+            print issue
+          }
+          rest = substr(rest, RSTART + RLENGTH)
+        }
+      }
+    }
+  '
+}
+
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 TEMPLATE_PATH="$REPO_ROOT/.github/pull_request_template.md"
 
@@ -141,6 +229,7 @@ fi
 # Parse flags early (needed before the existing-PR check).
 DRAFT_FLAG=""
 AUTO_MERGE=false
+CLEANUP_WORKTREE=false
 BASE_OVERRIDE=""
 POSITIONAL=()
 
@@ -148,6 +237,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --draft) DRAFT_FLAG="--draft"; shift ;;
     --auto-merge) AUTO_MERGE=true; shift ;;
+    --cleanup-worktree) CLEANUP_WORKTREE=true; shift ;;
     --base)
       if [ "$#" -lt 2 ]; then
         echo "ERROR: --base requires a branch name." >&2
@@ -160,6 +250,14 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 set -- "${POSITIONAL[@]+"${POSITIONAL[@]}"}"
+
+# --cleanup-worktree is only meaningful with --auto-merge: without a merge
+# there is nothing to clean up to. Reject the combination loudly so the user
+# notices instead of getting silent no-op behavior.
+if [ "$CLEANUP_WORKTREE" = true ] && [ "$AUTO_MERGE" != true ]; then
+  echo "ERROR: --cleanup-worktree requires --auto-merge (cleanup runs only after a successful merge)." >&2
+  exit 1
+fi
 
 # Resolve the actual base branch: --base overrides the repo default.
 BASE_BRANCH="${BASE_OVERRIDE:-$DEFAULT_BRANCH}"
@@ -228,17 +326,79 @@ else
 fi
 
 COMMIT_BODY="$(git log -1 --format=%b)"
+LINKED_ISSUES="$(find_issue_closing_refs "$BASE_BRANCH")"
+
+# ---------------------------------------------------------------------------
+# Sentinel-cycle PR body: when the current branch was authored by a sentinel
+# agent, pull the PR body from the cycle artifact's anchored region instead
+# of from commit messages.  Falls back to commit-message behavior silently if
+# no anchors are found or the run file is missing.
+# ---------------------------------------------------------------------------
+
+# Returns 0 (truthy) when .sentinel/runs/ contains at least one .md artifact.
+is_sentinel_authored_branch() {
+  [ -n "$(find .sentinel/runs -maxdepth 1 -name "*.md" 2>/dev/null | head -1)" ]
+}
+
+# Prints the path of the most-recently-modified sentinel run artifact.
+find_latest_sentinel_run() {
+  # ls -t is the simplest portable mtime sort; filenames here are controlled.
+  # shellcheck disable=SC2012
+  ls -t .sentinel/runs/*.md 2>/dev/null | head -1
+}
+
+# Reads the schema-version from the YAML frontmatter of a run artifact.
+get_schema_version() {
+  local run_file="$1"
+  awk '/^---$/{f=1-f; next} f && /^schema-version:/{print $2; exit}' "$run_file"
+}
+
+# Extracts lines between <!-- pr-body-start --> and <!-- pr-body-end -->.
+extract_pr_body_from_run() {
+  local run_file="$1"
+  awk '/<!-- pr-body-start -->/{flag=1; next} /<!-- pr-body-end -->/{flag=0} flag' "$run_file"
+}
+
+SENTINEL_BODY=""
+if is_sentinel_authored_branch; then
+  SENTINEL_RUN="$(find_latest_sentinel_run)"
+  if [ -n "$SENTINEL_RUN" ]; then
+    SCHEMA_VER="$(get_schema_version "$SENTINEL_RUN")"
+    if [ -n "$SCHEMA_VER" ]; then
+      major="${SCHEMA_VER%%.*}"
+      if [ "$major" -ge 2 ] 2>/dev/null; then
+        echo "WARNING: sentinel run schema-version $SCHEMA_VER not recognized; attempting 1.x extraction" >&2
+      fi
+    fi
+    SENTINEL_BODY="$(extract_pr_body_from_run "$SENTINEL_RUN")"
+    if [ -z "$SENTINEL_BODY" ]; then
+      echo "WARNING: sentinel cycle artifact found but PR-body anchors are empty — falling back to commit-message body" >&2
+    fi
+  fi
+fi
 
 # Build body from commit body + PR template (if present). The unified EXIT
 # trap installed above (`on_exit`) will rm the file regardless of how we exit.
 BODY_FILE="$(mktemp -t touchstone-pr-body.XXXXXX.md)"
 
 {
-  if [ -n "$COMMIT_BODY" ]; then
-    printf '%s\n\n---\n\n' "$COMMIT_BODY"
+  if [ -n "$LINKED_ISSUES" ]; then
+    printf '## Linked Issues\n\n'
+    while IFS= read -r issue_number; do
+      [ -n "$issue_number" ] || continue
+      printf 'Closes #%s\n' "$issue_number"
+    done <<< "$LINKED_ISSUES"
+    printf '\n'
   fi
-  if [ -f "$TEMPLATE_PATH" ]; then
-    cat "$TEMPLATE_PATH"
+  if [ -n "$SENTINEL_BODY" ]; then
+    printf '%s\n' "$SENTINEL_BODY"
+  else
+    if [ -n "$COMMIT_BODY" ]; then
+      printf '%s\n\n---\n\n' "$COMMIT_BODY"
+    fi
+    if [ -f "$TEMPLATE_PATH" ]; then
+      cat "$TEMPLATE_PATH"
+    fi
   fi
 } > "$BODY_FILE"
 
@@ -292,6 +452,10 @@ if [ "$AUTO_MERGE" = true ]; then
   if ! verify_pr_merged "$PR_NUMBER"; then
     echo "ERROR: merge-pr.sh exited 0 but PR #$PR_NUMBER is not merged on GitHub." >&2
     exit 1
+  fi
+
+  if [ "$CLEANUP_WORKTREE" = true ]; then
+    cleanup_feature_worktree
   fi
 fi
 

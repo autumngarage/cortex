@@ -5,6 +5,15 @@
 
 These principles are touchstone-owned and shared across every project. Apply them as the **primary coding and review criteria** before any project-specific rule below — an agent that lets a band-aid or a silent failure through has missed the point of this gate.
 
+## Agent Roles And Fallbacks
+
+There are two AI roles in a Touchstone workflow:
+
+- **Driving CLI:** Claude Code, Codex, or Gemini CLI owns the repo workflow. The driver reads the steering files, edits files, runs tests, creates the branch and commits, opens the PR, invokes review, and ships through the merge helper.
+- **Conductor worker/reviewer:** Conductor is the model router used by the driving CLI for review and bounded worker tasks. Conductor can route to Claude, Codex, Gemini, or other providers, and can fall back between configured providers, but Conductor does not replace the driving CLI's responsibility for git, PR, and merge workflow.
+
+Driver fallback is shared-contract fallback: Codex and other AGENTS.md-native tools start here; Gemini starts in `GEMINI.md` and delegates back here; Claude starts in `CLAUDE.md` and imports the same `principles/` files. If one driving CLI is unavailable or rate-limited, another driving CLI can continue by reading its entry file plus this managed block and `principles/*.md`. If an agent-specific file is incomplete or conflicts with this block or `principles/*.md`, follow the managed block and principles first.
+
 - **No band-aids** — fix the root cause; if patching a symptom, say so explicitly and name the root cause.
 - **Keep interfaces narrow** — expose the smallest stable contract; don't leak storage shape, vendor SDKs, or workflow sequencing.
 - **Derive limits from domain** — thresholds and sizes come from input/config/named constants; test at small, typical, and large scales.
@@ -18,6 +27,7 @@ These principles are touchstone-owned and shared across every project. Apply the
 - **Make irreversible actions recoverable** — destructive operations need a dry-run, backup, idempotency, rollback, or forward-fix plan before they run.
 - **Preserve compatibility at boundaries** — public API/config/schema/CLI/hook/template changes need a compatibility or migration plan.
 - **Audit weak-point classes** — when a structural bug is found, audit the class and add a guardrail; don't fix only the one instance.
+- **File issues for bugs** — open a GitHub issue when you find a bug, in this project or in an autumngarage tool. Don't silently work around it.
 
 Full rationale, worked examples, and the *why* behind each rule:
 
@@ -25,6 +35,20 @@ Full rationale, worked examples, and the *why* behind each rule:
 - `principles/pre-implementation-checklist.md`
 - `principles/documentation-ownership.md`
 - `principles/git-workflow.md`
+- `principles/agent-swarms.md`
+- `principles/file-upstream-bugs.md`
+
+## Required Delivery Workflow
+
+For any task that may change tracked files, drive the full branch → PR → review → merge lifecycle unless the user explicitly asks you to stop before shipping:
+
+1. Sync the default branch with `git pull --rebase`.
+2. Before the first edit, run `git branch --show-current`. If it reports `main` or `master`, create a feature branch with `git checkout -b <type>/<short-description>`.
+3. Make the change on that branch, keep commits scoped, stage explicit file paths, and commit with a concise message.
+4. From a clean worktree, run `CODEX_REVIEW_FORCE=1 bash scripts/codex-review.sh`. If Conductor creates fix commits, let the loop finish; if it blocks, address findings, commit, and rerun until clean.
+5. Ship with `bash scripts/open-pr.sh --auto-merge`. That command pushes the branch, creates the PR, runs the final read-only Conductor merge review, squash-merges after a clean review, and syncs the default branch.
+
+Do not bypass the PR/review/automerge path with a direct default-branch push except through the documented emergency path in `principles/git-workflow.md`.
 
 This block is managed by `touchstone` and refreshes on `touchstone update` / `touchstone init`. Edit content **outside** the markers to add project-specific agent guidance — touchstone will not touch it.
 <!-- touchstone:shared-principles:end -->
