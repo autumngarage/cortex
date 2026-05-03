@@ -237,6 +237,7 @@ def _existing_file_fingerprints(conn: sqlite3.Connection) -> dict[str, tuple[flo
 def _replace_file_chunks(conn: sqlite3.Connection, source: SourceFile) -> None:
     text = source.path.read_text()
     frontmatter, body = parse_frontmatter(text)
+    body_start_line = _body_start_line(text, body)
     frontmatter_json = json.dumps(frontmatter, sort_keys=True) if frontmatter else None
     chunks = chunk_markdown(body)
 
@@ -253,11 +254,20 @@ def _replace_file_chunks(conn: sqlite3.Connection, source: SourceFile) -> None:
             (
                 source.rel_path,
                 chunk.chunk_idx,
-                chunk.start_line,
-                chunk.end_line,
+                body_start_line + chunk.start_line - 1,
+                body_start_line + chunk.end_line - 1,
                 chunk.content,
                 frontmatter_json,
                 source.mtime,
                 source.size,
             ),
         )
+
+
+def _body_start_line(text: str, body: str) -> int:
+    if body == text:
+        return 1
+    prefix_len = len(text) - len(body)
+    if prefix_len < 0:
+        return 1
+    return text[:prefix_len].count("\n") + 1

@@ -123,6 +123,21 @@ def test_frontmatter_preserved_per_chunk(tmp_path: Path) -> None:
     assert rows["journal/no-frontmatter.md"]["frontmatter_json"] is None
 
 
+def test_frontmatter_line_offset_preserved_in_result_paths(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    _write(
+        project,
+        "plans/offset.md",
+        "## Plan\nneedle line\n",
+        frontmatter="Status: active\nWritten: 2026-05-01\n",
+    )
+    rebuild_index(project)
+
+    hits = query_bm25(project, "needle", top_k=1)
+
+    assert hits[0].path == "plans/offset.md:6"
+
+
 def test_section_aware_chunking_and_long_section_split() -> None:
     small = "## A\nalpha\n\n## B\nbeta\n"
     assert [chunk.content.splitlines()[0] for chunk in chunk_markdown(small)] == ["## A", "## B"]
@@ -222,8 +237,8 @@ def test_fts5_missing_falls_back_to_grep(tmp_path: Path, monkeypatch: pytest.Mon
 
     monkeypatch.setattr(
         index_mod,
-        "is_stale",
-        lambda _project: (_ for _ in ()).throw(index_mod.FTS5UnavailableError("missing")),
+        "ensure_fts5_available",
+        lambda: (_ for _ in ()).throw(index_mod.FTS5UnavailableError("missing")),
     )
 
     calls: list[list[str]] = []
@@ -253,8 +268,8 @@ def test_fts5_missing_json_fallback_preserves_json_schema(tmp_path: Path, monkey
 
     monkeypatch.setattr(
         index_mod,
-        "is_stale",
-        lambda _project: (_ for _ in ()).throw(index_mod.FTS5UnavailableError("missing")),
+        "ensure_fts5_available",
+        lambda: (_ for _ in ()).throw(index_mod.FTS5UnavailableError("missing")),
     )
 
     def fake_run(_cmd: list[str], **_kwargs: object) -> object:
@@ -272,6 +287,31 @@ def test_fts5_missing_json_fallback_preserves_json_schema(tmp_path: Path, monkey
     data = json.loads(result.stdout)
     assert set(data[0]) == {"path", "score", "frontmatter", "excerpt"}
     assert data[0]["excerpt"] == "grep fallback output"
+
+
+def test_grep_fallback_failure_exits_nonzero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = _project(tmp_path)
+    import cortex.retrieve.index as index_mod
+
+    monkeypatch.setattr(
+        index_mod,
+        "ensure_fts5_available",
+        lambda: (_ for _ in ()).throw(index_mod.FTS5UnavailableError("missing")),
+    )
+
+    def fake_run(_cmd: list[str], **_kwargs: object) -> object:
+        class Completed:
+            stdout = ""
+            stderr = "grep failed\n"
+            returncode = 3
+
+        return Completed()
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    result = CliRunner().invoke(cli, ["retrieve", "needle", "--json", "--path", str(project)])
+
+    assert result.exit_code == 3
+    assert "grep failed" in (result.output + (getattr(result, "stderr", "") or ""))
 
 
 def test_cortex_grep_unaffected_by_retrieve_index_and_sqlite_import(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

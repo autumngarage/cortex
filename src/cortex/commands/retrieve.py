@@ -81,12 +81,14 @@ def retrieve_command(
     try:
         from cortex.retrieve.index import (
             FTS5UnavailableError,
+            ensure_fts5_available,
             is_stale,
             rebuild_index,
             retrieve_index_exists,
         )
         from cortex.retrieve.query import hit_to_json, query_bm25
 
+        ensure_fts5_available()
         if no_rebuild:
             if not retrieve_index_exists(project_root):
                 click.echo(
@@ -142,6 +144,12 @@ def _run_grep_fallback(project_root: Path, query: str, *, as_json: bool) -> None
         text=True,
         check=False,
     )
+    if result.returncode != 0:
+        if result.stdout:
+            click.echo(result.stdout, nl=False)
+        if result.stderr:
+            click.echo(result.stderr, err=True, nl=False)
+        sys.exit(result.returncode)
     if as_json:
         excerpt = result.stdout.strip()
         hits = []
