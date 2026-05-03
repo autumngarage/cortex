@@ -94,11 +94,12 @@ writer). Parsed by `load_refresh_index_config` in `src/cortex/config.py`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `candidate_patterns` | list of strings | `[]` | Glob-style file patterns that contribute promotion candidates to `.cortex/.index.json`. |
+| `candidate_patterns` | list of strings | `[]` | Case-insensitive **substring matches against the body** of Journal entries with `Type: decision`. A Journal entry whose body contains any listed substring is added to `.cortex/.index.json` as a Doctrine-promotion candidate. (Entries already tagged `candidate-doctrine` are picked up regardless of this list.) These are not file globs and not regex. |
 
 Source pointers:
 - Dataclass: `RefreshIndexConfig` in `src/cortex/config.py`.
 - Parser: `load_refresh_index_config` in `src/cortex/config.py`.
+- Matcher: `_is_candidate` in `src/cortex/index.py`.
 
 ## Worked example
 
