@@ -74,7 +74,9 @@ repos:
     hooks:
       - id: touchstone-validate
         name: Touchstone project validation
-        entry: /usr/bin/env bash scripts/touchstone-run.sh validate
+        entry: >-
+          /usr/bin/env bash -c 'unset $(git rev-parse --local-env-vars);
+          exec bash scripts/touchstone-run.sh validate'
         language: system
         stages: [pre-push]
         always_run: true

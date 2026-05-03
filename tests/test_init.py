@@ -43,6 +43,7 @@ def test_init_copies_full_templates_tree(tmp_path: Path) -> None:
         "journal/plan-transition.md",
         "journal/sentinel-cycle.md",
         "journal/pr-merged.md",
+        "journal/promotion.md",
         "journal/release.md",
         "doctrine/candidate.md",
         "digest/monthly.md",
