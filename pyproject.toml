@@ -23,6 +23,27 @@ dependencies = [
     "click>=8.1,<9",
 ]
 
+[project.optional-dependencies]
+# Semantic retrieval extras for `cortex retrieve --mode {semantic,hybrid}`.
+#
+# Cross-platform install footprint (council delta #7 + risk #7/#8):
+#   - sqlite-vec ships pre-built wheels for x86_64/arm64 macOS + x86_64 Linux.
+#     aarch64 Linux is supported. Windows wheels exist but are less battle-tested.
+#   - fastembed pulls onnxruntime, which has NO PyPI wheel for aarch64 Linux
+#     (Graviton, Raspberry Pi, ARM K8s nodes). Users on those platforms hit
+#     ImportError during semantic mode; cortex falls back to BM25 with a
+#     stderr notice rather than crashing.
+#   - First model load downloads ~25 MB to ~/.cache/cortex/models/
+#     (XDG-respectful; not fastembed's default location). Air-gapped users
+#     should pre-seed the cache or stay on --mode bm25.
+#
+# Pinned ranges below match the wheels available within the uv exclude-newer
+# cutoff (2026-04-25). Bump alongside the cutoff.
+semantic = [
+    "sqlite-vec>=0.1.6,<0.2",
+    "fastembed>=0.4,<0.8",
+]
+
 [project.scripts]
 cortex = "cortex.cli:cli"
 
