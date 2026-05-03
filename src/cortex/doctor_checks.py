@@ -52,11 +52,51 @@ def run_plain_checks(project_root: Path) -> list[Issue]:
         check_cli_less_fallback,
         check_generated_layers,
         check_canonical_ownership,
+        check_semantic_retrieval_runtime,
     )
     issues: list[Issue] = []
     for check in checks:
         issues.extend(check(project_root))
     return sorted(issues, key=lambda i: (i.severity.value, i.path, i.message))
+
+
+def check_semantic_retrieval_runtime(project_root: Path) -> list[Issue]:
+    """Surface whether semantic retrieval (S2) is available on this machine.
+
+    Gated on the user having opted into retrieve (i.e. ``.cortex/.index/``
+    exists — built by ``cortex refresh-index --retrieve`` or auto-rebuilt
+    after ``cortex retrieve``). Fresh scaffolds with no retrieve usage stay
+    silent; only projects actually using retrieve see the runtime warning.
+
+    Warning, not error: BM25 mode keeps working without these deps, and
+    aarch64 Linux installs are documented to degrade gracefully.
+    """
+
+    if not (project_root / ".cortex" / ".index").exists():
+        return []
+    issues: list[Issue] = []
+    missing: list[str] = []
+    try:
+        import sqlite_vec  # type: ignore[import-not-found] # noqa: F401
+    except ImportError:
+        missing.append("sqlite-vec")
+    try:
+        import fastembed  # type: ignore[import-not-found]  # noqa: F401
+    except ImportError:
+        missing.append("fastembed")
+    if missing:
+        joined = " + ".join(missing)
+        issues.append(
+            Issue(
+                Severity.WARNING,
+                "",
+                f"semantic retrieval unavailable: {joined} not importable. "
+                "Run `pip install 'cortex[semantic]'` to enable "
+                "`cortex retrieve --mode hybrid|semantic`. BM25 mode is unaffected. "
+                "Note: aarch64 Linux lacks onnxruntime PyPI wheels.",
+            )
+        )
+    return issues
 
 
 def run_audit_checks(project_root: Path, *, since_days: int = DEFAULT_WINDOW_DAYS) -> list[Issue]:

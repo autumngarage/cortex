@@ -1,4 +1,11 @@
-"""SQLite FTS5 index build and invalidation for `cortex retrieve`."""
+"""SQLite FTS5 index build and invalidation for `cortex retrieve`.
+
+S2 extends the schema with a sqlite-vec ``embeddings`` virtual table, kept
+in sync with ``chunks`` row IDs. Schema migration is on-open: if a v1 index
+is opened with v2 code and no ``embeddings`` table exists, we leave the FTS
+side untouched and (on demand) backfill embeddings from current chunk
+content. Older clients can keep using v1 BM25 paths.
+"""
 
 from __future__ import annotations
 
@@ -6,8 +13,9 @@ import json
 import os
 import shutil
 import sqlite3
+import struct
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -18,13 +26,21 @@ from cortex.frontmatter import parse_frontmatter
 from cortex.retrieve.cache import index_path, temp_index_path
 from cortex.retrieve.chunker import chunk_markdown
 
-SCHEMA_VERSION = 1
+# Schema lineage:
+#   v1 — chunks + chunks_fts + meta (S1, v0.7.0).
+#   v2 — adds embeddings vec0 virtual table + embedding_model + embedding_dim
+#        meta keys (S2, v0.8.0). v1 indexes still load read-only via BM25.
+SCHEMA_VERSION = 2
 INDEXED_DIRS = frozenset(("doctrine", "journal", "plans", "digests"))
 INDEXED_TOP_LEVEL_FILES = frozenset(("map.md", "state.md"))
 
 
 class FTS5UnavailableError(RuntimeError):
     """Raised when Python's sqlite3 build does not provide FTS5."""
+
+
+class SqliteVecUnavailableError(RuntimeError):
+    """Raised when sqlite-vec extension cannot be loaded into a connection."""
 
 
 @dataclass(frozen=True)
@@ -46,6 +62,14 @@ class RebuildResult:
     indexed_chunks: int
     changed_paths: tuple[str, ...]
     deleted_paths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class EmbeddingBackfillResult:
+    """Result of an embeddings-table backfill."""
+
+    embedded_chunks: int
+    skipped_chunks: int
 
 
 def ensure_fts5_available() -> None:
@@ -161,6 +185,7 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
           frontmatter_json TEXT,
           file_mtime REAL NOT NULL,
           file_size INTEGER NOT NULL,
+          content_hash TEXT,
           UNIQUE(path, chunk_idx)
         );
         CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
@@ -173,6 +198,11 @@ def _ensure_schema(conn: sqlite3.Connection) -> None:
         );
         """
     )
+    # v2 migration: add `content_hash` column to v1 chunks tables (used to
+    # detect chunks whose embedding can be reused after a chunk re-insert).
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(chunks)").fetchall()}
+    if "content_hash" not in cols:
+        conn.execute("ALTER TABLE chunks ADD COLUMN content_hash TEXT")
     conn.execute("INSERT INTO chunks_fts(chunks_fts) VALUES('rebuild')")
 
 
@@ -241,6 +271,8 @@ def _existing_file_fingerprints(conn: sqlite3.Connection) -> dict[str, tuple[flo
 
 
 def _replace_file_chunks(conn: sqlite3.Connection, source: SourceFile) -> None:
+    import hashlib
+
     text = source.path.read_text()
     frontmatter, body = parse_frontmatter(text)
     body_start_line = _body_start_line(text, body)
@@ -249,13 +281,14 @@ def _replace_file_chunks(conn: sqlite3.Connection, source: SourceFile) -> None:
 
     conn.execute("DELETE FROM chunks WHERE path = ?", (source.rel_path,))
     for chunk in chunks:
+        digest = hashlib.sha256(chunk.content.encode("utf-8")).hexdigest()
         conn.execute(
             """
             INSERT INTO chunks (
               path, chunk_idx, start_line, end_line, content,
-              frontmatter_json, file_mtime, file_size
+              frontmatter_json, file_mtime, file_size, content_hash
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 source.rel_path,
@@ -266,6 +299,7 @@ def _replace_file_chunks(conn: sqlite3.Connection, source: SourceFile) -> None:
                 frontmatter_json,
                 source.mtime,
                 source.size,
+                digest,
             ),
         )
 
@@ -277,3 +311,236 @@ def _body_start_line(text: str, body: str) -> int:
     if prefix_len < 0:
         return 1
     return text[:prefix_len].count("\n") + 1
+
+
+# ---------------------------------------------------------------------------
+# Embeddings (S2)
+# ---------------------------------------------------------------------------
+
+
+def load_sqlite_vec(conn: sqlite3.Connection) -> None:
+    """Load the sqlite-vec extension into ``conn``.
+
+    Raises :class:`SqliteVecUnavailableError` with a clear reason when the
+    extension is not importable or the SQLite build refuses extensions
+    (the latter happens on some hardened distros).
+    """
+
+    try:
+        import sqlite_vec  # type: ignore[import-not-found]
+    except ImportError as exc:
+        raise SqliteVecUnavailableError(
+            f"sqlite-vec not importable: {exc}"
+        ) from exc
+
+    try:
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+    except (AttributeError, sqlite3.OperationalError) as exc:
+        raise SqliteVecUnavailableError(
+            f"sqlite-vec load failed: {exc}"
+        ) from exc
+    finally:
+        with suppress(AttributeError, sqlite3.OperationalError):
+            conn.enable_load_extension(False)
+
+
+def open_index_with_vec(path: Path) -> sqlite3.Connection:
+    """Open the chunks index with sqlite-vec loaded."""
+
+    conn = sqlite3.connect(path)
+    try:
+        load_sqlite_vec(conn)
+    except SqliteVecUnavailableError:
+        conn.close()
+        raise
+    return conn
+
+
+def has_embeddings_table(conn: sqlite3.Connection) -> bool:
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name = 'embeddings'"
+    ).fetchone()
+    return row is not None
+
+
+def ensure_embeddings_table(
+    conn: sqlite3.Connection, *, dimension: int
+) -> None:
+    """Create the embeddings vec0 virtual table if missing.
+
+    Caller is responsible for having sqlite-vec loaded into ``conn``.
+    """
+
+    if has_embeddings_table(conn):
+        return
+    conn.execute(
+        f"CREATE VIRTUAL TABLE embeddings USING vec0(embedding float[{dimension}])"
+    )
+
+
+def serialize_vector(vector: list[float]) -> bytes:
+    """Pack a python float list into the little-endian float32 blob sqlite-vec expects."""
+
+    return struct.pack(f"{len(vector)}f", *vector)
+
+
+def chunks_missing_embeddings(conn: sqlite3.Connection) -> list[tuple[int, str]]:
+    """Return ``(rowid, content)`` for chunks lacking an embedding row."""
+
+    if not has_embeddings_table(conn):
+        # All chunks need embedding once the table is created.
+        return [
+            (int(row[0]), str(row[1]))
+            for row in conn.execute("SELECT id, content FROM chunks ORDER BY id").fetchall()
+        ]
+    rows = conn.execute(
+        """
+        SELECT chunks.id, chunks.content
+        FROM chunks
+        LEFT JOIN embeddings ON chunks.id = embeddings.rowid
+        WHERE embeddings.rowid IS NULL
+        ORDER BY chunks.id
+        """
+    ).fetchall()
+    return [(int(r[0]), str(r[1])) for r in rows]
+
+
+def backfill_embeddings(
+    project_root: Path,
+    *,
+    embed_callable: Callable[[list[str]], list[list[float]]] | None = None,
+    dimension: int | None = None,
+    model_name: str | None = None,
+) -> EmbeddingBackfillResult:
+    """Populate the embeddings table for every chunk that lacks one.
+
+    Parameters
+    ----------
+    project_root:
+        Project containing ``.cortex/.index/chunks.sqlite``.
+    embed_callable:
+        Function accepting ``list[str]`` and returning ``list[list[float]]``.
+        When ``None``, loads the default fastembed embedder. Tests inject a
+        deterministic stub here.
+    dimension / model_name:
+        Override the default ``BAAI/bge-small-en-v1.5`` (384-dim) — used by
+        tests with stub embedders to avoid the heavy model load.
+    """
+
+    target = retrieve_index_path(project_root)
+    if not target.exists():
+        return EmbeddingBackfillResult(0, 0)
+
+    if embed_callable is None:
+        from cortex.retrieve.embeddings import (
+            EMBED_DIMENSION,
+            EMBED_MODEL_NAME,
+            Embedder,
+        )
+
+        embedder = Embedder.shared(project_root)
+        embed_callable = embedder.embed
+        dimension = dimension or EMBED_DIMENSION
+        model_name = model_name or EMBED_MODEL_NAME
+    else:
+        if dimension is None:
+            raise ValueError("dimension is required when embed_callable is provided")
+        model_name = model_name or "test-embedder"
+
+    conn = open_index_with_vec(target)
+    embedded = 0
+    skipped = 0
+    try:
+        ensure_embeddings_table(conn, dimension=dimension)
+        # Existing meta dimension MUST match: refuse to mix dimensions in
+        # one index. This catches "switched embedder, forgot to wipe index".
+        existing_dim = _get_meta(conn, "embedding_dim")
+        if existing_dim and int(existing_dim) != dimension:
+            raise ValueError(
+                f"embedding dimension mismatch: index built at {existing_dim}, "
+                f"caller provided {dimension}. Run `cortex refresh-index --retrieve` "
+                "with `CORTEX_CACHE_DIR` cleared to rebuild from scratch."
+            )
+
+        pending = chunks_missing_embeddings(conn)
+        if not pending:
+            _set_meta(conn, "embedding_model", model_name or "test-embedder")
+            _set_meta(conn, "embedding_dim", str(dimension))
+            conn.commit()
+            return EmbeddingBackfillResult(0, 0)
+
+        # Embed in batches so we don't pin the entire corpus in memory at
+        # once. fastembed itself batches internally; this is a safety belt.
+        batch_size = 32
+        for start in range(0, len(pending), batch_size):
+            batch = pending[start : start + batch_size]
+            texts = [content for _, content in batch]
+            vectors = embed_callable(texts)
+            if len(vectors) != len(batch):
+                raise RuntimeError(
+                    f"embedder returned {len(vectors)} vectors for {len(batch)} chunks"
+                )
+            for (rowid, _content), vector in zip(batch, vectors, strict=True):
+                if len(vector) != dimension:
+                    raise ValueError(
+                        f"embedding dimension mismatch: chunk {rowid} got "
+                        f"{len(vector)}, expected {dimension}"
+                    )
+                conn.execute(
+                    "INSERT INTO embeddings(rowid, embedding) VALUES (?, ?)",
+                    (rowid, serialize_vector(vector)),
+                )
+                embedded += 1
+
+        _set_meta(conn, "embedding_model", model_name or "test-embedder")
+        _set_meta(conn, "embedding_dim", str(dimension))
+        _set_meta(conn, "schema_version", str(SCHEMA_VERSION))
+        conn.commit()
+    finally:
+        conn.close()
+
+    return EmbeddingBackfillResult(embedded, skipped)
+
+
+def has_populated_embeddings(project_root: Path) -> bool:
+    """Return True when the index has ≥1 row in the embeddings table.
+
+    Used by ``cortex retrieve`` to decide whether to default to ``hybrid``
+    or stay on ``bm25`` (the per-brief default-mode flip rule).
+    """
+
+    target = retrieve_index_path(project_root)
+    if not target.exists():
+        return False
+    conn = sqlite3.connect(target)
+    try:
+        if not has_embeddings_table(conn):
+            return False
+        row = conn.execute("SELECT COUNT(*) FROM embeddings").fetchone()
+        return bool(row and int(row[0]) > 0)
+    except sqlite3.DatabaseError:
+        return False
+    finally:
+        conn.close()
+
+
+def _get_meta(conn: sqlite3.Connection, key: str) -> str | None:
+    row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else None
+
+
+def get_index_meta(project_root: Path) -> dict[str, str]:
+    """Return the meta key/value pairs from the chunks index (best-effort)."""
+
+    target = retrieve_index_path(project_root)
+    if not target.exists():
+        return {}
+    conn = sqlite3.connect(target)
+    try:
+        rows = conn.execute("SELECT key, value FROM meta").fetchall()
+    except sqlite3.DatabaseError:
+        return {}
+    finally:
+        conn.close()
+    return {str(k): str(v) for k, v in rows}
