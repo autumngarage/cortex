@@ -559,13 +559,19 @@ def check_canonical_ownership(project_root: Path) -> list[Issue]:
 
 def _modified_commits(project_root: Path, path: Path) -> list[str]:
     rel = _rel(path, project_root)
+    # No `--follow`: per Protocol § 4.1 + § 4.2, journal entries and doctrine
+    # entries are append-only / immutable in place — they never rename. Tracing
+    # renames false-positives when an entry's content is byte-identical to
+    # another file (e.g. an auto-drafted entry whose placeholders weren't
+    # substituted is identical to the template; git's rename heuristic then
+    # traces "modifications" back to commits that touched the template).
+    # See cortex#103 for the canonical repro.
     result = subprocess.run(
         [
             "git",
             "-C",
             str(project_root),
             "log",
-            "--follow",
             "--diff-filter=M",
             "--format=%H",
             "--",
