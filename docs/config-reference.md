@@ -101,6 +101,28 @@ Source pointers:
 - Parser: `load_refresh_index_config` in `src/cortex/config.py`.
 - Matcher: `_is_candidate` in `src/cortex/index.py`.
 
+### `[doctor.stale-checkbox]`
+
+Configuration for the `check_stale_plan_checkboxes` doctor check
+(cortex#100). Read by `_stale_checkbox_window_days` in
+`src/cortex/doctor_checks.py`. Schema-validated by
+`check_config_toml_schema`.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `window_days` | positive integer | `14` | How many days back to scan `Type: release` and `Type: pr-merged` Journal entries when computing overlap with active-plan `- [ ]` checkboxes. Larger values catch older drift; smaller values reduce false positives from long-tail mentions. |
+
+**Bypass per checkbox.** A checkbox annotated `<!-- cortex:no-stale-check -->`
+anywhere on the line is exempt from the check. Use this for legitimately
+aspirational items whose prose overlaps with release/PR-merge journal
+mentions without being shipped (e.g., "sustained-work period across all
+three targets" — release entries naturally name those targets).
+
+Source pointers:
+- Check: `check_stale_plan_checkboxes` in `src/cortex/doctor_checks.py`.
+- Window reader: `_stale_checkbox_window_days` (same file).
+- Schema: `check_config_toml_schema` (same file).
+
 ## Worked example
 
 A complete realistic config for a project that has a Homebrew tap,
