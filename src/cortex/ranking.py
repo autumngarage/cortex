@@ -263,7 +263,7 @@ def _case_study_summary(text: str) -> str:
 
 def _clean_item_text(text: str) -> str:
     cleaned = text.strip()
-    cleaned = cleaned.replace("**", "").replace("__", "")
+    cleaned = cleaned.replace("**", "")
     cleaned = re.sub(r"`([^`]+)`", r"\1", cleaned)
     cleaned = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", cleaned)
     return re.sub(r"\s+", " ", cleaned)

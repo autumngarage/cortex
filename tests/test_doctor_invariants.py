@@ -20,7 +20,9 @@ from cortex.doctor_checks import (
     check_immutable_doctrine,
     check_promotion_queue,
     check_retention_visibility,
+    check_stale_pickup_pointers,
     check_stale_plan_checkboxes,
+    check_stale_state_current_work,
     check_t1_4_deletions,
 )
 from cortex.goal_hash import normalize_goal_hash
@@ -286,6 +288,35 @@ def test_generated_layer_contract_warnings(tmp_path: Path) -> None:
     assert any("layer is stale" in issue.message for issue in issues)
 
 
+def test_state_warns_when_source_changed_after_generated_timestamp(tmp_path: Path) -> None:
+    """Regression for dogfood drift: State generated recently enough by age
+    can still be stale if newer Journal/Plan/Doctrine sources exist."""
+    _scaffold(tmp_path)
+    generated = (datetime.now(UTC) - timedelta(days=1)).isoformat()
+    state = tmp_path / ".cortex" / "state.md"
+    state.write_text(
+        f"---\n"
+        f"Generated: {generated}\n"
+        "Generator: cortex refresh-state\n"
+        "Sources: []\n"
+        "Corpus: 0\n"
+        "Omitted: []\n"
+        "Incomplete: []\n"
+        "Conflicts-preserved: []\n"
+        "---\n\n# State\n"
+    )
+    (tmp_path / ".cortex" / "journal" / "2026-05-04-release.md").write_text(
+        "# Release\n\n**Date:** 2026-05-04\n**Type:** release\n\nNewer source.\n"
+    )
+
+    issues = check_generated_layers(tmp_path)
+    assert any(
+        "state.md generated before source changed" in issue.message
+        and ".cortex/journal/2026-05-04-release.md" in issue.message
+        for issue in issues
+    ), [issue.message for issue in issues]
+
+
 def test_config_toml_schema_type_and_unknown_key(tmp_path: Path) -> None:
     _scaffold(tmp_path)
     (tmp_path / ".cortex" / "config.toml").write_text(
@@ -441,6 +472,28 @@ def _write_active_plan_with_items(project: Path, items: list[str], slug: str = "
         "## Success Criteria\nAll `tests/test_doctor_invariants.py` pass (signal: `pytest -q` exit 0).\n\n"
         "## Approach\nImplement the invariant.\n\n"
         f"## Work items\n{body_items}\n"
+    )
+
+
+def _write_active_plan_with_pickup(project: Path, pickup: str, slug: str = "active") -> None:
+    """Write a SPEC-valid active plan with high-authority pickup prose."""
+    title = "Active Plan"
+    (project / ".cortex" / "plans" / f"{slug}.md").write_text(
+        "---\n"
+        "Status: active\n"
+        "Written: 2026-05-02\n"
+        "Author: human\n"
+        f"Goal-hash: {normalize_goal_hash(title)}\n"
+        "Updated-by:\n"
+        "  - 2026-05-02T10:00 human\n"
+        "Cites: doctrine/0001\n"
+        "---\n\n"
+        f"# {title}\n\n"
+        f"## Pickup pointer\n\n{pickup}\n\n"
+        "## Why (grounding)\nLinks to doctrine/0001.\n\n"
+        "## Success Criteria\nAll `tests/test_doctor_invariants.py` pass (signal: `pytest -q` exit 0).\n\n"
+        "## Approach\nImplement the invariant.\n\n"
+        "## Work items\n- [ ] Future work that does not overlap.\n"
     )
 
 
@@ -660,6 +713,79 @@ def test_stale_checkbox_runs_on_plain_doctor(tmp_path: Path) -> None:
     result = CliRunner().invoke(cli, ["doctor", "--path", str(tmp_path)])
     assert result.exit_code == 0
     assert "likely shipped per .cortex/journal/" in result.output
+
+
+def test_stale_pickup_pointer_warns_on_recent_shipped_overlap(tmp_path: Path) -> None:
+    """Pickup pointers are checked too; they are what fresh agents read first."""
+    _scaffold(tmp_path)
+    _write_active_plan_with_pickup(
+        tmp_path,
+        "The next action is v0.7.0 retrieve interface work from PR #95.",
+    )
+    today = datetime.now(UTC).date().isoformat()
+    _write_release_journal(
+        tmp_path,
+        slug="v080-released",
+        iso_date=today,
+        what_shipped="### Slice S2 of `cortex retrieve` (PR #95)\n\nClosed v0.7.0 retrieve interface.",
+    )
+
+    issues = check_stale_pickup_pointers(tmp_path)
+    assert any(
+        "pickup pointer likely stale per .cortex/journal/" in issue.message
+        for issue in issues
+    ), [issue.message for issue in issues]
+
+
+def test_stale_pickup_pointer_runs_on_plain_doctor(tmp_path: Path) -> None:
+    _scaffold(tmp_path)
+    _write_active_plan_with_pickup(
+        tmp_path,
+        "The next action is v0.7.0 retrieve interface work from PR #95.",
+    )
+    today = datetime.now(UTC).date().isoformat()
+    _write_release_journal(
+        tmp_path,
+        slug="v080-released",
+        iso_date=today,
+        what_shipped="### Slice S2 of `cortex retrieve` (PR #95)\n\nClosed v0.7.0 retrieve interface.",
+    )
+
+    result = CliRunner().invoke(cli, ["doctor", "--path", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "pickup pointer likely stale per .cortex/journal/" in result.output
+
+
+def test_stale_state_current_work_warns_on_recent_shipped_overlap(tmp_path: Path) -> None:
+    """State hand regions can survive refresh; current-work prose needs its own guard."""
+    _scaffold(tmp_path)
+    (tmp_path / ".cortex" / "state.md").write_text(
+        "---\n"
+        f"Generated: {datetime.now(UTC).isoformat()}\n"
+        "Generator: cortex refresh-state\n"
+        "Sources: []\n"
+        "Corpus: 0\n"
+        "Omitted: []\n"
+        "Incomplete: []\n"
+        "Conflicts-preserved: []\n"
+        "---\n\n"
+        "# Project State\n\n"
+        "## Current work\n\n"
+        "- v0.7.0 retrieve interface work from PR #95 is next.\n"
+    )
+    today = datetime.now(UTC).date().isoformat()
+    _write_release_journal(
+        tmp_path,
+        slug="v080-released",
+        iso_date=today,
+        what_shipped="### Slice S2 of `cortex retrieve` (PR #95)\n\nClosed v0.7.0 retrieve interface.",
+    )
+
+    issues = check_stale_state_current_work(tmp_path)
+    assert any(
+        "state current work likely stale per .cortex/journal/" in issue.message
+        for issue in issues
+    ), [issue.message for issue in issues]
 
 
 def test_stale_checkbox_config_schema_typo_warns(tmp_path: Path) -> None:

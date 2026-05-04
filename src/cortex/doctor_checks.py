@@ -43,7 +43,29 @@ DEFAULT_GENERATED_FRESHNESS_DAYS = 7
 DEFAULT_RETENTION_DAYS = 30
 DEFAULT_JOURNAL_WARM_MAX = 200
 DEFAULT_STALE_CHECKBOX_WINDOW_DAYS = 14
+SOURCE_FRESHNESS_SLOP = timedelta(seconds=1)
 STALE_CHECKBOX_BYPASS_MARKER = "<!-- cortex:no-stale-check -->"
+STATE_SOURCE_DIRS = (
+    ".cortex/plans",
+    ".cortex/journal",
+    ".cortex/doctrine",
+    ".cortex/templates",
+    "docs/case-studies",
+)
+STATE_SOURCE_FILES = (
+    ".cortex/protocol.md",
+    ".cortex/SPEC_VERSION",
+    "SPEC.md",
+    "pyproject.toml",
+    "package.json",
+    "Cargo.toml",
+    "go.mod",
+    "Gemfile",
+    "Package.swift",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+)
 
 
 def run_plain_checks(project_root: Path) -> list[Issue]:
@@ -57,6 +79,8 @@ def run_plain_checks(project_root: Path) -> list[Issue]:
         check_canonical_ownership,
         check_semantic_retrieval_runtime,
         check_stale_plan_checkboxes,
+        check_stale_pickup_pointers,
+        check_stale_state_current_work,
     )
     issues: list[Issue] = []
     for check in checks:
@@ -347,6 +371,19 @@ def check_generated_layers(project_root: Path) -> list[Issue]:
                         "layer is stale; rerun `cortex refresh-state`",
                     )
                 )
+            if path.name == "state.md":
+                newer = _newer_state_source(project_root, generated)
+                if newer is not None:
+                    source_rel, changed_at = newer
+                    issues.append(
+                        Issue(
+                            Severity.WARNING,
+                            rel,
+                            "state.md generated before source changed "
+                            f"({source_rel} at {changed_at.isoformat()}); "
+                            "rerun `cortex refresh-state`",
+                        )
+                    )
     return issues
 
 
@@ -527,6 +564,110 @@ def check_stale_plan_checkboxes(
     return issues
 
 
+def check_stale_pickup_pointers(
+    project_root: Path,
+    *,
+    window_days: int | None = None,
+) -> list[Issue]:
+    """Warn when an active plan's `## Pickup pointer` cites shipped work.
+
+    The pickup pointer is higher-authority than ordinary checklist prose for
+    a fresh agent: it is explicitly "read this first." That makes stale pickup
+    text worse than a stale checkbox. Reuse the shipped-journal overlap
+    signals from ``check_stale_plan_checkboxes`` so a recent release/pr-merged
+    entry that clearly overlaps the pointer produces a visible warning.
+    """
+
+    plans_dir = project_root / ".cortex" / "plans"
+    journal_dir = project_root / ".cortex" / "journal"
+    if not plans_dir.exists() or not journal_dir.exists():
+        return []
+    effective_window = (
+        window_days
+        if window_days is not None
+        else _stale_checkbox_window_days(project_root)
+    )
+    journal_signals = _collect_recent_shipped_signals(journal_dir, effective_window)
+    if not journal_signals:
+        return []
+    issues: list[Issue] = []
+    for plan in sorted(plans_dir.glob("*.md")):
+        try:
+            text = plan.read_text()
+        except OSError:
+            continue
+        fields, body = parse_frontmatter(text)
+        if _field_str(fields, "Status") != "active":
+            continue
+        pickup = _extract_h2_section(body, "Pickup pointer")
+        if not pickup or STALE_CHECKBOX_BYPASS_MARKER in pickup:
+            continue
+        best = _best_journal_match(pickup, journal_signals)
+        if best is None:
+            continue
+        entry_rel, _ = best
+        issues.append(
+            Issue(
+                Severity.WARNING,
+                _rel(plan, project_root),
+                f"pickup pointer likely stale per {entry_rel}; refresh or remove shipped instructions: "
+                f"{_truncate(pickup, 120)}",
+            )
+        )
+    return issues
+
+
+def check_stale_state_current_work(
+    project_root: Path,
+    *,
+    window_days: int | None = None,
+) -> list[Issue]:
+    """Warn when `.cortex/state.md` current-work prose cites shipped work.
+
+    ``refresh-state`` intentionally preserves hand-authored regions, which
+    means a regenerated State file can still carry stale high-authority prose.
+    This check keeps the preserved region honest by matching its ``## Current
+    work`` section against recent shipped journal evidence.
+    """
+
+    state_path = project_root / ".cortex" / "state.md"
+    journal_dir = project_root / ".cortex" / "journal"
+    if not state_path.exists() or not journal_dir.exists():
+        return []
+    effective_window = (
+        window_days
+        if window_days is not None
+        else _stale_checkbox_window_days(project_root)
+    )
+    journal_signals = _collect_recent_shipped_signals(journal_dir, effective_window)
+    if not journal_signals:
+        return []
+    try:
+        _fields, body = parse_frontmatter(state_path.read_text())
+    except OSError:
+        return []
+    current_work = _extract_h2_section(body, "Current work")
+    if not current_work or STALE_CHECKBOX_BYPASS_MARKER in current_work:
+        return []
+    for line in current_work.splitlines():
+        bullet = _parse_bullet(line)
+        if bullet is None:
+            continue
+        best = _best_journal_match(bullet, journal_signals)
+        if best is None:
+            continue
+        entry_rel, _ = best
+        return [
+            Issue(
+                Severity.WARNING,
+                _rel(state_path, project_root),
+                f"state current work likely stale per {entry_rel}; refresh the hand-authored "
+                f"`## Current work` prose or remove shipped instructions: {_truncate(bullet, 120)}",
+            )
+        ]
+    return []
+
+
 def check_canonical_ownership(project_root: Path) -> list[Issue]:
     cortex_dir = project_root / ".cortex"
     if not (cortex_dir / "state.md").exists() or not _active_plans(cortex_dir):
@@ -701,6 +842,153 @@ def _generated_layer_paths(project_root: Path) -> list[Path]:
     return paths
 
 
+def _newer_state_source(
+    project_root: Path,
+    generated: datetime,
+) -> tuple[str, datetime] | None:
+    """Return a State source newer than ``Generated:``, if one exists.
+
+    Prefer git commit dates for clean worktrees so a fresh clone does not look
+    stale merely because file mtimes were rewritten by checkout. Dirty tracked
+    or untracked source files use mtime (or now for deletes) because no commit
+    timestamp exists yet.
+    """
+
+    threshold = generated.astimezone(UTC) + SOURCE_FRESHNESS_SLOP
+    pathspecs = _state_source_pathspecs(project_root)
+    if not pathspecs:
+        return None
+
+    if not _looks_like_git_worktree(project_root):
+        mtime = _latest_state_source_mtime(project_root)
+        if mtime is not None and mtime[1] > threshold:
+            return mtime
+        return None
+
+    dirty = _dirty_state_source(project_root, pathspecs, threshold)
+    if dirty is not None:
+        return dirty
+
+    committed = _latest_committed_state_source(project_root, pathspecs)
+    if committed is not None and committed[1] > threshold:
+        return committed
+
+    # Never-committed git projects still deserve a freshness check.
+    if committed is None:
+        mtime = _latest_state_source_mtime(project_root)
+        if mtime is not None and mtime[1] > threshold:
+            return mtime
+    return None
+
+
+def _state_source_pathspecs(project_root: Path) -> list[str]:
+    pathspecs: list[str] = []
+    for rel in (*STATE_SOURCE_DIRS, *STATE_SOURCE_FILES):
+        if (project_root / rel).exists():
+            pathspecs.append(rel)
+    return pathspecs
+
+
+def _looks_like_git_worktree(project_root: Path) -> bool:
+    return any((candidate / ".git").exists() for candidate in (project_root, *project_root.parents))
+
+
+def _dirty_state_source(
+    project_root: Path,
+    pathspecs: list[str],
+    threshold: datetime,
+) -> tuple[str, datetime] | None:
+    result = subprocess.run(
+        ["git", "-C", str(project_root), "status", "--porcelain", "--", *pathspecs],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    for line in result.stdout.splitlines():
+        rel = _status_path(line)
+        if rel is None:
+            continue
+        path = project_root / rel
+        if path.exists():
+            changed_at = datetime.fromtimestamp(path.stat().st_mtime, UTC)
+        else:
+            changed_at = datetime.now(UTC)
+        if changed_at > threshold:
+            return rel, changed_at
+    return None
+
+
+def _status_path(line: str) -> str | None:
+    if len(line) < 4:
+        return None
+    raw = line[3:].strip()
+    if " -> " in raw:
+        raw = raw.rsplit(" -> ", 1)[1]
+    return raw.strip('"') or None
+
+
+def _latest_committed_state_source(
+    project_root: Path,
+    pathspecs: list[str],
+) -> tuple[str, datetime] | None:
+    result = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(project_root),
+            "log",
+            "-1",
+            "--format=%cI",
+            "--name-only",
+            "--",
+            *pathspecs,
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    lines = [line.strip() for line in result.stdout.splitlines()]
+    lines = [line for line in lines if line]
+    if not lines:
+        return None
+    try:
+        changed_at = datetime.fromisoformat(lines[0]).astimezone(UTC)
+    except ValueError:
+        return None
+    source_rel = next((line for line in lines[1:] if line), pathspecs[0])
+    return source_rel, changed_at
+
+
+def _latest_state_source_mtime(project_root: Path) -> tuple[str, datetime] | None:
+    latest: tuple[str, datetime] | None = None
+    for path in _state_source_files(project_root):
+        try:
+            changed_at = datetime.fromtimestamp(path.stat().st_mtime, UTC)
+        except OSError:
+            continue
+        rel = _rel(path, project_root)
+        if latest is None or changed_at > latest[1]:
+            latest = (rel, changed_at)
+    return latest
+
+
+def _state_source_files(project_root: Path) -> list[Path]:
+    files: list[Path] = []
+    for rel in STATE_SOURCE_DIRS:
+        path = project_root / rel
+        if path.is_dir():
+            files.extend(sorted(path.rglob("*.md")))
+    for rel in STATE_SOURCE_FILES:
+        path = project_root / rel
+        if path.is_file():
+            files.append(path)
+    return files
+
+
 def _validate_table(
     rel: str,
     section: str,
@@ -760,6 +1048,7 @@ _SHIPPED_SECTION_HEADINGS = {"what shipped", "what landed"}
 # under section headings sometimes. The line must start with `- [ ]` (an
 # unchecked box); a `- [x]` already-flipped item is exempt by definition.
 _UNCHECKED_CHECKBOX_RE = re.compile(r"^\s*[-*]\s*\[\s\]\s+(?P<text>.+)$")
+_BULLET_RE = re.compile(r"^\s*[-*]\s+(?P<text>.+)$")
 
 # Strong tokens — citations of specific artifacts. A single match in both
 # the checkbox text and a journal entry's What-shipped section is enough to
@@ -845,6 +1134,16 @@ def _parse_unchecked_checkbox(line: str) -> str | None:
     return text or None
 
 
+def _parse_bullet(line: str) -> str | None:
+    match = _BULLET_RE.match(line)
+    if not match:
+        return None
+    text = match.group("text").strip()
+    if STALE_CHECKBOX_BYPASS_MARKER in text:
+        return None
+    return text or None
+
+
 def _collect_recent_shipped_signals(
     journal_dir: Path, window_days: int
 ) -> list[tuple[str, _Signals]]:
@@ -911,6 +1210,25 @@ def _extract_shipped_section(body: str) -> str:
                 continue
             if in_section:
                 # Hit the next `## ` heading — stop.
+                break
+            continue
+        if in_section:
+            captured.append(line)
+    return "\n".join(captured).strip()
+
+
+def _extract_h2_section(body: str, heading_name: str) -> str:
+    """Return prose under a specific H2 heading, or ''. """
+    wanted = heading_name.strip().lower()
+    in_section = False
+    captured: list[str] = []
+    for line in body.splitlines():
+        if line.startswith("## "):
+            heading = line[3:].strip().lower()
+            if heading == wanted or heading.startswith(f"{wanted} "):
+                in_section = True
+                continue
+            if in_section:
                 break
             continue
         if in_section:
