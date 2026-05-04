@@ -20,6 +20,7 @@ from cortex.doctor_checks import (
     check_immutable_doctrine,
     check_promotion_queue,
     check_retention_visibility,
+    check_stale_plan_checkboxes,
     check_t1_4_deletions,
 )
 from cortex.goal_hash import normalize_goal_hash
@@ -330,3 +331,288 @@ def test_canonical_ownership_runs_on_plain_doctor(tmp_path: Path) -> None:
     result = CliRunner().invoke(cli, ["doctor", "--path", str(tmp_path)])
     assert result.exit_code == 0
     assert "canonical-ownership" in result.output
+
+
+# --- cortex#100 stale-plan-checkbox check -----------------------------------
+
+
+def _write_active_plan_with_items(project: Path, items: list[str], slug: str = "active") -> None:
+    """Write a SPEC-valid active plan whose ## Work items section is `items`."""
+    title = "Active Plan"
+    body_items = "\n".join(items)
+    (project / ".cortex" / "plans" / f"{slug}.md").write_text(
+        "---\n"
+        "Status: active\n"
+        "Written: 2026-05-02\n"
+        "Author: human\n"
+        f"Goal-hash: {normalize_goal_hash(title)}\n"
+        "Updated-by:\n"
+        "  - 2026-05-02T10:00 human\n"
+        "Cites: doctrine/0001\n"
+        "---\n\n"
+        f"# {title}\n\n"
+        "## Why (grounding)\nLinks to doctrine/0001.\n\n"
+        "## Success Criteria\nAll `tests/test_doctor_invariants.py` pass (signal: `pytest -q` exit 0).\n\n"
+        "## Approach\nImplement the invariant.\n\n"
+        f"## Work items\n{body_items}\n"
+    )
+
+
+def _write_release_journal(
+    project: Path,
+    *,
+    slug: str,
+    iso_date: str,
+    what_shipped: str,
+) -> Path:
+    """Write a `Type: release` journal entry with a `## What shipped` section."""
+    path = project / ".cortex" / "journal" / f"{iso_date}-{slug}.md"
+    path.write_text(
+        f"# {slug}\n\n"
+        f"**Date:** {iso_date}\n"
+        "**Type:** release\n"
+        "**Trigger:** T1.10\n"
+        f"**Tag:** v0.7.0\n\n"
+        "## Artifact\n\nA thing.\n\n"
+        f"## What shipped\n\n{what_shipped}\n"
+    )
+    return path
+
+
+def test_stale_checkbox_warns_on_pr_ref_overlap(tmp_path: Path) -> None:
+    """Happy path — checkbox with PR #95 + journal mentioning PR #95 fires."""
+    _scaffold(tmp_path)
+    _write_active_plan_with_items(
+        tmp_path,
+        items=[
+            "- [ ] **v0.7.0 retrieve interface (PR #95)** — `cortex retrieve --mode bm25`.",
+        ],
+    )
+    today = datetime.now(UTC).date().isoformat()
+    _write_release_journal(
+        tmp_path,
+        slug="v070-released",
+        iso_date=today,
+        what_shipped="### Slice S2 of `cortex retrieve` (PR #95)\n\nClosed v0.7.0 retrieve interface.",
+    )
+
+    issues = check_stale_plan_checkboxes(tmp_path)
+    assert any(
+        "likely shipped per .cortex/journal/" in issue.message
+        and "v0.7.0 retrieve interface" in issue.message
+        for issue in issues
+    ), [issue.message for issue in issues]
+
+
+def test_stale_checkbox_no_warn_when_already_flipped(tmp_path: Path) -> None:
+    """Same fixture but the checkbox is `- [x]` — no warning."""
+    _scaffold(tmp_path)
+    _write_active_plan_with_items(
+        tmp_path,
+        items=[
+            "- [x] **v0.7.0 retrieve interface (PR #95)** — `cortex retrieve --mode bm25`.",
+        ],
+    )
+    today = datetime.now(UTC).date().isoformat()
+    _write_release_journal(
+        tmp_path,
+        slug="v070-released",
+        iso_date=today,
+        what_shipped="### Slice S2 of `cortex retrieve` (PR #95)\n\nClosed v0.7.0 retrieve interface.",
+    )
+
+    assert check_stale_plan_checkboxes(tmp_path) == []
+
+
+def test_stale_checkbox_bypass_annotation_suppresses(tmp_path: Path) -> None:
+    """Checkbox with `<!-- cortex:no-stale-check -->` is exempt."""
+    _scaffold(tmp_path)
+    _write_active_plan_with_items(
+        tmp_path,
+        items=[
+            "- [ ] **Sustained-work period (PR #95).** <!-- cortex:no-stale-check --> "
+            "Aspirational item that overlaps release prose without being shipped.",
+        ],
+    )
+    today = datetime.now(UTC).date().isoformat()
+    _write_release_journal(
+        tmp_path,
+        slug="v070-released",
+        iso_date=today,
+        what_shipped="### Slice (PR #95)\n\nClosed sustained-work period item.",
+    )
+
+    assert check_stale_plan_checkboxes(tmp_path) == []
+
+
+def test_stale_checkbox_outside_window_no_warn(tmp_path: Path) -> None:
+    """Matching journal whose Date is older than window_days — no warning."""
+    _scaffold(tmp_path)
+    _write_active_plan_with_items(
+        tmp_path,
+        items=[
+            "- [ ] **v0.7.0 retrieve interface (PR #95)** — `cortex retrieve --mode bm25`.",
+        ],
+    )
+    old = (datetime.now(UTC) - timedelta(days=30)).date().isoformat()
+    _write_release_journal(
+        tmp_path,
+        slug="v070-released",
+        iso_date=old,
+        what_shipped="### Slice S2 of `cortex retrieve` (PR #95)\n\nClosed v0.7.0 retrieve interface.",
+    )
+
+    assert check_stale_plan_checkboxes(tmp_path, window_days=14) == []
+
+
+def test_stale_checkbox_config_window_override_warns(tmp_path: Path) -> None:
+    """Matching journal at 30 days + window_days=60 in config — warns."""
+    _scaffold(tmp_path)
+    _write_active_plan_with_items(
+        tmp_path,
+        items=[
+            "- [ ] **v0.7.0 retrieve interface (PR #95)** — `cortex retrieve --mode bm25`.",
+        ],
+    )
+    old = (datetime.now(UTC) - timedelta(days=30)).date().isoformat()
+    _write_release_journal(
+        tmp_path,
+        slug="v070-released",
+        iso_date=old,
+        what_shipped="### Slice S2 of `cortex retrieve` (PR #95)\n\nClosed v0.7.0 retrieve interface.",
+    )
+    (tmp_path / ".cortex" / "config.toml").write_text(
+        "[doctor.stale-checkbox]\nwindow_days = 60\n"
+    )
+
+    issues = check_stale_plan_checkboxes(tmp_path)
+    assert any("likely shipped per" in issue.message for issue in issues)
+
+
+def test_stale_checkbox_brief_path_overlap_warns(tmp_path: Path) -> None:
+    """Strong signal #2 — shared `briefs/<name>.md` reference fires the check."""
+    _scaffold(tmp_path)
+    _write_active_plan_with_items(
+        tmp_path,
+        items=[
+            "- [ ] **Real promote writer** — see `briefs/v0.6.0-T2-promote-real-writer.md`.",
+        ],
+    )
+    today = datetime.now(UTC).date().isoformat()
+    _write_release_journal(
+        tmp_path,
+        slug="v060-released",
+        iso_date=today,
+        what_shipped="Closed `briefs/v0.6.0-T2-promote-real-writer.md` — real promote writer landed.",
+    )
+
+    issues = check_stale_plan_checkboxes(tmp_path)
+    assert any("likely shipped per" in issue.message for issue in issues)
+
+
+def test_stale_checkbox_unrelated_checkbox_no_warn(tmp_path: Path) -> None:
+    """A genuinely unrelated checkbox does not fire — guards against false positives."""
+    _scaffold(tmp_path)
+    _write_active_plan_with_items(
+        tmp_path,
+        items=[
+            "- [ ] **Future v2.0 multi-agent orchestration layer** — entirely future scope.",
+        ],
+    )
+    today = datetime.now(UTC).date().isoformat()
+    _write_release_journal(
+        tmp_path,
+        slug="v070-released",
+        iso_date=today,
+        what_shipped="### Slice S2 of `cortex retrieve` (PR #95)\n\nClosed v0.7.0 retrieve interface.",
+    )
+
+    assert check_stale_plan_checkboxes(tmp_path) == []
+
+
+def test_stale_checkbox_inactive_plan_skipped(tmp_path: Path) -> None:
+    """A `Status: shipped` plan's checkboxes are not scanned — only active plans."""
+    _scaffold(tmp_path)
+    _write_active_plan_with_items(
+        tmp_path,
+        items=[
+            "- [ ] **v0.7.0 retrieve interface (PR #95)** — shipped item.",
+        ],
+        slug="active",
+    )
+    # Mark the plan shipped so the check skips it.
+    plan = tmp_path / ".cortex" / "plans" / "active.md"
+    plan.write_text(plan.read_text().replace("Status: active", "Status: shipped"))
+    today = datetime.now(UTC).date().isoformat()
+    _write_release_journal(
+        tmp_path,
+        slug="v070-released",
+        iso_date=today,
+        what_shipped="### Slice (PR #95)\n\nClosed.",
+    )
+
+    assert check_stale_plan_checkboxes(tmp_path) == []
+
+
+def test_stale_checkbox_runs_on_plain_doctor(tmp_path: Path) -> None:
+    """End-to-end — `cortex doctor` surfaces the warning in its CLI output."""
+    _scaffold(tmp_path)
+    _write_active_plan_with_items(
+        tmp_path,
+        items=[
+            "- [ ] **v0.7.0 retrieve interface (PR #95)** — `cortex retrieve --mode bm25`.",
+        ],
+    )
+    today = datetime.now(UTC).date().isoformat()
+    _write_release_journal(
+        tmp_path,
+        slug="v070-released",
+        iso_date=today,
+        what_shipped="### Slice S2 of `cortex retrieve` (PR #95)\n\nClosed v0.7.0 retrieve interface.",
+    )
+
+    result = CliRunner().invoke(cli, ["doctor", "--path", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "likely shipped per .cortex/journal/" in result.output
+
+
+def test_stale_checkbox_config_schema_typo_warns(tmp_path: Path) -> None:
+    """Schema-validator regression — `[doctor.stale-checkbox]` typo surfaces.
+
+    Mirrors the cortex#94 pattern: a config section consumed at runtime must
+    also be schema-validated, otherwise typos silently fall back to defaults.
+    """
+    _scaffold(tmp_path)
+    (tmp_path / ".cortex" / "config.toml").write_text(
+        "[doctor.stale-checkbox]\nwindow_day = 30\n"
+    )
+
+    issues = check_config_toml_schema(tmp_path)
+    assert any(
+        issue.severity == "warning" and "window_day" in issue.message for issue in issues
+    )
+
+    # Wrong type (string, not int) — error.
+    (tmp_path / ".cortex" / "config.toml").write_text(
+        '[doctor.stale-checkbox]\nwindow_days = "fourteen"\n'
+    )
+    issues = check_config_toml_schema(tmp_path)
+    assert any(
+        issue.severity == "error" and "window_days" in issue.message for issue in issues
+    )
+
+    # Negative int — error (must be positive).
+    (tmp_path / ".cortex" / "config.toml").write_text(
+        "[doctor.stale-checkbox]\nwindow_days = -1\n"
+    )
+    issues = check_config_toml_schema(tmp_path)
+    assert any(
+        issue.severity == "error" and "window_days" in issue.message for issue in issues
+    )
+
+    # Valid value — no warnings/errors for this section.
+    (tmp_path / ".cortex" / "config.toml").write_text(
+        "[doctor.stale-checkbox]\nwindow_days = 30\n"
+    )
+    issues = check_config_toml_schema(tmp_path)
+    assert not any("stale-checkbox" in issue.message for issue in issues)

@@ -12,6 +12,7 @@ import re
 import subprocess
 import tomllib
 from collections import Counter
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,8 @@ DEFAULT_DELETION_LINE_THRESHOLD = 100
 DEFAULT_GENERATED_FRESHNESS_DAYS = 7
 DEFAULT_RETENTION_DAYS = 30
 DEFAULT_JOURNAL_WARM_MAX = 200
+DEFAULT_STALE_CHECKBOX_WINDOW_DAYS = 14
+STALE_CHECKBOX_BYPASS_MARKER = "<!-- cortex:no-stale-check -->"
 
 
 def run_plain_checks(project_root: Path) -> list[Issue]:
@@ -53,6 +56,7 @@ def run_plain_checks(project_root: Path) -> list[Issue]:
         check_generated_layers,
         check_canonical_ownership,
         check_semantic_retrieval_runtime,
+        check_stale_plan_checkboxes,
     )
     issues: list[Issue] = []
     for check in checks:
@@ -399,6 +403,22 @@ def check_config_toml_schema(project_root: Path) -> list[Issue]:
                 {"allowed_root_files": "string-list"},
             )
         )
+    doctor = data.get("doctor")
+    stale_checkbox = (
+        doctor.get("stale-checkbox") if isinstance(doctor, dict) else None
+    )
+    if isinstance(stale_checkbox, dict):
+        # Schema mirrors the `check_stale_plan_checkboxes` config reader
+        # added for cortex#100. Catches typos like `window_day` or wrong
+        # types before they silently fall back to the default window.
+        issues.extend(
+            _validate_table(
+                rel,
+                "doctor.stale-checkbox",
+                stale_checkbox,
+                {"window_days": "positive-int"},
+            )
+        )
     return issues
 
 
@@ -433,6 +453,75 @@ def check_retention_visibility(project_root: Path) -> list[Issue]:
                     Severity.WARNING,
                     ".cortex/journal",
                     "warm journal threshold exceeded; consolidation to digest is overdue per SPEC § 5.1",
+                )
+            )
+    return issues
+
+
+def check_stale_plan_checkboxes(
+    project_root: Path,
+    *,
+    window_days: int | None = None,
+) -> list[Issue]:
+    """Warn when active-plan `- [ ]` items overlap with recent shipped journal entries.
+
+    Failure mode (cortex#100): after a heavy shipping marathon, plan checkboxes
+    can stay unchecked even though the corresponding work shipped. ``cortex
+    next`` then ranks already-shipped work as P0 because the plan is stale.
+
+    For each ``- [ ]`` checkbox in an active plan, scan ``Type: release`` and
+    ``Type: pr-merged`` journal entries within ``window_days`` (default
+    14, configurable via ``[doctor.stale-checkbox] window_days``). The check
+    extracts the journal entry's ``## What shipped`` (or ``## What landed``)
+    section and computes overlap signals — shared ``PR #N`` references,
+    shared ``briefs/<name>.md`` paths, shared doctrine numbers, and
+    distinctive multi-token phrases. Warn when at least one strong signal
+    fires, or when ≥2 phrase matches do.
+
+    Bypass: a checkbox annotated ``<!-- cortex:no-stale-check -->`` is exempt
+    (for aspirational items like "sustained-work period" that legitimately
+    overlap with release-mention prose without being shipped).
+
+    Warning, not error: false positives are possible (e.g., a release entry
+    mentioning a future plan item). Authors review and either flip the
+    checkbox or add the bypass annotation.
+    """
+
+    plans_dir = project_root / ".cortex" / "plans"
+    journal_dir = project_root / ".cortex" / "journal"
+    if not plans_dir.exists() or not journal_dir.exists():
+        return []
+    effective_window = (
+        window_days
+        if window_days is not None
+        else _stale_checkbox_window_days(project_root)
+    )
+    journal_signals = _collect_recent_shipped_signals(journal_dir, effective_window)
+    if not journal_signals:
+        return []
+    issues: list[Issue] = []
+    for plan in sorted(plans_dir.glob("*.md")):
+        try:
+            text = plan.read_text()
+        except OSError:
+            continue
+        fields, body = parse_frontmatter(text)
+        if _field_str(fields, "Status") != "active":
+            continue
+        for line in body.splitlines():
+            checkbox = _parse_unchecked_checkbox(line)
+            if checkbox is None:
+                continue
+            best = _best_journal_match(checkbox, journal_signals)
+            if best is None:
+                continue
+            entry_rel, _ = best
+            issues.append(
+                Issue(
+                    Severity.WARNING,
+                    _rel(plan, project_root),
+                    f"plan item likely shipped per {entry_rel}; consider flipping to [x]: "
+                    f"{_truncate(checkbox, 100)}",
                 )
             )
     return issues
@@ -636,6 +725,10 @@ def _matches_schema(value: Any, expected: str) -> bool:
         return isinstance(value, list) and all(isinstance(item, str) for item in value)
     if expected == "optional-string-list":
         return value is None or _matches_schema(value, "string-list")
+    if expected == "positive-int":
+        # bool is a subclass of int in Python; reject it explicitly so
+        # `window_days = true` doesn't pass as an integer.
+        return isinstance(value, int) and not isinstance(value, bool) and value > 0
     raise AssertionError(f"unknown config schema kind: {expected}")
 
 
@@ -644,7 +737,262 @@ def _schema_label(expected: str) -> str:
         "optional-string": "a string or null",
         "string-list": "a list of strings",
         "optional-string-list": "a list of strings or null",
+        "positive-int": "a positive integer",
     }[expected]
+
+
+# --- stale-plan-checkbox helpers (cortex#100) -------------------------------
+
+# A "shipped" journal section header. We accept either "What shipped" (the
+# release.md template — SPEC § 3.3 example) or "What landed" (a phrasing
+# some pr-merged drafts use). Headers are matched case-insensitive after
+# stripping leading hashes; sub-headers (### …) inside the section are
+# preserved as part of its body so PR-grouped subsections stay matchable.
+_SHIPPED_SECTION_HEADINGS = {"what shipped", "what landed"}
+
+# Treat 1+ leading whitespace as part of the bullet — checkboxes are nested
+# under section headings sometimes. The line must start with `- [ ]` (an
+# unchecked box); a `- [x]` already-flipped item is exempt by definition.
+_UNCHECKED_CHECKBOX_RE = re.compile(r"^\s*[-*]\s*\[\s\]\s+(?P<text>.+)$")
+
+# Strong tokens — citations of specific artifacts. A single match in both
+# the checkbox text and a journal entry's What-shipped section is enough to
+# warrant a warning.
+_PR_REF_RE = re.compile(r"#(\d{2,5})\b")
+_BRIEF_PATH_RE = re.compile(r"(?:^|[\s`(])(briefs/[A-Za-z0-9._-]+\.md)\b")
+_DOCTRINE_REF_RE = re.compile(
+    r"(?<![A-Za-z0-9])doctrine[/\s-]+(\d{4})(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
+
+# A pared-down English stoplist plus markdown / cortex-domain particles.
+# Used to filter trigrams down to "distinctive" content phrases (signal #4).
+_STOPWORDS = frozenset(
+    {
+        "a", "an", "and", "the", "of", "in", "on", "at", "to", "for", "with",
+        "by", "from", "into", "via", "is", "was", "are", "were", "be", "been",
+        "being", "as", "or", "but", "if", "then", "than", "that", "this",
+        "those", "these", "it", "its", "we", "our", "us", "you", "your",
+        "they", "them", "their", "i", "me", "my", "he", "she", "his", "her",
+        "do", "does", "did", "done", "will", "would", "should", "could", "can",
+        "may", "might", "must", "shall", "have", "has", "had", "having", "not",
+        "no", "yes", "so", "up", "down", "out", "over", "under", "again",
+        "further", "very", "just", "now", "all", "any", "each", "few", "more",
+        "most", "other", "some", "such", "only", "own", "same", "too", "also",
+        "per", "etc", "ie", "eg",
+        "cortex", "shipped", "ships", "lands", "landed", "merged", "release",
+        "released", "v0", "v1", "pr", "prs", "tag", "tagged",
+    }
+)
+
+# Token shape used for both phrase extraction and a few other places. We
+# accept identifier-ish tokens with internal `-`, `_`, `.`, `/`, `:` so
+# `cortex retrieve --mode bm25` survives mostly intact.
+_TOKEN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_./:-]{1,}")
+
+
+def _stale_checkbox_window_days(project_root: Path) -> int:
+    """Read `[doctor.stale-checkbox] window_days` from .cortex/config.toml.
+
+    Falls back to ``DEFAULT_STALE_CHECKBOX_WINDOW_DAYS`` (14) when the file
+    or section is absent / malformed. Schema validation happens in
+    ``check_config_toml_schema`` — this reader degrades silently so a
+    typo'd config doesn't crash the doctor run; the warning surfaces from
+    the schema check instead.
+    """
+    path = project_root / ".cortex" / "config.toml"
+    if not path.exists():
+        return DEFAULT_STALE_CHECKBOX_WINDOW_DAYS
+    try:
+        data = tomllib.loads(path.read_text())
+    except (OSError, tomllib.TOMLDecodeError):
+        return DEFAULT_STALE_CHECKBOX_WINDOW_DAYS
+    doctor = data.get("doctor")
+    if not isinstance(doctor, dict):
+        return DEFAULT_STALE_CHECKBOX_WINDOW_DAYS
+    section = doctor.get("stale-checkbox")
+    if not isinstance(section, dict):
+        return DEFAULT_STALE_CHECKBOX_WINDOW_DAYS
+    value = section.get("window_days")
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return DEFAULT_STALE_CHECKBOX_WINDOW_DAYS
+    return value
+
+
+def _parse_unchecked_checkbox(line: str) -> str | None:
+    """Return the prose text of an unchecked checkbox, or None.
+
+    Returns None for: lines that aren't `- [ ]`; lines that carry the
+    bypass marker; and lines whose stripped text is empty (defensive).
+
+    The full prose (including any bold markers and parenthetical PR
+    references) is preserved — `_TOKEN_RE` already ignores asterisks and
+    parens, so leaving them in keeps PR-ref + brief-path + phrase signals
+    intact for matching.
+    """
+    match = _UNCHECKED_CHECKBOX_RE.match(line)
+    if not match:
+        return None
+    text = match.group("text").strip()
+    if STALE_CHECKBOX_BYPASS_MARKER in text:
+        return None
+    return text or None
+
+
+def _collect_recent_shipped_signals(
+    journal_dir: Path, window_days: int
+) -> list[tuple[str, _Signals]]:
+    """Return [(rel_path, signals)] for in-window release/pr-merged entries.
+
+    The journal entry's date is parsed from its ``Date:`` frontmatter (or
+    bold-inline). Falls back to the date prefix in the filename if neither
+    field parses. Entries outside the window are skipped silently.
+    """
+    cutoff = date.today() - timedelta(days=window_days)
+    out: list[tuple[str, _Signals]] = []
+    for entry in sorted(journal_dir.glob("*.md")):
+        try:
+            text = entry.read_text()
+        except OSError:
+            continue
+        fields, body = parse_frontmatter(text)
+        type_ = _field_str(fields, "Type") or _field_str_inline(body, "Type")
+        if type_ not in {"release", "pr-merged"}:
+            continue
+        entry_date = _parse_date(_field_str(fields, "Date")) or _parse_date(
+            _field_str_inline(body, "Date")
+        )
+        if entry_date is None:
+            entry_date = _journal_date(entry)
+        if entry_date is None or entry_date < cutoff:
+            continue
+        section = _extract_shipped_section(body)
+        if not section:
+            continue
+        signals = _extract_signals(section)
+        if signals.is_empty:
+            continue
+        rel = f".cortex/journal/{entry.name}"
+        out.append((rel, signals))
+    return out
+
+
+def _field_str_inline(body: str, field_name: str) -> str | None:
+    """Pull a `**Field:** value` from the first ~40 lines (header band)."""
+    header = "\n".join(body.splitlines()[:40])
+    match = re.search(
+        rf"\*\*{re.escape(field_name)}:\*\*\s*([^\n]+)", header
+    )
+    if not match:
+        return None
+    return match.group(1).strip() or None
+
+
+def _extract_shipped_section(body: str) -> str:
+    """Return the prose under `## What shipped` / `## What landed`, or ''.
+
+    The section ends at the next `## ` heading or end-of-file. Sub-headings
+    (`### …`) inside the section are preserved as content. Returns '' when
+    the section is absent.
+    """
+    in_section = False
+    captured: list[str] = []
+    for line in body.splitlines():
+        if line.startswith("## "):
+            heading = line[3:].strip().lower()
+            if heading in _SHIPPED_SECTION_HEADINGS:
+                in_section = True
+                continue
+            if in_section:
+                # Hit the next `## ` heading — stop.
+                break
+            continue
+        if in_section:
+            captured.append(line)
+    return "\n".join(captured).strip()
+
+
+@dataclass(frozen=True)
+class _Signals:
+    pr_refs: frozenset[str]
+    brief_paths: frozenset[str]
+    doctrine_refs: frozenset[str]
+    phrases: frozenset[tuple[str, ...]]
+
+    @property
+    def is_empty(self) -> bool:
+        return not (
+            self.pr_refs or self.brief_paths or self.doctrine_refs or self.phrases
+        )
+
+
+def _extract_signals(text: str) -> _Signals:
+    return _Signals(
+        pr_refs=frozenset(_PR_REF_RE.findall(text)),
+        brief_paths=frozenset(m.lower() for m in _BRIEF_PATH_RE.findall(text)),
+        doctrine_refs=frozenset(_DOCTRINE_REF_RE.findall(text)),
+        phrases=frozenset(_distinctive_trigrams(text)),
+    )
+
+
+def _distinctive_trigrams(text: str) -> list[tuple[str, ...]]:
+    """Extract sliding 3-grams of non-stopword tokens from `text`.
+
+    Pure-stopword runs are skipped. Tokens are lowercased; punctuation and
+    markdown symbols outside ``_TOKEN_RE`` are stripped. The resulting set
+    is the "distinctive phrase" signal — individually weak, but a 2+
+    overlap between checkbox text and a journal entry is meaningful.
+    """
+    tokens = [t.lower() for t in _TOKEN_RE.findall(text)]
+    content = [t for t in tokens if t not in _STOPWORDS and len(t) > 1]
+    if len(content) < 3:
+        return []
+    return [tuple(content[i : i + 3]) for i in range(len(content) - 2)]
+
+
+def _best_journal_match(
+    checkbox_text: str,
+    journal_signals: list[tuple[str, _Signals]],
+) -> tuple[str, _Signals] | None:
+    """Return the strongest matching (rel_path, signals) tuple, or None.
+
+    Matching policy (cortex#100):
+      - At least one shared `PR #N`, `briefs/<name>.md`, or `doctrine/NNNN`
+        reference is a STRONG match — fire on the first.
+      - Otherwise, ≥2 distinctive trigram overlaps (PHRASE matches) fire.
+      - Single-trigram overlap is intentionally not enough — too many false
+        positives from generic phrasing like "release release prep".
+
+    When multiple journal entries match, the one with the most overlap
+    signals wins; ties break to the most recent (last-listed) entry.
+    """
+    cb_signals = _extract_signals(checkbox_text)
+    if cb_signals.is_empty:
+        return None
+    best_score = 0
+    best: tuple[str, _Signals] | None = None
+    for rel, signals in journal_signals:
+        shared_pr = cb_signals.pr_refs & signals.pr_refs
+        shared_brief = cb_signals.brief_paths & signals.brief_paths
+        shared_doctrine = cb_signals.doctrine_refs & signals.doctrine_refs
+        shared_phrases = cb_signals.phrases & signals.phrases
+        strong_count = len(shared_pr) + len(shared_brief) + len(shared_doctrine)
+        phrase_count = len(shared_phrases)
+        if strong_count == 0 and phrase_count < 2:
+            continue
+        # Score: strong matches dominate; phrase matches break ties.
+        score = strong_count * 100 + phrase_count
+        if score >= best_score:
+            best_score = score
+            best = (rel, signals)
+    return best
+
+
+def _truncate(text: str, max_len: int) -> str:
+    collapsed = " ".join(text.split())
+    if len(collapsed) <= max_len:
+        return collapsed
+    return collapsed[: max_len - 1].rstrip() + "…"
 
 
 def _doctrine_0007_allowed_root_files(project_root: Path) -> set[str]:
