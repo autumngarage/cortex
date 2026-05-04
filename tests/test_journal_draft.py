@@ -9,6 +9,7 @@ must work.
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from datetime import date
@@ -325,6 +326,163 @@ def test_invalid_type_name_rejected(git_project: Path) -> None:
     for bad in ("foo/bar", "Decision", "-leading-dash", "..", ""):
         r = _draft(git_project, bad)
         assert r.exit_code == 2, (bad, r.output)
+
+
+# --- cortex#101 pr-merged placeholder substitution --------------------------
+
+
+def _stub_gh_in_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, payload: dict[str, object]
+) -> Path:
+    """Install a fake `gh` on PATH that returns ``payload`` for `pr view`.
+
+    Returns the bin dir so the caller can also drop other shims if needed.
+    The shim handles the two `gh` invocations the journal-draft path makes
+    today: ``gh auth status`` (must exit 0) and ``gh pr view N --json ...``
+    (prints the payload as JSON and exits 0).
+    """
+    import json as _json
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    payload_path = bin_dir / "pr-payload.json"
+    payload_path.write_text(_json.dumps(payload))
+    shim = bin_dir / "gh"
+    shim.write_text(
+        "#!/bin/bash\n"
+        'case "$1" in\n'
+        "  auth)\n"
+        "    exit 0\n"
+        "    ;;\n"
+        "  pr)\n"
+        f'    cat "{payload_path}"\n'
+        "    exit 0\n"
+        "    ;;\n"
+        "  *)\n"
+        "    echo \"unexpected gh invocation: $@\" >&2\n"
+        "    exit 2\n"
+        "    ;;\n"
+        "esac\n"
+    )
+    shim.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    return bin_dir
+
+
+def test_pr_merged_explicit_pr_substitutes_placeholders(
+    git_project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`--pr N` resolves PR via stubbed gh and fills the four canonical fields."""
+    _stub_gh_in_path(
+        monkeypatch,
+        tmp_path,
+        {
+            "number": 99,
+            "title": "feat(foo): bar baz",
+            "headRefName": "feat/foo-bar",
+            "mergeCommit": {"oid": "deadbeefcafef00d" * 2 + "12345678"},
+        },
+    )
+    result = _draft(git_project, "pr-merged", "--pr", "99")
+    assert result.exit_code == 0, result.output
+    today = date.today().isoformat()
+    files = list((git_project / ".cortex" / "journal").glob(f"{today}-pr-merged-*.md"))
+    assert files, list((git_project / ".cortex" / "journal").iterdir())
+    body = files[0].read_text()
+    # The four substitutable header fields all have real values now.
+    assert body.startswith("# PR #99 merged — feat(foo): bar baz"), body[:120]
+    assert "**Branch:** feat/foo-bar" in body
+    # HEAD sha is from the test repo, not the gh payload — non-empty hex.
+    assert re.search(r"\*\*Merge-commit:\*\* [0-9a-f]{40}", body), body
+    # No raw header placeholders survive for the substitutable fields.
+    assert "{{ nnn }}" not in body
+    assert "{{ short title }}" not in body
+    assert "{{ full sha }}" not in body
+    assert "{{ <type>/<slug> }}" not in body
+
+
+def test_pr_merged_infers_pr_from_merge_commit_subject(
+    git_project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Without `--pr`, parses HEAD's `(#NNN)` squash-merge subject for the PR."""
+    _stub_gh_in_path(
+        monkeypatch,
+        tmp_path,
+        {
+            "number": 42,
+            "title": "fix: thing",
+            "headRefName": "fix/thing",
+            "mergeCommit": {"oid": "abc123" * 6 + "abcd"},
+        },
+    )
+    # Add a commit whose subject ends in `(#42)` — the squash-merge convention.
+    extra = git_project / "EXTRA.md"
+    extra.write_text("trigger\n")
+    _run(git_project, "add", "EXTRA.md")
+    _run(git_project, "commit", "-m", "fix: thing (#42)")
+
+    result = _draft(git_project, "pr-merged")
+    assert result.exit_code == 0, result.output
+    today = date.today().isoformat()
+    files = list((git_project / ".cortex" / "journal").glob(f"{today}-pr-merged-*.md"))
+    body = files[0].read_text()
+    assert "PR #42 merged — fix: thing" in body
+    assert "**Branch:** fix/thing" in body
+    assert "{{ nnn }}" not in body
+
+
+def test_pr_merged_falls_back_to_template_without_pr_or_merge_subject(
+    git_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No `--pr`, no `(#NNN)` merge subject in window → raw template + warning.
+
+    Backwards compat: the prior behavior wrote the raw template. We keep
+    that (no crash) but emit a stderr `warning:` so the silent failure is
+    closed (engineering principle: no silent failures)."""
+    # Hide gh entirely so even if a CI runner has it, the path is "no PR".
+    bin_dir = git_project / "isolated-bin"
+    bin_dir.mkdir()
+    monkeypatch.setenv("PATH", str(bin_dir))
+
+    result = _draft(git_project, "pr-merged")
+    assert result.exit_code == 0, result.output
+    today = date.today().isoformat()
+    files = list((git_project / ".cortex" / "journal").glob(f"{today}-pr-merged-*.md"))
+    body = files[0].read_text()
+    # Raw template placeholders survive — no substitution context available.
+    assert "{{ nnn }}" in body
+    assert "{{ short title }}" in body
+    # Stderr surfaces the missing context so the failure is visible.
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "warning" in combined.lower()
+    assert "could not resolve a PR number" in combined
+
+
+def test_decision_template_substitution_unchanged(
+    git_project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Regression: pr-merged substitution must not bleed into other types.
+
+    The decision template's H1 placeholder (`# {{ One-line summary }}`)
+    stays as-is unless `--title` is passed. Verifies the substitution path
+    is `pr-merged`-gated, not blanket."""
+    _stub_gh_in_path(
+        monkeypatch,
+        tmp_path,
+        {
+            "number": 99,
+            "title": "feat: thing",
+            "headRefName": "feat/thing",
+            "mergeCommit": {"oid": "0" * 40},
+        },
+    )
+    result = _draft(git_project, "decision", "--pr", "99", "--slug", "decision-test")
+    assert result.exit_code == 0, result.output
+    today = date.today().isoformat()
+    body = (git_project / ".cortex" / "journal" / f"{today}-decision-test.md").read_text()
+    # Decision template's `{{ One-line summary }}` H1 placeholder survives —
+    # no `--pr`-driven rewrite for non-pr-merged types.
+    assert re.search(r"^# \{\{[^}]+\}\}", body, re.MULTILINE), body[:200]
 
 
 def test_project_template_override_wins(git_project: Path) -> None:

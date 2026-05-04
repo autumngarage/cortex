@@ -91,6 +91,92 @@ def test_append_only_journal_violation_detected(tmp_path: Path) -> None:
     assert any("append-only invariant violated" in issue.message for issue in issues)
 
 
+def test_append_only_journal_no_false_positive_via_template_rename(tmp_path: Path) -> None:
+    """Regression for cortex#103: `git log --follow` traced template-identical
+    journal content back to commits that modified the template, falsely
+    accusing pristine journal entries of mutation.
+
+    Reproduces the fix-required scenario: a template is modified in C1,
+    then a journal entry with byte-identical content is created in C2.
+    Old code (with `--follow`) warned citing C1 as a "modification" of the
+    journal entry. New code (without `--follow`) ignores rename traces, so
+    no warning fires."""
+    _git_cortex_project(tmp_path)
+    template_dir = tmp_path / ".cortex" / "templates" / "journal"
+    template_dir.mkdir(parents=True, exist_ok=True)
+    template = template_dir / "pr-merged.md"
+    template_v1 = "# PR #{{ nnn }} merged — {{ short title }}\n\n**Original template body.**\n"
+    template_v2 = "# PR #{{ nnn }} merged — {{ short title }}\n\n**Updated template body.**\n"
+    template.write_text(template_v1)
+    _commit(tmp_path, "docs: add pr-merged template", ".cortex/templates/journal/pr-merged.md")
+    template.write_text(template_v2)
+    _commit(tmp_path, "docs: tweak pr-merged template", ".cortex/templates/journal/pr-merged.md")
+
+    # Journal entry created with byte-identical content to template_v2 — this
+    # is what triggers git's rename heuristic if --follow is used.
+    entry = tmp_path / ".cortex" / "journal" / "2026-05-03-pr-merged-canary.md"
+    entry.write_text(template_v2)
+    _commit(tmp_path, "docs: auto-draft pr-merged canary", ".cortex/journal/2026-05-03-pr-merged-canary.md")
+
+    issues = check_append_only_journal(tmp_path)
+    assert not any(
+        "pr-merged-canary.md" in (issue.path or "") for issue in issues
+    ), [f"{i.path}: {i.message}" for i in issues]
+
+
+def test_append_only_journal_real_mutation_still_detected(tmp_path: Path) -> None:
+    """Negative case for the cortex#103 fix: dropping `--follow` must not
+    mask actual append-only violations. Same template-rename setup, then
+    we ACTUALLY modify the journal entry — the check still warns."""
+    _git_cortex_project(tmp_path)
+    template_dir = tmp_path / ".cortex" / "templates" / "journal"
+    template_dir.mkdir(parents=True, exist_ok=True)
+    template = template_dir / "pr-merged.md"
+    template_body = "# PR #{{ nnn }} merged — {{ short title }}\n\n**Body.**\n"
+    template.write_text(template_body)
+    _commit(tmp_path, "docs: add pr-merged template", ".cortex/templates/journal/pr-merged.md")
+
+    entry = tmp_path / ".cortex" / "journal" / "2026-05-03-pr-merged-real.md"
+    entry.write_text(template_body)
+    _commit(tmp_path, "docs: auto-draft pr-merged entry", ".cortex/journal/2026-05-03-pr-merged-real.md")
+
+    # Now actually modify the journal entry — this MUST still warn.
+    entry.write_text(template_body + "\nActual hand-edit after creation.\n")
+    _commit(tmp_path, "docs: hand-edit journal entry", ".cortex/journal/2026-05-03-pr-merged-real.md")
+
+    issues = check_append_only_journal(tmp_path)
+    assert any(
+        "pr-merged-real.md" in (issue.path or "")
+        and "append-only invariant violated" in issue.message
+        for issue in issues
+    ), [f"{i.path}: {i.message}" for i in issues]
+
+
+def test_immutable_doctrine_no_false_positive_via_rename(tmp_path: Path) -> None:
+    """Same shape as the journal regression but on the doctrine check.
+    `check_immutable_doctrine` shares `_modified_commits` so the fix lands
+    here too — and we test it independently to catch any future divergence."""
+    _git_cortex_project(tmp_path)
+    # An "external" doctrine-shaped file that the doctrine entry will end up
+    # byte-identical to. Anywhere outside .cortex/doctrine/ works.
+    sibling = tmp_path / "EXTERNAL.md"
+    body_v1 = "---\nStatus: Accepted\nDate: 2026-05-02\nLoad-priority: default\n---\n\n# Rule\n\nOriginal v1.\n"
+    body_v2 = "---\nStatus: Accepted\nDate: 2026-05-02\nLoad-priority: default\n---\n\n# Rule\n\nOriginal v2.\n"
+    sibling.write_text(body_v1)
+    _commit(tmp_path, "docs: add external sibling", "EXTERNAL.md")
+    sibling.write_text(body_v2)
+    _commit(tmp_path, "docs: tweak external sibling", "EXTERNAL.md")
+
+    doctrine = tmp_path / ".cortex" / "doctrine" / "0008-rule.md"
+    doctrine.write_text(body_v2)
+    _commit(tmp_path, "docs: add doctrine identical to sibling", ".cortex/doctrine/0008-rule.md")
+
+    issues = check_immutable_doctrine(tmp_path)
+    assert not any(
+        "0008-rule.md" in (issue.path or "") for issue in issues
+    ), [f"{i.path}: {i.message}" for i in issues]
+
+
 def test_journal_updated_by_frontmatter_diff_allowed(tmp_path: Path) -> None:
     _git_cortex_project(tmp_path)
     entry = tmp_path / ".cortex" / "journal" / "2026-05-02-decision.md"
