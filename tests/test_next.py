@@ -301,6 +301,20 @@ def test_spawned_plan_placeholders_do_not_enter_next_json(tmp_path: Path) -> Non
     )
 
 
+def test_next_preserves_double_underscore_file_paths(tmp_path: Path) -> None:
+    """Regression: markdown cleanup must not corrupt `__init__.py` paths."""
+    _init_cortex(tmp_path)
+    _write_plan(
+        tmp_path,
+        "release",
+        work_items="- [ ] Verify `src/cortex/__init__.py` matches `pyproject.toml`.\n",
+    )
+
+    data = json.loads(_next(tmp_path, "--json").output)
+
+    assert data["p0"][0]["text"] == "Verify src/cortex/__init__.py matches pyproject.toml."
+
+
 def test_is_placeholder_text() -> None:
     cases = {
         "{{ task }}": True,

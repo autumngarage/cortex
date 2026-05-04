@@ -1,5 +1,5 @@
 ---
-Status: active
+Status: shipped
 Written: 2026-04-29
 Author: claude-code (Henry Modisett)
 Goal-hash: b57f6355
@@ -8,10 +8,11 @@ Updated-by:
   - 2026-04-29 claude-code (council review applied — fixed critical invalidation bug for uncommitted edits; preserved pure-grep floor by keeping `cortex grep` untouched and adding `--mode bm25` alongside; removed auto-resolve to Conductor in favor of explicit opt-in; controlled model cache path; tightened doctrine supersede to declare index "hazmat" + interface non-normative; smaller default chunk size; cross-platform install gaps documented as risks)
   - 2026-04-29 claude-code (frontmatter SPEC compliance — Status enum + Cites scalar + auto-computed Goal-hash + required section headers added to satisfy `cortex doctor`)
   - 2026-04-29 claude-code (Conductor removed from retrieve path entirely — clear tool responsibility separation: Conductor = LLM routing; Cortex owns embedder choice end-to-end. v0.1 ships builtin only; future cloud embedders ship as direct Cortex-internal adapters when/if added. Slice S3 dropped; renumbered S4 → S3.)
+  - 2026-05-04 codex-session-2026-05-04 (closed as Cortex-side shipped: S0/S1/S2 delivered across v0.7.0 + v0.8.0, stable `cortex retrieve --json` contract exists, and remaining Sentinel consumption is downstream autumngarage/sentinel#111 rather than a Cortex blocker. Filters/rerank/polish remain future measured-demand work.)
 Cites: .cortex/doctrine/0005-scope-boundaries-v2.md, .cortex/doctrine/0006-scope-boundaries-v3.md, .cortex/protocol.md, .cortex/plans/cortex-v1.md
 ---
 
-> **Sub-plan banner (added 2026-05-02).** This plan is the **v0.7.0 sub-plan** of [`plans/cortex-v1.md`](./cortex-v1.md). Sequencing (where v0.7.0 sits between v0.6.0 Tier-4 close and the v0.9.0 dogfood gate) and acceptance gates (standalone + Sentinel-consumer) live in the master plan's `### v0.7.0 — Retrieval interface` section. Design + slice details (S0–S3, stack choices, invalidation semantics, council deltas) live here. If the two ever disagree, the master plan wins for sequencing; this plan wins for design.
+> **Sub-plan banner (updated 2026-05-04).** This plan was the **v0.7.0/v0.8.0 sub-plan** of [`plans/cortex-v1.md`](./cortex-v1.md). Cortex-side retrieval is shipped: BM25 in v0.7.0, semantic + hybrid + stable JSON output in v0.8.0. Downstream Sentinel consumption is tracked in autumngarage/sentinel#111 and is not a Cortex production-readiness blocker. If this plan and the master plan disagree, the master plan wins for sequencing and gate criteria.
 
 > **Council-applied deltas (2026-04-29).** This plan was reviewed by a 3-member council (Gemini-pro / Kimi / DeepSeek-v4) with synthesis. The following changes were folded back from the council critique:
 >
@@ -291,7 +292,7 @@ This plan is done when all hold:
 6a. **No paid-API calls in v0.1.** v0.1 ships `builtin` only; no cloud embedder paths exist. If future adapters land, they default to off; explicit opt-in required.
 7. **Doctrine supersede landed.** Doctrine 0005 #1 carries `Status: Superseded-by 0007` (or whichever number); new entry explains the carry-forward / changes split.
 8. **`cortex doctor` reports active retrieve state.** "Retrieve: hybrid via builtin (model: bge-small-en-v1.5, index: 312 chunks, age: 14m)" — concrete and actionable.
-9. **Sentinel consumes via `cortex retrieve --json`** in at least one role (Planner most likely) and demonstrates measurably better behavior on a multi-cycle dogfood (memory-usefulness gate from Sentinel master plan).
+9. **Downstream consumer contract exists.** `cortex retrieve --json` emits stable `{path, score, frontmatter, excerpt}` objects across modes. Sentinel consumption is a downstream Sentinel acceptance item (autumngarage/sentinel#111), not a Cortex gate.
 10. **Zero-config default**: a user who never edits `.cortex/config.toml` gets sensible behavior (grep by default; semantic if and only if they opt in via `--semantic` or build an index).
 
 ## Work items
@@ -324,13 +325,13 @@ Five slices. Each is independently shippable; prior slices unblock later ones.
 - Manifest tracks model + chunk-strategy version.
 - **Acceptance**: hybrid Recall@5 ≥ grep-only + 20% on the golden set; first-time index build on a 1000-entry repo completes in <60s.
 
-### S3 — Filters, rerank, polish
+### S3 — Filters, rerank, polish (deferred from v0.8.0)
 
 - `--filter`, `--since`, `--top-k` flag completion.
 - Optional cross-encoder rerank (`[retrieve] rerank = true`).
 - Performance tuning if golden-set numbers warrant.
 - Migration guidance docs.
-- **Acceptance**: documentation complete; `cortex doctor` warnings cover all common misconfigurations.
+- **Disposition**: not required for Cortex production readiness. Revisit on measured retrieval friction during v0.9.0 dogfood or explicit downstream demand.
 
 ## Out of scope (explicitly)
 

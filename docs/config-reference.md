@@ -103,23 +103,34 @@ Source pointers:
 
 ### `[doctor.stale-checkbox]`
 
-Configuration for the `check_stale_plan_checkboxes` doctor check
-(cortex#100). Read by `_stale_checkbox_window_days` in
+Configuration for stale high-authority guidance checks:
+`check_stale_plan_checkboxes`, `check_stale_pickup_pointers`, and
+`check_stale_state_current_work` (cortex#100 plus the 2026-05-04 dogfood
+extension). Read by `_stale_checkbox_window_days` in
 `src/cortex/doctor_checks.py`. Schema-validated by
 `check_config_toml_schema`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `window_days` | positive integer | `14` | How many days back to scan `Type: release` and `Type: pr-merged` Journal entries when computing overlap with active-plan `- [ ]` checkboxes. Larger values catch older drift; smaller values reduce false positives from long-tail mentions. |
+| `window_days` | positive integer | `14` | How many days back to scan `Type: release` and `Type: pr-merged` Journal entries when computing overlap with active-plan `- [ ]` checkboxes, active-plan `## Pickup pointer` prose, and `.cortex/state.md ## Current work` bullets. Larger values catch older drift; smaller values reduce false positives from long-tail mentions. |
 
-**Bypass per checkbox.** A checkbox annotated `<!-- cortex:no-stale-check -->`
-anywhere on the line is exempt from the check. Use this for legitimately
-aspirational items whose prose overlaps with release/PR-merge journal
-mentions without being shipped (e.g., "sustained-work period across all
-three targets" — release entries naturally name those targets).
+**Bypass marker.** A checkbox, pickup-pointer section, or current-work
+bullet annotated `<!-- cortex:no-stale-check -->` is exempt from the
+overlap check. Use this for legitimately aspirational items whose prose
+overlaps with release/PR-merge journal mentions without being shipped
+(e.g., "sustained-work period across all three targets" — release entries
+naturally name those targets).
+
+**State source freshness.** Separately, `check_generated_layers` warns when
+`.cortex/state.md` was generated before newer primary Cortex sources
+(`plans/`, `journal/`, `doctrine/`, templates, case studies, protocol/spec,
+or the project manifest). This check has no config knob; rerun
+`cortex refresh-state` or update the preserved hand-authored section.
 
 Source pointers:
-- Check: `check_stale_plan_checkboxes` in `src/cortex/doctor_checks.py`.
+- Checks: `check_stale_plan_checkboxes`, `check_stale_pickup_pointers`,
+  `check_stale_state_current_work`, and `check_generated_layers` in
+  `src/cortex/doctor_checks.py`.
 - Window reader: `_stale_checkbox_window_days` (same file).
 - Schema: `check_config_toml_schema` (same file).
 

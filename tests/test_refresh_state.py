@@ -151,6 +151,24 @@ def test_refresh_state_auto_walked_sections(tmp_path: Path) -> None:
     assert "`.cortex/journal/2026-04-21-stale.md` — Stale-by: 2026-05-01" in text
 
 
+def test_refresh_state_does_not_render_raw_template_pr_entries_as_shipped(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    _write_journal(
+        tmp_path,
+        "2026-04-22-raw-pr.md",
+        "pr-merged",
+        "PR #{{ nnn }} merged — {{ short title }}",
+    )
+
+    result = _run_refresh(tmp_path)
+    assert result.exit_code == 0, result.output
+    text = (tmp_path / ".cortex" / "state.md").read_text()
+
+    shipped = text.split("## Shipped recently", 1)[1].split("## Stale-now / handle-later", 1)[0]
+    assert "{{ nnn }}" not in shipped
+    assert "2026-04-22-raw-pr.md — shipped journal title contains unresolved template placeholder" in text
+
+
 def test_refresh_state_seven_field_header_complete(tmp_path: Path) -> None:
     _write_fixture(tmp_path)
     result = _run_refresh(tmp_path)

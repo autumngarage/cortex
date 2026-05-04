@@ -28,6 +28,7 @@ _CHECKBOX_RE = re.compile(r"^\s*[-*]\s+\[(?P<mark>[ xX])\]\s+", re.MULTILINE)
 _BOLD_FIELD_RE = re.compile(r"^\*\*(?P<key>[^:*]+):\*\*\s*(?P<value>.+?)\s*$", re.MULTILINE)
 _PLAIN_FIELD_RE = re.compile(r"^(?P<key>[A-Za-z][A-Za-z0-9-]*):\s*(?P<value>.+?)\s*$", re.MULTILINE)
 _SPEC_VERSION_RE = re.compile(r"\bSpec:\s*([0-9][^\s]+)")
+_TEMPLATE_PLACEHOLDER_RE = re.compile(r"\{\{\s*[^}]+?\s*\}\}")
 
 
 @dataclass(frozen=True)
@@ -301,6 +302,11 @@ def _parse_journals(files: list[SourceFile]) -> tuple[list[JournalState], list[s
             shipped = type_ in {"release", "pr-merged"} or (
                 type_ == "plan-transition" and _looks_shipped(file.text)
             )
+            if shipped and _has_template_placeholder(title):
+                errors.append(
+                    f"{file.path} — shipped journal title contains unresolved template placeholder"
+                )
+                shipped = False
             journals.append(
                 JournalState(
                     path=file.path,
@@ -393,6 +399,10 @@ def _scalar(value: FrontmatterValue | None) -> str | None:
 def _title(body: str) -> str | None:
     match = _H1_RE.search(body)
     return match.group(1).strip() if match else None
+
+
+def _has_template_placeholder(text: str) -> bool:
+    return bool(_TEMPLATE_PLACEHOLDER_RE.search(text))
 
 
 def _checkbox_counts(body: str) -> tuple[int, int]:
