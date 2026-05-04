@@ -33,10 +33,26 @@ permissions:
   contents: read
 
 jobs:
+  verify-tag:
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ inputs.tag_name || github.event.release.tag_name }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify release tag package metadata
+        run: |
+          expected_version="${RELEASE_TAG#v}"
+          PYTHONPATH=src python -m cortex.release_integrity "$RELEASE_TAG" "$expected_version"
+
   bump-tap:
     # On the auto-trigger, skip prereleases — they shouldn't land in the
     # tap. Manual dispatch always runs so we can re-bump on demand.
     if: github.event_name == 'workflow_dispatch' || !github.event.release.prerelease
+    needs: verify-tag
     uses: autumngarage/autumn-garage/.github/workflows/homebrew-bump.yml@v1
     with:
       formula-name: cortex
