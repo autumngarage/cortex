@@ -34,6 +34,7 @@ git fetch --tags origin >/dev/null
 [ "$(git rev-list --left-right --count origin/main...main)" = "0	0" ] || { echo "ERROR: local main out of sync with origin" >&2; exit 1; }
 
 current_version="$(grep -oE '__version__ = "[0-9.]+"' src/cortex/__init__.py | grep -oE '[0-9.]+')"
+uv run python -m cortex.release_integrity --repo "$REPO_ROOT" HEAD "$current_version" >/dev/null
 
 # Guard against partial-state from a previous failed run: if the source
 # version is ahead of the latest tag, the previous release didn't make
@@ -87,11 +88,13 @@ git commit --no-verify -m "chore: release ${new_tag}"
 # main can't get released instead.
 git push --no-verify origin main
 target_sha="$(git rev-parse HEAD)"
+uv run python -m cortex.release_integrity --repo "$REPO_ROOT" "$target_sha" "$new_version"
 gh release create "$new_tag" --target "$target_sha" --generate-notes
 git fetch --tags origin >/dev/null || true
+uv run python -m cortex.release_integrity --repo "$REPO_ROOT" "$new_tag" "$new_version"
 
 echo
 echo "  ✓ Released ${new_tag}"
 echo "  Tap bump is in flight via .github/workflows/release.yml"
 echo "  Watch: gh run list --workflow=release.yml --repo autumngarage/cortex --limit 1"
-echo "  Upgrade: brew update && brew upgrade cortex"
+echo "  Upgrade: brew update && brew upgrade autumngarage/cortex/cortex"

@@ -1,16 +1,16 @@
 ---
-Generated: 2026-05-04T06:58:18-04:00
-Generator: cortex refresh-state v0.8.1
+Generated: 2026-05-04T07:21:33-04:00
+Generator: cortex refresh-state v0.8.2
 Sources:
-  - HEAD sha: 76331bc53f5e7fde1c15f7d9c886b0dc96c1f756
+  - HEAD sha: f11138586f8ab172fa7575b8bf2e78834d386f12
   - .cortex/plans/*.md (10 files)
-  - .cortex/journal/*.md (44 entries, 2026-04-17..2026-05-04)
+  - .cortex/journal/*.md (45 entries, 2026-04-17..2026-05-04)
   - .cortex/doctrine/*.md (7 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
   - SPEC version: 0.5.0
-  - pyproject.toml: 0.8.1 + cortex package version: 0.8.1
-Corpus: 44 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
+  - pyproject.toml: 0.8.2 + cortex package version: 0.8.2
+Corpus: 45 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -61,6 +61,7 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 - **2026-05-02** — Cortex v0.6.0 released — Tier 4 closed (real promote writer + 9 doctor invariants + Doctrine 0007) (`.cortex/journal/2026-05-02-v0.6.0-released.md`, Type: release)
 - **2026-05-02** — Cortex v0.7.0 released — `cortex retrieve --mode bm25` over FTS5 (Slice S1 of the retrieve interface) (`.cortex/journal/2026-05-02-v0.7.0-released.md`, Type: release)
 - **2026-05-03** — Cortex v0.8.0 released — `cortex retrieve` semantic + hybrid (S2) + schema-validator drift fixes (`.cortex/journal/2026-05-03-v0.8.0-released.md`, Type: release)
+- **2026-05-04** — PR #109 merged — fix stale cortex state guidance (`.cortex/journal/2026-05-04-pr-merged-0710.md`, Type: pr-merged)
 - **2026-05-04** — Cortex v0.8.1 released — auto-draft substitution + stale-checkbox detector + append-only false-positive fix (`.cortex/journal/2026-05-04-v0.8.1-released.md`, Type: release)
 
 ## Stale-now / handle-later
