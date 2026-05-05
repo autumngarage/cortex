@@ -251,13 +251,17 @@ def _legacy_state_migration_hint(cortex_dir: Path) -> str:
 # append entirely and print a note. This mirrors how doctrine-0002 defines
 # the user contract ("running the wizard twice must be a no-op").
 _CORTEX_IMPORT_BLOCK = """\
-## Current state (read this first)
+## Cortex session start
 
-@.cortex/state.md
+When the CLI is available, run `cortex manifest --budget <N>` first. For
+delegation briefs, prefer `cortex manifest --profile delegation` (default
+4k-token budget).
 
-## Cortex Protocol
+Fallback-only imports for environments without the CLI:
 
 @.cortex/protocol.md
+
+@.cortex/state.md
 """
 
 _PROTOCOL_IMPORT_MARKER = "@.cortex/protocol.md"

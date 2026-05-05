@@ -4,7 +4,7 @@ __version__ = "0.8.2"
 SPEC_VERSION_LITERAL = "0.5.0"
 
 SUPPORTED_SPEC_VERSIONS: tuple[str, ...] = ("0.3", "0.4", "0.5")
-SUPPORTED_PROTOCOL_VERSIONS: tuple[str, ...] = ("0.2",)
+SUPPORTED_PROTOCOL_VERSIONS: tuple[str, ...] = ("0.2", "0.3")
 
 __all__ = [
     "SPEC_VERSION_LITERAL",

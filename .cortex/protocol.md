@@ -2,7 +2,7 @@
 
 > The set of rules an agent follows to read and write `.cortex/`. Projects import this file into `AGENTS.md` (or `CLAUDE.md`) so every agent working on the project follows the same contract.
 
-**Protocol version:** 0.2.2 (ships with SPEC.md v0.5.0; § 1 adds canonical-ownership requirement per Doctrine 0007 — additive minor per SPEC § 6)
+**Protocol version:** 0.3.0 (ships with SPEC.md v0.5.0; § 1 makes manifest-first agent loading explicit and documents the delegation budget profile — additive minor per SPEC § 6)
 **Status:** Active
 **Imports:** this file is imported into `AGENTS.md` via `@.cortex/protocol.md`
 
@@ -10,11 +10,13 @@
 
 ## 1. Read on session start
 
-The agent's first action in any session on a Cortex-enabled project is to load the session manifest:
+The agent's first action in any session on a Cortex-enabled project is to try the Cortex CLI session manifest:
 
 ```
 cortex manifest --budget <N>
 ```
+
+Use `cortex manifest --profile delegation` for compact agent-to-agent handoffs; that profile defaults to half the normal session budget (currently 4k tokens) and emits the pickup pointer, invariants, and retrieval instructions instead of loading the full corpus. Callers may still pass `--budget <N>` when a larger or smaller delegation window is required.
 
 The manifest is a token-budgeted slice of `.cortex/`, not the whole store. Default load:
 
@@ -32,7 +34,7 @@ The manifest is a token-budgeted slice of `.cortex/`, not the whole store. Defau
 
 **Graceful degradation.** At 32k context, the manifest falls back to State only. At 100k+, it may include Journal from last 7d. The CLI computes the slice; the agent receives the output.
 
-**Fallback when the CLI is unavailable.** A Cortex project without the `cortex` CLI installed (or in an environment where shelling out is blocked) MUST still be loadable. The minimum viable manifest is:
+**Fallback when the CLI is unavailable.** Direct `@path` imports are the fallback path, not the preferred session-start path. A Cortex project without the `cortex` CLI installed (or in an environment where shelling out is blocked) MUST still be loadable. The minimum viable manifest is:
 
 ```
 # In AGENTS.md or CLAUDE.md:
