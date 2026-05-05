@@ -52,6 +52,22 @@ def test_protocol_md_matches_canonical(repo_root: Path) -> None:
     )
 
 
+def test_bundled_protocol_guidance_prefers_manifest_then_fallback(repo_root: Path) -> None:
+    shipped = (repo_root / "src" / "cortex" / "_data" / "protocol.md").read_text()
+
+    manifest_idx = shipped.index("cortex manifest --budget <N>")
+    delegation_idx = shipped.index("cortex manifest --profile delegation")
+    fallback_idx = shipped.index("Fallback when the CLI is unavailable")
+    protocol_import_idx = shipped.index("@.cortex/protocol.md", fallback_idx)
+    state_import_idx = shipped.index("@.cortex/state.md", fallback_idx)
+
+    assert manifest_idx < fallback_idx
+    assert delegation_idx < fallback_idx
+    assert fallback_idx < protocol_import_idx < state_import_idx
+    assert "Direct `@path` imports are the fallback path" in shipped
+    assert "currently 4k tokens" in shipped
+
+
 def test_templates_tree_matches_canonical(repo_root: Path) -> None:
     canonical = _collect_tree(repo_root / ".cortex" / "templates")
     shipped = _collect_tree(repo_root / "src" / "cortex" / "_data" / "templates")

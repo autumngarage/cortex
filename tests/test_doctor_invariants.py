@@ -340,12 +340,36 @@ def test_state_source_freshness_warns_for_source_commit_after_state(tmp_path: Pa
 
 def test_cli_less_fallback_threshold_warns(tmp_path: Path) -> None:
     _scaffold(tmp_path)
+    (tmp_path / "CLAUDE.md").write_text(
+        "# Agent guidance\n\n@.cortex/protocol.md\n@.cortex/state.md\n"
+    )
     doctrine = tmp_path / ".cortex" / "doctrine"
     for i in range(21):
         (doctrine / f"{i + 1:04d}-entry.md").write_text("# Entry\n")
 
     issues = check_cli_less_fallback(tmp_path)
-    assert any("fallback threshold" in issue.message for issue in issues)
+    assert any(
+        issue.path == "CLAUDE.md"
+        and "fallback-only Cortex imports" in issue.message
+        and "cortex manifest --budget <N>" in issue.message
+        for issue in issues
+    )
+
+
+def test_cli_less_fallback_threshold_accepts_manifest_guidance(tmp_path: Path) -> None:
+    _scaffold(tmp_path)
+    (tmp_path / "AGENTS.md").write_text(
+        "# Agent guidance\n\n"
+        "Run `cortex manifest --budget <N>` first.\n"
+        "Fallback when the CLI is unavailable:\n"
+        "@.cortex/protocol.md\n"
+        "@.cortex/state.md\n"
+    )
+    doctrine = tmp_path / ".cortex" / "doctrine"
+    for i in range(21):
+        (doctrine / f"{i + 1:04d}-entry.md").write_text("# Entry\n")
+
+    assert check_cli_less_fallback(tmp_path) == []
 
 
 def test_t1_4_large_deletion_without_journal_warns(tmp_path: Path) -> None:

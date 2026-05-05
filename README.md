@@ -14,7 +14,7 @@
 
 > **Cortex is a protocol for agent project memory that treats your exact git repo as the memory store.** Instead of introducing a new database, daemon, or vector index, it defines a directory of structured Markdown files (`.cortex/`) that agents evolve alongside code. It is grepable, diffable, and auditable with existing tools, adding the missing agent memory convention without replacing your workspace.
 
-**Status:** v0.8.2 shipped 2026-05-04. Latest release notes: [GitHub Releases](https://github.com/autumngarage/cortex/releases). [`SPEC.md`](./SPEC.md) v0.5.0; [`.cortex/protocol.md`](./.cortex/protocol.md) v0.2.1.
+**Status:** v0.8.2 shipped 2026-05-04. Latest release notes: [GitHub Releases](https://github.com/autumngarage/cortex/releases). [`SPEC.md`](./SPEC.md) v0.5.0; [`.cortex/protocol.md`](./.cortex/protocol.md) v0.3.0.
 
 **For "where are we now" and "what's next" — read [`.cortex/state.md`](./.cortex/state.md) (current state) and [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) (the one master launch plan).** Those are the canonical sources, kept current by Cortex itself; this README does not restate them. Eating our own dog food: a single canonical owner per fact is [Doctrine 0007](./.cortex/doctrine/0007-canonical-ownership-of-state-and-plans.md), and `cortex doctor` warns when repo-root files duplicate `.cortex/` content.
 

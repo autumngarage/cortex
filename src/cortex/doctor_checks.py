@@ -48,6 +48,10 @@ DEFAULT_STALE_CHECKBOX_WINDOW_DAYS = 14
 DEFAULT_STATE_JOURNAL_STALENESS_DAYS = 7
 SOURCE_FRESHNESS_SLOP = timedelta(seconds=1)
 STALE_CHECKBOX_BYPASS_MARKER = "<!-- cortex:no-stale-check -->"
+AGENT_GUIDANCE_FILES = ("CLAUDE.md", "AGENTS.md")
+PROTOCOL_IMPORT_MARKER = "@.cortex/protocol.md"
+STATE_IMPORT_MARKER = "@.cortex/state.md"
+MANIFEST_COMMAND_RE = re.compile(r"\bcortex\s+manifest\b")
 STATE_SOURCE_DIRS = (
     ".cortex/plans",
     ".cortex/journal",
@@ -274,8 +278,6 @@ def check_promotion_queue(project_root: Path) -> list[Issue]:
 
 def check_cli_less_fallback(project_root: Path) -> list[Issue]:
     cortex_dir = project_root / ".cortex"
-    if (cortex_dir / ".index.json").exists():
-        return []
     doctrine_count = (
         len(list((cortex_dir / "doctrine").glob("*.md")))
         if (cortex_dir / "doctrine").exists()
@@ -289,14 +291,30 @@ def check_cli_less_fallback(project_root: Path) -> list[Issue]:
         and journal_count <= DEFAULT_FALLBACK_JOURNAL_THRESHOLD
     ):
         return []
-    return [
-        Issue(
-            Severity.WARNING,
-            ".cortex/.index.json",
-            "corpus exceeds CLI-less fallback threshold "
-            f"({doctrine_count} Doctrine, {journal_count} Journal); run `cortex refresh-index`",
+
+    issues: list[Issue] = []
+    for filename in AGENT_GUIDANCE_FILES:
+        path = project_root / filename
+        if not path.is_file():
+            continue
+        text = path.read_text()
+        has_fallback_imports = (
+            PROTOCOL_IMPORT_MARKER in text
+            and STATE_IMPORT_MARKER in text
         )
-    ]
+        if has_fallback_imports and not MANIFEST_COMMAND_RE.search(text):
+            issues.append(
+                Issue(
+                    Severity.WARNING,
+                    filename,
+                    "agent guidance uses fallback-only Cortex imports while "
+                    "corpus exceeds fallback threshold "
+                    f"({doctrine_count} Doctrine, {journal_count} Journal); "
+                    "document `cortex manifest --budget <N>` as the preferred "
+                    "session-start path and keep direct @imports as CLI-unavailable fallback.",
+                )
+            )
+    return issues
 
 
 def check_t1_4_deletions(
