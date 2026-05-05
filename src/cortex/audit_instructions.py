@@ -96,7 +96,7 @@ def audit_instructions(project_root: Path) -> AuditInstructionsReport:
     checked = 0
     findings.extend(Finding("warning", warning) for warning in config.warnings)
 
-    sibling_claims = _merge_claim_locations(config.siblings, scan.sibling_refs)
+    sibling_claims = _configured_claim_locations(config.siblings, scan.sibling_refs)
     sibling_findings = audit_filesystem_siblings(sibling_claims)
     checked += len(sibling_claims)
     findings.extend(sibling_findings)
@@ -339,6 +339,12 @@ def _merge_claim_locations(
     for value in configured:
         merged.setdefault(value, ())
     return merged
+
+
+def _configured_claim_locations(
+    configured: tuple[str, ...], discovered: dict[str, tuple[TextLocation, ...]]
+) -> dict[str, tuple[TextLocation, ...]]:
+    return {value: discovered.get(value, ()) for value in configured}
 
 
 def _warning(message: str, location: TextLocation | None) -> Finding:

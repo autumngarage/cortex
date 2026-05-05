@@ -112,7 +112,9 @@ def test_missing_sibling_reports_reference_line(tmp_path: Path, monkeypatch: Any
     assert "(CLAUDE.md:1)" in output
 
 
-def test_discovery_mode_audits_discovered_sibling(tmp_path: Path, monkeypatch: Any) -> None:
+def test_discovery_mode_ignores_unconfigured_sibling_paths(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     (tmp_path / "repos" / "touchstone").mkdir(parents=True)
     (tmp_path / "CLAUDE.md").write_text("Coordinate with ~/repos/touchstone.\n")
@@ -120,7 +122,20 @@ def test_discovery_mode_audits_discovered_sibling(tmp_path: Path, monkeypatch: A
     exit_code, output = _run(tmp_path)
 
     assert exit_code == 0
-    assert output == "audit-instructions: checked 1 claims, all verified\n"
+    assert output == "audit-instructions: checked 0 claims, all verified\n"
+
+
+def test_readme_placeholder_path_does_not_emit_missing_sibling(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / "README.md").write_text("touchstone new ~/Repos/my-new-project\n")
+
+    exit_code, output = _run(tmp_path)
+
+    assert exit_code == 0
+    assert "filesystem sibling" not in output
+    assert output == "audit-instructions: checked 0 claims, all verified\n"
 
 
 def test_url_404_warns(tmp_path: Path, monkeypatch: Any) -> None:
