@@ -8,18 +8,30 @@ from pathlib import Path
 import click
 
 from cortex.compat import warn_if_incompatible
-from cortex.manifest import build_manifest
+from cortex.manifest import MANIFEST_PROFILES, build_manifest
 
 
 @click.command("manifest")
 @click.option(
     "--budget",
     type=int,
-    default=8000,
-    show_default=True,
+    default=None,
+    show_default=False,
     help="Approximate token budget for the manifest (≈4 chars/token). Below 2000 "
     "the manifest degrades to state-only; at or above 15000 the Journal window "
-    "widens from 72h to 7d.",
+    "widens from 72h to 7d. Defaults to the selected profile budget.",
+)
+@click.option(
+    "--profile",
+    type=click.Choice(sorted(MANIFEST_PROFILES)),
+    default="default",
+    show_default=True,
+    help="Manifest profile. Use `delegation` for compact agent handoffs.",
+)
+@click.option(
+    "--show-budget",
+    is_flag=True,
+    help="Show estimated tokens used by each rendered section.",
 )
 @click.option(
     "--path",
@@ -29,7 +41,13 @@ from cortex.manifest import build_manifest
     show_default="current directory",
     help="Project root containing `.cortex/`.",
 )
-def manifest_command(*, budget: int, target_path: Path) -> None:
+def manifest_command(
+    *,
+    budget: int | None,
+    profile: str,
+    show_budget: bool,
+    target_path: Path,
+) -> None:
     """Emit the token-budgeted session manifest.
 
     Written to stdout as markdown so agents can pipe it directly into their
@@ -46,5 +64,10 @@ def manifest_command(*, budget: int, target_path: Path) -> None:
 
     warn_if_incompatible(cortex_dir)
 
-    manifest = build_manifest(target_path, budget)
-    click.echo(manifest.render(), nl=False)
+    profile_config = MANIFEST_PROFILES[profile]
+    manifest = build_manifest(
+        target_path,
+        budget if budget is not None else profile_config.default_budget_tokens,
+        profile=profile,  # type: ignore[arg-type]
+    )
+    click.echo(manifest.render(show_budget=show_budget), nl=False)

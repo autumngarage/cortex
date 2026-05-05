@@ -27,6 +27,12 @@ def _run_manifest(project: Path, budget: int) -> tuple[int, str]:
     return result.exit_code, result.output
 
 
+def _run_manifest_args(project: Path, *args: str) -> tuple[int, str]:
+    runner = CliRunner()
+    result = runner.invoke(cli, ["manifest", "--path", str(project), *args])
+    return result.exit_code, result.output
+
+
 def _write_doctrine(project: Path, number: int, *, priority: str = "default", date: str = "2026-04-01") -> Path:
     path = project / ".cortex" / "doctrine" / f"{number:04d}-example-{number}.md"
     path.write_text(
@@ -237,3 +243,52 @@ def test_wide_journal_at_high_budget(scaffolded_project: Path) -> None:
     rendered = manifest.render()
     assert "last 168h" in rendered
     assert "2026-04-14-six-days-ago.md" in rendered
+
+
+def test_delegation_profile_uses_half_default_budget(scaffolded_project: Path) -> None:
+    exit_code, output = _run_manifest_args(scaffolded_project, "--profile", "delegation")
+    assert exit_code == 0
+    assert "Profile: delegation" in output
+    assert "Budget: 4000 tokens" in output
+
+
+def test_delegation_profile_includes_handoff_brief_without_full_state(
+    scaffolded_project: Path,
+) -> None:
+    _write_plan(scaffolded_project, "handoff-plan", status="active").write_text(
+        "---\n"
+        "Status: active\n"
+        "Written: 2026-04-17\n"
+        "Author: human\n"
+        "Goal-hash: handoff-plan\n"
+        "Updated-by:\n  - 2026-04-17T10:00 human\n"
+        "Cites: doctrine/0001\n"
+        "---\n\n"
+        "# Handoff Plan\n\n"
+        "## Pickup pointer\n\nDo exactly this next.\n\n"
+        "## Why (grounding)\ndoctrine/0001\n\n"
+        "## Success Criteria\nAll `tests/` pass.\n\n"
+        "## Approach\n.\n\n## Work items\n- [ ] x\n"
+    )
+    _write_doctrine(scaffolded_project, 1)
+    _write_journal(scaffolded_project, "2026-04-17", "recent")
+
+    exit_code, output = _run_manifest_args(
+        scaffolded_project,
+        "--profile",
+        "delegation",
+        "--budget",
+        "4000",
+    )
+
+    assert exit_code == 0
+    assert "## Project Identity" in output
+    assert "SPEC target:" in output
+    assert "Journal is append-only" in output
+    assert "Active Plan:" in output
+    assert "Do exactly this next." in output
+    assert "## state.md" not in output
+    assert "## Omitted Corpus" in output
+    assert "Doctrine:" in output
+    assert "Journal:" in output
+    assert "cortex retrieve --mode bm25" in output
