@@ -86,6 +86,7 @@ from cortex.init_scan import (
 from cortex.init_seeders import seed_doctrine, seed_plan, seed_plans
 from cortex.seed import SeedConflictError, SeedSourceError, seed_doctrine_from
 from cortex.shell import git_remediation_cmd, run_git
+from cortex.state_migration import is_legacy_hand_authored_state
 
 CURRENT_SPEC_VERSION = SPEC_VERSION_LITERAL
 
@@ -230,6 +231,18 @@ def _ensure_subdir(path: Path) -> None:
     gitkeep = path / ".gitkeep"
     if not gitkeep.exists():
         gitkeep.touch()
+
+
+def _legacy_state_migration_hint(cortex_dir: Path) -> str:
+    state_path = cortex_dir / "state.md"
+    if not state_path.exists():
+        return ""
+    try:
+        if is_legacy_hand_authored_state(state_path.read_text()):
+            return " Legacy hand-authored state.md detected; run `cortex migrate-state`."
+    except OSError:
+        return ""
+    return ""
 
 
 # Import block the interactive wizard appends to CLAUDE.md / AGENTS.md. The
@@ -900,10 +913,12 @@ def init_command(
 
     if spec_version_file.exists() and not force:
         existing = spec_version_file.read_text().strip()
+        migration_hint = _legacy_state_migration_hint(cortex_dir)
         click.echo(
             f"error: `.cortex/SPEC_VERSION` already exists ({existing}) at {cortex_dir}. "
             "Use `--force` to rewrite the scaffold; existing doctrine/plan/journal/"
-            "procedure content is preserved either way.",
+            "procedure content is preserved either way."
+            f"{migration_hint}",
             err=True,
         )
         sys.exit(1)

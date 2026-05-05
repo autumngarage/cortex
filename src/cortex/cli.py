@@ -18,6 +18,7 @@ from cortex.commands.grep import grep_command
 from cortex.commands.init import init_command
 from cortex.commands.journal import journal_group
 from cortex.commands.manifest import manifest_command
+from cortex.commands.migrate_state import migrate_state_command
 from cortex.commands.next import next_command
 from cortex.commands.plan import plan_group
 from cortex.commands.promote import promote_command
@@ -101,6 +102,7 @@ def version_command() -> None:
 cli.add_command(init_command)
 cli.add_command(doctor_command)
 cli.add_command(manifest_command)
+cli.add_command(migrate_state_command)
 cli.add_command(grep_command)
 cli.add_command(status_command)
 cli.add_command(promote_command)

@@ -20,11 +20,13 @@ from cortex.doctor_checks import (
     check_config_toml_schema,
     check_generated_layers,
     check_immutable_doctrine,
+    check_legacy_state_migration_needed,
     check_promotion_queue,
     check_retention_visibility,
     check_stale_pickup_pointers,
     check_stale_plan_checkboxes,
     check_stale_state_current_work,
+    check_state_journal_staleness,
     check_t1_4_deletions,
 )
 from cortex.goal_hash import normalize_goal_hash
@@ -405,6 +407,76 @@ def test_state_warns_when_source_changed_after_generated_timestamp(tmp_path: Pat
         and ".cortex/journal/2026-05-04-release.md" in issue.message
         for issue in issues
     ), [issue.message for issue in issues]
+
+
+def test_legacy_hand_authored_state_warns_to_migrate(tmp_path: Path) -> None:
+    _scaffold(tmp_path)
+    state = tmp_path / ".cortex" / "state.md"
+    state.write_text(
+        "---\n"
+        "Generated: 2026-04-18T22:00:00-07:00\n"
+        "Generator: hand-authored (regeneration infrastructure ships in Cortex Phase C)\n"
+        "Sources: []\n"
+        "Corpus: 0\n"
+        "Omitted: []\n"
+        "Incomplete: []\n"
+        "Conflicts-preserved: []\n"
+        "Spec: 0.3.1\n"
+        "---\n\n"
+        "# Project State\n\n"
+        "Hand-authored content.\n"
+    )
+
+    issues = check_legacy_state_migration_needed(tmp_path)
+    assert any("cortex migrate-state" in issue.message for issue in issues)
+
+
+def test_state_journal_staleness_warns_past_default_window(tmp_path: Path) -> None:
+    _scaffold(tmp_path)
+    state = tmp_path / ".cortex" / "state.md"
+    state.write_text(
+        "---\n"
+        "Generated: 2026-04-01T00:00:00+00:00\n"
+        "Generator: cortex refresh-state\n"
+        "Sources: []\n"
+        "Corpus: 0\n"
+        "Omitted: []\n"
+        "Incomplete: []\n"
+        "Conflicts-preserved: []\n"
+        "---\n\n"
+        "# State\n"
+    )
+    (tmp_path / ".cortex" / "journal" / "2026-04-10-release.md").write_text(
+        "# Release\n\n**Date:** 2026-04-10\n**Type:** release\n"
+    )
+
+    issues = check_state_journal_staleness(tmp_path)
+    assert any("older than latest journal entry" in issue.message for issue in issues)
+
+
+def test_state_journal_staleness_honors_window_config(tmp_path: Path) -> None:
+    _scaffold(tmp_path)
+    (tmp_path / ".cortex" / "config.toml").write_text(
+        "[doctor.state-staleness]\nwindow_days = 30\n"
+    )
+    state = tmp_path / ".cortex" / "state.md"
+    state.write_text(
+        "---\n"
+        "Generated: 2026-04-01T00:00:00+00:00\n"
+        "Generator: cortex refresh-state\n"
+        "Sources: []\n"
+        "Corpus: 0\n"
+        "Omitted: []\n"
+        "Incomplete: []\n"
+        "Conflicts-preserved: []\n"
+        "---\n\n"
+        "# State\n"
+    )
+    (tmp_path / ".cortex" / "journal" / "2026-04-10-release.md").write_text(
+        "# Release\n\n**Date:** 2026-04-10\n**Type:** release\n"
+    )
+
+    assert check_state_journal_staleness(tmp_path) == []
 
 
 def test_config_toml_schema_type_and_unknown_key(tmp_path: Path) -> None:
