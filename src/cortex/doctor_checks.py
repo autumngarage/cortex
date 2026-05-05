@@ -24,6 +24,7 @@ from cortex.audit import (
 )
 from cortex.frontmatter import FrontmatterValue, parse_frontmatter
 from cortex.index import read_index
+from cortex.plans import iter_plan_files
 from cortex.validation import SEVEN_FIELDS, Issue, Severity
 
 CANONICAL_OWNERSHIP_RE = re.compile(
@@ -464,7 +465,7 @@ def check_retention_visibility(project_root: Path) -> list[Issue]:
     cutoff = date.today() - timedelta(days=DEFAULT_RETENTION_DAYS)
     plans_dir = project_root / ".cortex" / "plans"
     if plans_dir.exists():
-        for plan in sorted(plans_dir.glob("*.md")):
+        for plan in iter_plan_files(project_root):
             fields, _body = parse_frontmatter(plan.read_text())
             status = _field_str(fields, "Status")
             if status not in {"shipped", "cancelled"}:
@@ -524,9 +525,8 @@ def check_stale_plan_checkboxes(
     checkbox or add the bypass annotation.
     """
 
-    plans_dir = project_root / ".cortex" / "plans"
     journal_dir = project_root / ".cortex" / "journal"
-    if not plans_dir.exists() or not journal_dir.exists():
+    if not (project_root / ".cortex" / "plans").exists() or not journal_dir.exists():
         return []
     effective_window = (
         window_days
@@ -537,7 +537,7 @@ def check_stale_plan_checkboxes(
     if not journal_signals:
         return []
     issues: list[Issue] = []
-    for plan in sorted(plans_dir.glob("*.md")):
+    for plan in iter_plan_files(project_root):
         try:
             text = plan.read_text()
         except OSError:
@@ -578,9 +578,8 @@ def check_stale_pickup_pointers(
     entry that clearly overlaps the pointer produces a visible warning.
     """
 
-    plans_dir = project_root / ".cortex" / "plans"
     journal_dir = project_root / ".cortex" / "journal"
-    if not plans_dir.exists() or not journal_dir.exists():
+    if not (project_root / ".cortex" / "plans").exists() or not journal_dir.exists():
         return []
     effective_window = (
         window_days
@@ -591,7 +590,7 @@ def check_stale_pickup_pointers(
     if not journal_signals:
         return []
     issues: list[Issue] = []
-    for plan in sorted(plans_dir.glob("*.md")):
+    for plan in iter_plan_files(project_root):
         try:
             text = plan.read_text()
         except OSError:
@@ -1375,11 +1374,10 @@ def _doctrine_0007_allowed_root_files(project_root: Path) -> set[str]:
 
 
 def _active_plans(cortex_dir: Path) -> list[Path]:
-    plans_dir = cortex_dir / "plans"
-    if not plans_dir.exists():
+    if not (cortex_dir / "plans").exists():
         return []
     active: list[Path] = []
-    for plan in sorted(plans_dir.glob("*.md")):
+    for plan in iter_plan_files(cortex_dir.parent):
         fields, _body = parse_frontmatter(plan.read_text())
         if _field_str(fields, "Status") == "active":
             active.append(plan)

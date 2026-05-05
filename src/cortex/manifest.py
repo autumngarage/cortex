@@ -33,6 +33,7 @@ from pathlib import Path
 
 from cortex.frontmatter import parse_frontmatter
 from cortex.index import read_index
+from cortex.plans import iter_plan_files
 from cortex.verified import VERIFIED_RE, bullet_age_days, format_warning, parse_verified
 
 CHARS_PER_TOKEN = 4
@@ -157,11 +158,10 @@ def _doctrine_order(entries: list[Path]) -> list[Path]:
 
 
 def _active_plans(cortex_dir: Path) -> list[Path]:
-    plans_dir = cortex_dir / "plans"
-    if not plans_dir.exists():
+    if not (cortex_dir / "plans").exists():
         return []
     result: list[Path] = []
-    for plan in sorted(plans_dir.glob("*.md")):
+    for plan in iter_plan_files(cortex_dir.parent):
         frontmatter, _body = parse_frontmatter(plan.read_text())
         status = frontmatter.get("Status")
         if isinstance(status, str) and status.strip() == "active":
@@ -223,7 +223,8 @@ def _promotion_summary(cortex_dir: Path) -> str:
     except json.JSONDecodeError as exc:
         return f"Promotion-queue: unreadable (`.cortex/.index.json` JSON error: {exc})."
     except ValueError as exc:
-        return f"Promotion-queue: unreadable (`.cortex/.index.json` {exc})."
+        message = str(exc).split(": ", 1)[-1].replace("top-level JSON value", "top-level value")
+        return f"Promotion-queue: unreadable (`.cortex/.index.json` {message})."
     if "candidates" in data:
         queue = data["candidates"]
         legacy_queue = False

@@ -151,6 +151,29 @@ def test_refresh_state_auto_walked_sections(tmp_path: Path) -> None:
     assert "`.cortex/journal/2026-04-21-stale.md` — Stale-by: 2026-05-01" in text
 
 
+def test_refresh_state_ignores_archived_plans(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    archived_dir = tmp_path / ".cortex" / "plans" / "_archived"
+    archived_dir.mkdir()
+    _write_plan(
+        tmp_path,
+        "archived",
+        "Archived Plan",
+        completed=0,
+        total=1,
+        updated="2000-01-01T00:00",
+    )
+    (tmp_path / ".cortex" / "plans" / "archived.md").rename(archived_dir / "archived.md")
+
+    result = _run_refresh(tmp_path)
+    assert result.exit_code == 0, result.output
+    text = (tmp_path / ".cortex" / "state.md").read_text()
+
+    assert "Archived Plan" not in text
+    assert "`archived`" not in text
+    assert "Corpus: 2 Journal entries, 2 Plans" in text
+
+
 def test_refresh_state_does_not_render_raw_template_pr_entries_as_shipped(tmp_path: Path) -> None:
     _write_fixture(tmp_path)
     _write_journal(

@@ -17,6 +17,7 @@ from pathlib import Path
 from cortex import __version__
 from cortex.frontmatter import FrontmatterValue, parse_frontmatter
 from cortex.manifests import ManifestInfo, detect_project_manifest
+from cortex.plans import iter_plan_files
 
 DETERMINISTIC_GENERATED = "2000-01-01T00:00:00+00:00"
 STALE_PLAN_DAYS = 14
@@ -127,7 +128,7 @@ def build_state_inputs(project_root: Path, *, deterministic: bool = False) -> St
         project_manifest=project_manifest,
         package_version=__version__,
         previous_state=previous_state,
-        plans=_read_tree(project_root, cortex_dir / "plans", "*.md", incomplete),
+        plans=_read_plan_sources(project_root, cortex_dir / "plans", incomplete),
         journal=_read_tree(project_root, cortex_dir / "journal", "*.md", incomplete),
         doctrine=_read_tree(project_root, cortex_dir / "doctrine", "*.md", incomplete),
         templates=_read_tree(project_root, cortex_dir / "templates", "*.md", incomplete),
@@ -330,6 +331,19 @@ def _read_tree(project_root: Path, dir_path: Path, pattern: str, incomplete: lis
     for path in sorted(dir_path.rglob(pattern)):
         if not path.is_file():
             continue
+        try:
+            files.append(SourceFile(path=_rel(project_root, path), text=path.read_text()))
+        except OSError as exc:
+            incomplete.append(f"{_rel(project_root, path)} — unreadable: {exc}")
+    return files
+
+
+def _read_plan_sources(project_root: Path, plans_dir: Path, incomplete: list[str]) -> list[SourceFile]:
+    if not plans_dir.exists():
+        incomplete.append(f"{_rel(project_root, plans_dir)} — missing source directory")
+        return []
+    files: list[SourceFile] = []
+    for path in iter_plan_files(project_root):
         try:
             files.append(SourceFile(path=_rel(project_root, path), text=path.read_text()))
         except OSError as exc:
