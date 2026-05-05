@@ -21,6 +21,7 @@ SUBPROCESS_TIMEOUT_SECONDS = 8
 VERSION_RE = re.compile(r"\bv\d+\.\d+\.\d+\b")
 SIBLING_RE = re.compile(r"(?<![\w/])~/(?:[Rr]epos)/[A-Za-z0-9._-]+")
 URL_RE = re.compile(r"https?://[^\s<>'\")\]]+")
+URL_TRAILING_DELIMITERS = "`),.;:>"
 
 
 @dataclass(frozen=True)
@@ -95,7 +96,7 @@ def audit_instructions(project_root: Path) -> AuditInstructionsReport:
     checked = 0
     findings.extend(Finding("warning", warning) for warning in config.warnings)
 
-    sibling_claims = _merge_claim_locations(config.siblings, scan.sibling_refs)
+    sibling_claims = _configured_claim_locations(config.siblings, scan.sibling_refs)
     sibling_findings = audit_filesystem_siblings(sibling_claims)
     checked += len(sibling_claims)
     findings.extend(sibling_findings)
@@ -143,7 +144,7 @@ def scan_instruction_files(project_root: Path, scan_files: tuple[str, ...]) -> S
                 sibling = raw.rstrip(".,;:")
                 sibling_refs.setdefault(sibling, []).append(TextLocation(path, line_number))
             for raw in URL_RE.findall(line):
-                url = raw.rstrip(".,;:")
+                url = _normalize_url_claim(raw)
                 url_refs.setdefault(url, []).append(TextLocation(path, line_number))
             for version in VERSION_RE.findall(line):
                 version_refs.setdefault(version, []).append(TextLocation(path, line_number))
@@ -155,6 +156,10 @@ def scan_instruction_files(project_root: Path, scan_files: tuple[str, ...]) -> S
         url_refs={key: tuple(value) for key, value in url_refs.items()},
         version_refs={key: tuple(value) for key, value in version_refs.items()},
     )
+
+
+def _normalize_url_claim(raw: str) -> str:
+    return raw.rstrip(URL_TRAILING_DELIMITERS)
 
 
 def audit_filesystem_siblings(siblings: dict[str, tuple[TextLocation, ...]]) -> list[Finding]:
@@ -196,7 +201,13 @@ def audit_homebrew_tap(tap: str, scan: ScanResult) -> list[Finding]:
     version = _find_first_version(payload)
     findings = [Finding("ok", f"homebrew tap: {tap}" + (f" (formula at {version})" if version else ""))]
     if version:
-        findings.extend(_version_mismatch_findings("homebrew formula version mismatch", version, scan))
+        findings.extend(
+            _version_mismatch_findings(
+                "homebrew formula version mismatch",
+                version,
+                _homebrew_tap_version_locations(scan, tap),
+            )
+        )
     return findings
 
 
@@ -231,7 +242,13 @@ def audit_github_releases(repos: tuple[str, ...], scan: ScanResult) -> list[Find
             findings.append(Finding("warning", f"github release: {repo} returned no release tag"))
             continue
         findings.append(Finding("ok", f"github release: {repo} latest is {tag}"))
-        findings.extend(_version_mismatch_findings("github release version mismatch", tag, scan))
+        findings.extend(
+            _version_mismatch_findings(
+                "github release version mismatch",
+                tag,
+                _github_repo_version_locations(scan, repo),
+            )
+        )
     return findings
 
 
@@ -273,10 +290,12 @@ def _head_status(url: str) -> tuple[int | None, str | None]:
         return None, str(exc)
 
 
-def _version_mismatch_findings(label: str, latest: str, scan: ScanResult) -> list[Finding]:
+def _version_mismatch_findings(
+    label: str, latest: str, version_refs: dict[str, tuple[TextLocation, ...]]
+) -> list[Finding]:
     latest_normalized = latest if latest.startswith("v") else f"v{latest}"
     findings: list[Finding] = []
-    for version, locations in sorted(scan.version_refs.items()):
+    for version, locations in sorted(version_refs.items()):
         if version == latest_normalized:
             continue
         for location in locations:
@@ -287,6 +306,34 @@ def _version_mismatch_findings(label: str, latest: str, scan: ScanResult) -> lis
                 )
             )
     return findings
+
+
+def _github_repo_version_locations(
+    scan: ScanResult, repo: str
+) -> dict[str, tuple[TextLocation, ...]]:
+    marker = f"github.com/{repo.lower()}"
+    locations_by_version: dict[str, list[TextLocation]] = {}
+    for url, locations in scan.url_refs.items():
+        if marker not in url.lower():
+            continue
+        for version in VERSION_RE.findall(url):
+            locations_by_version.setdefault(version, []).extend(locations)
+    return {version: tuple(locations) for version, locations in locations_by_version.items()}
+
+
+def _homebrew_tap_version_locations(
+    scan: ScanResult, tap: str
+) -> dict[str, tuple[TextLocation, ...]]:
+    marker = tap.lower()
+    locations_by_version: dict[str, list[TextLocation]] = {}
+    for path, text in scan.text_by_file.items():
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            if marker not in line.lower():
+                continue
+            location = TextLocation(path, line_number)
+            for version in VERSION_RE.findall(line):
+                locations_by_version.setdefault(version, []).append(location)
+    return {version: tuple(locations) for version, locations in locations_by_version.items()}
 
 
 def _github_tag_from_payload(payload: Any) -> str | None:
@@ -334,6 +381,12 @@ def _merge_claim_locations(
     for value in configured:
         merged.setdefault(value, ())
     return merged
+
+
+def _configured_claim_locations(
+    configured: tuple[str, ...], discovered: dict[str, tuple[TextLocation, ...]]
+) -> dict[str, tuple[TextLocation, ...]]:
+    return {value: discovered.get(value, ()) for value in configured}
 
 
 def _warning(message: str, location: TextLocation | None) -> Finding:

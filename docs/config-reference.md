@@ -48,12 +48,11 @@ declarations.
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `homebrew_tap` | string \| null | `null` | Homebrew tap to audit for stale claims (e.g. `"autumngarage/cortex"`). Empty strings are normalized to `null`. |
-| `siblings` | list of strings \| null | `[]` | Sibling-repo references (e.g. `"autumngarage/touchstone"`) to cross-check for drift. |
+| `siblings` | list of strings \| null | `[]` | Local filesystem paths for sibling repos (e.g. `"~/repos/touchstone"`) to cross-check for drift. |
 | `pypi_package` | string \| null | `null` | PyPI package name to audit (e.g. `"cortex"`). Empty strings are normalized to `null`. |
 | `github_repos` | list of strings \| null | `[]` | GitHub `owner/repo` references to check for release / tap state. |
 | `urls` | list of strings \| null | `[]` | Free-form URLs to check for liveness or version drift. |
 | `scan_files` | list of strings \| null | `["CLAUDE.md", "AGENTS.md", "README.md"]` (`DEFAULT_AUDIT_SCAN_FILES`) | Repo-root files to scan for external claims. Setting this overrides the default — pass the full list, not a delta. |
-| `gh_release` | string \| null | `null` | GitHub release URL pattern. **Schema-validated but not yet read by the parser** (`load_audit_instructions_config` ignores this key as of v0.7.0); included in the doctor schema so projects can declare it without warnings, ahead of the parser wiring it through. |
 
 Source pointers:
 - Dataclass: `AuditInstructionsConfig` in `src/cortex/config.py`.
@@ -143,9 +142,8 @@ sibling-repo cross-checks, and a documented reason to keep a root-level
 ```toml
 [audit-instructions]
 homebrew_tap = "autumngarage/example"
-siblings = ["autumngarage/example-helper"]
+siblings = ["~/repos/example-helper"]
 pypi_package = "example"
-gh_release = "https://github.com/autumngarage/example/releases"
 urls = ["https://example.com/install"]
 scan_files = ["CLAUDE.md", "AGENTS.md", "README.md"]
 github_repos = ["autumngarage/example"]
