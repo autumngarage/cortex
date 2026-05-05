@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -46,6 +47,22 @@ def _git_init(project: Path) -> None:
 def _commit(project: Path, message: str, *paths: str) -> None:
     _run(project, "add", *paths)
     _run(project, "commit", "-m", message)
+
+
+def _commit_at(project: Path, message: str, when: datetime, *paths: str) -> None:
+    _run(project, "add", *paths)
+    env = {
+        **os.environ,
+        "GIT_AUTHOR_DATE": when.isoformat(),
+        "GIT_COMMITTER_DATE": when.isoformat(),
+    }
+    subprocess.run(
+        ["git", "-C", str(project), "commit", "-m", message],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
 
 
 def _scaffold(project: Path) -> None:
@@ -244,6 +261,78 @@ def test_promotion_queue_dangling_source_warns(tmp_path: Path) -> None:
 
     issues = check_promotion_queue(tmp_path)
     assert any("does not exist" in issue.message for issue in issues)
+
+
+def _write_generated_state(project: Path, generated: datetime) -> None:
+    (project / ".cortex" / "state.md").write_text(
+        "---\n"
+        f"Generated: {generated.isoformat()}\n"
+        "Generator: cortex refresh-state v0.8.2\n"
+        "Sources:\n"
+        "  - .cortex/journal/*.md\n"
+        "Corpus: test\n"
+        "Omitted:\n"
+        "  []\n"
+        "Incomplete:\n"
+        "  []\n"
+        "Conflicts-preserved: []\n"
+        "---\n\n"
+        "# Project State\n"
+    )
+
+
+def test_state_source_freshness_allows_same_commit_state_and_source(tmp_path: Path) -> None:
+    """Regression for cortex#112: State regenerated with its source in one commit is fresh."""
+    _git_cortex_project(tmp_path)
+    generated = datetime.now(UTC) - timedelta(minutes=3)
+    committed_at = generated + timedelta(minutes=2)
+
+    (tmp_path / ".cortex" / "journal" / "2026-05-04-release.md").write_text(
+        "# Release\n\n**Date:** 2026-05-04\n**Type:** release\n\nBody.\n"
+    )
+    _write_generated_state(tmp_path, generated)
+    _commit_at(
+        tmp_path,
+        "docs: regenerate state with release journal",
+        committed_at,
+        ".cortex/journal/2026-05-04-release.md",
+        ".cortex/state.md",
+    )
+
+    issues = check_generated_layers(tmp_path)
+    assert not any(
+        issue.path == ".cortex/state.md"
+        and "state.md generated before source changed" in issue.message
+        for issue in issues
+    ), [f"{issue.path}: {issue.message}" for issue in issues]
+
+
+def test_state_source_freshness_warns_for_source_commit_after_state(tmp_path: Path) -> None:
+    generated = datetime.now(UTC) - timedelta(minutes=5)
+    state_committed_at = generated + timedelta(minutes=1)
+    source_committed_at = generated + timedelta(minutes=3)
+    _scaffold(tmp_path)
+    _git_init(tmp_path)
+    _write_generated_state(tmp_path, generated)
+    _commit_at(tmp_path, "docs: add generated state", state_committed_at, ".cortex")
+
+    (tmp_path / ".cortex" / "journal" / "2026-05-04-release.md").write_text(
+        "# Release\n\n**Date:** 2026-05-04\n**Type:** release\n\nBody.\n"
+    )
+    _commit_at(
+        tmp_path,
+        "docs: add release journal after state",
+        source_committed_at,
+        ".cortex/journal/2026-05-04-release.md",
+    )
+
+    issues = check_generated_layers(tmp_path)
+    assert any(
+        issue.path == ".cortex/state.md"
+        and "state.md generated before source changed" in issue.message
+        and ".cortex/journal/2026-05-04-release.md" in issue.message
+        for issue in issues
+    ), [f"{issue.path}: {issue.message}" for issue in issues]
 
 
 def test_cli_less_fallback_threshold_warns(tmp_path: Path) -> None:
