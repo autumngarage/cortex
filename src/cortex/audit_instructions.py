@@ -201,7 +201,13 @@ def audit_homebrew_tap(tap: str, scan: ScanResult) -> list[Finding]:
     version = _find_first_version(payload)
     findings = [Finding("ok", f"homebrew tap: {tap}" + (f" (formula at {version})" if version else ""))]
     if version:
-        findings.extend(_version_mismatch_findings("homebrew formula version mismatch", version, scan))
+        findings.extend(
+            _version_mismatch_findings(
+                "homebrew formula version mismatch",
+                version,
+                _homebrew_tap_version_locations(scan, tap),
+            )
+        )
     return findings
 
 
@@ -236,7 +242,13 @@ def audit_github_releases(repos: tuple[str, ...], scan: ScanResult) -> list[Find
             findings.append(Finding("warning", f"github release: {repo} returned no release tag"))
             continue
         findings.append(Finding("ok", f"github release: {repo} latest is {tag}"))
-        findings.extend(_version_mismatch_findings("github release version mismatch", tag, scan))
+        findings.extend(
+            _version_mismatch_findings(
+                "github release version mismatch",
+                tag,
+                _github_repo_version_locations(scan, repo),
+            )
+        )
     return findings
 
 
@@ -278,10 +290,12 @@ def _head_status(url: str) -> tuple[int | None, str | None]:
         return None, str(exc)
 
 
-def _version_mismatch_findings(label: str, latest: str, scan: ScanResult) -> list[Finding]:
+def _version_mismatch_findings(
+    label: str, latest: str, version_refs: dict[str, tuple[TextLocation, ...]]
+) -> list[Finding]:
     latest_normalized = latest if latest.startswith("v") else f"v{latest}"
     findings: list[Finding] = []
-    for version, locations in sorted(scan.version_refs.items()):
+    for version, locations in sorted(version_refs.items()):
         if version == latest_normalized:
             continue
         for location in locations:
@@ -292,6 +306,34 @@ def _version_mismatch_findings(label: str, latest: str, scan: ScanResult) -> lis
                 )
             )
     return findings
+
+
+def _github_repo_version_locations(
+    scan: ScanResult, repo: str
+) -> dict[str, tuple[TextLocation, ...]]:
+    marker = f"github.com/{repo.lower()}"
+    locations_by_version: dict[str, list[TextLocation]] = {}
+    for url, locations in scan.url_refs.items():
+        if marker not in url.lower():
+            continue
+        for version in VERSION_RE.findall(url):
+            locations_by_version.setdefault(version, []).extend(locations)
+    return {version: tuple(locations) for version, locations in locations_by_version.items()}
+
+
+def _homebrew_tap_version_locations(
+    scan: ScanResult, tap: str
+) -> dict[str, tuple[TextLocation, ...]]:
+    marker = tap.lower()
+    locations_by_version: dict[str, list[TextLocation]] = {}
+    for path, text in scan.text_by_file.items():
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            if marker not in line.lower():
+                continue
+            location = TextLocation(path, line_number)
+            for version in VERSION_RE.findall(line):
+                locations_by_version.setdefault(version, []).append(location)
+    return {version: tuple(locations) for version, locations in locations_by_version.items()}
 
 
 def _github_tag_from_payload(payload: Any) -> str | None:

@@ -83,7 +83,7 @@ def test_stale_homebrew_formula_version_reports_source_line(
     tmp_path: Path, monkeypatch: Any
 ) -> None:
     _write_config(tmp_path, '[audit-instructions]\nhomebrew_tap = "autumngarage/cortex"\n')
-    (tmp_path / "CLAUDE.md").write_text("Install v0.2.5 from the tap.\n")
+    (tmp_path / "CLAUDE.md").write_text("Install autumngarage/cortex v0.2.5 from the tap.\n")
     monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/brew" if name == "brew" else None)
     monkeypatch.setattr(
         "subprocess.run",
@@ -98,6 +98,95 @@ def test_stale_homebrew_formula_version_reports_source_line(
     assert "homebrew formula version mismatch" in output
     assert "CLAUDE.md mentions v0.2.5, latest is v0.3.0" in output
     assert "(CLAUDE.md:1)" in output
+
+
+def test_github_version_checks_are_scoped_to_matching_release_urls(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    _write_config(
+        tmp_path,
+        """
+[audit-instructions]
+github_repos = ["autumngarage/touchstone", "autumngarage/conductor"]
+scan_files = ["README.md"]
+""",
+    )
+    (tmp_path / "README.md").write_text(
+        "\n".join(
+            [
+                "Touchstone: https://github.com/autumngarage/touchstone/releases/tag/v2.4.0",
+                "Conductor: https://github.com/autumngarage/conductor/releases/tag/v0.8.8",
+                "History: https://github.com/some/old-project/releases/tag/v2.0.0",
+            ]
+        )
+        + "\n"
+    )
+
+    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        tags = {
+            "autumngarage/touchstone": "v2.4.0",
+            "autumngarage/conductor": "v0.8.8",
+        }
+        if args[:3] == ["gh", "release", "list"]:
+            return subprocess.CompletedProcess(
+                args, 0, stdout=json.dumps([{"tagName": tags[args[4]]}]), stderr=""
+            )
+        raise AssertionError(f"unexpected subprocess: {args}")
+
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/gh" if name == "gh" else None)
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr("urllib.request.urlopen", lambda _request, timeout: _Response(200))
+
+    exit_code, output = _run(tmp_path)
+
+    assert exit_code == 0
+    assert "github release version mismatch" not in output
+    assert output == "audit-instructions: checked 5 claims, all verified\n"
+
+
+def test_github_version_checks_still_warn_for_matching_stale_release_url(
+    tmp_path: Path, monkeypatch: Any
+) -> None:
+    _write_config(
+        tmp_path,
+        """
+[audit-instructions]
+github_repos = ["autumngarage/touchstone", "autumngarage/conductor"]
+scan_files = ["README.md"]
+""",
+    )
+    (tmp_path / "README.md").write_text(
+        "\n".join(
+            [
+                "Touchstone: https://github.com/autumngarage/touchstone/releases/tag/v2.3.0",
+                "Conductor: https://github.com/autumngarage/conductor/releases/tag/v0.8.8",
+                "History: https://github.com/some/old-project/releases/tag/v2.0.0",
+            ]
+        )
+        + "\n"
+    )
+
+    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        tags = {
+            "autumngarage/touchstone": "v2.4.0",
+            "autumngarage/conductor": "v0.8.8",
+        }
+        if args[:3] == ["gh", "release", "list"]:
+            return subprocess.CompletedProcess(
+                args, 0, stdout=json.dumps([{"tagName": tags[args[4]]}]), stderr=""
+            )
+        raise AssertionError(f"unexpected subprocess: {args}")
+
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/gh" if name == "gh" else None)
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.setattr("urllib.request.urlopen", lambda _request, timeout: _Response(200))
+
+    exit_code, output = _run(tmp_path)
+
+    assert exit_code == 0
+    assert "github release version mismatch: README.md mentions v2.3.0, latest is v2.4.0" in output
+    assert "v0.8.8, latest is v2.4.0" not in output
+    assert "v2.0.0, latest is v0.8.8" not in output
 
 
 def test_missing_sibling_reports_reference_line(tmp_path: Path, monkeypatch: Any) -> None:
