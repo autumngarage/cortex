@@ -38,6 +38,8 @@ def read_index(path: Path) -> dict[str, Any]:
 
     Missing files return an empty dict. Malformed JSON and non-object JSON are
     surfaced to the caller; callers decide whether that is fatal or a warning.
+    Date-derived fields such as ``age_days`` are materialized at this boundary
+    so the serialized cache only changes when source content changes.
     """
 
     if not path.exists():
@@ -45,14 +47,14 @@ def read_index(path: Path) -> dict[str, Any]:
     data = json.loads(path.read_text())
     if not isinstance(data, dict):
         raise ValueError(f"{path}: top-level JSON value is not an object")
-    return data
+    return _with_derived_age_days(data)
 
 
 def write_index(path: Path, data: dict[str, Any]) -> None:
     """Atomically write pretty-printed index JSON to ``path``."""
 
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = json.dumps(data, indent=2, sort_keys=False) + "\n"
+    payload = json.dumps(_strip_derived_age_days(data), indent=2, sort_keys=False) + "\n"
     fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     tmp = Path(tmp_name)
     try:
@@ -70,7 +72,6 @@ def compute_index(cortex_root: Path, config: RefreshIndexConfig) -> dict[str, An
     """Compute the promotion-candidate index from primary Cortex sources."""
 
     project_root = cortex_root.parent
-    today = _today()
     promoted = _promoted_to_by_source(cortex_root)
     candidates: list[dict[str, Any]] = []
 
@@ -90,7 +91,6 @@ def compute_index(cortex_root: Path, config: RefreshIndexConfig) -> dict[str, An
                     "source": rel,
                     "type": _field_scalar(fields, "Type") or "unknown",
                     "last_touched": last_touched.isoformat(),
-                    "age_days": (today - last_touched).days,
                     "tags": _field_list(fields, "Tags"),
                     "supersedes": _field_scalar(fields, "Supersedes"),
                     "promoted_to": _field_scalar(fields, "Promoted-to") or promoted.get(f"journal/{candidate_id}"),
@@ -128,11 +128,50 @@ def refresh_index(project_root: Path, config: RefreshIndexConfig) -> RefreshInde
 def _same_index_inputs(left: dict[str, Any], right: dict[str, Any]) -> bool:
     return {
         "spec": left.get("spec"),
-        "candidates": left.get("candidates"),
+        "candidates": _strip_candidate_age_days(left.get("candidates")),
     } == {
         "spec": right.get("spec"),
-        "candidates": right.get("candidates"),
+        "candidates": _strip_candidate_age_days(right.get("candidates")),
     }
+
+
+def _with_derived_age_days(data: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(data.get("candidates"), list):
+        return data
+    today = _today()
+    enriched = dict(data)
+    candidates: list[Any] = []
+    for candidate in data["candidates"]:
+        if not isinstance(candidate, dict):
+            candidates.append(candidate)
+            continue
+        item = dict(candidate)
+        last_touched = _parse_date(item.get("last_touched"))
+        if last_touched is not None:
+            item["age_days"] = (today - last_touched).days
+        candidates.append(item)
+    enriched["candidates"] = candidates
+    return enriched
+
+
+def _strip_derived_age_days(data: dict[str, Any]) -> dict[str, Any]:
+    stripped = dict(data)
+    stripped["candidates"] = _strip_candidate_age_days(data.get("candidates"))
+    return stripped
+
+
+def _strip_candidate_age_days(value: Any) -> Any:
+    if not isinstance(value, list):
+        return value
+    candidates: list[Any] = []
+    for candidate in value:
+        if not isinstance(candidate, dict):
+            candidates.append(candidate)
+            continue
+        item = dict(candidate)
+        item.pop("age_days", None)
+        candidates.append(item)
+    return candidates
 
 
 def _entry_fields(text: str) -> tuple[dict[str, FrontmatterValue], str]:
@@ -193,6 +232,15 @@ def _last_touched(path: Path, fields: dict[str, FrontmatterValue]) -> date:
     if match:
         return date.fromisoformat(match.group(1))
     return _today()
+
+
+def _parse_date(value: Any) -> date | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return date.fromisoformat(value[:10])
+    except ValueError:
+        return None
 
 
 def _promoted_to_by_source(cortex_root: Path) -> dict[str, str]:

@@ -26,6 +26,7 @@ from pathlib import Path
 
 from cortex.audit import _journal_header_fields, load_journal_entries
 from cortex.frontmatter import parse_frontmatter
+from cortex.index import read_index
 
 OVERDUE_DIGEST_DAYS = 45
 RECENT_JOURNAL_DAYS = 7
@@ -172,11 +173,13 @@ def _read_promotion_index(cortex_dir: Path) -> _PromotionIndexRead:
     if not index_path.exists():
         return _PromotionIndexRead(present=False, proposed=None, stale=None, error=None)
     try:
-        data = json.loads(index_path.read_text())
+        data = read_index(index_path)
     except json.JSONDecodeError as exc:
         return _PromotionIndexRead(
             present=True, proposed=None, stale=None, error=f"JSON decode error: {exc}"
         )
+    except ValueError as exc:
+        return _PromotionIndexRead(present=True, proposed=None, stale=None, error=str(exc))
     if not isinstance(data, dict):
         return _PromotionIndexRead(
             present=True, proposed=None, stale=None,

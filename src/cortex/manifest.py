@@ -32,6 +32,7 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 from cortex.frontmatter import parse_frontmatter
+from cortex.index import read_index
 from cortex.verified import VERIFIED_RE, bullet_age_days, format_warning, parse_verified
 
 CHARS_PER_TOKEN = 4
@@ -218,11 +219,11 @@ def _promotion_summary(cortex_dir: Path) -> str:
     if not index_path.exists():
         return "Promotion-queue: unavailable (no `.cortex/.index.json`; ship a CLI run to refresh it)."
     try:
-        data = json.loads(index_path.read_text())
+        data = read_index(index_path)
     except json.JSONDecodeError as exc:
         return f"Promotion-queue: unreadable (`.cortex/.index.json` JSON error: {exc})."
-    if not isinstance(data, dict):
-        return "Promotion-queue: unreadable (`.cortex/.index.json` top-level value is not an object)."
+    except ValueError as exc:
+        return f"Promotion-queue: unreadable (`.cortex/.index.json` {exc})."
     if "candidates" in data:
         queue = data["candidates"]
         legacy_queue = False
