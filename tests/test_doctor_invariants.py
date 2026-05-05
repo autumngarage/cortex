@@ -8,6 +8,7 @@ import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from cortex.cli import cli
@@ -630,6 +631,38 @@ def test_stale_checkbox_warns_on_pr_ref_overlap(tmp_path: Path) -> None:
         and "v0.7.0 retrieve interface" in issue.message
         for issue in issues
     ), [issue.message for issue in issues]
+
+
+@pytest.mark.parametrize("root_filename", ["ROADMAP.md", "STATUS.md", "PLAN.md", "NEXT.md", "TODO.md"])
+def test_stale_checkbox_does_not_scan_repo_root_duplicates(
+    tmp_path: Path, root_filename: str
+) -> None:
+    """Doctrine 0007 root duplicates are not stale-checkbox scan inputs."""
+    _scaffold(tmp_path)
+    stale_root_checkbox = "- [ ] v0.7.0 retrieve interface (PR #95)"
+    (tmp_path / root_filename).write_text(f"# Duplicate\n\n{stale_root_checkbox}\n")
+    _write_active_plan_with_items(
+        tmp_path,
+        items=[
+            "- [ ] **Future v2.0 multi-agent orchestration layer** — entirely future scope.",
+        ],
+    )
+    today = datetime.now(UTC).date().isoformat()
+    _write_release_journal(
+        tmp_path,
+        slug="v070-released",
+        iso_date=today,
+        what_shipped="What shipped: cortex retrieve --mode bm25 (PR #95)",
+    )
+
+    issues = check_stale_plan_checkboxes(tmp_path)
+    assert not any(
+        root_filename in (issue.path or "") or root_filename in issue.message
+        for issue in issues
+    ), [f"{issue.path}: {issue.message}" for issue in issues]
+    assert not any(
+        "v0.7.0 retrieve interface" in issue.message for issue in issues
+    ), [f"{issue.path}: {issue.message}" for issue in issues]
 
 
 def test_stale_checkbox_no_warn_when_already_flipped(tmp_path: Path) -> None:
