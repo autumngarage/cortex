@@ -188,7 +188,7 @@ def _gh_pr_view_json(project_root: Path, pr_number: int) -> dict[str, str] | Non
     """Return a dict of PR fields, or None on any failure.
 
     Keys returned: ``number`` (str), ``title``, ``headRefName``,
-    ``mergeCommit.oid`` flattened to ``mergeCommitSha``. Failures (gh
+    ``body``, ``mergeCommit.oid`` flattened to ``mergeCommitSha``. Failures (gh
     missing, not authenticated, PR not found, parse error) all return
     ``None`` so callers degrade by leaving placeholders intact rather than
     crashing.
@@ -210,7 +210,7 @@ def _gh_pr_view_json(project_root: Path, pr_number: int) -> dict[str, str] | Non
             "view",
             str(pr_number),
             "--json",
-            "number,title,headRefName,mergeCommit",
+            "number,title,body,headRefName,mergeCommit",
         ],
         cwd=project_root,
         capture_output=True,
@@ -228,6 +228,8 @@ def _gh_pr_view_json(project_root: Path, pr_number: int) -> dict[str, str] | Non
         out["number"] = str(data["number"])
     if isinstance(data.get("title"), str):
         out["title"] = data["title"]
+    if isinstance(data.get("body"), str):
+        out["body"] = data["body"]
     if isinstance(data.get("headRefName"), str):
         out["headRefName"] = data["headRefName"]
     merge_commit = data.get("mergeCommit")
@@ -317,6 +319,98 @@ def _substitute_pr_merged_placeholders(
             continue
         body = body.replace(placeholder, value)
     return body, unfilled
+
+
+def _pr_body_bullets(pr_body: str | None) -> list[str]:
+    """Extract top-level Markdown bullet lines from a PR body."""
+    if not pr_body:
+        return []
+    bullets: list[str] = []
+    for line in pr_body.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(("- ", "* ")):
+            bullets.append(f"- {stripped[2:].strip()}")
+    return [bullet for bullet in bullets if bullet != "-"]
+
+
+def _substitute_pr_merged_body_no_edit(
+    body: str,
+    *,
+    pr_number: int | None,
+    pr_title: str | None,
+    pr_body: str | None,
+) -> str:
+    """Remove prompt-only pr-merged body placeholders for no-edit drafts.
+
+    Edit-mode keeps template prompts visible for humans. In no-edit mode the
+    invariant is stricter: an auto-committed Journal entry must not contain
+    unresolved ``{{ ... }}`` prompts, and must not claim a deferred checkbox
+    exists when no SPEC § 4.2 target has been resolved.
+    """
+    if pr_title:
+        body = re.sub(
+            r"^> \{\{ One sentence:.*\}\}$",
+            f"> {pr_title}.",
+            body,
+            count=1,
+            flags=re.MULTILINE,
+        )
+    else:
+        body = re.sub(
+            r"^> \{\{ One sentence:.*\}\}\n?",
+            "",
+            body,
+            count=1,
+            flags=re.MULTILINE,
+        )
+
+    bullets = _pr_body_bullets(pr_body)
+    if not bullets:
+        summary = pr_title or "Merged PR"
+        suffix = f" (#{pr_number})" if pr_number is not None else ""
+        bullets = [f"- {summary}{suffix}"]
+    body = re.sub(
+        r"\{\{ Bulleted list of the user-visible or protocol-visible changes in this PR\..*?\}\}",
+        "\n".join(bullets),
+        body,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+    body = re.sub(
+        r"^(- \*\*(?:Plans|Doctrine|Journal linkage):\*\*) \{\{.*\}\}$",
+        r"\1 _(none recorded — fill on edit)_",
+        body,
+        flags=re.MULTILINE,
+    )
+
+    def _rewrite_cites(match: re.Match[str]) -> str:
+        resolved = [
+            part.strip()
+            for part in match.group(1).split(",")
+            if "{{" not in part and part.strip()
+        ]
+        if not resolved:
+            return "**Cites:** _(none — fill on edit)_"
+        return f"**Cites:** {', '.join(resolved)}"
+
+    body = re.sub(r"^\*\*Cites:\*\* (.+)$", _rewrite_cites, body, count=1, flags=re.MULTILINE)
+
+    body = re.sub(
+        r"^- \[ \] \{\{ item .*?\}\}$",
+        "_None._",
+        body,
+        count=1,
+        flags=re.MULTILINE,
+    )
+
+    return re.sub(
+        r"\n## What we'd do differently\n\n\{\{ Optional .*?Omit if nothing\. \}\}\n?",
+        "\n",
+        body,
+        count=1,
+        flags=re.DOTALL,
+    )
 
 
 def _render_context_block(
@@ -447,6 +541,7 @@ def draft_command(
         if resolved_pr is not None:
             pr_data = _gh_pr_view_json(project_root, resolved_pr)
         pr_title = pr_data.get("title") if pr_data else None
+        pr_body = pr_data.get("body") if pr_data else None
         branch = pr_data.get("headRefName") if pr_data else None
         body, unfilled = _substitute_pr_merged_placeholders(
             body,
@@ -472,6 +567,21 @@ def draft_command(
                 f"{', '.join(unfilled)}.",
                 err=True,
             )
+        if no_edit and pr_data is not None:
+            body = _substitute_pr_merged_body_no_edit(
+                body,
+                pr_number=resolved_pr,
+                pr_title=pr_title,
+                pr_body=pr_body,
+            )
+            remaining_placeholders = re.findall(r"\{\{[^}]+\}\}", body)
+            if remaining_placeholders:
+                click.echo(
+                    "warning: pr-merged --no-edit draft left body "
+                    "placeholders intact for: "
+                    f"{', '.join(remaining_placeholders)}.",
+                    err=True,
+                )
 
     if slug_override:
         slug = _normalize_slug(slug_override)

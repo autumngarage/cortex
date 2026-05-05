@@ -401,6 +401,74 @@ def test_pr_merged_explicit_pr_substitutes_placeholders(
     assert "{{ <type>/<slug> }}" not in body
 
 
+def test_pr_merged_no_edit_strips_all_template_placeholders(
+    git_project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """No-edit pr-merged drafts must not auto-commit raw template prompts."""
+    title = "fix(journal): strip pr-merged placeholders"
+    _stub_gh_in_path(
+        monkeypatch,
+        tmp_path,
+        {
+            "number": 99,
+            "title": title,
+            "body": "\n".join(
+                [
+                    "## Summary",
+                    "- Filled the lede from PR metadata",
+                    "- Extracted shipped bullets from the PR body",
+                    "* Removed the bogus deferred follow-up checkbox",
+                ]
+            ),
+            "headRefName": "fix/journal-placeholders",
+            "mergeCommit": {"oid": "deadbeefcafef00d" * 2 + "12345678"},
+        },
+    )
+    result = _draft(git_project, "pr-merged", "--pr", "99")
+    assert result.exit_code == 0, result.output
+    today = date.today().isoformat()
+    files = list((git_project / ".cortex" / "journal").glob(f"{today}-pr-merged-*.md"))
+    assert files, list((git_project / ".cortex" / "journal").iterdir())
+    body = files[0].read_text()
+
+    assert "{{" not in body, f"Unfilled placeholders survived: {body}"
+    assert f"> {title}." in body
+    assert "- Filled the lede from PR metadata" in body
+    assert "- Extracted shipped bullets from the PR body" in body
+    assert "- Removed the bogus deferred follow-up checkbox" in body
+    followups = body.split("## Follow-ups (deferred to future work)", 1)[1].split(
+        "(Per SPEC", 1
+    )[0]
+    assert "- [ ]" not in followups
+    assert "_None._" in followups
+
+
+def test_pr_merged_no_edit_with_no_pr_body_uses_title_fallback(
+    git_project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    title = "fix(journal): fall back to PR title"
+    _stub_gh_in_path(
+        monkeypatch,
+        tmp_path,
+        {
+            "number": 99,
+            "title": title,
+            "body": "",
+            "headRefName": "fix/journal-title-fallback",
+            "mergeCommit": {"oid": "deadbeefcafef00d" * 2 + "12345678"},
+        },
+    )
+    result = _draft(git_project, "pr-merged", "--pr", "99")
+    assert result.exit_code == 0, result.output
+    today = date.today().isoformat()
+    files = list((git_project / ".cortex" / "journal").glob(f"{today}-pr-merged-*.md"))
+    assert files, list((git_project / ".cortex" / "journal").iterdir())
+    body = files[0].read_text()
+
+    assert "{{" not in body, f"Unfilled placeholders survived: {body}"
+    assert f"- {title} (#99)" in body
+
+
 def test_pr_merged_infers_pr_from_merge_commit_subject(
     git_project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
