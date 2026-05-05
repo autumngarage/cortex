@@ -9,6 +9,7 @@ from typing import Any
 
 from click.testing import CliRunner
 
+from cortex.audit_instructions import scan_instruction_files
 from cortex.cli import cli
 
 
@@ -134,6 +135,14 @@ def test_url_404_warns(tmp_path: Path, monkeypatch: Any) -> None:
 
     assert exit_code == 0
     assert "url: https://example.invalid/missing returned 404" in output
+
+
+def test_scan_strips_markdown_backticks_from_url_claims(tmp_path: Path) -> None:
+    (tmp_path / "README.md").write_text("Install from `https://github.com/autumngarage/conductor`.\n")
+
+    scan = scan_instruction_files(tmp_path, ("README.md",))
+
+    assert tuple(scan.url_refs) == ("https://github.com/autumngarage/conductor",)
 
 
 def test_strict_exits_1_on_warning(tmp_path: Path, monkeypatch: Any) -> None:

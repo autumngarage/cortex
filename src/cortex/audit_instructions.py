@@ -21,6 +21,7 @@ SUBPROCESS_TIMEOUT_SECONDS = 8
 VERSION_RE = re.compile(r"\bv\d+\.\d+\.\d+\b")
 SIBLING_RE = re.compile(r"(?<![\w/])~/(?:[Rr]epos)/[A-Za-z0-9._-]+")
 URL_RE = re.compile(r"https?://[^\s<>'\")\]]+")
+URL_TRAILING_DELIMITERS = "`),.;:>"
 
 
 @dataclass(frozen=True)
@@ -143,7 +144,7 @@ def scan_instruction_files(project_root: Path, scan_files: tuple[str, ...]) -> S
                 sibling = raw.rstrip(".,;:")
                 sibling_refs.setdefault(sibling, []).append(TextLocation(path, line_number))
             for raw in URL_RE.findall(line):
-                url = raw.rstrip(".,;:")
+                url = _normalize_url_claim(raw)
                 url_refs.setdefault(url, []).append(TextLocation(path, line_number))
             for version in VERSION_RE.findall(line):
                 version_refs.setdefault(version, []).append(TextLocation(path, line_number))
@@ -155,6 +156,10 @@ def scan_instruction_files(project_root: Path, scan_files: tuple[str, ...]) -> S
         url_refs={key: tuple(value) for key, value in url_refs.items()},
         version_refs={key: tuple(value) for key, value in version_refs.items()},
     )
+
+
+def _normalize_url_claim(raw: str) -> str:
+    return raw.rstrip(URL_TRAILING_DELIMITERS)
 
 
 def audit_filesystem_siblings(siblings: dict[str, tuple[TextLocation, ...]]) -> list[Finding]:
