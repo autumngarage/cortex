@@ -25,6 +25,7 @@ from cortex.audit import (
 from cortex.frontmatter import FrontmatterValue, parse_frontmatter
 from cortex.index import read_index
 from cortex.plans import iter_plan_files
+from cortex.state_migration import is_legacy_hand_authored_state
 from cortex.validation import SEVEN_FIELDS, Issue, Severity
 
 CANONICAL_OWNERSHIP_RE = re.compile(
@@ -44,6 +45,7 @@ DEFAULT_GENERATED_FRESHNESS_DAYS = 7
 DEFAULT_RETENTION_DAYS = 30
 DEFAULT_JOURNAL_WARM_MAX = 200
 DEFAULT_STALE_CHECKBOX_WINDOW_DAYS = 14
+DEFAULT_STATE_JOURNAL_STALENESS_DAYS = 7
 SOURCE_FRESHNESS_SLOP = timedelta(seconds=1)
 STALE_CHECKBOX_BYPASS_MARKER = "<!-- cortex:no-stale-check -->"
 STATE_SOURCE_DIRS = (
@@ -82,6 +84,8 @@ def run_plain_checks(project_root: Path) -> list[Issue]:
         check_stale_plan_checkboxes,
         check_stale_pickup_pointers,
         check_stale_state_current_work,
+        check_legacy_state_migration_needed,
+        check_state_journal_staleness,
     )
     issues: list[Issue] = []
     for check in checks:
@@ -457,6 +461,18 @@ def check_config_toml_schema(project_root: Path) -> list[Issue]:
                 {"window_days": "positive-int"},
             )
         )
+    state_staleness = (
+        doctor.get("state-staleness") if isinstance(doctor, dict) else None
+    )
+    if isinstance(state_staleness, dict):
+        issues.extend(
+            _validate_table(
+                rel,
+                "doctor.state-staleness",
+                state_staleness,
+                {"window_days": "positive-int"},
+            )
+        )
     return issues
 
 
@@ -665,6 +681,60 @@ def check_stale_state_current_work(
             )
         ]
     return []
+
+
+def check_legacy_state_migration_needed(project_root: Path) -> list[Issue]:
+    state_path = project_root / ".cortex" / "state.md"
+    if not state_path.exists():
+        return []
+    try:
+        text = state_path.read_text()
+    except OSError as exc:
+        return [Issue(Severity.WARNING, _rel(state_path, project_root), f"state.md unreadable: {exc}")]
+    if not is_legacy_hand_authored_state(text):
+        return []
+    return [
+        Issue(
+            Severity.WARNING,
+            _rel(state_path, project_root),
+            "legacy hand-authored state.md has no cortex:hand markers; run `cortex migrate-state`",
+        )
+    ]
+
+
+def check_state_journal_staleness(
+    project_root: Path,
+    *,
+    window_days: int | None = None,
+) -> list[Issue]:
+    state_path = project_root / ".cortex" / "state.md"
+    journal_dir = project_root / ".cortex" / "journal"
+    if not state_path.exists() or not journal_dir.exists():
+        return []
+    try:
+        fields, _body = parse_frontmatter(state_path.read_text())
+    except OSError as exc:
+        return [Issue(Severity.WARNING, _rel(state_path, project_root), f"state.md unreadable: {exc}")]
+    generated = _parse_datetime(fields.get("Generated"))
+    if generated is None:
+        return []
+    latest = _latest_journal_date(journal_dir)
+    if latest is None:
+        return []
+    effective_window = (
+        window_days if window_days is not None else _state_staleness_window_days(project_root)
+    )
+    age_days = (latest - generated.astimezone(UTC)).days
+    if age_days <= effective_window:
+        return []
+    return [
+        Issue(
+            Severity.WARNING,
+            _rel(state_path, project_root),
+            f"state.md is {age_days} days older than latest journal entry "
+            f"({latest.date().isoformat()}); rerun `cortex refresh-state`",
+        )
+    ]
 
 
 def check_canonical_ownership(project_root: Path) -> list[Issue]:
@@ -1148,6 +1218,26 @@ def _stale_checkbox_window_days(project_root: Path) -> int:
     return value
 
 
+def _state_staleness_window_days(project_root: Path) -> int:
+    path = project_root / ".cortex" / "config.toml"
+    if not path.exists():
+        return DEFAULT_STATE_JOURNAL_STALENESS_DAYS
+    try:
+        data = tomllib.loads(path.read_text())
+    except (OSError, tomllib.TOMLDecodeError):
+        return DEFAULT_STATE_JOURNAL_STALENESS_DAYS
+    doctor = data.get("doctor")
+    if not isinstance(doctor, dict):
+        return DEFAULT_STATE_JOURNAL_STALENESS_DAYS
+    section = doctor.get("state-staleness")
+    if not isinstance(section, dict):
+        return DEFAULT_STATE_JOURNAL_STALENESS_DAYS
+    value = section.get("window_days")
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        return DEFAULT_STATE_JOURNAL_STALENESS_DAYS
+    return value
+
+
 def _parse_unchecked_checkbox(line: str) -> str | None:
     """Return the prose text of an unchecked checkbox, or None.
 
@@ -1214,6 +1304,26 @@ def _collect_recent_shipped_signals(
         rel = f".cortex/journal/{entry.name}"
         out.append((rel, signals))
     return out
+
+
+def _latest_journal_date(journal_dir: Path) -> datetime | None:
+    latest: datetime | None = None
+    for entry in sorted(journal_dir.glob("*.md")):
+        try:
+            fields, body = parse_frontmatter(entry.read_text())
+        except OSError:
+            continue
+        entry_date = _parse_date(_field_str(fields, "Date")) or _parse_date(
+            _field_str_inline(body, "Date")
+        )
+        if entry_date is None:
+            entry_date = _journal_date(entry)
+        if entry_date is None:
+            continue
+        candidate = datetime.combine(entry_date, datetime.min.time(), tzinfo=UTC)
+        if latest is None or candidate > latest:
+            latest = candidate
+    return latest
 
 
 def _field_str_inline(body: str, field_name: str) -> str | None:

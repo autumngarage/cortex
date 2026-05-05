@@ -88,7 +88,12 @@ class JournalState:
     shipped: bool
 
 
-def build_state_inputs(project_root: Path, *, deterministic: bool = False) -> StateInputs:
+def build_state_inputs(
+    project_root: Path,
+    *,
+    deterministic: bool = False,
+    assume_index_present: bool = False,
+) -> StateInputs:
     """Read primary sources for State regeneration.
 
     Unreadable or malformed optional inputs are recorded in ``incomplete`` with
@@ -113,7 +118,7 @@ def build_state_inputs(project_root: Path, *, deterministic: bool = False) -> St
         incomplete.append(f"{project_manifest.filename} — unreadable: {project_manifest.error}")
     head_sha = _read_head_sha(project_root, incomplete)
     omitted = []
-    if not (cortex_dir / ".index.json").exists():
+    if not assume_index_present and not (cortex_dir / ".index.json").exists():
         omitted.append(".cortex/.index.json — absent; promotion queue index ships in a later lifecycle tier")
 
     return StateInputs(

@@ -155,6 +155,28 @@ def test_init_refuses_second_invocation_without_force(tmp_path: Path) -> None:
     assert "already exists" in result.output
 
 
+def test_init_rerun_points_legacy_state_to_migration(tmp_path: Path) -> None:
+    _run_init(tmp_path)
+    (tmp_path / ".cortex" / "state.md").write_text(
+        "---\n"
+        "Generated: 2026-04-18T22:00:00-07:00\n"
+        "Generator: hand-authored (regeneration infrastructure ships in Cortex Phase C)\n"
+        "Sources: []\n"
+        "Corpus: 0\n"
+        "Omitted: []\n"
+        "Incomplete: []\n"
+        "Conflicts-preserved: []\n"
+        "Spec: 0.3.1\n"
+        "---\n\n"
+        "# Project State\n\n"
+        "Legacy content.\n"
+    )
+
+    result = CliRunner().invoke(cli, ["init", "--path", str(tmp_path)])
+    assert result.exit_code != 0
+    assert "cortex migrate-state" in result.output
+
+
 def test_init_force_overwrites_scaffold_files(tmp_path: Path) -> None:
     _run_init(tmp_path)
     # Simulate user tampering with a scaffold file.
