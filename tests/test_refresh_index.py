@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
+import cortex.index as index_mod
 from cortex.cli import cli
 from cortex.index import read_index, write_index
 
@@ -137,6 +140,27 @@ def test_refresh_index_idempotent_on_unchanged_inputs(tmp_path: Path) -> None:
     second_code, second_output = _run_refresh(project)
     assert second_code == 0, second_output
     assert (project / ".cortex" / ".index.json").read_bytes() == first
+
+
+def test_refresh_index_serialized_form_ignores_age_days_wall_clock_churn(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = _project(tmp_path)
+    _write_journal(project, "tagged", tags="[candidate-doctrine]")
+
+    monkeypatch.setattr(index_mod, "_today", lambda: date(2026, 4, 24))
+    first_code, first_output = _run_refresh(project)
+    assert first_code == 0, first_output
+    first = (project / ".cortex" / ".index.json").read_bytes()
+    assert b"age_days" not in first
+    assert read_index(project / ".cortex" / ".index.json")["candidates"][0]["age_days"] == 1
+
+    monkeypatch.setattr(index_mod, "_today", lambda: date(2026, 4, 30))
+    second_code, second_output = _run_refresh(project)
+    assert second_code == 0, second_output
+    assert (project / ".cortex" / ".index.json").read_bytes() == first
+    assert read_index(project / ".cortex" / ".index.json")["candidates"][0]["age_days"] == 7
 
 
 def test_journal_draft_refreshes_index_inline(tmp_path: Path) -> None:

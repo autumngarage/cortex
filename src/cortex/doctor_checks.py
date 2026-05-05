@@ -24,6 +24,7 @@ from cortex.audit import (
 )
 from cortex.frontmatter import FrontmatterValue, parse_frontmatter
 from cortex.index import read_index
+from cortex.plans import iter_plan_files
 from cortex.validation import SEVEN_FIELDS, Issue, Severity
 
 CANONICAL_OWNERSHIP_RE = re.compile(
@@ -464,7 +465,7 @@ def check_retention_visibility(project_root: Path) -> list[Issue]:
     cutoff = date.today() - timedelta(days=DEFAULT_RETENTION_DAYS)
     plans_dir = project_root / ".cortex" / "plans"
     if plans_dir.exists():
-        for plan in sorted(plans_dir.glob("*.md")):
+        for plan in iter_plan_files(project_root):
             fields, _body = parse_frontmatter(plan.read_text())
             status = _field_str(fields, "Status")
             if status not in {"shipped", "cancelled"}:
@@ -524,9 +525,8 @@ def check_stale_plan_checkboxes(
     checkbox or add the bypass annotation.
     """
 
-    plans_dir = project_root / ".cortex" / "plans"
     journal_dir = project_root / ".cortex" / "journal"
-    if not plans_dir.exists() or not journal_dir.exists():
+    if not (project_root / ".cortex" / "plans").exists() or not journal_dir.exists():
         return []
     effective_window = (
         window_days
@@ -537,7 +537,7 @@ def check_stale_plan_checkboxes(
     if not journal_signals:
         return []
     issues: list[Issue] = []
-    for plan in sorted(plans_dir.glob("*.md")):
+    for plan in iter_plan_files(project_root):
         try:
             text = plan.read_text()
         except OSError:
@@ -578,9 +578,8 @@ def check_stale_pickup_pointers(
     entry that clearly overlaps the pointer produces a visible warning.
     """
 
-    plans_dir = project_root / ".cortex" / "plans"
     journal_dir = project_root / ".cortex" / "journal"
-    if not plans_dir.exists() or not journal_dir.exists():
+    if not (project_root / ".cortex" / "plans").exists() or not journal_dir.exists():
         return []
     effective_window = (
         window_days
@@ -591,7 +590,7 @@ def check_stale_pickup_pointers(
     if not journal_signals:
         return []
     issues: list[Issue] = []
-    for plan in sorted(plans_dir.glob("*.md")):
+    for plan in iter_plan_files(project_root):
         try:
             text = plan.read_text()
         except OSError:
@@ -870,8 +869,16 @@ def _newer_state_source(
         return dirty
 
     committed = _latest_committed_state_source(project_root, pathspecs)
-    if committed is not None and committed[1] > threshold:
-        return committed
+    if committed is not None:
+        source_rel, changed_at, source_sha = committed
+        state_sha = _latest_commit_sha(project_root, ".cortex/state.md")
+        if state_sha is not None:
+            if source_sha == state_sha:
+                return None
+            if _is_ancestor(project_root, state_sha, source_sha):
+                return source_rel, changed_at
+        if changed_at > threshold:
+            return source_rel, changed_at
 
     # Never-committed git projects still deserve a freshness check.
     if committed is None:
@@ -932,7 +939,7 @@ def _status_path(line: str) -> str | None:
 def _latest_committed_state_source(
     project_root: Path,
     pathspecs: list[str],
-) -> tuple[str, datetime] | None:
+) -> tuple[str, datetime, str] | None:
     result = subprocess.run(
         [
             "git",
@@ -940,7 +947,7 @@ def _latest_committed_state_source(
             str(project_root),
             "log",
             "-1",
-            "--format=%cI",
+            "--format=%H%x00%cI",
             "--name-only",
             "--",
             *pathspecs,
@@ -955,12 +962,39 @@ def _latest_committed_state_source(
     lines = [line for line in lines if line]
     if not lines:
         return None
+    first = lines[0].split("\x00", 1)
+    if len(first) != 2 or not first[0]:
+        return None
+    source_sha, raw_changed_at = first
     try:
-        changed_at = datetime.fromisoformat(lines[0]).astimezone(UTC)
+        changed_at = datetime.fromisoformat(raw_changed_at).astimezone(UTC)
     except ValueError:
         return None
     source_rel = next((line for line in lines[1:] if line), pathspecs[0])
-    return source_rel, changed_at
+    return source_rel, changed_at, source_sha
+
+
+def _latest_commit_sha(project_root: Path, rel: str) -> str | None:
+    result = subprocess.run(
+        ["git", "-C", str(project_root), "log", "-1", "--format=%H", "--", rel],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return None
+    sha = result.stdout.strip()
+    return sha or None
+
+
+def _is_ancestor(project_root: Path, maybe_ancestor: str, descendant: str) -> bool:
+    result = subprocess.run(
+        ["git", "-C", str(project_root), "merge-base", "--is-ancestor", maybe_ancestor, descendant],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
 
 
 def _latest_state_source_mtime(project_root: Path) -> tuple[str, datetime] | None:
@@ -1340,11 +1374,10 @@ def _doctrine_0007_allowed_root_files(project_root: Path) -> set[str]:
 
 
 def _active_plans(cortex_dir: Path) -> list[Path]:
-    plans_dir = cortex_dir / "plans"
-    if not plans_dir.exists():
+    if not (cortex_dir / "plans").exists():
         return []
     active: list[Path] = []
-    for plan in sorted(plans_dir.glob("*.md")):
+    for plan in iter_plan_files(cortex_dir.parent):
         fields, _body = parse_frontmatter(plan.read_text())
         if _field_str(fields, "Status") == "active":
             active.append(plan)

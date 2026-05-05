@@ -26,6 +26,8 @@ from pathlib import Path
 
 from cortex.audit import _journal_header_fields, load_journal_entries
 from cortex.frontmatter import parse_frontmatter
+from cortex.index import read_index
+from cortex.plans import iter_plan_files
 
 OVERDUE_DIGEST_DAYS = 45
 RECENT_JOURNAL_DAYS = 7
@@ -108,11 +110,11 @@ def _read_protocol_version(cortex_dir: Path) -> str | None:
 
 
 def _collect_active_plans(cortex_dir: Path) -> list[PlanSummary]:
-    plans_dir = cortex_dir / "plans"
-    if not plans_dir.exists():
+    project_root = cortex_dir.parent
+    if not (cortex_dir / "plans").exists():
         return []
     summaries: list[PlanSummary] = []
-    for path in sorted(plans_dir.glob("*.md")):
+    for path in iter_plan_files(project_root):
         frontmatter, body = parse_frontmatter(path.read_text())
         status = frontmatter.get("Status")
         if not isinstance(status, str) or status.strip() != "active":
@@ -172,11 +174,13 @@ def _read_promotion_index(cortex_dir: Path) -> _PromotionIndexRead:
     if not index_path.exists():
         return _PromotionIndexRead(present=False, proposed=None, stale=None, error=None)
     try:
-        data = json.loads(index_path.read_text())
+        data = read_index(index_path)
     except json.JSONDecodeError as exc:
         return _PromotionIndexRead(
             present=True, proposed=None, stale=None, error=f"JSON decode error: {exc}"
         )
+    except ValueError as exc:
+        return _PromotionIndexRead(present=True, proposed=None, stale=None, error=str(exc))
     if not isinstance(data, dict):
         return _PromotionIndexRead(
             present=True, proposed=None, stale=None,
