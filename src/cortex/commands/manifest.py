@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
+from typing import cast
 
 import click
 
 from cortex.compat import warn_if_incompatible
-from cortex.manifest import MANIFEST_PROFILES, build_manifest
+from cortex.manifest import MANIFEST_PROFILES, ManifestProfileName, build_manifest
 
 
 @click.command("manifest")
@@ -34,6 +36,12 @@ from cortex.manifest import MANIFEST_PROFILES, build_manifest
     help="Show estimated tokens used by each rendered section.",
 )
 @click.option(
+    "--json",
+    "as_json",
+    is_flag=True,
+    help="Emit manifest budget diagnostics as machine-readable JSON.",
+)
+@click.option(
     "--path",
     "target_path",
     type=click.Path(file_okay=False, dir_okay=True, exists=True, path_type=Path),
@@ -46,6 +54,7 @@ def manifest_command(
     budget: int | None,
     profile: str,
     show_budget: bool,
+    as_json: bool,
     target_path: Path,
 ) -> None:
     """Emit the token-budgeted session manifest.
@@ -64,10 +73,14 @@ def manifest_command(
 
     warn_if_incompatible(cortex_dir)
 
-    profile_config = MANIFEST_PROFILES[profile]
+    profile_name = cast(ManifestProfileName, profile)
+    profile_config = MANIFEST_PROFILES[profile_name]
     manifest = build_manifest(
         target_path,
         budget if budget is not None else profile_config.default_budget_tokens,
-        profile=profile,  # type: ignore[arg-type]
+        profile=profile_name,
     )
+    if as_json:
+        click.echo(json.dumps(manifest.diagnostics(), indent=2, sort_keys=True))
+        return
     click.echo(manifest.render(show_budget=show_budget), nl=False)

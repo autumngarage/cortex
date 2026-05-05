@@ -30,7 +30,7 @@ import tomllib
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from cortex.frontmatter import parse_frontmatter
 from cortex.index import read_index
@@ -89,6 +89,7 @@ MANIFEST_PROFILES: dict[ManifestProfileName, ManifestProfile] = {
 class ManifestSection:
     title: str
     body: str
+    budget_tokens: int = 0
     # Number of whole entries actually included (post-budget truncation).
     included: int = 0
     # Entries considered but dropped for budget reasons.
@@ -97,6 +98,58 @@ class ManifestSection:
     truncated_paths: list[str] = field(default_factory=list)
     omitted: bool = False
     retrieval: str = ""
+
+    def used_tokens(self) -> int:
+        if not self.body.strip():
+            return 0
+        return estimate_tokens(self.body)
+
+    def omitted_count(self) -> int:
+        return len(self.omitted_entries())
+
+    def omitted_entries(self) -> list[str]:
+        return self.truncated_paths
+
+    def omission_kind(self) -> str:
+        if self.omitted:
+            return "omitted"
+        return "truncated"
+
+    def omission_brief_line(self) -> str:
+        count = self.omitted_count()
+        entry_word = "entry" if count == 1 else "entries"
+        preview = _paths_preview(self.omitted_entries())
+        suffix = f" ({preview})" if preview else ""
+        retrieval = f" {self.retrieval}" if self.retrieval else ""
+        return (
+            f"{_section_label(self.title)}: {count} {entry_word} "
+            f"{self.omission_kind()} by the manifest budget.{suffix}{retrieval}"
+        )
+
+    def omission_diagnostic(self) -> dict[str, Any]:
+        return {
+            "section": self.title,
+            "kind": self.omission_kind(),
+            "count": self.omitted_count(),
+            "entries": self.omitted_entries(),
+            "retrieval": self.retrieval,
+        }
+
+    def diagnostics(self) -> dict[str, Any]:
+        omitted_paths = self.omitted_entries()
+        return {
+            "title": self.title,
+            "budget_tokens": self.budget_tokens,
+            "used_tokens": self.used_tokens(),
+            "included_count": self.included,
+            "truncated_count": self.truncated,
+            "omitted_count": len(omitted_paths),
+            "included_entries": self.included_paths,
+            "truncated_entries": self.truncated_paths,
+            "omitted_entries": omitted_paths,
+            "omitted": self.omitted,
+            "retrieval": self.retrieval,
+        }
 
 
 @dataclass
@@ -127,7 +180,12 @@ class Manifest:
         for section in self.sections:
             out += f"## {section.title}\n\n"
             if show_budget:
-                out += f"> Tokens: ~{estimate_tokens(section.body)} used.\n\n"
+                budget = (
+                    f" of ~{section.budget_tokens}"
+                    if section.budget_tokens
+                    else ""
+                )
+                out += f"> Tokens: ~{section.used_tokens()}{budget} used.\n\n"
             if section.truncated:
                 out += (
                     f"> Included {section.included} of "
@@ -142,10 +200,65 @@ class Manifest:
             out += "\n---\n\n"
         if self.promotion_summary:
             out += self.promotion_summary + "\n"
+        omission_summary = self.omission_summary()
+        if omission_summary:
+            out += "\n" + omission_summary
         return out
 
     def total_estimated_tokens(self) -> int:
         return estimate_tokens(self.render(show_budget=True))
+
+    def diagnostics(self) -> dict[str, Any]:
+        sections = [section.diagnostics() for section in self.sections]
+        return {
+            "project_root": str(self.project_root),
+            "profile": self.profile.name,
+            "budget_tokens": self.budget_tokens,
+            "used_tokens": sum(int(section["used_tokens"]) for section in sections),
+            "degraded": self.degraded,
+            "journal_hours": self.journal_hours,
+            "promotion_summary": self.promotion_summary,
+            "sections": sections,
+            "omissions": [
+                section.omission_diagnostic()
+                for section in self.sections
+                if section.omitted_count() > 0
+            ],
+        }
+
+    def omission_summary(self) -> str:
+        lines = [
+            "- "
+            + section.omission_brief_line()
+            for section in self.sections
+            if section.omitted_count() > 0
+        ]
+        if not lines:
+            return ""
+        return "\n".join(
+            [
+                "## Omitted context for delegation brief",
+                "",
+                "Paste this into a delegation brief when relying on this manifest:",
+                "",
+                *lines,
+                "",
+            ]
+        )
+
+
+def _section_label(title: str) -> str:
+    return title.split(" — ", 1)[0].split(" (", 1)[0]
+
+
+def _paths_preview(paths: list[str], *, limit: int = 5) -> str:
+    if not paths:
+        return ""
+    preview = ", ".join(f"`{path}`" for path in paths[:limit])
+    remaining = len(paths) - limit
+    if remaining > 0:
+        preview += f", +{remaining} more"
+    return preview
 
 
 def estimate_tokens(text: str) -> int:
@@ -269,7 +382,12 @@ def _active_task_pointer(project_root: Path, cortex_dir: Path) -> tuple[str, lis
     return f"Active Plan: `{rel}` `## Pickup pointer`\n\n{pickup}", [rel]
 
 
-def _delegation_sections(project_root: Path, cortex_dir: Path) -> list[ManifestSection]:
+def _delegation_sections(
+    project_root: Path,
+    cortex_dir: Path,
+    *,
+    budget_tokens: int,
+) -> list[ManifestSection]:
     doctrine_paths = [_rel(p, project_root) for p in _doctrine_order(_doctrine_entries(cortex_dir))]
     active_plan_paths = [_rel(p, project_root) for p in _active_plans(cortex_dir)]
     journal_paths = [_rel(p, project_root) for p in _read_files_newest_first(cortex_dir / "journal")]
@@ -300,18 +418,20 @@ def _delegation_sections(project_root: Path, cortex_dir: Path) -> list[ManifestS
         "or retrieve by query when history matters.\n"
     )
     return [
-        ManifestSection("Project Identity", identity, included=1),
-        ManifestSection("Protocol Invariants", invariants, included=1),
+        ManifestSection("Project Identity", identity, budget_tokens=budget_tokens, included=1),
+        ManifestSection("Protocol Invariants", invariants, budget_tokens=budget_tokens, included=1),
         ManifestSection(
             "Active Task Pointer",
             pointer,
+            budget_tokens=budget_tokens,
             included=len(pointer_paths),
             included_paths=pointer_paths,
         ),
-        ManifestSection("Targeted Retrieval", retrieval, included=1),
+        ManifestSection("Targeted Retrieval", retrieval, budget_tokens=budget_tokens, included=1),
         ManifestSection(
             "Omitted Corpus",
             omitted,
+            budget_tokens=0,
             truncated=len(doctrine_paths) + len(active_plan_paths) + len(journal_paths),
             truncated_paths=[*doctrine_paths, *active_plan_paths, *journal_paths],
             omitted=True,
@@ -508,7 +628,11 @@ def build_manifest(
 
     sections: list[ManifestSection]
     if manifest_profile.include_delegation_brief:
-        sections = _delegation_sections(project_root, cortex_dir)
+        sections = _delegation_sections(
+            project_root,
+            cortex_dir,
+            budget_tokens=budget_tokens,
+        )
     else:
         state_file = cortex_dir / "state.md"
         state_body = state_file.read_text() if state_file.exists() else "> state.md missing — run `cortex init`.\n"
@@ -521,6 +645,7 @@ def build_manifest(
             ManifestSection(
                 title="state.md",
                 body=state_body,
+                budget_tokens=estimate_tokens(state_body),
                 included=1,
                 included_paths=[_rel(state_file, project_root)] if state_file.exists() else [],
             )
@@ -555,6 +680,7 @@ def build_manifest(
         ManifestSection(
             title="Doctrine (Load-priority `always` first; then recency)",
             body=doctrine_body or "_no Doctrine entries_\n",
+            budget_tokens=doctrine_budget // CHARS_PER_TOKEN,
             included=doctrine_in,
             truncated=doctrine_cut,
             included_paths=[_rel(Path(p), project_root) for p in doctrine_in_paths],
@@ -571,6 +697,7 @@ def build_manifest(
         ManifestSection(
             title="Active Plans",
             body=plans_body or "_no active Plans_\n",
+            budget_tokens=plan_budget // CHARS_PER_TOKEN,
             included=plans_in,
             truncated=plans_cut,
             included_paths=[_rel(Path(p), project_root) for p in plans_in_paths],
@@ -593,6 +720,7 @@ def build_manifest(
         ManifestSection(
             title=f"Journal — last {journal_hours}h + latest digest",
             body=journal_body or "_no Journal entries in window_\n",
+            budget_tokens=max(0, journal_budget) // CHARS_PER_TOKEN,
             included=journal_in,
             truncated=journal_cut,
             included_paths=[_rel(Path(p), project_root) for p in journal_in_paths],

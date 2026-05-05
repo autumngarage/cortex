@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -31,6 +32,37 @@ def _run_manifest_args(project: Path, *args: str) -> tuple[int, str]:
     runner = CliRunner()
     result = runner.invoke(cli, ["manifest", "--path", str(project), *args])
     return result.exit_code, result.output
+
+
+def _run_manifest_json(project: Path, *args: str) -> dict[str, object]:
+    exit_code, output = _run_manifest_args(project, *args, "--json")
+    assert exit_code == 0, output
+    payload = json.loads(output)
+    assert isinstance(payload, dict)
+    return payload
+
+
+def _section(payload: dict[str, object], title_prefix: str) -> dict[str, object]:
+    sections = payload["sections"]
+    assert isinstance(sections, list)
+    for section in sections:
+        assert isinstance(section, dict)
+        title = section.get("title")
+        if isinstance(title, str) and title.startswith(title_prefix):
+            return section
+    raise AssertionError(f"missing section {title_prefix!r}: {sections!r}")
+
+
+def _int_value(payload: dict[str, object], key: str) -> int:
+    value = payload[key]
+    assert isinstance(value, int)
+    return value
+
+
+def _list_value(payload: dict[str, object], key: str) -> list[object]:
+    value = payload[key]
+    assert isinstance(value, list)
+    return value
 
 
 def _write_doctrine(project: Path, number: int, *, priority: str = "default", date: str = "2026-04-01") -> Path:
@@ -232,8 +264,75 @@ def test_budget_strictly_enforced(scaffolded_project: Path) -> None:
     # even with the whole budget it shouldn't fit.
     manifest = build_manifest(scaffolded_project, 8000)
     rendered = manifest.render()
-    assert "0001-big.md" not in rendered
+    assert "### `0001-big.md`" not in rendered
     assert "truncated by budget" in rendered
+
+
+def test_json_budget_diagnostics_expose_doctrine_omissions(
+    scaffolded_project: Path,
+) -> None:
+    path = scaffolded_project / ".cortex" / "doctrine" / "0001-large.md"
+    path.write_text(
+        "# 0001 — Large\n\n"
+        "**Status:** Accepted\n"
+        "**Date:** 2026-04-01\n"
+        "**Load-priority:** default\n\n"
+        + ("doctrine body " * 1000)
+    )
+
+    payload = _run_manifest_json(scaffolded_project, "--budget", "3000")
+    doctrine = _section(payload, "Doctrine")
+
+    assert _int_value(doctrine, "budget_tokens") > 0
+    assert _int_value(doctrine, "used_tokens") <= _int_value(doctrine, "budget_tokens")
+    assert _list_value(doctrine, "included_entries") == []
+    assert _list_value(doctrine, "truncated_entries") == [".cortex/doctrine/0001-large.md"]
+    assert _list_value(doctrine, "omitted_entries") == [".cortex/doctrine/0001-large.md"]
+    assert _int_value(doctrine, "omitted_count") == 1
+
+
+def test_human_budget_summary_exposes_plan_omissions(
+    scaffolded_project: Path,
+) -> None:
+    plan = _write_plan(scaffolded_project, "large-plan", status="active")
+    plan.write_text(plan.read_text() + "\n" + ("plan body " * 1000))
+
+    exit_code, output = _run_manifest_args(
+        scaffolded_project,
+        "--budget",
+        "3000",
+        "--show-budget",
+    )
+
+    assert exit_code == 0
+    assert "## Omitted context for delegation brief" in output
+    assert "Active Plans: 1 entry truncated by the manifest budget." in output
+    assert "`.cortex/plans/large-plan.md`" in output
+    assert "read `.cortex/plans/` for omitted active plans." in output
+
+
+def test_json_budget_diagnostics_expose_journal_omissions(
+    scaffolded_project: Path,
+) -> None:
+    journal = _write_journal(scaffolded_project, "2026-05-05", "large")
+    journal.write_text(journal.read_text() + "\n" + ("journal body " * 1000))
+
+    payload = _run_manifest_json(scaffolded_project, "--budget", "3000")
+    journal_section = _section(payload, "Journal")
+
+    assert _int_value(journal_section, "budget_tokens") > 0
+    assert _int_value(journal_section, "used_tokens") <= _int_value(
+        journal_section,
+        "budget_tokens",
+    )
+    assert _list_value(journal_section, "included_entries") == []
+    assert _list_value(journal_section, "truncated_entries") == [
+        ".cortex/journal/2026-05-05-large.md"
+    ]
+    assert _list_value(journal_section, "omitted_entries") == [
+        ".cortex/journal/2026-05-05-large.md"
+    ]
+    assert _int_value(journal_section, "omitted_count") == 1
 
 
 def test_wide_journal_at_high_budget(scaffolded_project: Path) -> None:
