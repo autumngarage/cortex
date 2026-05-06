@@ -6,7 +6,7 @@ This directory is the project's Cortex memory. Six layers follow the Cortex spec
 
 - `doctrine/` — immutable load-bearing claims. Numbered ADR-style entries; never deleted; superseded entries stay in place with a link forward.
 - `journal/` — append-only event log. One event per dated file (`YYYY-MM-DD-<slug>.md`); never edited in place; consolidated via monthly/quarterly digests.
-- `plans/` — active efforts with measurable `Success Criteria`. One file per effort; status transitions (`active` → `shipped|cancelled|deferred|blocked`) tracked in frontmatter.
+- `plans/` — active efforts with measurable `Success Criteria`. One file per effort; status transitions (`active` → `shipped|cancelled|deferred|blocked|superseded`) tracked in frontmatter.
 - `map.md` — derived structural view of the project (packages, boundaries, data flow). Regenerated from code + manifests.
 - `state.md` — derived current operational state (priorities, in-flight plans, recent wins). Regenerated from journal + plans.
 - `procedures/` — versioned how-tos and stable interface contracts. Mutable in place; breaking changes bump the doc's own version.

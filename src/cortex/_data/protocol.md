@@ -58,7 +58,7 @@ These triggers are **deterministic, auditable, and enforceable**. When any of th
 |---|---|---|
 | T1.1 | Diff touches `.cortex/doctrine/`, `.cortex/plans/`, `principles/`, or `SPEC.md` | `journal/decision.md` |
 | T1.2 | Test command failed after succeeding earlier in the session | `journal/incident.md` |
-| T1.3 | A Plan's `Status:` field changed (`active` → `shipped|cancelled|deferred|blocked`) | `journal/plan-transition.md` |
+| T1.3 | A Plan's `Status:` field changed (`active` → `shipped|cancelled|deferred|blocked|superseded`) | `journal/plan-transition.md` |
 | T1.4 | File deletion exceeding N lines (default N=100; configurable per project) | `journal/decision.md` |
 | T1.5 | Dependency manifest changed (`pyproject.toml`, `package.json`, `Cargo.toml`, `go.mod`, `Gemfile`) | `journal/decision.md` |
 | T1.6 | Sentinel cycle ended (`.sentinel/runs/<timestamp>.md` written) | `journal/sentinel-cycle.md` |

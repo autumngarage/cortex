@@ -171,6 +171,54 @@ def test_empty_plan_frontmatter_value_rejected(scaffolded_project: Path) -> None
     assert "Status" in stderr
 
 
+def test_plan_status_superseded_is_valid(scaffolded_project: Path) -> None:
+    # cortex#160: Status: superseded should not be flagged as invalid.
+    plans_dir = scaffolded_project / ".cortex" / "plans"
+    plans_dir.mkdir(parents=True, exist_ok=True)
+    plan = plans_dir / "superseded-plan.md"
+    plan.write_text(
+        "---\n"
+        "Status: superseded\n"
+        "Written: 2026-04-17\n"
+        "Author: human\n"
+        f"Goal-hash: {normalize_goal_hash('Superseded Plan')}\n"
+        "Updated-by:\n"
+        "  - 2026-04-17T10:00 human\n"
+        "Cites: doctrine/0001\n"
+        "---\n\n"
+        "# Superseded Plan\n\n"
+        "> Summary.\n\n"
+        "## Why (grounding)\ndoctrine/0001.\n\n"
+        "## Success Criteria\nN/A — superseded by plans/other.\n\n"
+        "## Approach\n.\n\n"
+        "## Work items\n- [x] item\n"
+    )
+    exit_code, stdout, _ = _run_doctor(scaffolded_project)
+    assert exit_code == 0, stdout
+
+
+def test_plan_status_unknown_value_rejected(scaffolded_project: Path) -> None:
+    plans_dir = scaffolded_project / ".cortex" / "plans"
+    plans_dir.mkdir(parents=True, exist_ok=True)
+    plan = plans_dir / "bad-status.md"
+    plan.write_text(
+        "---\n"
+        "Status: invalid-status\n"
+        "Written: 2026-04-17\n"
+        "Author: human\n"
+        f"Goal-hash: {normalize_goal_hash('Bad Status Plan')}\n"
+        "Updated-by:\n"
+        "  - 2026-04-17T10:00 human\n"
+        "---\n\n"
+        "# Bad Status Plan\n\n## Why (grounding)\ndoctrine/0001.\n\n"
+        "## Success Criteria\nyes\n\n## Approach\n.\n\n## Work items\n- [ ] a\n"
+    )
+    exit_code, _stdout, stderr = _run_doctor(scaffolded_project)
+    assert exit_code == 1
+    assert "Status" in stderr
+    assert "invalid-status" in stderr
+
+
 def test_invalid_doctrine_status_rejected(scaffolded_project: Path) -> None:
     entry = scaffolded_project / ".cortex" / "doctrine" / "0002-weird.md"
     entry.write_text(
