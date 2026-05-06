@@ -52,6 +52,7 @@ declarations.
 | `pypi_package` | string \| null | `null` | PyPI package name to audit (e.g. `"cortex"`). Empty strings are normalized to `null`. |
 | `github_repos` | list of strings \| null | `[]` | GitHub `owner/repo` references to check for release / tap state. Matches versions found **in GitHub URLs** in `scan_files` (e.g. `.../releases/tag/v1.2.3`). |
 | `github_releases` | list of strings \| null | `[]` | GitHub `owner/repo` references to check for release freshness via `gh api`. For each repo, fetches the latest published release tag and compares it against version strings on **any `scan_files` line that mentions the repo** — broader than `github_repos`, which is URL-scoped. Intended for projects that distribute via GitHub Releases without a Homebrew tap (e.g. signed DMGs, Sparkle appcasts). |
+| `paas_repos` | list of strings \| null | `[]` | GitHub `owner/repo` references for repos deployed via a PaaS (Railway, Fly.io, Render, Heroku, Vercel, …) where the deploy IS the release and no GitHub Release tags are published. Verifies the repo is reachable but **does not** check for release tags, so no "no release tag" false-positive warning is emitted. Use this instead of `github_repos` for deploy-on-merge services. |
 | `urls` | list of strings \| null | `[]` | Free-form URLs to check for liveness or version drift. |
 | `scan_files` | list of strings \| null | `["CLAUDE.md", "AGENTS.md", "README.md"]` (`DEFAULT_AUDIT_SCAN_FILES`) | Repo-root files to scan for external claims. Setting this overrides the default — pass the full list, not a delta. |
 
@@ -158,6 +159,10 @@ github_repos = ["autumngarage/example"]
 # Use github_releases instead of (or alongside) github_repos for projects
 # that ship GitHub Releases without a Homebrew tap:
 github_releases = ["autumngarage/example-macos-app"]
+# Use paas_repos for repos deployed via Railway / Fly.io / Render / Heroku / Vercel
+# where the deploy IS the release and no GitHub Release tags are published.
+# Verifies the repo is reachable without checking for release tags:
+paas_repos = ["outriderintel/vanguard"]
 
 [doctrine.0007]
 allowed_root_files = ["ROADMAP.md"]

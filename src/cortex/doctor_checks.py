@@ -438,6 +438,7 @@ def check_config_toml_schema(project_root: Path) -> list[Issue]:
             "scan_files": "optional-string-list",
             "github_repos": "optional-string-list",
             "github_releases": "optional-string-list",
+            "paas_repos": "optional-string-list",
         }
         issues.extend(_validate_table(rel, "audit-instructions", audit, audit_schema))
     refresh_index = data.get("refresh-index")

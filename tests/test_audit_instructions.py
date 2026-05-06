@@ -385,6 +385,64 @@ def test_github_releases_gh_failure_warns_without_crashing(tmp_path: Path, monke
     assert "could not resolve to a Repository" in output
 
 
+def test_paas_repos_does_not_warn_no_release_tag(tmp_path: Path, monkeypatch: Any) -> None:
+    _write_config(
+        tmp_path,
+        '[audit-instructions]\npaas_repos = ["outriderintel/vanguard"]\nscan_files = ["CLAUDE.md"]\n',
+    )
+    (tmp_path / "CLAUDE.md").write_text("Deployed via Railway; no GitHub releases.\n")
+
+    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["gh", "api"] and args[2] == "repos/outriderintel/vanguard":
+            return subprocess.CompletedProcess(args, 0, stdout="outriderintel/vanguard\n", stderr="")
+        raise AssertionError(f"unexpected subprocess: {args}")
+
+    monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    exit_code, output = _run(tmp_path)
+
+    assert exit_code == 0
+    assert "no release tag" not in output
+    assert output == "audit-instructions: checked 1 claims, all verified\n"
+
+
+def test_paas_repos_nonexistent_repo_warns(tmp_path: Path, monkeypatch: Any) -> None:
+    _write_config(
+        tmp_path,
+        '[audit-instructions]\npaas_repos = ["outriderintel/nonexistent"]\n',
+    )
+
+    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["gh", "api"] and "nonexistent" in args[2]:
+            return subprocess.CompletedProcess(
+                args, 1, stdout="", stderr="Could not resolve to a Repository with the name 'nonexistent'"
+            )
+        raise AssertionError(f"unexpected subprocess: {args}")
+
+    monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    exit_code, output = _run(tmp_path)
+
+    assert exit_code == 0
+    assert "paas repo: outriderintel/nonexistent not reachable" in output
+    assert "Could not resolve" in output
+
+
+def test_paas_repos_gh_absent_degrades_gracefully(tmp_path: Path, monkeypatch: Any) -> None:
+    monkeypatch.setenv("PATH", "")
+    _write_config(
+        tmp_path,
+        '[audit-instructions]\npaas_repos = ["outriderintel/vanguard"]\n',
+    )
+
+    exit_code, output = _run(tmp_path)
+
+    assert exit_code == 0
+    assert "gh not installed, skipping paas_repos checks" in output
+
+
 def test_brew_and_gh_absent_degrade_gracefully(tmp_path: Path, monkeypatch: Any) -> None:
     monkeypatch.setenv("PATH", "")
     _write_config(
@@ -394,6 +452,7 @@ def test_brew_and_gh_absent_degrade_gracefully(tmp_path: Path, monkeypatch: Any)
 homebrew_tap = "autumngarage/cortex"
 github_repos = ["autumngarage/cortex"]
 github_releases = ["autumngarage/cortex"]
+paas_repos = ["outriderintel/vanguard"]
 """,
     )
 
@@ -403,3 +462,4 @@ github_releases = ["autumngarage/cortex"]
     assert "brew not installed, skipping homebrew_tap check" in output
     assert "gh not installed, skipping github_repos checks" in output
     assert "gh not installed, skipping github_releases checks" in output
+    assert "gh not installed, skipping paas_repos checks" in output
