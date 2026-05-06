@@ -245,6 +245,140 @@ def test_doctrine_mutation_detected_but_supersede_status_allowed(tmp_path: Path)
     assert check_immutable_doctrine(clean) == []
 
 
+# --- cortex#172: doctrine append-only baseline at file-introduction commit ---
+
+
+def test_immutable_doctrine_introduction_only_no_warning(tmp_path: Path) -> None:
+    """A doctrine entry whose only commit is its introduction must not warn.
+
+    Regression for cortex#172 Layer 1: if the check incorrectly treats the
+    introduction commit as a modification, this test will fail."""
+    _git_cortex_project(tmp_path)
+    entry = tmp_path / ".cortex" / "doctrine" / "0009-rule.md"
+    entry.write_text(
+        "---\nStatus: Accepted\nDate: 2026-05-07\nLoad-priority: always\n---\n\n# Rule\n\nBody.\n"
+    )
+    _commit(tmp_path, "docs: add doctrine 0009", ".cortex/doctrine/0009-rule.md")
+
+    issues = check_immutable_doctrine(tmp_path)
+    assert not any(
+        "0009-rule.md" in (issue.path or "") for issue in issues
+    ), [f"{i.path}: {i.message}" for i in issues]
+
+
+def test_immutable_doctrine_real_modification_warns_with_sha(tmp_path: Path) -> None:
+    """A doctrine entry with a real post-intro M commit warns, and the message
+    names the offending commit SHA (first 12 chars)."""
+    _git_cortex_project(tmp_path)
+    entry = tmp_path / ".cortex" / "doctrine" / "0009-rule.md"
+    body = "---\nStatus: Accepted\nDate: 2026-05-07\nLoad-priority: always\n---\n\n# Rule\n\nOriginal.\n"
+    entry.write_text(body)
+    _commit(tmp_path, "docs: add doctrine 0009", ".cortex/doctrine/0009-rule.md")
+
+    entry.write_text(body.replace("Original.", "Mutated body."))
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "add", ".cortex/doctrine/0009-rule.md"],
+        check=True, capture_output=True, text=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "commit", "-m", "docs: mutate doctrine"],
+        check=True, capture_output=True, text=True,
+    )
+    sha = subprocess.run(
+        ["git", "-C", str(tmp_path), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+
+    issues = check_immutable_doctrine(tmp_path)
+    assert any(
+        "0009-rule.md" in (issue.path or "")
+        and "immutable Doctrine invariant violated" in issue.message
+        and sha[:12] in issue.message
+        for issue in issues
+    ), [f"{i.path}: {i.message}" for i in issues]
+
+
+def test_immutable_doctrine_grandfather_commit_silences_warning(tmp_path: Path) -> None:
+    """A real M commit whose SHA is in [doctrine.append-only] grandfather-commits
+    must not produce a warning — this is the cortex#172 Layer 2 fix."""
+    _git_cortex_project(tmp_path)
+    entry = tmp_path / ".cortex" / "doctrine" / "0009-rule.md"
+    body = "---\nStatus: Accepted\nDate: 2026-05-07\nLoad-priority: always\n---\n\n# Rule\n\nOriginal.\n"
+    entry.write_text(body)
+    _commit(tmp_path, "docs: add doctrine 0009", ".cortex/doctrine/0009-rule.md")
+
+    entry.write_text(body.replace("Original.", "Pre-invariant drift."))
+    _run(tmp_path, "add", ".cortex/doctrine/0009-rule.md")
+    _run(tmp_path, "commit", "-m", "docs: pre-invariant backfill")
+    sha = subprocess.run(
+        ["git", "-C", str(tmp_path), "rev-parse", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+
+    (tmp_path / ".cortex" / "config.toml").write_text(
+        f'[doctrine.append-only]\ngrandfather-commits = ["{sha}"]\n'
+    )
+
+    issues = check_immutable_doctrine(tmp_path)
+    assert not any(
+        "0009-rule.md" in (issue.path or "") for issue in issues
+    ), [f"{i.path}: {i.message}" for i in issues]
+
+
+def test_immutable_doctrine_non_grandfathered_modification_still_warns(tmp_path: Path) -> None:
+    """A real M commit NOT in grandfather-commits must still warn — the
+    grandfather list must not be a blanket suppressor."""
+    _git_cortex_project(tmp_path)
+    entry = tmp_path / ".cortex" / "doctrine" / "0009-rule.md"
+    body = "---\nStatus: Accepted\nDate: 2026-05-07\nLoad-priority: always\n---\n\n# Rule\n\nOriginal.\n"
+    entry.write_text(body)
+    _commit(tmp_path, "docs: add doctrine 0009", ".cortex/doctrine/0009-rule.md")
+
+    entry.write_text(body.replace("Original.", "Unauthorized mutation."))
+    _run(tmp_path, "add", ".cortex/doctrine/0009-rule.md")
+    _run(tmp_path, "commit", "-m", "docs: unauthorized mutation")
+
+    (tmp_path / ".cortex" / "config.toml").write_text(
+        '[doctrine.append-only]\ngrandfather-commits = ["0000000000000000000000000000000000000000"]\n'
+    )
+
+    issues = check_immutable_doctrine(tmp_path)
+    assert any(
+        "0009-rule.md" in (issue.path or "")
+        and "immutable Doctrine invariant violated" in issue.message
+        for issue in issues
+    ), [f"{i.path}: {i.message}" for i in issues]
+
+
+def test_config_toml_schema_validates_doctrine_append_only_section(tmp_path: Path) -> None:
+    """Schema validator catches typos and type errors in [doctrine.append-only]."""
+    _scaffold(tmp_path)
+
+    # Valid value — no warnings.
+    (tmp_path / ".cortex" / "config.toml").write_text(
+        '[doctrine.append-only]\ngrandfather-commits = ["abc123"]\n'
+    )
+    assert check_config_toml_schema(tmp_path) == []
+
+    # Unknown key — warning.
+    (tmp_path / ".cortex" / "config.toml").write_text(
+        '[doctrine.append-only]\ngrandfathered-shas = ["abc123"]\n'
+    )
+    issues = check_config_toml_schema(tmp_path)
+    assert any(
+        issue.severity == "warning" and "grandfathered-shas" in issue.message for issue in issues
+    )
+
+    # Wrong type (string instead of list) — error.
+    (tmp_path / ".cortex" / "config.toml").write_text(
+        '[doctrine.append-only]\ngrandfather-commits = "abc123"\n'
+    )
+    issues = check_config_toml_schema(tmp_path)
+    assert any(
+        issue.severity == "error" and "grandfather-commits" in issue.message for issue in issues
+    )
+
+
 def test_promotion_queue_dangling_source_warns(tmp_path: Path) -> None:
     _scaffold(tmp_path)
     (tmp_path / ".cortex" / ".index.json").write_text(
