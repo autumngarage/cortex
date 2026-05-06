@@ -1,16 +1,16 @@
 ---
-Generated: 2026-05-06T13:24:02-04:00
+Generated: 2026-05-06T13:54:26-04:00
 Generator: cortex refresh-state v0.9.0
 Sources:
-  - HEAD sha: 19c5277dd191fba895e3378d4afeaefb68c9248e
+  - HEAD sha: 771e7cc6a47f4c4f1c7e32b9b52ab79b5b27b5bd
   - .cortex/plans/*.md (10 files)
-  - .cortex/journal/*.md (62 entries, 2026-04-17..2026-05-06)
+  - .cortex/journal/*.md (63 entries, 2026-04-17..2026-05-06)
   - .cortex/doctrine/*.md (7 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
   - SPEC version: 0.5.0
   - pyproject.toml: 0.9.0 + cortex package version: 0.9.0
-Corpus: 62 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 63 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -35,9 +35,9 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 **Status by stage:**
 - **Readiness tiers through lifecycle are shipped.** Tier 1, Tier 2, Tier 3 Cortex-side, and Tier 4 lifecycle are closed; release details live in the generated `## Shipped recently` section below and the cited release journals.
 - **Retrieval interface is Cortex-side shipped.** BM25, semantic, hybrid, and stable JSON output are available from the Cortex CLI. The remaining Sentinel Planner hookup is downstream work in autumngarage/sentinel#111.
-- **Release integrity is shipped at v0.8.2.** cortex#107 is closed: the corrective `v0.8.2` tag contains matching package metadata, release.yml verifies tag metadata before Homebrew tap bump, Homebrew upgraded to 0.8.2, and `cortex version` reports 0.8.2 from `/opt/homebrew/bin/cortex`. <!-- cortex:no-stale-check -->
-- **v0.9.0 — three-target dogfood gate** is the active next stage. The outward-facing positioning paragraph plus conductor and touchstone installs are complete; next is installing Cortex on **vesper**. Validate fresh-clone session start, bare-repo degradation, retrieval on each corpus, sustained work on the Touchstone-managed targets, and behavioral exit gates. Cortex production readiness must not depend on Sentinel being installed.
-- **v1.0.0 — production release.** Ceremony plus pre-1.0 compatibility audit against v0.3 / v0.5 scaffolds, `.cortex/config.toml` schema reference doc, SPEC-to-test traceability matrix, README/PITCH refresh.
+- **Release integrity is shipped at v0.8.2.** cortex#107 is closed: the corrective `v0.8.2` tag contains matching package metadata, release.yml verifies tag metadata before Homebrew tap bump. <!-- cortex:no-stale-check -->
+- **v0.9.0 dogfood gate is closed.** Cortex installed on conductor (autumngarage/conductor#178), touchstone (autumngarage/touchstone#151), and vesper (henrymodisett/vesper#167). 9 dogfood-surfaced bugs filed and closed in 4 swarm PRs (cortex#145–#148). Fresh-clone acceptance + bare-repo degradation CI fixtures permanent (PRs #150, #151). Retrieval validated per target (PR #149). Behavioral exit-bar review declared the gate exit (PR #152). v0.9.0 released 2026-05-06; `/opt/homebrew/bin/cortex` reports `0.9.0`. <!-- cortex:no-stale-check -->
+- **v1.0.0 — production release** is the active next stage. Two ceremony items already shipped (config.toml schema reference, SPEC-to-test traceability matrix). Remaining swarmable work: SPEC freeze, README/PITCH/CASE-STUDIES refresh, PRIOR_ART codesight+Karpathy add, CLI help-text polish, doctrine review. User-involved items: pre-1.0 compatibility audit against v0.3/v0.5 fixture repos, brew-install smoke test on a clean machine.
 
 **Deferred from v1.0** (full list with revisit conditions in [`plans/cortex-v1.md`](./plans/cortex-v1.md) `## Follow-ups (deferred)`): LLM polish features (`refresh-map`, `refresh-state --enhance`, `cortex next --enhance`); triad-mode infrastructure; Sentinel end-of-cycle hook; Touchstone pre-push `--strict`; interactive per-candidate prompts; doctor audits for runtime triggers (T1.2/T1.6/T1.7); single-authority drift + full claim-trace doctor checks; MCP transport surface; standalone `cortex import-knowledge` command; doctrine-conflict resolution in `cortex promote`; manifest detection edge-case test fixtures; retention/cleanup destructive automation. **Note:** retrieval was previously in this list — promoted to v0.7.0 on 2026-05-02 because grep alone doesn't scale past ~100 entries on real-project corpora.
 
@@ -48,7 +48,7 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 
 ## Active plans
 
-- `cortex-v1` — Ship Cortex v1.0; Goal-hash `9e961737`; 78% complete (36/46 checkboxes)
+- `cortex-v1` — Ship Cortex v1.0; Goal-hash `9e961737`; 80% complete (37/46 checkboxes)
 
 ## Shipped recently
 
@@ -76,6 +76,7 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 - **2026-05-06** — PR #149 merged — docs(journal): record v0.9.0 retrieval validation findings (`.cortex/journal/2026-05-06-pr-merged-1251.md`, Type: pr-merged)
 - **2026-05-06** — PR #150 merged — test(acceptance): fresh-clone session-start fixture covers manifest/next/doctor (`.cortex/journal/2026-05-06-pr-merged-1311.md`, Type: pr-merged)
 - **2026-05-06** — PR #152 merged — docs(plan): close v0.9.0 dogfood gate with behavioral exit-bar review (`.cortex/journal/2026-05-06-pr-merged-1319.md`, Type: pr-merged)
+- **2026-05-06** — PR #153 merged — docs(journal): record v0.9.0 release — three-target dogfood gate exit (`.cortex/journal/2026-05-06-pr-merged-1328.md`, Type: pr-merged)
 
 ## Stale-now / handle-later
 
