@@ -14,7 +14,7 @@
 
 > **Cortex is a protocol for agent project memory that treats your exact git repo as the memory store.** Instead of introducing a new database, daemon, or vector index, it defines a directory of structured Markdown files (`.cortex/`) that agents evolve alongside code. It is grepable, diffable, and auditable with existing tools, adding the missing agent memory convention without replacing your workspace.
 
-**Status:** v0.8.2 shipped 2026-05-04. Latest release notes: [GitHub Releases](https://github.com/autumngarage/cortex/releases). [`SPEC.md`](./SPEC.md) v0.5.0; [`.cortex/protocol.md`](./.cortex/protocol.md) v0.3.0.
+**Status:** v0.9.0 released 2026-05-06 — production-ready. Latest release notes: [GitHub Releases](https://github.com/autumngarage/cortex/releases). [`SPEC.md`](./SPEC.md) v0.5.0; [`.cortex/protocol.md`](./.cortex/protocol.md) v0.3.0.
 
 **For "where are we now" and "what's next" — read [`.cortex/state.md`](./.cortex/state.md) (current state) and [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) (the one master launch plan).** Those are the canonical sources, kept current by Cortex itself; this README does not restate them. Eating our own dog food: a single canonical owner per fact is [Doctrine 0007](./.cortex/doctrine/0007-canonical-ownership-of-state-and-plans.md), and `cortex doctor` warns when repo-root files duplicate `.cortex/` content.
 
@@ -201,6 +201,7 @@ Each tool writes to its own files and reads the others only as best-effort. Noth
 - **[`docs/config-reference.md`](./docs/config-reference.md)** — Per-project `.cortex/config.toml` schema reference (every key, type, default, worked example).
 - **[`docs/spec-conformance.md`](./docs/spec-conformance.md)** — The SPEC-to-test traceability matrix, proving CLI conformance.
 - **[`docs/PITCH.md`](./docs/PITCH.md)** — A plain-language overview of Cortex.
+- **[`docs/CASE-STUDIES.md`](./docs/CASE-STUDIES.md)** — Documented case studies: the conductor incident and the three-target v0.9.0 dogfood gate.
 - **[`docs/install-pr-templates.md`](./docs/install-pr-templates.md)** — Reusable copy and checklist for Cortex install PRs on sibling projects.
 - **[`docs/PRIOR_ART.md`](./docs/PRIOR_ART.md)** — Research and influences.
 
@@ -208,7 +209,9 @@ Each tool writes to its own files and reads the others only as best-effort. Noth
 
 ## Status and plan
 
-The canonical current state lives in [`.cortex/state.md`](./.cortex/state.md), and the launch sequence lives in [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md). As of v0.8.2, release integrity and Cortex-side retrieval are shipped; the active v0.9.0 gate is installing Cortex on `conductor`, `touchstone`, and `vesper` for real dogfood. README deliberately keeps only this pointer so the generated `.cortex/` state remains the source of truth.
+**Production-ready (v0.9.0, released 2026-05-06).** Three reference installs in the wild: `conductor`, `touchstone`, and `vesper` install Cortex via the Homebrew tap. Nine dogfood-surfaced bugs filed and closed in v0.9.0; CI fixtures are now permanent for fresh-clone acceptance and bare-repo degradation. See [`docs/CASE-STUDIES.md`](./docs/CASE-STUDIES.md) for the gate evidence.
+
+For "where are we now" and "what's next": [`.cortex/state.md`](./.cortex/state.md) is the canonical current state; [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) is the master launch sequence. README deliberately keeps only this pointer per [Doctrine 0007](./.cortex/doctrine/0007-canonical-ownership-of-state-and-plans.md) — repo-root files that restate `.cortex/` content are anti-pattern.
 
 LLM-additive features (`cortex refresh-map`, `cortex refresh-state --enhance`, `cortex next --enhance`) and triad-mode infrastructure (`.cortex/pending/` + `cortex doctrine draft` + T1.7 Touchstone pre-merge hook) are deliberately **deferred from the v1.0 path** to v1.x. See [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) `## Follow-ups (deferred)` for the full deferral list with revisit conditions per item.
 
