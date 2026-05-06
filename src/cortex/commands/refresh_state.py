@@ -35,7 +35,14 @@ from cortex.state_render import build_state_inputs, render_state
     help="Project root containing `.cortex/`.",
 )
 def refresh_state_command(*, dry_run: bool, target_path: Path) -> None:
-    """Regenerate `.cortex/state.md` from primary Cortex sources."""
+    """Regenerate `.cortex/state.md` from journal entries, plans, and doctrine.
+
+    Preserves hand-authored regions wrapped in ``<!-- cortex:hand -->`` /
+    ``<!-- cortex:end-hand -->`` markers and updates the seven-field provenance
+    header. Use ``--dry-run`` to preview the output before writing. Also see
+    ``cortex refresh-index --retrieve`` to rebuild the search index used by
+    ``cortex retrieve``.
+    """
     project_root = Path(target_path).resolve()
     cortex_dir = project_root / ".cortex"
     if not cortex_dir.is_dir():

@@ -68,7 +68,8 @@ def _detect_author() -> str:
     "--title",
     "title",
     required=True,
-    help="Plan title (drives the H1 and Goal-hash; required).",
+    help="Plan title displayed as the H1 heading (required). Also seeds the Goal-hash "
+    "that `cortex doctor` verifies to detect accidental title changes.",
 )
 @click.option(
     "--cites",
@@ -92,7 +93,7 @@ def spawn_command(
     cites: str | None,
     target_path: Path,
 ) -> None:
-    """Scaffold a new active Plan at .cortex/plans/<SLUG>.md."""
+    """Create a new Plan at .cortex/plans/<SLUG>.md with required frontmatter and sections."""
     project_root = Path(target_path).resolve()
     cortex_dir = project_root / ".cortex"
     if not cortex_dir.is_dir():
@@ -184,7 +185,11 @@ def spawn_command(
 
 @click.group("plan")
 def plan_group() -> None:
-    """Author and inspect Plans."""
+    """Create and inspect Plans.
+
+    Use ``cortex plan spawn <slug>`` to create a new plan,
+    ``cortex plan status`` to check completion and staleness.
+    """
 
 
 plan_group.add_command(spawn_command)

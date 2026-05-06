@@ -172,7 +172,7 @@ def _render_filter_only_matches(
     "--layer",
     type=click.Choice(LAYER_CHOICES),
     default=None,
-    help="Restrict the search to one `.cortex/` subdirectory.",
+    help="Restrict the search to one `.cortex/` layer: doctrine, plans, journal, procedures, or templates.",
 )
 @click.option(
     "--path",
@@ -213,11 +213,11 @@ def grep_command(
     include_templates: bool,
     rg_args: tuple[str, ...],
 ) -> None:
-    """Search `.cortex/` for PATTERN with ripgrep, annotated with per-file frontmatter.
+    """Search `.cortex/` for PATTERN, annotated with each file's frontmatter metadata.
 
-    Extra arguments after ``--`` are forwarded to ``rg`` so that flags like
-    ``-i`` (case insensitive), ``-C 2`` (context), or ``--type md`` can be
-    composed. Example::
+    Each matched file is prefixed with a one-line summary of its layer, status,
+    type, and date so you can see context without a second read. Extra arguments
+    after ``--`` are forwarded to ``rg``::
 
         cortex grep "retry backoff" -- -i -C 2
 

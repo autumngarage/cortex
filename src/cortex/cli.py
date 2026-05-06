@@ -53,7 +53,7 @@ def _detect_install_method() -> str:
     "--status-only",
     is_flag=True,
     default=False,
-    help="Print the status summary non-interactively and exit. Suitable for scripting.",
+    help="Print the status summary and exit without entering the interactive flow.",
 )
 @click.option(
     "--path",
@@ -62,23 +62,17 @@ def _detect_install_method() -> str:
     default=None,
     help=(
         "Project root to inspect. Defaults to the current working directory. "
-        "Mirrors `cortex status --path`; surfaced at the top level so "
-        "`cortex --status-only --path X` works the same as `cortex status --path X`."
+        "Equivalent to `cortex status --path X`."
     ),
 )
 @click.pass_context
 def cli(ctx: click.Context, status_only: bool, path_override: Path | None) -> None:
     """Cortex — project memory protocol and reference CLI.
 
-    Running ``cortex`` with no subcommand prints the status summary (active
-    plans, recent journal activity, digest age, promotion-queue counts).
-    The fully interactive flow described in the README (per-candidate
-    review prompts, digest-generation prompts) depends on
-    ``.cortex/.index.json`` which is populated by the v0.6.0 refresh
-    commands (per the production-release rerank); until then the bare
-    invocation is effectively ``cortex status``. Use ``--status-only`` or
-    ``cortex status --json`` for scripting; both accept ``--path`` to
-    target an arbitrary project root.
+    Running ``cortex`` with no subcommand prints the project status: active
+    plans, recent journal activity, digest age, and promotion-queue counts.
+    Use ``cortex status --json`` for machine-readable output, or ``--path``
+    to target a project other than the current directory.
     """
     if ctx.invoked_subcommand is None:
         target = path_override if path_override is not None else Path.cwd()

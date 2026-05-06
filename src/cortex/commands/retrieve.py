@@ -28,8 +28,10 @@ _HYBRID_DEFAULT_NOTICE_KEY = "hybrid-default-flip"
     type=click.Choice(("hybrid", "semantic", "bm25")),
     default=None,
     help=(
-        "Retrieval mode. Default flips between bm25 (no embeddings yet) and "
-        "hybrid (BM25+semantic RRF) once embeddings are built."
+        "Search algorithm. `bm25` is keyword-based and always available. "
+        "`hybrid` combines BM25 with semantic (vector) search for better recall — "
+        "requires embeddings to be built. `semantic` uses vector search only. "
+        "Defaults to `hybrid` once embeddings exist, `bm25` otherwise."
     ),
 )
 @click.option(
@@ -44,13 +46,13 @@ _HYBRID_DEFAULT_NOTICE_KEY = "hybrid-default-flip"
     "as_json",
     is_flag=True,
     default=False,
-    help="Emit the stable JSON contract: [{path, score, frontmatter, excerpt}].",
+    help="Emit stable JSON: [{path, score, frontmatter, excerpt}]. Suitable for scripting.",
 )
 @click.option(
     "--no-rebuild",
     is_flag=True,
     default=False,
-    help="Skip the staleness check, the chunks-index rebuild, AND the embeddings backfill.",
+    help="Skip the index staleness check and rebuild before querying. Faster, but may miss recent entries.",
 )
 @click.option(
     "--path",
@@ -69,7 +71,12 @@ def retrieve_command(
     no_rebuild: bool,
     target_path: Path,
 ) -> None:
-    """Search `.cortex/` using the derived BM25 / semantic / hybrid index."""
+    """Search `.cortex/` entries by keyword, semantic similarity, or both.
+
+    Run ``cortex refresh-index --retrieve`` first to build the search index.
+    Use ``--mode bm25`` for keyword-only search (no setup required beyond the
+    index), ``--mode hybrid`` for best recall (requires embedding provider).
+    """
 
     project_root = Path(target_path).resolve()
     cortex_dir = project_root / ".cortex"

@@ -42,7 +42,7 @@ class PromotionJournal:
     "force",
     is_flag=True,
     default=False,
-    help="Promote even when the candidate already has promoted_to set.",
+    help="Allow re-promoting a candidate that was already promoted (prompts for confirmation).",
 )
 @click.option(
     "--yes",
@@ -74,7 +74,12 @@ def promote_command(
     dry_run: bool,
     target_path: Path,
 ) -> None:
-    """Promote a queued candidate into a new Doctrine entry."""
+    """Promote a Journal candidate from the queue into a numbered Doctrine entry.
+
+    CANDIDATE_ID comes from `cortex refresh-index` output (e.g. ``cand-001``).
+    Run `cortex refresh-index` first to build or refresh the promotion queue.
+    Use ``--dry-run`` to preview what would be written before committing.
+    """
 
     project_root = Path(target_path).resolve()
     cortex_dir = project_root / ".cortex"
@@ -117,7 +122,8 @@ def promote_command(
     candidate = _find_candidate(queue, candidate_id)
     if candidate is None:
         click.echo(
-            f"error: no promotion candidate with id {candidate_id!r} in `.cortex/.index.json`.",
+            f"error: no promotion candidate with id {candidate_id!r} in `.cortex/.index.json`. "
+            "Run `cortex refresh-index` to rebuild the queue and get current candidate IDs.",
             err=True,
         )
         sys.exit(1)
