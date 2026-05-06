@@ -171,8 +171,11 @@ def check_immutable_doctrine(project_root: Path) -> list[Issue]:
     doctrine_dir = project_root / ".cortex" / "doctrine"
     if not doctrine_dir.exists():
         return issues
+    grandfather_commits = _doctrine_append_only_grandfather_commits(project_root)
     for entry in sorted(doctrine_dir.glob("*.md")):
         for sha in _modified_commits(project_root, entry):
+            if any(sha.startswith(g) for g in grandfather_commits):
+                continue
             if _diff_only_allowed_frontmatter(project_root, sha, entry, {"Status"}):
                 continue
             issues.append(
@@ -463,6 +466,16 @@ def check_config_toml_schema(project_root: Path) -> list[Issue]:
                 "doctrine.0007",
                 doctrine_0007,
                 {"allowed_root_files": "string-list"},
+            )
+        )
+    doctrine_append_only = doctrine.get("append-only") if isinstance(doctrine, dict) else None
+    if isinstance(doctrine_append_only, dict):
+        issues.extend(
+            _validate_table(
+                rel,
+                "doctrine.append-only",
+                doctrine_append_only,
+                {"grandfather-commits": "optional-string-list"},
             )
         )
     doctor = data.get("doctor")
@@ -789,20 +802,20 @@ def check_canonical_ownership(project_root: Path) -> list[Issue]:
 
 def _modified_commits(project_root: Path, path: Path) -> list[str]:
     rel = _rel(path, project_root)
-    # No `--follow`: per Protocol § 4.1 + § 4.2, journal entries and doctrine
-    # entries are append-only / immutable in place — they never rename. Tracing
-    # renames false-positives when an entry's content is byte-identical to
-    # another file (e.g. an auto-drafted entry whose placeholders weren't
-    # substituted is identical to the template; git's rename heuristic then
-    # traces "modifications" back to commits that touched the template).
-    # See cortex#103 for the canonical repro.
-    result = subprocess.run(
+    # Find the file's introduction commit to use as the range baseline.
+    # The append-only invariant is "no changes between introduction and HEAD",
+    # so modifications before the file existed can never be violations.
+    # --follow is safe here: we are finding where the file *first appeared*,
+    # not tracing modifications — the M+--follow false-positive (cortex#103)
+    # does not apply to the A filter.
+    intro_result = subprocess.run(
         [
             "git",
             "-C",
             str(project_root),
             "log",
-            "--diff-filter=M",
+            "--diff-filter=A",
+            "--follow",
             "--format=%H",
             "--",
             rel,
@@ -811,6 +824,29 @@ def _modified_commits(project_root: Path, path: Path) -> list[str]:
         capture_output=True,
         text=True,
     )
+    intro_shas = [line.strip() for line in intro_result.stdout.splitlines() if line.strip()]
+    # git log is newest-first; the oldest A commit is the true introduction.
+    intro_sha = intro_shas[-1] if intro_shas else None
+
+    # No `--follow` for M commits: per Protocol § 4.1 + § 4.2, journal entries
+    # and doctrine entries are append-only / immutable in place — they never
+    # rename. Tracing renames false-positives when an entry's content is
+    # byte-identical to another file (e.g. an auto-drafted entry whose
+    # placeholders weren't substituted is identical to the template; git's
+    # rename heuristic then traces "modifications" back to commits that touched
+    # the template). See cortex#103 for the canonical repro.
+    cmd = [
+        "git",
+        "-C",
+        str(project_root),
+        "log",
+        "--diff-filter=M",
+        "--format=%H",
+    ]
+    if intro_sha:
+        cmd.append(f"{intro_sha}..HEAD")
+    cmd.extend(["--", rel])
+    result = subprocess.run(cmd, check=False, capture_output=True, text=True)
     if result.returncode != 0:
         return []
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
@@ -1481,6 +1517,33 @@ def _truncate(text: str, max_len: int) -> str:
     if len(collapsed) <= max_len:
         return collapsed
     return collapsed[: max_len - 1].rstrip() + "…"
+
+
+def _doctrine_append_only_grandfather_commits(project_root: Path) -> set[str]:
+    """Read ``[doctrine.append-only] grandfather-commits`` from config.toml.
+
+    Returns a set of SHA prefixes (any length) that the append-only check
+    should skip.  Adding a SHA here must come with a same-commit Journal entry
+    explaining why — the config is the acknowledgement, the journal entry is
+    the audit trail.
+    """
+    path = project_root / ".cortex" / "config.toml"
+    if not path.exists():
+        return set()
+    try:
+        data = tomllib.loads(path.read_text())
+    except (OSError, tomllib.TOMLDecodeError):
+        return set()
+    doctrine = data.get("doctrine")
+    if not isinstance(doctrine, dict):
+        return set()
+    append_only = doctrine.get("append-only")
+    if not isinstance(append_only, dict):
+        return set()
+    commits = append_only.get("grandfather-commits", [])
+    if not isinstance(commits, list):
+        return set()
+    return {c for c in commits if isinstance(c, str)}
 
 
 def _doctrine_0007_allowed_root_files(project_root: Path) -> set[str]:

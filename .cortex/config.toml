@@ -12,3 +12,10 @@ candidate_patterns = [
   "doctrine candidate",
   "this is load-bearing",
 ]
+
+[doctrine.append-only]
+# 866be5764448 backfilled Load-priority: always onto doctrines 0001–0004 before
+# the immutable-Doctrine invariant existed (SPEC v0.3.0-dev, 2026-04-17).
+# The violation is real but pre-invariant; grandfathered here so cortex doctor
+# stops producing unfixable noise. See journal/2026-05-07-doctrine-append-only-grandfather.md.
+grandfather-commits = ["866be5764448becf2973793cb18bc89aa4a2dff6"]
