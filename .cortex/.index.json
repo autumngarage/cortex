@@ -1,6 +1,6 @@
 {
   "spec": "0.5.0",
-  "generated": "2026-05-06T08:53:12-04:00",
+  "generated": "2026-05-06T14:02:25-04:00",
   "candidates": [
     {
       "id": "2026-04-17-competitive-positioning-and-claude-code-risk",
@@ -187,6 +187,15 @@
       "source": ".cortex/journal/2026-05-05-conductor-cortex-install-baseline-merged.md",
       "type": "decision",
       "last_touched": "2026-05-05",
+      "tags": [],
+      "supersedes": null,
+      "promoted_to": null
+    },
+    {
+      "id": "2026-05-06-v10-doctrine-review-all-7-hold-no-supersedes",
+      "source": ".cortex/journal/2026-05-06-v10-doctrine-review-all-7-hold-no-supersedes.md",
+      "type": "decision",
+      "last_touched": "2026-05-06",
       "tags": [],
       "supersedes": null,
       "promoted_to": null
