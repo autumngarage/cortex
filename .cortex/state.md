@@ -1,16 +1,16 @@
 ---
-Generated: 2026-05-06T14:29:31-04:00
+Generated: 2026-05-06T15:21:22-04:00
 Generator: cortex refresh-state v0.9.0
 Sources:
-  - HEAD sha: 690c4653c082df2cf522bc30ee1a7efb11e5588b
+  - HEAD sha: 899ef57f29d64b0ee85462d1ac976ce2629078c8
   - .cortex/plans/*.md (10 files)
-  - .cortex/journal/*.md (67 entries, 2026-04-17..2026-05-06)
+  - .cortex/journal/*.md (68 entries, 2026-04-17..2026-05-06)
   - .cortex/doctrine/*.md (7 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
   - SPEC version: 0.5.0
   - pyproject.toml: 0.9.0 + cortex package version: 0.9.0
-Corpus: 67 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 68 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -48,7 +48,7 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 
 ## Active plans
 
-- `cortex-v1` — Ship Cortex v1.0; Goal-hash `9e961737`; 93% complete (43/46 checkboxes)
+- `cortex-v1` — Ship Cortex v1.0; Goal-hash `9e961737`; 96% complete (44/46 checkboxes)
 
 ## Shipped recently
 
@@ -79,6 +79,7 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 - **2026-05-06** — PR #153 merged — docs(journal): record v0.9.0 release — three-target dogfood gate exit (`.cortex/journal/2026-05-06-pr-merged-1328.md`, Type: pr-merged)
 - **2026-05-06** — PR #154 merged — docs(plan): tick v0.9.0 release checkbox; reframe state as v1.0.0-active (`.cortex/journal/2026-05-06-pr-merged-1355.md`, Type: pr-merged)
 - **2026-05-06** — PR #158 merged — chore(cli): polish help text and error messages for v1.0 adoption-friction reduction (`.cortex/journal/2026-05-06-pr-merged-1420.md`, Type: pr-merged)
+- **2026-05-06** — PR #159 merged — docs(plan): close pre-1.0 compat audit + tick v1 swarm checkboxes (`.cortex/journal/2026-05-06-pr-merged-1433.md`, Type: pr-merged)
 
 ## Stale-now / handle-later
 
