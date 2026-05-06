@@ -76,7 +76,11 @@ def _format_issue(issue: Issue) -> str:
     "--strict",
     is_flag=True,
     default=False,
-    help="Exit 1 when any warnings are present (in addition to errors).",
+    help=(
+        "Exit with non-zero status if any warnings are present, in addition to errors. "
+        "Use in CI / merge gates. Without this flag, warnings are reported but exit "
+        "code stays 0 unless errors exist."
+    ),
 )
 @click.option(
     "--json",
@@ -142,6 +146,8 @@ def doctor_command(
     if issues:
         summary = f"{len(errors)} error{'s' if len(errors) != 1 else ''}, {len(warnings)} warning{'s' if len(warnings) != 1 else ''}"
         click.echo(f"\ncortex doctor: {summary}", err=bool(errors))
+        if strict and warnings and not errors:
+            click.echo("(strict mode: exiting non-zero because warnings exist)")
     else:
         click.echo(f"cortex doctor: .cortex/ looks healthy ({target_path})")
 

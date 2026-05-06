@@ -21,9 +21,10 @@ def scaffolded_project(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _run_doctor(project: Path) -> tuple[int, str, str]:
+def _run_doctor(project: Path, extra_args: list[str] | None = None) -> tuple[int, str, str]:
     runner = CliRunner()
-    result = runner.invoke(cli, ["doctor", "--path", str(project)])
+    args = ["doctor", "--path", str(project)] + (extra_args or [])
+    result = runner.invoke(cli, args)
     # Click 8.2+ separates stdout/stderr; we flatten to a single combined
     # stream for substring assertions and keep `result.output` (stdout) for
     # positive checks like "looks healthy".
@@ -506,3 +507,54 @@ def test_leading_constraint_keyword_in_bullet_still_flagged(
     exit_code, stdout, _ = _run_doctor(scaffolded_project)
     assert exit_code == 0
     assert "scope qualifier" in stdout
+
+
+# ---------------------------------------------------------------------------
+# --strict flag: exit-code semantics
+# ---------------------------------------------------------------------------
+
+
+def test_strict_clean_project_exits_0(scaffolded_project: Path) -> None:
+    exit_code, stdout, _ = _run_doctor(scaffolded_project, ["--strict"])
+    assert exit_code == 0
+    assert "looks healthy" in stdout
+
+
+def test_strict_with_warnings_exits_1(scaffolded_project: Path) -> None:
+    # An invalid journal filename produces a warning without an error.
+    (scaffolded_project / ".cortex" / "journal" / "not-a-valid-name.md").write_text("# Title\n")
+    exit_code, _stdout, combined = _run_doctor(scaffolded_project, ["--strict"])
+    assert exit_code == 1
+    assert "strict mode" in combined
+    assert "warning" in combined.lower()
+
+
+def test_strict_with_errors_exits_1(scaffolded_project: Path) -> None:
+    # Errors always produce exit 1; --strict doesn't change that.
+    (scaffolded_project / ".cortex" / "SPEC_VERSION").unlink()
+    exit_code, _stdout, stderr = _run_doctor(scaffolded_project, ["--strict"])
+    assert exit_code == 1
+    assert "SPEC_VERSION" in stderr
+
+
+def test_non_strict_with_warnings_exits_0(scaffolded_project: Path) -> None:
+    # Without --strict, warnings do not affect the exit code.
+    (scaffolded_project / ".cortex" / "journal" / "not-a-valid-name.md").write_text("# Title\n")
+    exit_code, stdout, _ = _run_doctor(scaffolded_project)
+    assert exit_code == 0
+    assert "Journal filename" in stdout
+
+
+def test_non_strict_with_errors_exits_1(scaffolded_project: Path) -> None:
+    # Sanity check: errors exit 1 without --strict too.
+    (scaffolded_project / ".cortex" / "SPEC_VERSION").unlink()
+    exit_code, _stdout, stderr = _run_doctor(scaffolded_project)
+    assert exit_code == 1
+    assert "SPEC_VERSION" in stderr
+
+
+def test_strict_help_text_present() -> None:
+    runner = CliRunner()
+    result = runner.invoke(cli, ["doctor", "--help"])
+    assert "--strict" in result.output
+    assert "CI" in result.output or "merge" in result.output
