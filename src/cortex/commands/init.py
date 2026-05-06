@@ -283,6 +283,30 @@ _GITIGNORE_ENTRIES: tuple[str, ...] = (
 # published alongside their code when they share the project.
 _GITIGNORE_LOCAL_ONLY_ENTRY: str = ".cortex/"
 
+# Scaffolded `.cortex/config.toml` stub. Fully commented so Slice-3 schema
+# changes (e.g. a new `github_releases` key) don't conflict with this stub.
+# The full schema lives at docs/config-reference.md.
+_CONFIG_TOML_STUB: str = """\
+# .cortex/config.toml — Cortex per-project configuration.
+#
+# This file is optional. The full schema is documented at:
+#   https://github.com/autumngarage/cortex/blob/main/docs/config-reference.md
+#
+# Common section: [audit-instructions]
+# Use this to drive `cortex doctor --audit-instructions` against external
+# claims (install commands, version references, sibling-repo paths) in
+# files like CLAUDE.md / README.md.
+#
+# Example shapes are documented in docs/config-reference.md. Uncomment
+# and tailor the fields below to this project's distribution surface.
+
+# [audit-instructions]
+# scan_files = ["CLAUDE.md", "AGENTS.md", "README.md"]
+# siblings = []
+# github_repos = []
+# # homebrew_tap = "<org>/<tap-formula>"
+"""
+
 
 def _append_imports(target_file: Path) -> bool:
     """Append the Cortex import block at the end of `target_file`.
@@ -585,7 +609,7 @@ def _absorb_plans(
     return written
 
 
-def _print_scan_summary(scan: ScanResult) -> None:
+def _print_scan_summary(scan: ScanResult, *, assume_yes: bool = False) -> None:
     """Render the one-screen scan summary before any prompts fire.
 
     The block is grouped by category in a fixed order so users developing
@@ -650,7 +674,13 @@ def _print_scan_summary(scan: ScanResult) -> None:
 
     unknown = scan.by_category("unknown")
     if unknown:
-        click.echo("  Unknown pattern (will prompt for classification):")
+        if assume_yes:
+            click.echo(
+                "  Unknown pattern (auto-classified as map_ref per --yes;"
+                " re-classify via .cortex/.discover.toml):"
+            )
+        else:
+            click.echo("  Unknown pattern (will prompt for classification):")
         for f in unknown:
             click.echo(f"    {f.relative}")
         click.echo("")
@@ -947,7 +977,7 @@ def init_command(
     # On non-TTY without `--yes` we still print the summary (it's information,
     # not interaction) but skip the "Continue?" prompt and downstream imports.
     scan = scan_project(target_path)
-    _print_scan_summary(scan)
+    _print_scan_summary(scan, assume_yes=assume_yes)
     will_prompt = _should_prompt(yes=assume_yes)
     if will_prompt and not click.confirm("Continue?", default=True):
         click.echo("Aborted by user — no changes made.")
@@ -986,6 +1016,12 @@ def init_command(
     # 4. subdirectories with .gitkeep (.gitkeep is scaffold; empty dirs stay empty)
     for sub in SCAFFOLD_SUBDIRS:
         _ensure_subdir(cortex_dir / sub)
+
+    # 4b. config.toml stub (scaffold; write only when absent so a user who has
+    # already customised their config doesn't get it overwritten on --force).
+    config_toml = cortex_dir / "config.toml"
+    if not config_toml.exists():
+        config_toml.write_text(_CONFIG_TOML_STUB)
 
     # 5. map.md and state.md stubs (scaffold files; overwrite). Generator
     # string is derived from `cortex.__version__` so the stubs' seven-field
@@ -1244,6 +1280,10 @@ def init_command(
             "Import `@.cortex/protocol.md` and `@.cortex/state.md` into your AGENTS.md or CLAUDE.md."
         )
     next_steps.append("Run `cortex doctor` to validate the scaffold against SPEC.md.")
+    next_steps.append(
+        "(Optional) Configure .cortex/config.toml — uncomment [audit-instructions] to enable"
+        " `cortex doctor --audit-instructions` for stale-claim detection across your docs."
+    )
 
     click.echo("Next steps:")
     for idx, step in enumerate(next_steps, start=1):
