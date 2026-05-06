@@ -16,6 +16,7 @@ from cortex import SUPPORTED_PROTOCOL_VERSIONS, SUPPORTED_SPEC_VERSIONS, __versi
 from cortex.commands.doctor import doctor_command
 from cortex.commands.grep import grep_command
 from cortex.commands.init import init_command
+from cortex.commands.install_brief import install_brief_command
 from cortex.commands.journal import journal_group
 from cortex.commands.manifest import manifest_command
 from cortex.commands.migrate_state import migrate_state_command
@@ -94,6 +95,7 @@ def version_command() -> None:
 
 
 cli.add_command(init_command)
+cli.add_command(install_brief_command)
 cli.add_command(doctor_command)
 cli.add_command(manifest_command)
 cli.add_command(migrate_state_command)

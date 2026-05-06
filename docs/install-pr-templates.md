@@ -6,6 +6,63 @@ Use this copy when opening Cortex install PRs on sibling projects. It positions 
 
 Cortex is a protocol for agent project memory that treats your exact git repo as the memory store. Instead of introducing a new database, daemon, or vector index, it defines a directory of structured Markdown files (`.cortex/`) that agents evolve alongside code. It is grepable, diffable, and auditable with existing tools, adding the missing agent memory convention without replacing your workspace.
 
+## Generating an install brief
+
+Use `cortex install-brief <target-path>` to generate a self-contained brief
+for delegating an install to an agent. The command detects the target's
+ecosystem (Python / Swift / Rust / Go / Node / Ruby), distribution shape
+(Homebrew tap, PaaS, or plain GitHub releases), Touchstone-managed paths, and
+sibling repos with Cortex already installed:
+
+```bash
+cortex install-brief ~/repos/foo --output /tmp/install-foo.md
+# Hand to an agent:
+conductor exec --with codex --brief-file /tmp/install-foo.md
+```
+
+Flags:
+- `--output PATH` — write to a file instead of stdout (default: stdout).
+- `--no-references` — omit the five canonical prior-install PR references.
+
+## Merging the install PR
+
+Install PRs open on the *target* repository, not on the Cortex repo. The merge
+path matters because Conductor review runs inside the target's own
+`scripts/merge-pr.sh` gate — it caught a real stale-claim bug on
+autumngarage/touchstone#151 (filed upstream as cortex#123).
+
+**Preferred path — full Conductor review:**
+
+From inside the target repo's working tree:
+
+```bash
+cd ~/repos/<target>
+bash scripts/merge-pr.sh <pr-number>
+```
+
+This invokes Touchstone + Conductor review (where configured) and is the
+documented merge gate for every Autumn Garage sibling. When the review is
+clean the PR is squash-merged and the branch is deleted automatically.
+
+**Fast path — bypasses Conductor review:**
+
+```bash
+gh pr merge <pr-number> --repo <owner>/<repo> --squash --delete-branch
+```
+
+Use this only when the target has no `scripts/merge-pr.sh` **or** when the PR
+is provably metadata-only (zero changes to `src/`, no logic diff — only
+`.cortex/`, `.gitignore`, `CLAUDE.md`, `AGENTS.md`).
+
+**Why this matters:** The v0.9.0 install pass demonstrated the asymmetry
+clearly. conductor#178 and touchstone#151 merged via `merge-pr.sh` with
+Conductor review; sentinel#112 and vanguard#190 merged via the fast path
+(direct `gh pr merge --squash`). Conductor review on touchstone caught a
+stale-claim drift that the fast-path merges couldn't see. As the dogfood pool
+grows past five targets, skipping the reviewed path becomes a systematic
+safety-net gap, not an isolated shortcut. This section documents the
+trade-off so the human or agent doing the merge knows which path they're on.
+
 ## Shared Install PR Body
 
 ```markdown
