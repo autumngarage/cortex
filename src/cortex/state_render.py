@@ -8,6 +8,7 @@ fixtures without mocks.
 
 from __future__ import annotations
 
+import hashlib
 import re
 import subprocess
 from dataclasses import dataclass, field
@@ -54,6 +55,7 @@ class StateInputs:
     case_studies: list[SourceFile] = field(default_factory=list)
     omitted: list[str] = field(default_factory=list)
     incomplete: list[str] = field(default_factory=list)
+    source_hashes: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -121,6 +123,12 @@ def build_state_inputs(
     if not assume_index_present and not (cortex_dir / ".index.json").exists():
         omitted.append(".cortex/.index.json — absent; promotion queue index ships in a later lifecycle tier")
 
+    plans = _read_plan_sources(project_root, cortex_dir / "plans", incomplete)
+    journal = _read_tree(project_root, cortex_dir / "journal", "*.md", incomplete)
+    doctrine = _read_tree(project_root, cortex_dir / "doctrine", "*.md", incomplete)
+    templates = _read_tree(project_root, cortex_dir / "templates", "*.md", incomplete)
+    case_studies = _read_tree(project_root, project_root / "docs" / "case-studies", "*.md", incomplete)
+
     return StateInputs(
         project_root=project_root,
         generated=(
@@ -133,13 +141,14 @@ def build_state_inputs(
         project_manifest=project_manifest,
         package_version=__version__,
         previous_state=previous_state,
-        plans=_read_plan_sources(project_root, cortex_dir / "plans", incomplete),
-        journal=_read_tree(project_root, cortex_dir / "journal", "*.md", incomplete),
-        doctrine=_read_tree(project_root, cortex_dir / "doctrine", "*.md", incomplete),
-        templates=_read_tree(project_root, cortex_dir / "templates", "*.md", incomplete),
-        case_studies=_read_tree(project_root, project_root / "docs" / "case-studies", "*.md", incomplete),
+        plans=plans,
+        journal=journal,
+        doctrine=doctrine,
+        templates=templates,
+        case_studies=case_studies,
         omitted=omitted,
         incomplete=incomplete,
+        source_hashes=_compute_source_hashes(plans, journal, doctrine, templates, case_studies),
     )
 
 
@@ -183,12 +192,17 @@ def _render_header(inputs: StateInputs, incomplete: list[str]) -> list[str]:
         f"{len(inputs.doctrine)} Doctrine entries, {len(inputs.templates)} Templates, "
         f"{len(inputs.case_studies)} Case studies"
     )
+    sources_hash_lines = [
+        "Sources-hash:",
+        *[f"  {path}: {digest}" for path, digest in sorted(inputs.source_hashes.items())],
+    ] if inputs.source_hashes else []
     return [
         "---",
         f"Generated: {inputs.generated}",
         f"Generator: cortex refresh-state v{inputs.package_version}",
         "Sources:",
         *[f"  - {line}" for line in sources],
+        *sources_hash_lines,
         f"Corpus: {corpus}",
         "Omitted:",
         *(_yaml_list(inputs.omitted) if inputs.omitted else ["  []"]),
@@ -470,3 +484,12 @@ def _rel(project_root: Path, path: Path) -> str:
         return path.relative_to(project_root).as_posix()
     except ValueError:
         return path.as_posix()
+
+
+def _compute_source_hashes(*source_lists: list[SourceFile]) -> dict[str, str]:
+    """SHA-256 each source file's text content, keyed by relative path."""
+    hashes: dict[str, str] = {}
+    for sources in source_lists:
+        for sf in sources:
+            hashes[sf.path] = hashlib.sha256(sf.text.encode()).hexdigest()
+    return hashes
