@@ -23,6 +23,30 @@ conductor exec --with codex --brief-file /tmp/install-foo.md
 Flags:
 - `--output PATH` — write to a file instead of stdout (default: stdout).
 - `--no-references` — omit the five canonical prior-install PR references.
+- `--closes N,N,...` — comma-separated issue numbers to track. When provided, the
+  brief instructs the delegate to write **two** files instead of one:
+  - `.cortex/journal/<date>-cortex-install-baseline.md` — append-only narrative.
+    Issue references appear as `Refs:` in frontmatter, not as `[ ]` checkboxes
+    (Journal is append-only per Protocol § 4.1 — boxes that can never flip are
+    permanent stale claims).
+  - `.cortex/plans/cortex-install-followups.md` — mutable plan with `Status: active`
+    and `[ ]` checkboxes per tracked issue. Tracking lives here; the journal
+    cites it via `Cites:`.
+
+## Dual-artifact convention (installs with follow-up tracking)
+
+When `cortex install-brief --closes <issues>` is used, the brief enforces the
+layer contract:
+
+- **Journal** = append-only record. Never evolves after authoring. Issue
+  references appear as `Refs: cortex#N` in frontmatter — not as `[ ]` checkboxes.
+  Putting `[ ]` in a journal entry creates a permanent stale claim the moment the
+  upstream issue closes, because the Journal is append-only (Protocol § 4.1).
+- **Plan** = mutable, checkbox-driven. All `[ ]` items live here. The plan
+  transitions to `Status: shipped` when all referenced issues are resolved.
+
+The journal entry's `Cites:` field links to the plan so readers find the tracking
+from either artifact. The plan's `Cites:` field links back to the journal entry.
 
 ## Merging the install PR
 
