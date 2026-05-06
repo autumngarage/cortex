@@ -1,16 +1,16 @@
 ---
-Generated: 2026-05-06T13:15:47-04:00
-Generator: cortex refresh-state v0.8.3
+Generated: 2026-05-06T13:24:02-04:00
+Generator: cortex refresh-state v0.9.0
 Sources:
-  - HEAD sha: 8cebe3c71d4f50b62c01658640bfb18e0a89cff9
+  - HEAD sha: 19c5277dd191fba895e3378d4afeaefb68c9248e
   - .cortex/plans/*.md (10 files)
-  - .cortex/journal/*.md (60 entries, 2026-04-17..2026-05-06)
+  - .cortex/journal/*.md (62 entries, 2026-04-17..2026-05-06)
   - .cortex/doctrine/*.md (7 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
   - SPEC version: 0.5.0
-  - pyproject.toml: 0.8.3 + cortex package version: 0.8.3
-Corpus: 60 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
+  - pyproject.toml: 0.9.0 + cortex package version: 0.9.0
+Corpus: 62 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -70,10 +70,12 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 - **2026-05-05** — PR #122 merged — docs: record conductor cortex install (`.cortex/journal/2026-05-05-pr-merged-0924.md`, Type: pr-merged)
 - **2026-05-05** — PR #126 merged — docs: record touchstone cortex install (`.cortex/journal/2026-05-05-pr-merged-0956.md`, Type: pr-merged)
 - **2026-05-06** — Cortex v0.8.3 released — installable baseline for vesper dogfood (`.cortex/journal/2026-05-06-cortex-v083-released-installable-baseline-for-vesp.md`, Type: release)
+- **2026-05-06** — Cortex v0.9.0 released — three-target dogfood gate exit (`.cortex/journal/2026-05-06-cortex-v090-released-three-target-dogfood-gate-exi.md`, Type: release)
 - **2026-05-06** — PR #133 merged — docs(journal): record v0.8.3 release (`.cortex/journal/2026-05-06-pr-merged-0810.md`, Type: pr-merged)
 - **2026-05-06** — PR #144 merged — docs(plan): tick v0.9.0 vesper install checkbox (`.cortex/journal/2026-05-06-pr-merged-0835.md`, Type: pr-merged)
 - **2026-05-06** — PR #149 merged — docs(journal): record v0.9.0 retrieval validation findings (`.cortex/journal/2026-05-06-pr-merged-1251.md`, Type: pr-merged)
 - **2026-05-06** — PR #150 merged — test(acceptance): fresh-clone session-start fixture covers manifest/next/doctor (`.cortex/journal/2026-05-06-pr-merged-1311.md`, Type: pr-merged)
+- **2026-05-06** — PR #152 merged — docs(plan): close v0.9.0 dogfood gate with behavioral exit-bar review (`.cortex/journal/2026-05-06-pr-merged-1319.md`, Type: pr-merged)
 
 ## Stale-now / handle-later
 
