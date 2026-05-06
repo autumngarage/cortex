@@ -62,6 +62,14 @@ def _status(project: Path, *extra: str) -> Result:
     return result
 
 
+def test_empty_plans_produces_informative_message(tmp_path: Path) -> None:
+    _init_cortex(tmp_path)
+    result = _status(tmp_path)
+    assert result.output.strip(), "expected non-empty stdout for empty plans"
+    assert "no active plans" in result.output
+    assert "cortex plan spawn" in result.output
+
+
 def test_zero_work_items_reports_zero_completion_and_not_stale(tmp_path: Path) -> None:
     _init_cortex(tmp_path)
     _write_plan(tmp_path, "zero", work_items="")

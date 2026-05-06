@@ -53,6 +53,11 @@ def run_plan_status(project_root: Path, *, as_json: bool, stale_only: bool) -> N
 
     warn_if_incompatible(cortex_dir)
     plans = collect_plan_statuses(project_root)
+
+    if not plans and not as_json:
+        click.echo("no active plans — create one with `cortex plan spawn <slug>`")
+        return
+
     if stale_only:
         plans = [plan for plan in plans if plan.stale]
 

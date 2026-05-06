@@ -95,6 +95,21 @@ def retrieve_index_exists(project_root: Path) -> bool:
     return retrieve_index_path(project_root).exists()
 
 
+def get_indexed_chunk_count(project_root: Path) -> int:
+    """Return total indexed chunk count, or 0 if the index does not exist."""
+    index_path = retrieve_index_path(project_root)
+    if not index_path.exists():
+        return 0
+    try:
+        conn = sqlite3.connect(index_path)
+        try:
+            return int(conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0])
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError:
+        return 0
+
+
 def rebuild_index(project_root: Path) -> RebuildResult:
     """Incrementally rebuild the retrieve index and atomically publish it."""
 
