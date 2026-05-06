@@ -75,6 +75,23 @@ STATE_SOURCE_FILES = (
     "build.gradle.kts",
 )
 
+# PR trailer enforcement (--audit-pr-trailers).
+# Matches any bare #NNN reference anywhere in text.
+_PR_TRAILER_ISSUE_REF_RE = re.compile(r"#(\d+)")
+# Close trailers: must start at beginning of a line (MULTILINE).
+# Accepts Closes-issue:, Closes:, Fixes: — all case-insensitive.
+_CLOSE_TRAILER_RE = re.compile(
+    r"^(?:Closes-issue|Closes|Fixes):\s+#(\d+)",
+    re.MULTILINE | re.IGNORECASE,
+)
+# Refs: #N — explicit opt-out: mention but do not close.
+_REFS_TRAILER_RE = re.compile(
+    r"^Refs:\s+#(\d+)",
+    re.MULTILINE | re.IGNORECASE,
+)
+# Remote base refs tried in order when scanning unique branch commits.
+_ORIGIN_BASE_REFS = ("origin/main", "origin/master")
+
 
 def run_plain_checks(project_root: Path) -> list[Issue]:
     """Checks that run on plain `cortex doctor`."""
@@ -145,6 +162,12 @@ def run_audit_checks(project_root: Path, *, since_days: int = DEFAULT_WINDOW_DAY
     issues.extend(check_t1_4_deletions(project_root, since_days=since_days))
     issues.extend(check_config_toml_schema(project_root))
     issues.extend(check_retention_visibility(project_root))
+    return sorted(issues, key=lambda i: (i.severity.value, i.path, i.message))
+
+
+def run_pr_trailer_checks(project_root: Path) -> list[Issue]:
+    """Checks run behind `cortex doctor --audit-pr-trailers`."""
+    issues = check_pr_trailers(project_root)
     return sorted(issues, key=lambda i: (i.severity.value, i.path, i.message))
 
 
@@ -609,6 +632,106 @@ def check_retention_visibility(project_root: Path) -> list[Issue]:
                 )
             )
     return issues
+
+
+def _branch_commit_messages(project_root: Path) -> list[str] | None:
+    """Return full commit messages for commits unique to the current branch.
+
+    Tries origin/main then origin/master as the base ref.
+    Returns None when git is unavailable or no remote base ref exists locally.
+    Returns [] when the branch has no unique commits (e.g. already on main).
+    """
+    for base in _ORIGIN_BASE_REFS:
+        check = subprocess.run(
+            ["git", "-C", str(project_root), "rev-parse", "--verify", base],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if check.returncode != 0:
+            continue
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "log",
+                f"{base}..HEAD",
+                "--format=%B%x00",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            return [m.strip() for m in result.stdout.split("\x00") if m.strip()]
+    return None
+
+
+def _pr_view_texts(project_root: Path) -> tuple[str, str] | None:
+    """Return (title, body) for the open PR on this branch via `gh pr view`.
+
+    Returns None when `gh` is unavailable, there is no open PR, or parsing
+    fails. Callers treat None as "no PR data" and skip the PR-text scan.
+    """
+    result = subprocess.run(
+        ["gh", "pr", "view", "--json", "title,body"],
+        check=False,
+        capture_output=True,
+        text=True,
+        cwd=str(project_root),
+    )
+    if result.returncode != 0:
+        return None
+    try:
+        data = json.loads(result.stdout)
+        return (data.get("title") or "", data.get("body") or "")
+    except (json.JSONDecodeError, AttributeError):
+        return None
+
+
+def check_pr_trailers(project_root: Path) -> list[Issue]:
+    """Warn when branch commits reference issues without close trailers.
+
+    Walks commits unique to the current branch (origin/main..HEAD), plus the
+    open PR title and body (when `gh` is available), and extracts every #NNN
+    reference. For each referenced issue, verifies one of these trailers exists
+    somewhere in the branch's commit messages:
+
+        Closes-issue: #N   (cortex convention)
+        Closes: #N
+        Fixes: #N
+
+    `Refs: #N` is an explicit opt-out — it marks a mention as documentation-
+    only and suppresses the warning for that issue number.
+
+    Returns [] silently when the project is not a git repo, has no
+    origin/main or origin/master ref, or has no commits unique to the branch.
+    """
+    messages = _branch_commit_messages(project_root)
+    if messages is None or not messages:
+        return []
+
+    all_commit_text = "\n".join(messages)
+    pr_info = _pr_view_texts(project_root)
+    pr_text = f"{pr_info[0]}\n{pr_info[1]}" if pr_info else ""
+    combined = f"{all_commit_text}\n{pr_text}"
+
+    referenced: set[int] = {int(n) for n in _PR_TRAILER_ISSUE_REF_RE.findall(combined)}
+    closed: set[int] = {int(n) for n in _CLOSE_TRAILER_RE.findall(combined)}
+    opted_out: set[int] = {int(n) for n in _REFS_TRAILER_RE.findall(combined)}
+
+    missing = sorted(referenced - closed - opted_out)
+    return [
+        Issue(
+            Severity.WARNING,
+            "",
+            f"issue #{num} referenced on this branch but has no "
+            "Closes-issue: / Closes: / Fixes: trailer "
+            "(add to a commit body, or use `Refs: #N` to explicitly skip auto-close)",
+        )
+        for num in missing
+    ]
 
 
 def check_stale_plan_checkboxes(
