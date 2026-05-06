@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
 
+import cortex
 from cortex.cli import cli
 from cortex.commands.init import init_command
 from cortex.goal_hash import normalize_goal_hash
@@ -558,3 +561,101 @@ def test_strict_help_text_present() -> None:
     result = runner.invoke(cli, ["doctor", "--help"])
     assert "--strict" in result.output
     assert "CI" in result.output or "merge" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Generator-version drift check (cortex#183)
+# ---------------------------------------------------------------------------
+
+
+def _write_state_with_generator(project: Path, generator_line: str) -> None:
+    """Overwrite state.md frontmatter with a specific Generator: value."""
+    state = project / ".cortex" / "state.md"
+    text = state.read_text()
+    # Replace the existing Generator: line (or insert after Generated: if absent).
+    if "Generator:" in text:
+        new_text = re.sub(r"(?m)^Generator:.*$", f"Generator: {generator_line}", text)
+    else:
+        new_text = text.replace(
+            "Generated:", f"Generator: {generator_line}\nGenerated:"
+        )
+    state.write_text(new_text)
+
+
+def test_generator_matches_current_cli_no_warning(scaffolded_project: Path) -> None:
+    _write_state_with_generator(scaffolded_project, f"cortex refresh-state v{cortex.__version__}")
+    with patch.object(cortex, "__version__", cortex.__version__):
+        exit_code, _stdout, combined = _run_doctor(scaffolded_project)
+    assert exit_code == 0
+    assert "Generator was" not in combined
+
+
+def test_generator_one_minor_older_warns(scaffolded_project: Path) -> None:
+    _write_state_with_generator(scaffolded_project, "cortex refresh-state v0.8.3")
+    with patch.object(cortex, "__version__", "1.0.0"):
+        exit_code, _stdout, combined = _run_doctor(scaffolded_project)
+    assert exit_code == 0
+    assert "Generator was" in combined
+    assert "v0.8.3" in combined
+
+
+def test_generator_one_major_older_warns(scaffolded_project: Path) -> None:
+    _write_state_with_generator(scaffolded_project, "cortex refresh-state v0.5.0")
+    with patch.object(cortex, "__version__", "1.0.0"):
+        exit_code, _stdout, combined = _run_doctor(scaffolded_project)
+    assert exit_code == 0
+    assert "Generator was" in combined
+
+
+def test_generator_one_patch_older_silent(scaffolded_project: Path) -> None:
+    _write_state_with_generator(scaffolded_project, "cortex refresh-state v1.1.0")
+    with patch.object(cortex, "__version__", "1.1.1"):
+        exit_code, _stdout, combined = _run_doctor(scaffolded_project)
+    assert exit_code == 0
+    assert "Generator was" not in combined
+
+
+def test_generator_missing_field_silent(tmp_path: Path) -> None:
+    # A generated layer without a Generator: field should produce no drift warning.
+    # Test the check function directly to avoid tripping the seven-fields ERROR
+    # (which also fires when Generator: is absent from state.md).
+    from cortex.doctor_checks import check_generator_version_drift
+
+    cortex_dir = tmp_path / ".cortex"
+    cortex_dir.mkdir()
+    state = cortex_dir / "state.md"
+    state.write_text(
+        "---\n"
+        "Generated: 2026-01-01T00:00:00+00:00\n"
+        "Sources:\n  - HEAD sha: abc1234\n"
+        "Corpus: 0 Journal entries\n"
+        "Omitted: []\n"
+        "Incomplete: []\n"
+        "Conflicts-preserved: []\n"
+        "---\n\n# State\n"
+    )
+    with patch.object(cortex, "__version__", "1.1.0"):
+        issues = check_generator_version_drift(tmp_path)
+    assert issues == []
+
+
+def test_generator_map_md_drifted_warns(scaffolded_project: Path) -> None:
+    # Create a map.md with a drifted Generator version.
+    map_md = scaffolded_project / ".cortex" / "map.md"
+    map_md.write_text(
+        "---\n"
+        "Generated: 2026-01-01T00:00:00+00:00\n"
+        "Generator: cortex refresh-map v0.8.3\n"
+        "Sources:\n"
+        "  - HEAD sha: abc1234\n"
+        "Corpus: 0 Journal entries\n"
+        "Omitted: []\n"
+        "Incomplete: []\n"
+        "Conflicts-preserved: []\n"
+        "---\n\n# Map\n"
+    )
+    with patch.object(cortex, "__version__", "1.1.0"):
+        exit_code, _stdout, combined = _run_doctor(scaffolded_project)
+    assert exit_code == 0
+    assert "Generator was" in combined
+    assert "map.md" in combined

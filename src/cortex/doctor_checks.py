@@ -18,6 +18,8 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from packaging.version import InvalidVersion, Version
+
 from cortex.audit import (
     DEFAULT_WINDOW_DAYS,
     JOURNAL_MATCH_WINDOW_HOURS,
@@ -101,6 +103,7 @@ def run_plain_checks(project_root: Path) -> list[Issue]:
         check_immutable_doctrine,
         check_cli_less_fallback,
         check_generated_layers,
+        check_generator_version_drift,
         check_canonical_ownership,
         check_semantic_retrieval_runtime,
         check_stale_plan_checkboxes,
@@ -957,6 +960,62 @@ def check_state_journal_staleness(
             f"({latest.date().isoformat()}); rerun `cortex refresh-state`",
         )
     ]
+
+
+_GENERATOR_VERSION_RE = re.compile(r"\bv(\d+\.\d+(?:\.\d+)?(?:[.\-][A-Za-z0-9]+)*)\s*$")
+
+
+def check_generator_version_drift(project_root: Path) -> list[Issue]:
+    """Warn when a derived layer's Generator: version differs by major or minor from the current CLI.
+
+    Patch-only deltas are silent; missing Generator: fields are silent (compat
+    with pre-v0.4 scaffolds that predate the field).
+    """
+    import cortex
+
+    try:
+        current = Version(cortex.__version__)
+    except InvalidVersion:
+        return []
+
+    issues: list[Issue] = []
+    for layer_path in _generated_layer_paths(project_root):
+        rel = _rel(layer_path, project_root)
+        try:
+            text = layer_path.read_text()
+            frontmatter, _body = parse_frontmatter(text)
+        except OSError:
+            continue
+        if not frontmatter:
+            continue
+        generator_field = _field_str(frontmatter, "Generator")
+        if not generator_field:
+            continue
+        m = _GENERATOR_VERSION_RE.search(generator_field)
+        if not m:
+            continue
+        try:
+            gen_ver = Version(m.group(1))
+        except InvalidVersion:
+            continue
+        if gen_ver.major != current.major or gen_ver.minor != current.minor:
+            # Determine the refresh command from the layer name.
+            if layer_path.name == "state.md":
+                refresh_cmd = "cortex refresh-state"
+            elif layer_path.name == "map.md":
+                refresh_cmd = "cortex refresh-map"
+            else:
+                refresh_cmd = "cortex refresh-state"
+            issues.append(
+                Issue(
+                    Severity.WARNING,
+                    rel,
+                    f"Generator was {generator_field}, current CLI is {cortex.__version__}. "
+                    f"Run `{refresh_cmd}` to regenerate with current-version provenance and any "
+                    f"new layer fields (e.g. Sources-hash: in v1.1.0).",
+                )
+            )
+    return issues
 
 
 def check_canonical_ownership(project_root: Path) -> list[Issue]:
