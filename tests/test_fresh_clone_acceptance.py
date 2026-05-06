@@ -19,6 +19,7 @@ network-free. The synthetic corpus is the unit of test.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from datetime import timedelta as _timedelta
 from pathlib import Path
 
 import pytest
@@ -49,11 +50,17 @@ def fresh_clone(tmp_path: Path) -> Path:
     plans.mkdir(exist_ok=True)
     (plans / "demo-roadmap.md").write_text(_plan_body())
 
-    # Seed two journal entries: a recent release + an older decision.
+    # Seed two journal entries: a recent release (within manifest's 72h
+    # default window) + an older decision (≥ 21 days old). Dates are
+    # computed relative to the test clock so the fixture doesn't go
+    # stale as wall-clock time advances.
+    today = datetime.now(UTC).date()
+    recent = today.isoformat()
+    older = (today - _timedelta(days=21)).isoformat()
     journal = cortex_dir / "journal"
     journal.mkdir(exist_ok=True)
-    (journal / "2026-05-06-demo-v100-released.md").write_text(_release_body())
-    (journal / "2026-04-15-demo-architecture-decision.md").write_text(_decision_body())
+    (journal / f"{recent}-demo-v100-released.md").write_text(_release_body(recent))
+    (journal / f"{older}-demo-architecture-decision.md").write_text(_decision_body(older))
 
     # Seed one doctrine entry alongside the init scaffold's defaults.
     doctrine = cortex_dir / "doctrine"
@@ -104,10 +111,10 @@ def _plan_body() -> str:
     )
 
 
-def _release_body() -> str:
+def _release_body(recent_date: str) -> str:
     return (
         "# Demo v1.0.0 released\n\n"
-        "**Date:** 2026-05-06\n"
+        f"**Date:** {recent_date}\n"
         "**Type:** release\n"
         "**Trigger:** T1.10\n"
         "**Tag:** v1.0.0\n"
@@ -126,10 +133,10 @@ def _release_body() -> str:
     )
 
 
-def _decision_body() -> str:
+def _decision_body(older_date: str) -> str:
     return (
         "# Demo architecture decision\n\n"
-        "**Date:** 2026-04-15\n"
+        f"**Date:** {older_date}\n"
         "**Type:** decision\n"
         "**Trigger:** T1.1\n"
         "**Cites:** doctrine/0010-demo-load-bearing-rule\n\n"
@@ -180,7 +187,8 @@ def test_manifest_includes_recent_release(fresh_clone: Path) -> None:
     result = runner.invoke(cli, ["manifest", "--path", str(fresh_clone), "--budget", "8000"])
     assert result.exit_code == 0, result.output
     # Either the journal slug or a key phrase from the release.
-    assert "v1.0.0" in result.output or "2026-05-06" in result.output, (
+    today = datetime.now(UTC).date().isoformat()
+    assert "v1.0.0" in result.output or today in result.output, (
         "manifest must surface the recent release"
     )
 
