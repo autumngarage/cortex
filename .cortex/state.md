@@ -1,15 +1,15 @@
 ---
-Generated: 2026-05-06T19:11:13-04:00
-Generator: cortex refresh-state v1.0.0
+Generated: 2026-05-06T19:17:27-04:00
+Generator: cortex refresh-state v1.1.0
 Sources:
-  - HEAD sha: c2802de23ea7ecc526918a9b6bff1c2e72cefaa3
+  - HEAD sha: 5cd020e54e81197db56c831f65aaf2053e049b90
   - .cortex/plans/*.md (10 files)
-  - .cortex/journal/*.md (75 entries, 2026-04-17..2026-05-07)
+  - .cortex/journal/*.md (77 entries, 2026-04-17..2026-05-07)
   - .cortex/doctrine/*.md (7 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
   - SPEC version: 0.5.0
-  - pyproject.toml: 1.0.0 + cortex package version: 1.0.0
+  - pyproject.toml: 1.1.0 + cortex package version: 1.1.0
 Sources-hash:
   .cortex/doctrine/0001-why-cortex-exists.md: e20d6d52fac419bf22ad43ddf01762f03504f348ef0b2cc30d3983b4c8bec063
   .cortex/doctrine/0002-compose-by-file-contract-not-code.md: 2063446ef8eaf51db05712759124cb21ce26557179607fe59c4ff126f0e4edf3
@@ -74,6 +74,7 @@ Sources-hash:
   .cortex/journal/2026-05-06-cortex-v083-released-installable-baseline-for-vesp.md: 0a9965d3f9e10a0c915abf553c08ef24435973afcc0951942a13c70f734cc93a
   .cortex/journal/2026-05-06-cortex-v090-released-three-target-dogfood-gate-exi.md: 34fe74d8e3e0c593f0d32bdb2c7c77d215ffb9ae1f196319b29695c4b47489cd
   .cortex/journal/2026-05-06-cortex-v100-released-production-freeze-5-target-do.md: 28ca1b05d39d8dba88a2dad18b2bee536a2c408f0296358ceca96171df74bba5
+  .cortex/journal/2026-05-06-cortex-v110-released-root-cause-fixes-sources-hash.md: 16beb5de8eea190917dfc547f3b069ea694886a8456d209de3518323bd3bd69f
   .cortex/journal/2026-05-06-pr-merged-0810.md: d0267834267a75776da3004d034e0ed60475c292cad511372c45b6e6280a67bd
   .cortex/journal/2026-05-06-pr-merged-0835.md: f95bf27f241e52b207731de7616b7f5a35f0befd5760cd9790292e77985e245a
   .cortex/journal/2026-05-06-pr-merged-1251.md: 3539ba49aecc62a319aba80914db036598dd0f0f05c6894eefc2951589611e58
@@ -88,6 +89,7 @@ Sources-hash:
   .cortex/journal/2026-05-06-pr-merged-1601.md: 907fd23201e49f68dd2fcbd0257c9b13226d693695c76ba7cb7290a3a77c22a5
   .cortex/journal/2026-05-06-pr-merged-1831.md: e9709f093edef6c184bd82d1e07c8998186d502a9152959cfb35db83ae0cf10b
   .cortex/journal/2026-05-06-pr-merged-1846.md: e896213d3436a46cf2bc219e7eb7df976a69adb2b2d3064cbf8594c3c6833a9b
+  .cortex/journal/2026-05-06-pr-merged-1913.md: 7b8c4e753ec24f81400547b7e88ac73bbb86f98154b64be18c4d300b3379322a
   .cortex/journal/2026-05-06-pre-10-compatibility-audit-v03-and-v05-forward-com.md: 677ee49aad6c9c09f58f5842d10ead7578b01f4e559b94b75816aaa66b063613
   .cortex/journal/2026-05-06-v090-behavioral-exit-bar-review-gate-exit-declared.md: 45866242b9c2e95316bd3b325a45ed181228200d184dda09f110b859d6a5e655
   .cortex/journal/2026-05-06-v090-dogfood-retrieval-validation-across-three-tar.md: 9864bb736576da17152b2068a905af9264c5f3e3f000fc349dc7387fa54b181f
@@ -116,7 +118,7 @@ Sources-hash:
   .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476
   .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44
   docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c
-Corpus: 75 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 77 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -178,6 +180,7 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 - **2026-05-06** — Cortex v0.8.3 released — installable baseline for vesper dogfood (`.cortex/journal/2026-05-06-cortex-v083-released-installable-baseline-for-vesp.md`, Type: release)
 - **2026-05-06** — Cortex v0.9.0 released — three-target dogfood gate exit (`.cortex/journal/2026-05-06-cortex-v090-released-three-target-dogfood-gate-exi.md`, Type: release)
 - **2026-05-06** — Cortex v1.0.0 released — production freeze + 5-target dogfood pool (`.cortex/journal/2026-05-06-cortex-v100-released-production-freeze-5-target-do.md`, Type: release)
+- **2026-05-06** — Cortex v1.1.0 released — root-cause fixes (Sources-hash, doctrine intro baseline, --strict, trailer audit) (`.cortex/journal/2026-05-06-cortex-v110-released-root-cause-fixes-sources-hash.md`, Type: release)
 - **2026-05-06** — PR #133 merged — docs(journal): record v0.8.3 release (`.cortex/journal/2026-05-06-pr-merged-0810.md`, Type: pr-merged)
 - **2026-05-06** — PR #144 merged — docs(plan): tick v0.9.0 vesper install checkbox (`.cortex/journal/2026-05-06-pr-merged-0835.md`, Type: pr-merged)
 - **2026-05-06** — PR #149 merged — docs(journal): record v0.9.0 retrieval validation findings (`.cortex/journal/2026-05-06-pr-merged-1251.md`, Type: pr-merged)
@@ -192,6 +195,7 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 - **2026-05-06** — PR #170 merged — feat(init): summarize pre-existing scaffold content so users can distinguish their issues from the install (`.cortex/journal/2026-05-06-pr-merged-1601.md`, Type: pr-merged)
 - **2026-05-06** — PR #178 merged — feat(state): hash-based source tracking replaces mtime for staleness check (closes cortex#171) (`.cortex/journal/2026-05-06-pr-merged-1831.md`, Type: pr-merged)
 - **2026-05-06** — PR #177 merged — feat(doctor,install-brief): enforce issue-closing trailer convention via doctor audit + brief prefill (closes cortex#173) (`.cortex/journal/2026-05-06-pr-merged-1846.md`, Type: pr-merged)
+- **2026-05-06** — PR #179 merged — chore(state): refresh state.md ahead of v1.1.0 release (`.cortex/journal/2026-05-06-pr-merged-1913.md`, Type: pr-merged)
 
 ## Stale-now / handle-later
 
