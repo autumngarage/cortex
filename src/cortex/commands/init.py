@@ -294,7 +294,18 @@ def _emit_pre_existing_summary(project_root: Path, pre_existing: set[Path]) -> N
             f"`cortex doctor` reports {n_errors} error{'s' if n_errors != 1 else ''} / "
             f"{n_warnings} warning{'s' if n_warnings != 1 else ''} on this content"
         )
-    except Exception:
+    except Exception as exc:
+        # Fall back to a generic doctor breadcrumb so init still completes,
+        # but surface the failure so the user (and any log aggregator) can see
+        # it. Per engineering-principles.md No-silent-failures: every exception
+        # is either re-raised or logged with enough context to debug from logs
+        # alone.
+        click.echo(
+            f"  warning: pre-existing scaffold analysis failed "
+            f"({type(exc).__name__}: {exc}); falling back to generic doctor "
+            "breadcrumb. Run `cortex doctor` directly to triage.",
+            err=True,
+        )
         doctor_clause = "`cortex doctor` can triage this content"
 
     plan_str = f"{n_plans} pre-existing plan{'s' if n_plans != 1 else ''}"
