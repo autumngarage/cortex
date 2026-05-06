@@ -47,7 +47,7 @@ DOCTRINE_LOAD_PRIORITY_VALUES = ("default", "always")
 DOCTRINE_STATUS_RE = re.compile(r"^(Proposed|Accepted|Superseded-by\s+\d+)\s*$")
 
 PLAN_REQUIRED_FIELDS = ("Status", "Written", "Author", "Goal-hash", "Updated-by", "Cites")
-PLAN_STATUS_VALUES = ("active", "shipped", "cancelled", "deferred", "blocked")
+PLAN_STATUS_VALUES = ("active", "shipped", "cancelled", "deferred", "blocked", "superseded")
 PLAN_REQUIRED_SECTIONS = (
     "## Why (grounding)",
     "## Success Criteria",

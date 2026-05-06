@@ -14,7 +14,7 @@
 ## Transition
 
 - **From:** {{ active | blocked | deferred }}
-- **To:** {{ shipped | cancelled | deferred | blocked }}
+- **To:** {{ shipped | cancelled | deferred | blocked | superseded }}
 - **Reason:** {{ succeeded / deprioritized / superseded by <slug> / external blocker / scope change }}
 
 ## Outcome against success criteria

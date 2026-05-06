@@ -2,7 +2,7 @@
 
 > **Cortex is a file-format protocol for project memory.** Six layers of documents per project, each with a mechanical, authoring, and retrieval contract. Consumed by humans and AI coding agents. The CLI named `cortex` is one implementation; other tools (Sentinel, Touchstone, Claude Code sessions, humans) read and write the same files by the same rules.
 
-**Spec version:** 1.0.0
+**Spec version:** 1.1.0-dev
 **Status:** Active
 **Protocol companion:** [`.cortex/protocol.md`](./.cortex/protocol.md) defines when and how agents write; SPEC.md defines what the files look like.
 
@@ -178,7 +178,7 @@ Staleness rule: if `Generated` is older than N hours (configurable, default 24),
 
 | Contract | Value |
 |---|---|
-| Mechanical | Mutable for status updates; new files for new plans; completed plans auto-move to `plans/archive/` after 30 days in `shipped`/`cancelled` status |
+| Mechanical | Mutable for status updates; new files for new plans; completed plans auto-move to `plans/archive/` after 30 days in `shipped`/`cancelled`/`superseded` status |
 | Authoring | Memex **named trail**; a structured path through Doctrine, Map, and State; defines success criteria |
 | Trigger | Multi-step work that outlives a single session and whose completion is non-obvious |
 | Retrieval | Agent episodic memory (active): *"what am I trying to accomplish, and what's the plan?"* |
@@ -187,7 +187,7 @@ Staleness rule: if `Generated` is older than N hours (configurable, default 24),
 
 ```markdown
 ---
-Status: active                  # active | shipped | cancelled | deferred | blocked
+Status: active                  # active | shipped | cancelled | deferred | blocked | superseded
 Written: 2026-04-17
 Author: human                   # human | sentinel-coder | claude-session-<iso> | <other>
 Goal-hash: a1b2c3                # normalized hash of the goal statement (§ 4.9)
@@ -427,6 +427,8 @@ Tools must declare which spec major versions they support. Readers encountering 
 **v0.5.0-dev adds per-fact `Verified:` timestamps (§ 4.5.1).** Generated-layer bullets may now carry an optional end-of-bullet verification date, and consumers such as `cortex manifest` may surface stale verification warnings inline. Additive change — unparsed tags remain plain markdown, and existing generated layers without tags remain valid.
 
 **v1.0.0 is the spec freeze.** The strict major-for-breaking rule (above) now applies. No `0.x`-era changes in this release — 1.0.0 is identical to the 0.5.0-dev draft except: (1) the `-dev` suffix is dropped, (2) `Spec:` is added to the § 4.5 required-fields enumeration as the eighth metadata field (it was already emitted by the reference implementation and present in the § 3.2 / § 3.3 example headers; the omission from § 4.5 was a documentation gap). Tools that conform to 0.5.0-dev conform to 1.0.0; no migration is required.
+
+**v1.1.0-dev adds `superseded` to the Plan status enum.** A plan is `superseded` when a newer plan replaces its entire purpose — semantically distinct from `cancelled` (abandoned without completion) and `shipped` (done). Superseded plans are terminal: omitted from `cortex next` P0/P1 output (same treatment as `shipped`/`cancelled`) and eligible for archive after 30 days. A prior `Status: superseded` on a plan was flagged as an error by `cortex doctor`; it now validates clean. Additive change — existing readers that do not enumerate statuses are unaffected; readers that validate the enum should accept the new value. Bumped as a minor because it expands the allowed value set for an existing field.
 
 **Protocol version relationship.** [`.cortex/protocol.md`](./.cortex/protocol.md) carries its own version. A Protocol version is compatible with one or more SPEC.md versions, declared in the Protocol's header. A major SPEC bump always requires a Protocol review; a minor SPEC bump may or may not trigger a Protocol bump depending on whether new triggers are needed.
 

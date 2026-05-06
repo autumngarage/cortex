@@ -504,7 +504,7 @@ def check_retention_visibility(project_root: Path) -> list[Issue]:
         for plan in iter_plan_files(project_root):
             fields, _body = parse_frontmatter(plan.read_text())
             status = _field_str(fields, "Status")
-            if status not in {"shipped", "cancelled"}:
+            if status not in {"shipped", "cancelled", "superseded"}:
                 continue
             plan_date = _parse_date(_field_str(fields, "Date") or _field_str(fields, "Written"))
             if plan_date is None:

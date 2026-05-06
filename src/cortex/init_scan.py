@@ -205,7 +205,7 @@ _MAX_SCAN_DEPTH = 4
 # Conservative: we want false negatives (a shipped plan still imported, the
 # user can fix it) over false positives (a real active plan demoted away).
 _SHIPPED_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"^\s*Status:\s*(?:shipped|done|complete|completed|cancelled)\b", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^\s*Status:\s*(?:shipped|done|complete|completed|cancelled|superseded)\b", re.IGNORECASE | re.MULTILINE),
     re.compile(r"^#+\s*Done\b", re.IGNORECASE | re.MULTILINE),
 )
 # How many lines of head to read for status detection. 30 is enough to catch
