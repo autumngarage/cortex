@@ -428,6 +428,33 @@ def test_refresh_state_auto_rebuilds_existing_retrieve_index(tmp_path: Path) -> 
     assert any(hit.path.startswith("state.md:") for hit in hits)
 
 
+def test_empty_corpus_retrieve_prints_guidance(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    rebuild_index(project)  # creates index with zero chunks
+
+    result = CliRunner().invoke(
+        cli, ["retrieve", "--mode", "bm25", "--no-rebuild", "anything", "--path", str(project)]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "corpus" in result.output.lower()
+    assert "refresh-index" in result.output
+
+
+def test_nonempty_corpus_no_matches_mentions_count(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    _write(project, "doctrine/0001.md", "## Doctrine\nsome unrelated text\n")
+    rebuild_index(project)
+
+    result = CliRunner().invoke(
+        cli, ["retrieve", "--mode", "bm25", "--no-rebuild", "xyzzy_no_match_token", "--path", str(project)]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "no matches" in result.output
+    assert "indexed entries" in result.output
+
+
 def test_warm_query_latency_under_ci_budget(tmp_path: Path) -> None:
     project = _project(tmp_path)
     for idx in range(200):

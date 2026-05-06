@@ -87,6 +87,7 @@ def retrieve_command(
             FTS5UnavailableError,
             backfill_embeddings,
             ensure_fts5_available,
+            get_indexed_chunk_count,
             has_populated_embeddings,
             is_stale,
             rebuild_index,
@@ -117,6 +118,18 @@ def retrieve_command(
         else:
             if is_stale(project_root):
                 rebuild_index(project_root)
+
+        # Bail early when the corpus has no indexed content.
+        total_chunks = get_indexed_chunk_count(project_root)
+        if total_chunks == 0:
+            if as_json:
+                click.echo(json.dumps([]))
+            else:
+                click.echo(
+                    "no results — the .cortex/ corpus has no journal, doctrine, or plan\n"
+                    "entries indexed yet. Add content and run `cortex refresh-index` to enable retrieval."
+                )
+            return
 
         # Step 2: decide effective mode + (lazily) backfill embeddings.
         effective_mode, embed_callable = _resolve_mode(
@@ -149,10 +162,10 @@ def retrieve_command(
         click.echo(f"error: cortex retrieve failed: {exc}", err=True)
         sys.exit(1)
 
-    _emit_hits(hits, as_json=as_json, hit_to_json=hit_to_json)
+    _emit_hits(hits, as_json=as_json, hit_to_json=hit_to_json, query=query, total_count=total_chunks)
 
 
-def _emit_hits(hits, *, as_json: bool, hit_to_json=None) -> None:  # type: ignore[no-untyped-def]
+def _emit_hits(hits, *, as_json: bool, hit_to_json=None, query: str | None = None, total_count: int | None = None) -> None:  # type: ignore[no-untyped-def]
     if as_json:
         if hit_to_json is None:
             click.echo(json.dumps([]))
@@ -160,7 +173,10 @@ def _emit_hits(hits, *, as_json: bool, hit_to_json=None) -> None:  # type: ignor
             click.echo(json.dumps([hit_to_json(hit) for hit in hits]))
         return
     if not hits:
-        click.echo("no results found")
+        if query is not None and total_count is not None:
+            click.echo(f'no matches for "{query}" — corpus has {total_count} indexed entries')
+        else:
+            click.echo("no results found")
         return
     for hit in hits:
         click.echo(f"{hit.path}  score={hit.score:.4f}")
