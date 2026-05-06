@@ -1,16 +1,16 @@
 ---
-Generated: 2026-05-06T15:21:22-04:00
-Generator: cortex refresh-state v0.9.0
+Generated: 2026-05-06T15:26:40-04:00
+Generator: cortex refresh-state v1.0.0
 Sources:
-  - HEAD sha: 899ef57f29d64b0ee85462d1ac976ce2629078c8
+  - HEAD sha: 6852d8f73bea7956b26c470d0d3fc1dd79e1c77a
   - .cortex/plans/*.md (10 files)
-  - .cortex/journal/*.md (68 entries, 2026-04-17..2026-05-06)
+  - .cortex/journal/*.md (70 entries, 2026-04-17..2026-05-06)
   - .cortex/doctrine/*.md (7 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
   - SPEC version: 0.5.0
-  - pyproject.toml: 0.9.0 + cortex package version: 0.9.0
-Corpus: 68 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
+  - pyproject.toml: 1.0.0 + cortex package version: 1.0.0
+Corpus: 70 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -71,6 +71,7 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 - **2026-05-05** — PR #126 merged — docs: record touchstone cortex install (`.cortex/journal/2026-05-05-pr-merged-0956.md`, Type: pr-merged)
 - **2026-05-06** — Cortex v0.8.3 released — installable baseline for vesper dogfood (`.cortex/journal/2026-05-06-cortex-v083-released-installable-baseline-for-vesp.md`, Type: release)
 - **2026-05-06** — Cortex v0.9.0 released — three-target dogfood gate exit (`.cortex/journal/2026-05-06-cortex-v090-released-three-target-dogfood-gate-exi.md`, Type: release)
+- **2026-05-06** — Cortex v1.0.0 released — production freeze + 5-target dogfood pool (`.cortex/journal/2026-05-06-cortex-v100-released-production-freeze-5-target-do.md`, Type: release)
 - **2026-05-06** — PR #133 merged — docs(journal): record v0.8.3 release (`.cortex/journal/2026-05-06-pr-merged-0810.md`, Type: pr-merged)
 - **2026-05-06** — PR #144 merged — docs(plan): tick v0.9.0 vesper install checkbox (`.cortex/journal/2026-05-06-pr-merged-0835.md`, Type: pr-merged)
 - **2026-05-06** — PR #149 merged — docs(journal): record v0.9.0 retrieval validation findings (`.cortex/journal/2026-05-06-pr-merged-1251.md`, Type: pr-merged)
@@ -80,6 +81,7 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 - **2026-05-06** — PR #154 merged — docs(plan): tick v0.9.0 release checkbox; reframe state as v1.0.0-active (`.cortex/journal/2026-05-06-pr-merged-1355.md`, Type: pr-merged)
 - **2026-05-06** — PR #158 merged — chore(cli): polish help text and error messages for v1.0 adoption-friction reduction (`.cortex/journal/2026-05-06-pr-merged-1420.md`, Type: pr-merged)
 - **2026-05-06** — PR #159 merged — docs(plan): close pre-1.0 compat audit + tick v1 swarm checkboxes (`.cortex/journal/2026-05-06-pr-merged-1433.md`, Type: pr-merged)
+- **2026-05-06** — PR #165 merged — docs(plan): tick brew-smoke-test ceremony item with real-corpus install evidence (`.cortex/journal/2026-05-06-pr-merged-1522.md`, Type: pr-merged)
 
 ## Stale-now / handle-later
 
