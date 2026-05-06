@@ -426,3 +426,35 @@ def test_plural_llm_keywords_are_flagged(scaffolded_project: Path, constraint: s
     assert "scope qualifier" in stdout, (
         f"plural-form constraint {constraint!r} should warn but did not"
     )
+
+
+def test_conductor_delegation_prose_not_flagged(scaffolded_project: Path) -> None:
+    # Regression for cortex#141: "use provider-specific X only when Y" is a
+    # documentation conditional, not a behavioral constraint. "only" appears
+    # mid-sentence after the verb, not at the start of the statement.
+    prose = (
+        "# Project\n\n"
+        "Conductor does not inherit your conversation context. For delegation,\n"
+        "write a complete brief with goal, context, scope, constraints, expected\n"
+        "output, and validation; use `--brief-file` for nontrivial `exec` tasks.\n"
+        "Default to `conductor ask`; use provider-specific `call` / `exec` only\n"
+        "when the user explicitly asks for a provider or the semantic API does not\n"
+        "fit.\n"
+    )
+    (scaffolded_project / "CLAUDE.md").write_text(prose)
+    exit_code, _stdout, combined = _run_doctor(scaffolded_project)
+    assert exit_code == 0
+    assert "scope qualifier" not in combined
+
+
+def test_leading_constraint_keyword_in_bullet_still_flagged(
+    scaffolded_project: Path,
+) -> None:
+    # Positive counterpart to test_conductor_delegation_prose_not_flagged:
+    # a bullet that leads with a constraint keyword must still warn.
+    (scaffolded_project / "CLAUDE.md").write_text(
+        "# Project\n\n- Never use cloud providers.\n"
+    )
+    exit_code, stdout, _ = _run_doctor(scaffolded_project)
+    assert exit_code == 0
+    assert "scope qualifier" in stdout

@@ -91,6 +91,15 @@ CONSTRAINT_KEYWORD_RE = re.compile(
     r"\b(no|never|always|forbidden|only|must|don't|do not)\b",
     re.IGNORECASE,
 )
+# "only" at the very end of a line is a split conditional ("... only\nwhen
+# Y"), not a behavioral directive. Suppress when no other constraint
+# keyword (must, never, no…) reinforces the warning on the same line.
+# Fixes the false positive from cortex#141.
+TRAILING_ONLY_RE = re.compile(r"\bonly\s*$", re.IGNORECASE)
+NON_ONLY_CONSTRAINT_RE = re.compile(
+    r"\b(no|never|always|forbidden|must|don't|do not)\b",
+    re.IGNORECASE,
+)
 LLM_KEYWORD_RE = re.compile(
     # Singular and plural forms — `\b(llm)\b` does not match `LLMs` because
     # `s` is a word character, so common phrasings like "No LLMs." or
@@ -775,6 +784,11 @@ def check_claude_agents(project_root: Path) -> list[Issue]:
     frontmatter (top-of-file ``---`` block) and fenced code blocks
     (```` ``` ```` / ``~~~``) are skipped.
 
+    Additional exclusion: when ``only`` is the sole constraint keyword
+    and appears as the very last word on the line, the line is skipped —
+    trailing ``only`` signals a split conditional ("use X only\\nwhen Y"),
+    not a behavioral directive (cortex#141).
+
     Motivation: sentinel's planner reads CLAUDE.md statements like "No
     cloud LLMs." and applies them globally — including to dev-toolchain
     config like ``.sentinel/config.toml``. The intent was app-runtime
@@ -794,6 +808,10 @@ def check_claude_agents(project_root: Path) -> list[Issue]:
         line_lookup = dict(live_lines)
         for lineno, content in live_lines:
             if not CONSTRAINT_KEYWORD_RE.search(content):
+                continue
+            # "only" trailing at end of line → split conditional "only\nwhen Y",
+            # not a directive. Skip unless another constraint keyword is present.
+            if TRAILING_ONLY_RE.search(content) and not NON_ONLY_CONSTRAINT_RE.search(content):
                 continue
             if not LLM_KEYWORD_RE.search(content):
                 continue
