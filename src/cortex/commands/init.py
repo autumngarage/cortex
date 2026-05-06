@@ -841,8 +841,7 @@ def _format_equivalent_command(
     "add_imports_claude",
     default=None,
     help="Append `@.cortex/protocol.md` + `@.cortex/state.md` imports to CLAUDE.md. "
-    "On a TTY without this flag, `cortex init` prompts (default Yes). "
-    "Non-TTY without `--yes` skips. Idempotent when imports are already present.",
+    "Prompts on TTY (default Yes); skips silently on non-TTY without --yes. Idempotent.",
 )
 @click.option(
     "--add-imports-agents/--no-add-imports-agents",
@@ -854,20 +853,16 @@ def _format_equivalent_command(
     "--gitignore/--no-gitignore",
     "add_gitignore",
     default=None,
-    help="Append `.cortex/.index.json` and `.cortex/pending/` to the project `.gitignore`. "
-    "Idempotent; existing entries are never duplicated. On a TTY without this flag, "
-    "`cortex init` prompts (default Yes).",
+    help="Add `.cortex/.index.json` and `.cortex/pending/` to `.gitignore`. "
+    "Prompts on TTY (default Yes). Idempotent.",
 )
 @click.option(
     "--local-only",
     "local_only",
     is_flag=True,
     default=False,
-    help="Keep `.cortex/` on this machine — append `.cortex/` (the whole directory) "
-    "to `.gitignore` so journals, plans, doctrine, and state stay unpublished when "
-    "the project is shared. The SPEC default treats `.cortex/` as committed "
-    "team-shared memory; this flag inverts that for solo / private use. "
-    "Conflicts with `--no-gitignore`.",
+    help="Gitignore all of `.cortex/` for solo or private projects that should not "
+    "publish memory alongside code. Conflicts with `--no-gitignore`.",
 )
 @click.option(
     "--yes",
@@ -875,28 +870,24 @@ def _format_equivalent_command(
     "assume_yes",
     is_flag=True,
     default=False,
-    help="Accept all interactive defaults without prompting (doctrine 0002 § 4). "
-    "Equivalent to running the wizard and pressing Enter at every step.",
+    help="Accept all interactive defaults without prompting.",
 )
 @click.option(
     "--seed-from",
     "seed_from",
     type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
     default=None,
-    help="Copy one-level `*.md` Doctrine pack entries from DIR into `.cortex/doctrine/` "
-    "after scaffolding. Numbered files keep their requested NNNN prefix; unnumbered "
-    "files are assigned the next available number at or above 0100 from their H1 slug. "
-    "Example: Sentinel can ship a default Doctrine pack and projects can run "
-    "`cortex init --seed-from ../sentinel/doctrine-pack`.",
+    help="Seed doctrine entries from a directory of `*.md` files after scaffolding "
+    "(e.g. a Sentinel doctrine pack: `cortex init --seed-from ../sentinel/doctrine-pack`). "
+    "Numbered files keep their NNNN prefix; unnumbered files are auto-numbered.",
 )
 @click.option(
     "--merge",
     "merge_mode",
     type=click.Choice(["skip-existing"]),
     default=None,
-    help="Conflict handling for `--seed-from`. Default aborts before copying any seed "
-    "entry if a requested destination or Doctrine number already exists. "
-    "`--merge skip-existing` skips conflicts and copies the rest.",
+    help="Conflict handling for `--seed-from`. Default aborts on conflicts; "
+    "`skip-existing` copies what it can and skips the rest.",
 )
 def init_command(
     *,
@@ -910,7 +901,13 @@ def init_command(
     seed_from: Path | None,
     merge_mode: str | None,
 ) -> None:
-    """Scaffold a SPEC-v0.5.0-conformant `.cortex/` directory in the target project."""
+    """Set up `.cortex/` project memory in the target directory.
+
+    Scaffolds the directory layout, scans for existing docs (principles,
+    decisions, roadmap) and offers to import them, and optionally wires agent
+    context files (CLAUDE.md, AGENTS.md). Existing doctrine, plans, journal,
+    and procedure entries are never overwritten.
+    """
     print_banner(SUBTITLE_INIT, cortex_version())
 
     # `--local-only` and `--no-gitignore` are mutually exclusive: the former

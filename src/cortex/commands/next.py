@@ -63,7 +63,7 @@ def run_next(project_root: Path, *, as_json: bool, limit: int | None, since_days
     type=click.IntRange(min=0),
     default=30,
     show_default=True,
-    help="Include case studies modified in the last N days.",
+    help="Window (days) for including recently-modified docs/case-studies/ entries in the ranked list.",
 )
 def next_command(
     *,
@@ -72,5 +72,5 @@ def next_command(
     limit: int | None,
     since_days: int,
 ) -> None:
-    """Print deterministic next-work candidates grouped by priority."""
+    """Print ranked next-work items across all active Plans, grouped by priority."""
     run_next(Path(target_path).resolve(), as_json=as_json, limit=limit, since_days=since_days)

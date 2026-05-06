@@ -18,7 +18,7 @@ from cortex.index import refresh_index
     "include_retrieve",
     is_flag=True,
     default=False,
-    help="Also rebuild the derived `.cortex/.index/chunks.sqlite` retrieve index.",
+    help="Also rebuild the full-text + semantic search index used by `cortex retrieve`.",
 )
 @click.option(
     "--path",
@@ -29,7 +29,11 @@ from cortex.index import refresh_index
     help="Project root containing `.cortex/`.",
 )
 def refresh_index_command(*, include_retrieve: bool, target_path: Path) -> None:
-    """Regenerate `.cortex/.index.json` from primary Cortex sources."""
+    """Rebuild `.cortex/.index.json` — the promotion queue and entry index.
+
+    Required before ``cortex promote``. Pass ``--retrieve`` to also rebuild
+    the full-text + semantic search index used by ``cortex retrieve``.
+    """
 
     project_root = Path(target_path).resolve()
     cortex_dir = project_root / ".cortex"

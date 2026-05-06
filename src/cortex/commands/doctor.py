@@ -53,43 +53,44 @@ def _format_issue(issue: Issue) -> str:
     "run_audit",
     is_flag=True,
     default=False,
-    help="Also walk recent git history and check that every Tier-1 Protocol "
-    "trigger has a matching Journal entry (Protocol § 2).",
+    help="Also scan recent git history and warn when required Journal entries are missing "
+    "for merges, releases, and other tracked events. Informational: does not change the exit code.",
 )
 @click.option(
     "--audit-digests",
     "run_audit_digests",
     is_flag=True,
     default=False,
-    help="Also sample each Journal digest and warn when its claims lack "
-    "`journal/...` citations (SPEC § 5.4).",
+    help="Also sample each Journal digest and warn when its claims cannot be traced "
+    "back to a source Journal entry. Informational: does not change the exit code.",
 )
 @click.option(
     "--audit-instructions",
     "run_audit_instructions",
     is_flag=True,
     default=False,
-    help="Also verify external-artifact claims in CLAUDE.md, AGENTS.md, and README.md.",
+    help="Also verify filesystem paths, GitHub releases, Homebrew formulas, PyPI packages, "
+    "and URLs cited in CLAUDE.md, AGENTS.md, and README.md. Use with --strict to fail on warnings.",
 )
 @click.option(
     "--strict",
     is_flag=True,
     default=False,
-    help="Exit 1 when informational audit warnings are present.",
+    help="Exit 1 when any warnings are present (in addition to errors).",
 )
 @click.option(
     "--json",
     "as_json",
     is_flag=True,
     default=False,
-    help="Emit machine-readable JSON for --audit-instructions.",
+    help="Emit machine-readable JSON (only supported with --audit-instructions).",
 )
 @click.option(
     "--since-days",
     type=int,
     default=DEFAULT_WINDOW_DAYS,
     show_default=True,
-    help="Audit window in days (only used with --audit).",
+    help="How many days of git history to scan (only used with --audit).",
 )
 def doctor_command(
     *,
@@ -101,15 +102,13 @@ def doctor_command(
     as_json: bool,
     since_days: int,
 ) -> None:
-    """Validate a project's `.cortex/` directory against SPEC.md.
+    """Check a project's `.cortex/` directory for SPEC conformance.
 
-    Exits 0 on clean, 1 if any issue has severity ``error``. Warnings are
-    surfaced but do not fail the exit code.
+    Exits 0 when clean, 1 on any structural error. Warnings are printed but
+    do not affect the exit code unless ``--strict`` is passed.
 
-    ``--audit`` and ``--audit-digests`` run independent Protocol checks on
-    top of the structural validation; neither currently escalates exit
-    codes on failure — they are informational so you can retrofit Journal
-    entries without being blocked from shipping.
+    The ``--audit*`` flags add optional Protocol-compliance and external-claim
+    checks on top of the structural pass. Run them independently or together.
     """
     target_path = Path(target_path).resolve()
     if as_json and not run_audit_instructions:

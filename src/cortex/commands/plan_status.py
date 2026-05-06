@@ -90,5 +90,5 @@ def run_plan_status(project_root: Path, *, as_json: bool, stale_only: bool) -> N
     help="Only include Plans flagged stale.",
 )
 def status_command(*, target_path: Path, as_json: bool, stale_only: bool) -> None:
-    """Print per-Plan completion and staleness."""
+    """Print completion percentage and staleness for each active Plan."""
     run_plan_status(Path(target_path).resolve(), as_json=as_json, stale_only=stale_only)

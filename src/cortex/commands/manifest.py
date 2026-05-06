@@ -19,27 +19,28 @@ from cortex.manifest import MANIFEST_PROFILES, ManifestProfileName, build_manife
     type=int,
     default=None,
     show_default=False,
-    help="Approximate token budget for the manifest (≈4 chars/token). Below 2000 "
-    "the manifest degrades to state-only; at or above 15000 the Journal window "
-    "widens from 72h to 7d. Defaults to the selected profile budget.",
+    help="Approximate token budget (≈4 chars/token). Below 2000 the manifest "
+    "degrades to state-only; at or above 15000 the journal window widens from 72h to 7d. "
+    "Defaults to the selected profile's budget. Override when piping into a tight context window.",
 )
 @click.option(
     "--profile",
     type=click.Choice(sorted(MANIFEST_PROFILES)),
     default="default",
     show_default=True,
-    help="Manifest profile. Use `delegation` for compact agent handoffs.",
+    help="Content profile. `default` loads state, doctrine, plans, and recent journal entries (~8k tokens). "
+    "`delegation` trims to the pickup pointer and key invariants for agent-to-agent handoffs (~4k tokens).",
 )
 @click.option(
     "--show-budget",
     is_flag=True,
-    help="Show estimated tokens used by each rendered section.",
+    help="Show estimated token count for each rendered section. Useful for tuning --budget.",
 )
 @click.option(
     "--json",
     "as_json",
     is_flag=True,
-    help="Emit manifest budget diagnostics as machine-readable JSON.",
+    help="Emit per-section token-usage diagnostics as JSON instead of the manifest text.",
 )
 @click.option(
     "--path",
@@ -57,10 +58,11 @@ def manifest_command(
     as_json: bool,
     target_path: Path,
 ) -> None:
-    """Emit the token-budgeted session manifest.
+    """Print the session-start manifest: state, recent journal, doctrine, and active plans.
 
-    Written to stdout as markdown so agents can pipe it directly into their
-    context window, or humans can redirect it to a file for inspection.
+    Output is markdown written to stdout so agents can pipe it into their context
+    window or humans can redirect it to a file. Use ``--profile delegation`` for
+    compact agent-to-agent handoffs; use ``--show-budget`` to see where tokens go.
     """
     target_path = Path(target_path).resolve()
     cortex_dir = target_path / ".cortex"

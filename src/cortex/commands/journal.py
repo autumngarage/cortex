@@ -466,9 +466,10 @@ def _render_context_block(
     type=int,
     default=None,
     help=(
-        "PR number to drive `gh pr view` lookup for `--type pr-merged`. "
-        "When omitted, inferred from HEAD's most recent merge commit subject "
-        "matching `(#NNN)`. Ignored for other types."
+        "PR number for `--type pr-merged`. When omitted, inferred from the most recent "
+        "merge commit subject (e.g. `feat: foo (#123)`). Requires `gh` to be installed "
+        "and authenticated; degrades gracefully when `gh` is unavailable. "
+        "Ignored for other types."
     ),
 )
 @click.option(
@@ -488,7 +489,12 @@ def draft_command(
     pr_number: int | None,
     target_path: Path,
 ) -> None:
-    """Scaffold a Journal entry of TYPE (e.g. decision, release, incident)."""
+    """Create a new Journal entry of TYPE from a template and open it in $EDITOR.
+
+    TYPE is the template name: decision, pr-merged, release, incident,
+    plan-transition, or any custom type added under .cortex/templates/journal/.
+    The entry is pre-filled with today's date and recent git/PR context.
+    """
     project_root = Path(target_path).resolve()
     cortex_dir = project_root / ".cortex"
     if not cortex_dir.is_dir():
@@ -716,7 +722,11 @@ def _refresh_retrieve_index_if_present(project_root: Path) -> None:
 
 @click.group("journal")
 def journal_group() -> None:
-    """Author Journal entries from templates."""
+    """Create and manage Journal entries.
+
+    Use ``cortex journal draft <type>`` to scaffold an entry from a template.
+    Available types: decision, pr-merged, release, incident, plan-transition.
+    """
 
 
 journal_group.add_command(draft_command)
