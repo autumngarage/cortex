@@ -24,6 +24,7 @@ class AuditInstructionsConfig:
     scan_files: tuple[str, ...] = field(default_factory=lambda: tuple(DEFAULT_AUDIT_SCAN_FILES))
     discovery_mode: bool = True
     warnings: tuple[str, ...] = ()
+    self_repo: str | None = None
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,7 @@ def load_audit_instructions_config(project_root: Path) -> AuditInstructionsConfi
         urls=_string_tuple(raw.get("urls")),
         scan_files=scan_files,
         discovery_mode=False,
+        self_repo=_optional_string(raw.get("self_repo")),
     )
 
 

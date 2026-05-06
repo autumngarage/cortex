@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import shutil
 import subprocess
 import tomllib
 from collections import Counter
@@ -25,6 +26,7 @@ from cortex.audit import (
     JOURNAL_MATCH_WINDOW_HOURS,
     load_journal_entries,
 )
+from cortex.config import load_audit_instructions_config
 from cortex.frontmatter import FrontmatterValue, parse_frontmatter
 from cortex.index import read_index
 from cortex.plans import iter_plan_files
@@ -76,6 +78,15 @@ STATE_SOURCE_FILES = (
     "build.gradle",
     "build.gradle.kts",
 )
+
+# Issue-ref staleness check (--audit-issue-refs).
+ISSUE_REF_WATCH_MARKER = "<!-- watch -->"
+ISSUE_STATE_CACHE_TTL_SECONDS = 24 * 3600
+_ISSUE_CHECK_SUBPROCESS_TIMEOUT = 8
+# Matches optional qualified owner/repo before #N, or bare #N.
+# Applied via findall() on checkbox lines; returns (owner_repo, num) tuples
+# where owner_repo is "" for bare references.
+_INLINE_ISSUE_REF_RE = re.compile(r"(?:([\w-]+/[\w.-]+))?#(\d+)")
 
 # PR trailer enforcement (--audit-pr-trailers).
 # Matches any bare #NNN reference anywhere in text.
@@ -172,6 +183,170 @@ def run_pr_trailer_checks(project_root: Path) -> list[Issue]:
     """Checks run behind `cortex doctor --audit-pr-trailers`."""
     issues = check_pr_trailers(project_root)
     return sorted(issues, key=lambda i: (i.severity.value, i.path, i.message))
+
+
+def run_issue_ref_checks(project_root: Path) -> list[Issue]:
+    """Checks run behind `cortex doctor --audit-issue-refs`."""
+    issues = check_stale_issue_references(project_root)
+    return sorted(issues, key=lambda i: (i.severity.value, i.path, i.message))
+
+
+def check_stale_issue_references(project_root: Path) -> list[Issue]:
+    """Warn when an open [ ] checkbox references a closed GitHub issue.
+
+    Walks .cortex/journal/*.md, .cortex/plans/*.md, .cortex/doctrine/*.md.
+    Queries GitHub issue state via `gh api` and caches results for 24h in
+    .cortex/.cache/issue-state.json. Only fires under --audit-issue-refs.
+
+    Bypass: lines ending in <!-- watch --> are exempt (intentional
+    "watch this even after close" tracking).
+
+    Bare #N references are disambiguated via [audit-instructions].self_repo
+    in .cortex/config.toml. If unset, bare refs are skipped silently.
+    """
+    if shutil.which("gh") is None:
+        return [Issue(Severity.WARNING, "", "gh not installed, skipping --audit-issue-refs check")]
+
+    config = load_audit_instructions_config(project_root)
+    self_repo = config.self_repo
+
+    cortex_dir = project_root / ".cortex"
+    if not cortex_dir.exists():
+        return []
+
+    cache = _load_issue_cache(project_root)
+
+    # (file_path, line_num, "owner/repo#N")
+    pending: list[tuple[Path, int, str]] = []
+
+    for scan_dir in (cortex_dir / "journal", cortex_dir / "plans", cortex_dir / "doctrine"):
+        if not scan_dir.exists():
+            continue
+        for md_file in sorted(scan_dir.glob("*.md")):
+            try:
+                text = md_file.read_text(errors="replace")
+            except OSError:
+                continue
+            for line_num, line in enumerate(text.splitlines(), start=1):
+                if not _UNCHECKED_CHECKBOX_RE.match(line):
+                    continue
+                if ISSUE_REF_WATCH_MARKER in line:
+                    continue
+                for owner_repo, num_str in _INLINE_ISSUE_REF_RE.findall(line):
+                    if owner_repo:
+                        pending.append((md_file, line_num, f"{owner_repo}#{num_str}"))
+                    elif self_repo:
+                        pending.append((md_file, line_num, f"{self_repo}#{num_str}"))
+                    # else: bare ref, no self_repo → skip silently
+
+    if not pending:
+        _save_issue_cache(project_root, cache)
+        return []
+
+    unique_refs = {ref for _, _, ref in pending}
+    states = _fetch_issue_states(unique_refs, cache)
+    _save_issue_cache(project_root, cache)
+
+    issues: list[Issue] = []
+    for md_file, line_num, ref in pending:
+        state = states.get(ref)
+        if state != "closed":
+            continue
+        rel = _rel(md_file, project_root)
+        issues.append(
+            Issue(
+                Severity.WARNING,
+                rel,
+                f"stale-issue-ref: {ref} is closed but checkbox is still open "
+                f"(line {line_num}); "
+                "the Journal append-only invariant means this box can't be flipped — "
+                "consider a follow-up entry, or add <!-- watch --> to silence",
+            )
+        )
+
+    return issues
+
+
+def _load_issue_cache(project_root: Path) -> dict[str, Any]:
+    cache_path = project_root / ".cortex" / ".cache" / "issue-state.json"
+    if not cache_path.exists():
+        return {}
+    try:
+        data = json.loads(cache_path.read_text())
+        if isinstance(data, dict):
+            return data
+    except (OSError, json.JSONDecodeError):
+        pass
+    return {}
+
+
+def _save_issue_cache(project_root: Path, cache: dict[str, Any]) -> None:
+    cache_dir = project_root / ".cortex" / ".cache"
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        (cache_dir / "issue-state.json").write_text(json.dumps(cache, indent=2))
+    except OSError:
+        pass
+
+
+def _is_cache_entry_fresh(entry: Any) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    fetched_at = entry.get("fetched_at")
+    if not isinstance(fetched_at, str):
+        return False
+    try:
+        fetched = datetime.fromisoformat(fetched_at)
+        if fetched.tzinfo is None:
+            fetched = fetched.replace(tzinfo=UTC)
+        return (datetime.now(UTC) - fetched).total_seconds() < ISSUE_STATE_CACHE_TTL_SECONDS
+    except ValueError:
+        return False
+
+
+def _fetch_issue_states(
+    refs: set[str], cache: dict[str, Any]
+) -> dict[str, str | None]:
+    """Return {ref: "open"|"closed"|None} using cache where fresh, gh api otherwise."""
+    states: dict[str, str | None] = {}
+    to_fetch: list[str] = []
+
+    for ref in refs:
+        entry = cache.get(ref)
+        if entry and _is_cache_entry_fresh(entry):
+            states[ref] = entry.get("state")
+        else:
+            to_fetch.append(ref)
+
+    for ref in to_fetch:
+        parts = ref.rsplit("#", 1)
+        if len(parts) != 2:
+            continue
+        owner_repo, num = parts
+        state = _gh_issue_state(owner_repo, num)
+        if state is not None:
+            states[ref] = state
+            cache[ref] = {"state": state, "fetched_at": datetime.now(UTC).isoformat()}
+
+    return states
+
+
+def _gh_issue_state(owner_repo: str, num: str) -> str | None:
+    """Query `gh api` for issue state. Returns 'open', 'closed', or None on error."""
+    try:
+        result = subprocess.run(
+            ["gh", "api", f"repos/{owner_repo}/issues/{num}", "--jq", ".state"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=_ISSUE_CHECK_SUBPROCESS_TIMEOUT,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    state = result.stdout.strip()
+    return state if state in ("open", "closed") else None
 
 
 def check_append_only_journal(project_root: Path) -> list[Issue]:
@@ -534,6 +709,7 @@ def check_config_toml_schema(project_root: Path) -> list[Issue]:
             "github_repos": "optional-string-list",
             "github_releases": "optional-string-list",
             "paas_repos": "optional-string-list",
+            "self_repo": "optional-string",
         }
         issues.extend(_validate_table(rel, "audit-instructions", audit, audit_schema))
     refresh_index = data.get("refresh-index")

@@ -55,6 +55,7 @@ declarations.
 | `paas_repos` | list of strings \| null | `[]` | GitHub `owner/repo` references for repos deployed via a PaaS (Railway, Fly.io, Render, Heroku, Vercel, …) where the deploy IS the release and no GitHub Release tags are published. Verifies the repo is reachable but **does not** check for release tags, so no "no release tag" false-positive warning is emitted. Use this instead of `github_repos` for deploy-on-merge services. |
 | `urls` | list of strings \| null | `[]` | Free-form URLs to check for liveness or version drift. |
 | `scan_files` | list of strings \| null | `["CLAUDE.md", "AGENTS.md", "README.md"]` (`DEFAULT_AUDIT_SCAN_FILES`) | Repo-root files to scan for external claims. Setting this overrides the default — pass the full list, not a delta. |
+| `self_repo` | string \| null | `null` | Default `owner/repo` used to resolve bare `#N` references when running `cortex doctor --audit-issue-refs`. Without this, bare `#N` references in `.cortex/` content are silently skipped. Set to the GitHub `owner/repo` for this project (e.g. `"autumngarage/cortex"`). |
 
 **Template URL skip.** URLs containing placeholder text (`YOUR_USERNAME`, `YOUR_ORG`,
 `YOUR_REPO`, `YOUR_NAME`, `EXAMPLE`, `your-name`, `your-username`, `your-org`,
