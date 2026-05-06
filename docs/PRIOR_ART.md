@@ -142,7 +142,19 @@ The insight: **an agent can regenerate the Map weekly; a human could not.** That
 
 ---
 
-## 7. Summary table
+## 7. Adjacent tools and composition
+
+### codesight (autumngarage/codesight)
+
+Codesight produces a structural-view document of the codebase — a `CODESIGHT.md` that answers "what does this code do today" at the file and package level. Cortex maintains the in-flight reflection layer — `state.md`, doctrine, and the journal — that answers "what is currently changing, why, and by when." The two compose by file contract: a project running both gets a complete picture at session start without either tool importing the other. An agent reads `.codesight/CODESIGHT.md` to orient structurally, then `.cortex/state.md` to understand what's in flight. Cortex's `map.md` layer (deferred to v1.x) will cover overlapping ground at lower cadence; codesight and `map.md` converge on the same read-surface rather than competing.
+
+### Karpathy wiki gist (the "what does each file do" pattern)
+
+Andrej Karpathy's wiki-style "what does each file do" gist captured a pattern the community had been hand-rolling: a flat per-file annotation document living alongside the code, kept as ground-truth orientation for both humans and LLMs. The pattern works because it is simple and grep-able; it fails at scale because it is hand-maintained and drifts. Cortex's `map.md` layer (deferred to v1.x) is the agent-evolved version of this artifact: structurally equivalent but regenerated on demand from code and git rather than hand-maintained. The novel piece is cheap regeneration — the same insight that distinguishes Cortex's regenerating State from a hand-maintained `NEXT_PHASE.md`. The gist pattern named the read-surface; Cortex's contribution is the write-and-invalidation contract.
+
+---
+
+## 8. Summary table
 
 | Cortex layer | Mechanical source | Authoring mode | Agent memory type |
 |---|---|---|---|
