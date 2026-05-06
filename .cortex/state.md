@@ -1,16 +1,16 @@
 ---
-Generated: 2026-05-05T09:53:18-04:00
-Generator: cortex refresh-state v0.8.2
+Generated: 2026-05-06T08:06:26-04:00
+Generator: cortex refresh-state v0.8.3
 Sources:
-  - HEAD sha: 2aa1cd405ac01f33f21759801d88e2b5ec4a351c
+  - HEAD sha: c81eab437e7c4e7a574b98c1a834b8a0a6813ee6
   - .cortex/plans/*.md (10 files)
-  - .cortex/journal/*.md (52 entries, 2026-04-17..2026-05-05)
+  - .cortex/journal/*.md (54 entries, 2026-04-17..2026-05-06)
   - .cortex/doctrine/*.md (7 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
   - SPEC version: 0.5.0
-  - pyproject.toml: 0.8.2 + cortex package version: 0.8.2
-Corpus: 52 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
+  - pyproject.toml: 0.8.3 + cortex package version: 0.8.3
+Corpus: 54 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -68,6 +68,8 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 - **2026-05-04** — Cortex v0.8.2 released — corrective release integrity patch (`.cortex/journal/2026-05-04-v0.8.2-released.md`, Type: release)
 - **2026-05-05** — PR #118 merged — docs: add cortex positioning paragraph (`.cortex/journal/2026-05-05-pr-merged-0900.md`, Type: pr-merged)
 - **2026-05-05** — PR #122 merged — docs: record conductor cortex install (`.cortex/journal/2026-05-05-pr-merged-0924.md`, Type: pr-merged)
+- **2026-05-05** — PR #126 merged — docs: record touchstone cortex install (`.cortex/journal/2026-05-05-pr-merged-0956.md`, Type: pr-merged)
+- **2026-05-06** — Cortex v0.8.3 released — installable baseline for vesper dogfood (`.cortex/journal/2026-05-06-cortex-v083-released-installable-baseline-for-vesp.md`, Type: release)
 
 ## Stale-now / handle-later
 
