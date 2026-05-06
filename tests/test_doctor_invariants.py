@@ -567,6 +567,116 @@ def test_state_warns_when_source_changed_after_generated_timestamp(tmp_path: Pat
     ), [issue.message for issue in issues]
 
 
+def _write_state_with_sources_hash(
+    project: Path,
+    generated: datetime,
+    source_hashes: dict[str, str],
+) -> None:
+    """Write a state.md that includes a Sources-hash: block (SPEC v1.1.0+)."""
+    hash_lines = "".join(f"  {p}: {h}\n" for p, h in sorted(source_hashes.items()))
+    (project / ".cortex" / "state.md").write_text(
+        "---\n"
+        f"Generated: {generated.isoformat()}\n"
+        "Generator: cortex refresh-state v1.0.0\n"
+        "Sources:\n"
+        "  - .cortex/journal/*.md\n"
+        "Sources-hash:\n"
+        f"{hash_lines}"
+        "Corpus: test\n"
+        "Omitted: []\n"
+        "Incomplete: []\n"
+        "Conflicts-preserved: []\n"
+        "Spec: 1.1.0\n"
+        "---\n\n"
+        "# Project State\n"
+    )
+
+
+def test_sources_hash_touch_does_not_warn(tmp_path: Path) -> None:
+    """Regression for cortex#171: touching a source's mtime without changing
+    content must not trigger a staleness warning when Sources-hash: is present."""
+    from cortex.state_render import build_state_inputs, render_state
+
+    _scaffold(tmp_path)
+    journal_path = tmp_path / ".cortex" / "journal" / "2026-05-06-decision.md"
+    journal_path.write_text(
+        "# Decision\n\n**Date:** 2026-05-06\n**Type:** decision\n\nBody.\n"
+    )
+    # Generate state.md via the real pipeline so Sources-hash: covers all sources.
+    inputs = build_state_inputs(tmp_path)
+    (tmp_path / ".cortex" / "state.md").write_text(render_state(inputs))
+
+    # Touch mtime on the journal file — content unchanged.
+    import os
+    future = (datetime.now(UTC) + timedelta(seconds=10)).timestamp()
+    os.utime(journal_path, (future, future))
+
+    issues = check_generated_layers(tmp_path)
+    assert not any(
+        issue.path == ".cortex/state.md"
+        and ("state.md generated before source changed" in issue.message
+             or "hash mismatch" in issue.message)
+        for issue in issues
+    ), [f"{issue.path}: {issue.message}" for issue in issues]
+
+
+def test_sources_hash_content_change_warns(tmp_path: Path) -> None:
+    """When a source's content actually changes, doctor must warn using
+    the hash-mismatch message (not the mtime message)."""
+    from cortex.state_render import build_state_inputs, render_state
+
+    _scaffold(tmp_path)
+    journal_path = tmp_path / ".cortex" / "journal" / "2026-05-06-decision.md"
+    journal_path.write_text(
+        "# Decision\n\n**Date:** 2026-05-06\n**Type:** decision\n\nOriginal.\n"
+    )
+    inputs = build_state_inputs(tmp_path)
+    (tmp_path / ".cortex" / "state.md").write_text(render_state(inputs))
+
+    # Modify the source content.
+    journal_path.write_text(
+        "# Decision\n\n**Date:** 2026-05-06\n**Type:** decision\n\nModified.\n"
+    )
+
+    issues = check_generated_layers(tmp_path)
+    assert any(
+        issue.path == ".cortex/state.md"
+        and "state.md source content changed" in issue.message
+        and "hash mismatch" in issue.message
+        for issue in issues
+    ), [f"{issue.path}: {issue.message}" for issue in issues]
+
+
+def test_sources_hash_absent_falls_back_to_mtime(tmp_path: Path) -> None:
+    """Pre-v1.1 state.md without Sources-hash: uses the existing mtime-based
+    fallback so old scaffolds keep working."""
+    _scaffold(tmp_path)
+    generated = (datetime.now(UTC) - timedelta(days=1)).isoformat()
+    (tmp_path / ".cortex" / "state.md").write_text(
+        f"---\n"
+        f"Generated: {generated}\n"
+        "Generator: cortex refresh-state v0.9.0\n"
+        "Sources: []\n"
+        "Corpus: 0\n"
+        "Omitted: []\n"
+        "Incomplete: []\n"
+        "Conflicts-preserved: []\n"
+        "Spec: 1.0.0\n"
+        "---\n\n# State\n"
+    )
+    (tmp_path / ".cortex" / "journal" / "2026-05-06-release.md").write_text(
+        "# Release\n\n**Date:** 2026-05-06\n**Type:** release\n\nBody.\n"
+    )
+
+    issues = check_generated_layers(tmp_path)
+    assert any(
+        issue.path == ".cortex/state.md"
+        and "state.md generated before source changed" in issue.message
+        and ".cortex/journal/2026-05-06-release.md" in issue.message
+        for issue in issues
+    ), [f"{issue.path}: {issue.message}" for issue in issues]
+
+
 def test_legacy_hand_authored_state_warns_to_migrate(tmp_path: Path) -> None:
     _scaffold(tmp_path)
     state = tmp_path / ".cortex" / "state.md"

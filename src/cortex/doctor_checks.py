@@ -7,6 +7,7 @@ preserve one rendering and exit-code policy.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
@@ -364,7 +365,8 @@ def check_generated_layers(project_root: Path) -> list[Issue]:
     for path in _generated_layer_paths(project_root):
         rel = _rel(path, project_root)
         try:
-            frontmatter, _body = parse_frontmatter(path.read_text())
+            text = path.read_text()
+            frontmatter, _body = parse_frontmatter(text)
         except OSError as exc:
             issues.append(Issue(Severity.WARNING, rel, f"generated layer unreadable: {exc}"))
             continue
@@ -398,19 +400,83 @@ def check_generated_layers(project_root: Path) -> list[Issue]:
                     )
                 )
             if path.name == "state.md":
-                newer = _newer_state_source(project_root, generated)
-                if newer is not None:
-                    source_rel, changed_at = newer
-                    issues.append(
-                        Issue(
-                            Severity.WARNING,
-                            rel,
-                            "state.md generated before source changed "
-                            f"({source_rel} at {changed_at.isoformat()}); "
-                            "rerun `cortex refresh-state`",
-                        )
-                    )
+                issues.extend(_check_state_source_freshness(project_root, rel, text, generated))
     return issues
+
+
+def _check_state_source_freshness(
+    project_root: Path,
+    state_rel: str,
+    state_text: str,
+    generated: datetime,
+) -> list[Issue]:
+    """Check whether state.md's sources have changed since it was generated.
+
+    Primary path: compare SHA-256 of each source against the hash recorded in
+    Sources-hash: frontmatter (added in SPEC v1.1.0). No false positives from
+    mtime races or git checkout rewrites.
+
+    Fallback: mtime-based check when Sources-hash: is absent (compat with
+    pre-v1.1 scaffolds that were generated without the hash block).
+    """
+    sources_hash = _parse_sources_hash(state_text)
+    if sources_hash is not None:
+        return _check_by_hash(project_root, state_rel, generated, sources_hash)
+    # Compat fallback for state.md written before Sources-hash: was introduced.
+    newer = _newer_state_source(project_root, generated)
+    if newer is not None:
+        source_rel, changed_at = newer
+        return [
+            Issue(
+                Severity.WARNING,
+                state_rel,
+                "state.md generated before source changed "
+                f"({source_rel} at {changed_at.isoformat()}); "
+                "rerun `cortex refresh-state`",
+            )
+        ]
+    return []
+
+
+def _check_by_hash(
+    project_root: Path,
+    state_rel: str,
+    generated: datetime,
+    sources_hash: dict[str, str],
+) -> list[Issue]:
+    # Hash check: existing sources whose content changed since state was generated.
+    for src_rel, expected_hash in sorted(sources_hash.items()):
+        src_path = project_root / src_rel
+        if not src_path.exists():
+            continue
+        try:
+            actual = _sha256_file(src_path)
+        except OSError:
+            continue
+        if actual != expected_hash:
+            return [
+                Issue(
+                    Severity.WARNING,
+                    state_rel,
+                    f"state.md source content changed "
+                    f"({src_rel} hash mismatch); "
+                    "rerun `cortex refresh-state`",
+                )
+            ]
+    # Mtime check: files not listed in Sources-hash are new since generation.
+    newer = _newer_unlisted_source(project_root, generated, sources_hash)
+    if newer is not None:
+        source_rel, changed_at = newer
+        return [
+            Issue(
+                Severity.WARNING,
+                state_rel,
+                "state.md generated before source changed "
+                f"({source_rel} at {changed_at.isoformat()}); "
+                "rerun `cortex refresh-state`",
+            )
+        ]
+    return []
 
 
 def check_config_toml_schema(project_root: Path) -> list[Issue]:
@@ -1147,6 +1213,62 @@ def _state_source_files(project_root: Path) -> list[Path]:
         if path.is_file():
             files.append(path)
     return files
+
+
+_FRONTMATTER_BLOCK_RE = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?", re.DOTALL)
+_SOURCES_HASH_BLOCK_RE = re.compile(r"(?m)^Sources-hash:\n((?:[ \t]+\S.+\n?)*)")
+
+
+def _parse_sources_hash(state_text: str) -> dict[str, str] | None:
+    """Extract Sources-hash: mapping from state.md frontmatter.
+
+    Returns None when the field is absent (pre-v1.1 scaffold → caller falls
+    back to mtime check). Returns an empty dict when the block is present but
+    empty (all sources were missing when refresh-state ran).
+    """
+    fm = _FRONTMATTER_BLOCK_RE.match(state_text)
+    if not fm:
+        return None
+    block = fm.group(1)
+    sh = _SOURCES_HASH_BLOCK_RE.search(block)
+    if sh is None:
+        return None
+    result: dict[str, str] = {}
+    for line in sh.group(1).splitlines():
+        line = line.strip()
+        if not line or ": " not in line:
+            continue
+        path, _, digest = line.partition(": ")
+        result[path.strip()] = digest.strip()
+    return result
+
+
+def _sha256_file(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _newer_unlisted_source(
+    project_root: Path,
+    generated: datetime,
+    listed_rels: dict[str, str],
+) -> tuple[str, datetime] | None:
+    """Return a source file NOT in listed_rels whose mtime exceeds the threshold.
+
+    Used when Sources-hash: is present to catch genuinely new files (added
+    after refresh-state ran) that aren't yet listed in the hash block.
+    """
+    threshold = generated.astimezone(UTC) + SOURCE_FRESHNESS_SLOP
+    for path in _state_source_files(project_root):
+        rel = _rel(path, project_root)
+        if rel in listed_rels:
+            continue
+        try:
+            changed_at = datetime.fromtimestamp(path.stat().st_mtime, UTC)
+        except OSError:
+            continue
+        if changed_at > threshold:
+            return rel, changed_at
+    return None
 
 
 def _validate_table(

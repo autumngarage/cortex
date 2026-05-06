@@ -1,16 +1,119 @@
 ---
-Generated: 2026-05-06T15:26:40-04:00
+Generated: 2026-05-06T18:16:18-04:00
 Generator: cortex refresh-state v1.0.0
 Sources:
-  - HEAD sha: 6852d8f73bea7956b26c470d0d3fc1dd79e1c77a
+  - HEAD sha: a22b41eae4919b783a9daca985660ccae21820c6
   - .cortex/plans/*.md (10 files)
-  - .cortex/journal/*.md (70 entries, 2026-04-17..2026-05-06)
+  - .cortex/journal/*.md (72 entries, 2026-04-17..2026-05-06)
   - .cortex/doctrine/*.md (7 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
   - SPEC version: 0.5.0
   - pyproject.toml: 1.0.0 + cortex package version: 1.0.0
-Corpus: 70 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
+Sources-hash:
+  .cortex/doctrine/0001-why-cortex-exists.md: e20d6d52fac419bf22ad43ddf01762f03504f348ef0b2cc30d3983b4c8bec063
+  .cortex/doctrine/0002-compose-by-file-contract-not-code.md: 2063446ef8eaf51db05712759124cb21ce26557179607fe59c4ff126f0e4edf3
+  .cortex/doctrine/0003-spec-is-the-artifact.md: 93d7e814c723f0053ce425b7ed9658581bea1ef8b6e72f4d68d38f4751c2fc6d
+  .cortex/doctrine/0004-scope-boundaries.md: 0d1450bc4afdb8359726822d714258546d43395586f7eb8d88ed32c651154d8c
+  .cortex/doctrine/0005-scope-boundaries-v2.md: 804bcd31702a00887b603efae46867ed66acb7fe61b30d80df038f6b24a73684
+  .cortex/doctrine/0006-scope-boundaries-v3.md: 773ff81c5c8a3a1736ad1b640f026b14ace0f6d8198f165534a034906b4e88df
+  .cortex/doctrine/0007-canonical-ownership-of-state-and-plans.md: eeb749c99679b6beccb9ddadf56eb5a7f7aabf387df9c80b407811411a826099
+  .cortex/journal/2026-04-17-competitive-positioning-and-claude-code-risk.md: 9f5416382cf595d0718df52135c80f64b442d0f37783a498a06abb56531e5796
+  .cortex/journal/2026-04-17-cortex-init-shipped.md: 1cdd2f44a174be0bb5dabc5ce50ca06223be90250d8ce26d9ac33f05b7162b82
+  .cortex/journal/2026-04-17-cursor-retreat-and-scale-design.md: b5da79d2510de0a9660f07b99292d83b1b193792d080d81ba69fe75d1b2788aa
+  .cortex/journal/2026-04-17-journal-append-only-self-test.md: ecdee14cd87c623fa6e636b5c79d231c5c91a6d3719852f87a4a11b58529ffe2
+  .cortex/journal/2026-04-17-phase-a-foundation-shipped.md: 3b97232646380a9fbc2812cb6acfdb60128b28ddfd92dc5197da3574d13742eb
+  .cortex/journal/2026-04-17-phase-b-plan-refresh.md: f245dc65c7e4f2e5f8e1671aad32e8128d48a4c75d21d51b5784273c903ad0fc
+  .cortex/journal/2026-04-17-phase-b-scaffold-shipped.md: 4fc4330df8b06dba2061785275a712ebe9ad832b81d85e0e7157bda681d7d100
+  .cortex/journal/2026-04-17-protocol-sharpened-and-drafts-archived.md: 032a4aaa6a3471dd1c77fceb6ca123b36012161e098d440ed0048f1f088d2f4d
+  .cortex/journal/2026-04-17-spec-v0.1.0-drafted.md: 40328e70ecb3ceb35f5b3fe239492370896e1f923f57454992f6cc06e5ea5eb2
+  .cortex/journal/2026-04-17-vision-critique-round-1.md: 04b211bc6b401065e6bcc6470190e9bb766ae70f15ef48d4e151585109348c14
+  .cortex/journal/2026-04-17-vision-session-lost-to-crash.md: 88d6642f306472d5e9845ff4a8b95ab6190968ca1327db39cf9e6fb6490e05d9
+  .cortex/journal/2026-04-17-vision-v3-promoted.md: 5b0e4b0c5dae75728d6a64797698f585653ce5bc1dcfd93a46807bbbd07b10e7
+  .cortex/journal/2026-04-18-open-phase-c-plan-and-update-build-docs.md: 273eaef36a2237c072a6fedb11d96d59e60b7dbb37f157e0e7929ae02b08f70c
+  .cortex/journal/2026-04-18-phase-b-shipped-v0.1.0-on-homebrew.md: b980bfb8ea9524583998c553016cd33121fbbba5d2a1abda254e4e3e09671d4b
+  .cortex/journal/2026-04-23-derive-success-from-preconditions.md: 7463f6a601b99c65e0364ede549385a63c41b078f3c741ce04f2c030bc963f51
+  .cortex/journal/2026-04-23-phase-c-reordered.md: d4199b269e3867950782f3e84fffc845a7ab35dec8b16f3f489834478fa1a7dd
+  .cortex/journal/2026-04-24-case-study-driven-roadmap.md: 3726f61f751138a257801629f322cbe73c10a9b08092ea45ce7b2af44c8effb4
+  .cortex/journal/2026-04-24-dogfood-target-touchstone.md: 5e71c9afffcc2e0fb039cf77b2994e31738a5f878704107d89fb044560cd7c05
+  .cortex/journal/2026-04-24-init-ux-fixes-plan-decision.md: b0553490d6514b3fe8a9cec89c643b25ccdfd211b27c0f8967a27f942293e7e5
+  .cortex/journal/2026-04-24-plan-md-deleted-as-redundant.md: 43301523fe05cef8c2b3c1c7fdd99487147b4047269a80793595e1d248bda92d
+  .cortex/journal/2026-04-24-production-release-rerank.md: 99829c5b542bcb35c3608f89cb8a1e3e815cbba797995cd5579cfd53e5f539eb
+  .cortex/journal/2026-04-24-single-plan-consolidation.md: a0659e420f05636a88891f403f23f4ab1b4345e6bf5a0e239ba9fe1183372a6e
+  .cortex/journal/2026-04-24-v1-followups-parked.md: a6cc73a29a71ad32fa372f1f396b972b2f9a2d909a23ae7640f22f5bcb0fe9da
+  .cortex/journal/2026-04-25-init-ux-fixes-plan-shipped.md: 7fdbbafd5ad7c21d839a19a3f4c71c19e0eaca1cf411551dbdfe59e0a2838eca
+  .cortex/journal/2026-04-25-readme-drift-detection-feature-request.md: 8f55d85e13b69cabb60cf521bc52d03d9911a4e556b63032d0b6a6db3320db78
+  .cortex/journal/2026-04-25-v0.2.4-and-v0.2.5-released.md: b3affe722b8cf1832f7f1c1a927c168506ccf47494e510c8943181c8f6e05b9b
+  .cortex/journal/2026-04-25-v0.2.4-touchstone-re-test-clean.md: 65031a6a506929d98377263b6b3a08e1d4176030dc033a8985ce0594cdee86cd
+  .cortex/journal/2026-04-26-v0.3.0-released.md: 26b7b1adf9fe72c04fe456d770b5b6fdd8686917ba7af01166ee5acb82d7e875
+  .cortex/journal/2026-04-27-production-readiness-audit-hardening.md: 6c6732e8888a702703f8b013274c1c99dc6c98448a9434536da323e5de0395a4
+  .cortex/journal/2026-04-27-refresh-state-hand-marker-convention.md: 323eb5b864c4d74f62633fab7883cb9476e6a9c96a31163d90cdf815a23cc940
+  .cortex/journal/2026-04-28-codesight-cross-pollination-and-council-review.md: def01facf7e1a0ce4c3cd2956e3a34fc25f2a3d2b422accb1ba98a2db63f892d
+  .cortex/journal/2026-04-28-cortex-v050-released-tier-2-tier-3-partial-tier-4.md: 4d192229832a34af0f5688cbeb0328eb4a61ba626b026399109677aafc11bd65
+  .cortex/journal/2026-04-28-cortex-v051-autumn-mail-dogfood-polish-patch.md: 0719dd7171e5be4d8065ea453d1703bb98c1933df8a6176b38519dc2a6deb4d2
+  .cortex/journal/2026-04-28-deps-rust-council-review.md: c26de67b85a7a7421b8327a1cf0477e075740eacdaaad08a5c54b808a76a5ce1
+  .cortex/journal/2026-04-28-markdownfs-council-review.md: 0ed4d2447feaed0ba4a22d2eb547786cf79e164a26a48dcb10c71cc656db7ffa
+  .cortex/journal/2026-05-02-canonical-ownership-doctrine-and-doctor-check.md: 8ed54e32fde756d450324935f856e91af12ceeac36cf9f972068422d41d7c9e9
+  .cortex/journal/2026-05-02-promote-retrieval-onto-launch-path-and-doc-cleanup.md: 88756d7334dcc7251bdb1eb86a3d89f078154183b9d2e731ef639439113a2646
+  .cortex/journal/2026-05-02-v0.6.0-released.md: ce689be661bb6b4554e7d379090b15369d88f46f0b8dc36121d4f636ded41be2
+  .cortex/journal/2026-05-02-v0.7.0-released.md: 2db15b0a64cbd9da7b809e13f6d043ad54cd27e84377e51b455a78b2cc6cbd98
+  .cortex/journal/2026-05-03-pr-merged-2039.md: 796759be6f10840fe01fa61d202d96142b554bc272f39b3a1bcd2537236cd22f
+  .cortex/journal/2026-05-03-pr-merged-2057.md: ec5297b7469681eb63093d2b975b01653fefbdfe5f80ce3f141b71b8daf593a9
+  .cortex/journal/2026-05-03-pr-merged-2119.md: 02b9577a6eafc3b6a174e4232851ad157d6d586ca96b11a9c2ee5e248afc7b48
+  .cortex/journal/2026-05-03-v0.8.0-released.md: a9d85756c7b8a44da094b82054e9297eac62ace8338e2e575d76e902c13b6a56
+  .cortex/journal/2026-05-04-pr-merged-0710.md: abe5af54f6ba1383e0851bb8f00bc05622acf6884ec4d2a0f7ad123eb39c8577
+  .cortex/journal/2026-05-04-pr-merged-0728.md: 37391f736a776e6b2e3f095d131465b9c36dfce2446fa1a948eace063697c6db
+  .cortex/journal/2026-05-04-pr-merged-0737.md: 374a218f062ab36f36231ae7bd9521aa7d46c99cd8d450fac7d49bc91c764e8d
+  .cortex/journal/2026-05-04-v0.8.1-released.md: e7d25afced958206be0d3bc2cf2c4cef18c38eae09d3ac5e42ccad47b6373698
+  .cortex/journal/2026-05-04-v0.8.2-released.md: 0cc1b18920f7d0d3bbf35375477899d1bf2ef589eef1df18e3a8a7fcd004af4c
+  .cortex/journal/2026-05-05-conductor-cortex-install-baseline-merged.md: de73f3429023a00feec046fa15f33732ab9e2bb691f95ff1b33c3dd56bd0f178
+  .cortex/journal/2026-05-05-pr-merged-0900.md: 76764cd68b75ff03003ae8fd5355abefbc4ac4c580189d079806e7435afbbd99
+  .cortex/journal/2026-05-05-pr-merged-0924.md: 6b4e38ef3b49ada60eab1d06358cb532863f5b6ce9813ba0bdae63a188751125
+  .cortex/journal/2026-05-05-pr-merged-0956.md: 774becc9d11ffdda9f4e6672afe276d3b2b0b7c4c1b5bac12267cea9548f0c69
+  .cortex/journal/2026-05-05-touchstone-cortex-install-baseline-merged.md: eec143237e5e737c642f265d63ee9bd5365543172b6da91b9dd46e67ec487de3
+  .cortex/journal/2026-05-06-cortex-v083-released-installable-baseline-for-vesp.md: 0a9965d3f9e10a0c915abf553c08ef24435973afcc0951942a13c70f734cc93a
+  .cortex/journal/2026-05-06-cortex-v090-released-three-target-dogfood-gate-exi.md: 34fe74d8e3e0c593f0d32bdb2c7c77d215ffb9ae1f196319b29695c4b47489cd
+  .cortex/journal/2026-05-06-cortex-v100-released-production-freeze-5-target-do.md: 28ca1b05d39d8dba88a2dad18b2bee536a2c408f0296358ceca96171df74bba5
+  .cortex/journal/2026-05-06-pr-merged-0810.md: d0267834267a75776da3004d034e0ed60475c292cad511372c45b6e6280a67bd
+  .cortex/journal/2026-05-06-pr-merged-0835.md: f95bf27f241e52b207731de7616b7f5a35f0befd5760cd9790292e77985e245a
+  .cortex/journal/2026-05-06-pr-merged-1251.md: 3539ba49aecc62a319aba80914db036598dd0f0f05c6894eefc2951589611e58
+  .cortex/journal/2026-05-06-pr-merged-1311.md: 7b017973f4856d286fdc774eac9c0846b993985483807a7b881a9ad7f5d2e635
+  .cortex/journal/2026-05-06-pr-merged-1319.md: ac5aaeeb522c9aec2cf8287612940d06d1da85cad8db78e55e67657f4e1b7064
+  .cortex/journal/2026-05-06-pr-merged-1328.md: 78381661ffdeb0b26740bf870f5d77075075f3961ba5cf6e89beeb2cc53bbd80
+  .cortex/journal/2026-05-06-pr-merged-1355.md: 07e9563130926f1232993264b74fc9d70db9466a7144dc1626f7b3229b0fc102
+  .cortex/journal/2026-05-06-pr-merged-1420.md: 80ccce35183880918bdcf74611b094d2c45744497d2df009c224d0b3cadca7c2
+  .cortex/journal/2026-05-06-pr-merged-1433.md: fcc117d081fb6d1c2c8d31bce8998f29883c2f52c9b426e22ac21aea886c3b35
+  .cortex/journal/2026-05-06-pr-merged-1522.md: ee15e2c15cceddf274c41e8be29134289a81ec86e8185edc4342528d2f76cf5a
+  .cortex/journal/2026-05-06-pr-merged-1529.md: abd955565d793a1d0e2550b6365e13c717e4cd651be330d3462ee08c28626f21
+  .cortex/journal/2026-05-06-pr-merged-1601.md: 907fd23201e49f68dd2fcbd0257c9b13226d693695c76ba7cb7290a3a77c22a5
+  .cortex/journal/2026-05-06-pre-10-compatibility-audit-v03-and-v05-forward-com.md: 677ee49aad6c9c09f58f5842d10ead7578b01f4e559b94b75816aaa66b063613
+  .cortex/journal/2026-05-06-v090-behavioral-exit-bar-review-gate-exit-declared.md: 45866242b9c2e95316bd3b325a45ed181228200d184dda09f110b859d6a5e655
+  .cortex/journal/2026-05-06-v090-dogfood-retrieval-validation-across-three-tar.md: 9864bb736576da17152b2068a905af9264c5f3e3f000fc349dc7387fa54b181f
+  .cortex/journal/2026-05-06-v10-doctrine-review-all-7-hold-no-supersedes.md: f10fe0930dea7946d20959ea681d8908350157140f0bc036a38862a4db764585
+  .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
+  .cortex/plans/cortex-v0.3.0.md: d78e60537e30ed81d8464575191674253822ed4953a055ca2a14a9626c5f8b6f
+  .cortex/plans/cortex-v1.md: 3a8aed197e9e994d02cf1e143c5abe1e5bb821c5a0c39145b3040c69a1eb5b65
+  .cortex/plans/init-ux-fixes-from-touchstone.md: fdf183f562d2dcde26101ea6b44163bfccf8377affc712cf1318ec16be4ecaee
+  .cortex/plans/phase-b-walking-skeleton.md: 3f52bfc07c327cfc88e26dccdf13b91e1d23cf02ff4dbea2426cd75d088c0e04
+  .cortex/plans/phase-c-authoring-and-state.md: 8ab9a5ac4e593102e16ccab03a8b13248ec68f1afd05cd974c19c0c0e361c3c1
+  .cortex/plans/phase-c-first-synthesis.md: 6f665b8f0667478e00b4fee88744d2054ed6ee1157bd1f250a6f918bdec17bee
+  .cortex/plans/phase-d-integration.md: 4e7a3e708eb7b60e5ac7fd9b080bc41363043875c9984e6141d579e119fc843d
+  .cortex/plans/phase-e-synthesis-and-governance.md: 6cbbaf7627552a3f5e1943417600732a414bb40fcef179873b23e194cbd696ba
+  .cortex/plans/vision-sharpening.md: 7434ab62dc5c5039e4515a93da372a9a358f7dc6effd194c2012f2d6c3968f4d
+  .cortex/templates/README.md: 0e1fe4be29e8c465aeaac0b75b1a6522f1f98333ea2f009d4d900bd56abd866f
+  .cortex/templates/digest/monthly.md: 0c13cf6781d15e0858544e3919166a7c123698066e6c93fc70a3b808a8239813
+  .cortex/templates/digest/quarterly.md: 8750f1eb703b158d30869204737b071213d2b33370af86ce85daed1f48943f98
+  .cortex/templates/doctrine/candidate.md: f36d07799d0573161985d3b0f0592970b13dc3e8f6f69eb19f0c49ee45cdc618
+  .cortex/templates/journal/decision.md: c13a09aba83b4ea70d16406c2b22941a200a8e76a3e3af9abbb15484b56b8783
+  .cortex/templates/journal/incident.md: 4dd23cdeb23ee8584908218ca585d4e3cc4d9f3de64cd55c43720ab731fc441a
+  .cortex/templates/journal/plan-transition.md: 883e4aa674e446869c9885fc43c8349e43d696c03b5c97aad4db04e1e46c678e
+  .cortex/templates/journal/pr-merged.md: 54c7db7d1a7a9e5833436825c542d746d9dc96270388e76910cef2bd91b20e64
+  .cortex/templates/journal/promotion.md: 04061afa98ae6f0ef64ba960bc92df23aa6a7371f594c5c5906ff213842cf800
+  .cortex/templates/journal/release.md: 9a6bc59219156e48b419fb170c7c50ff557767def8672ef20568df3e14eadbd0
+  .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476
+  .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44
+  docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c
+Corpus: 72 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -82,6 +185,8 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 - **2026-05-06** — PR #158 merged — chore(cli): polish help text and error messages for v1.0 adoption-friction reduction (`.cortex/journal/2026-05-06-pr-merged-1420.md`, Type: pr-merged)
 - **2026-05-06** — PR #159 merged — docs(plan): close pre-1.0 compat audit + tick v1 swarm checkboxes (`.cortex/journal/2026-05-06-pr-merged-1433.md`, Type: pr-merged)
 - **2026-05-06** — PR #165 merged — docs(plan): tick brew-smoke-test ceremony item with real-corpus install evidence (`.cortex/journal/2026-05-06-pr-merged-1522.md`, Type: pr-merged)
+- **2026-05-06** — PR #166 merged — docs(journal): record v1.0.0 release — production freeze (`.cortex/journal/2026-05-06-pr-merged-1529.md`, Type: pr-merged)
+- **2026-05-06** — PR #170 merged — feat(init): summarize pre-existing scaffold content so users can distinguish their issues from the install (`.cortex/journal/2026-05-06-pr-merged-1601.md`, Type: pr-merged)
 
 ## Stale-now / handle-later
 
