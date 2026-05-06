@@ -1,6 +1,11 @@
 [manifest]
 verified_threshold_days = 90
 
+[audit-instructions]
+homebrew_tap = "autumngarage/cortex"
+github_releases = ["autumngarage/cortex"]
+scan_files = ["CLAUDE.md", "AGENTS.md", "README.md"]
+
 [refresh-index]
 candidate_patterns = [
   "we decided",

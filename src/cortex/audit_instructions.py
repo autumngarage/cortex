@@ -23,6 +23,15 @@ SIBLING_RE = re.compile(r"(?<![\w/])~/(?:[Rr]epos)/[A-Za-z0-9._-]+")
 URL_RE = re.compile(r"https?://[^\s<>'\")\]]+")
 URL_TRAILING_DELIMITERS = "`),.;:>"
 
+# Placeholder patterns that appear in user-facing example snippets, not real claims.
+# Case-sensitive for ALL_CAPS variants; case-insensitive for hyphenated-lowercase and
+# angle-bracket forms. Mirrors the sibling-path fix in cortex#123.
+_TEMPLATE_URL_EXACT = frozenset({"YOUR_USERNAME", "YOUR_ORG", "YOUR_REPO", "YOUR_NAME", "EXAMPLE"})
+_TEMPLATE_URL_LOWER = frozenset({
+    "your-name", "your-username", "your-org", "your-repo", "your-fork",
+    "<example>", "<your-",
+})
+
 
 @dataclass(frozen=True)
 class TextLocation:
@@ -122,6 +131,10 @@ def audit_instructions(project_root: Path) -> AuditInstructionsReport:
         checked += len(config.github_repos)
         findings.extend(audit_github_releases(config.github_repos, scan))
 
+    if config.github_releases:
+        checked += len(config.github_releases)
+        findings.extend(audit_github_releases_latest(config.github_releases, scan))
+
     return AuditInstructionsReport(checked=checked, findings=tuple(findings))
 
 
@@ -145,7 +158,8 @@ def scan_instruction_files(project_root: Path, scan_files: tuple[str, ...]) -> S
                 sibling_refs.setdefault(sibling, []).append(TextLocation(path, line_number))
             for raw in URL_RE.findall(line):
                 url = _normalize_url_claim(raw)
-                url_refs.setdefault(url, []).append(TextLocation(path, line_number))
+                if not _is_template_url(url):
+                    url_refs.setdefault(url, []).append(TextLocation(path, line_number))
             for version in VERSION_RE.findall(line):
                 version_refs.setdefault(version, []).append(TextLocation(path, line_number))
 
@@ -160,6 +174,14 @@ def scan_instruction_files(project_root: Path, scan_files: tuple[str, ...]) -> S
 
 def _normalize_url_claim(raw: str) -> str:
     return raw.rstrip(URL_TRAILING_DELIMITERS)
+
+
+def _is_template_url(url: str) -> bool:
+    for pattern in _TEMPLATE_URL_EXACT:
+        if pattern in url:
+            return True
+    url_lower = url.lower()
+    return any(pattern in url_lower for pattern in _TEMPLATE_URL_LOWER)
 
 
 def audit_filesystem_siblings(siblings: dict[str, tuple[TextLocation, ...]]) -> list[Finding]:
@@ -252,6 +274,42 @@ def audit_github_releases(repos: tuple[str, ...], scan: ScanResult) -> list[Find
     return findings
 
 
+def audit_github_releases_latest(repos: tuple[str, ...], scan: ScanResult) -> list[Finding]:
+    if shutil.which("gh") is None:
+        return [Finding("warning", "gh not installed, skipping github_releases checks")]
+
+    findings: list[Finding] = []
+    for repo in repos:
+        try:
+            completed = subprocess.run(
+                ["gh", "api", f"repos/{repo}/releases/latest", "--jq", ".tag_name"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=SUBPROCESS_TIMEOUT_SECONDS,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            findings.append(Finding("warning", f"audit-instructions: gh api failed for {repo}: {exc}"))
+            continue
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip() or f"exit {completed.returncode}"
+            findings.append(Finding("warning", f"audit-instructions: gh api failed for {repo}: {detail}"))
+            continue
+        tag = completed.stdout.strip()
+        if not tag:
+            findings.append(Finding("warning", f"github releases: {repo} returned no release tag"))
+            continue
+        findings.append(Finding("ok", f"github releases: {repo} latest is {tag}"))
+        findings.extend(
+            _version_mismatch_findings(
+                "github release version mismatch",
+                tag,
+                _version_locations_by_marker(scan, repo),
+            )
+        )
+    return findings
+
+
 def _run_network_checks(
     tasks: list[tuple[str, str, tuple[TextLocation, ...]]],
     pypi_package: str | None,
@@ -321,19 +379,26 @@ def _github_repo_version_locations(
     return {version: tuple(locations) for version, locations in locations_by_version.items()}
 
 
-def _homebrew_tap_version_locations(
-    scan: ScanResult, tap: str
+def _version_locations_by_marker(
+    scan: ScanResult, marker: str
 ) -> dict[str, tuple[TextLocation, ...]]:
-    marker = tap.lower()
+    """Version strings found on lines containing `marker` (case-insensitive)."""
+    marker_lower = marker.lower()
     locations_by_version: dict[str, list[TextLocation]] = {}
     for path, text in scan.text_by_file.items():
         for line_number, line in enumerate(text.splitlines(), start=1):
-            if marker not in line.lower():
+            if marker_lower not in line.lower():
                 continue
             location = TextLocation(path, line_number)
             for version in VERSION_RE.findall(line):
                 locations_by_version.setdefault(version, []).append(location)
     return {version: tuple(locations) for version, locations in locations_by_version.items()}
+
+
+def _homebrew_tap_version_locations(
+    scan: ScanResult, tap: str
+) -> dict[str, tuple[TextLocation, ...]]:
+    return _version_locations_by_marker(scan, tap)
 
 
 def _github_tag_from_payload(payload: Any) -> str | None:

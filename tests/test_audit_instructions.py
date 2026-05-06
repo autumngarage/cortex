@@ -295,6 +295,96 @@ def test_network_timeout_warns_without_crashing(tmp_path: Path, monkeypatch: Any
     assert "check failed: timed out" in output
 
 
+def test_template_url_skipped_real_broken_url_still_warns(tmp_path: Path, monkeypatch: Any) -> None:
+    _write_config(
+        tmp_path,
+        '[audit-instructions]\nurls = ["https://example.invalid/missing"]\nscan_files = ["README.md"]\n',
+    )
+    (tmp_path / "README.md").write_text(
+        "git clone https://github.com/YOUR_USERNAME/example.git\n"
+        "See also https://github.com/your-org/example for details.\n"
+    )
+    monkeypatch.setattr("urllib.request.urlopen", lambda _req, timeout: _Response(404))
+
+    exit_code, output = _run(tmp_path)
+
+    assert exit_code == 0
+    assert "YOUR_USERNAME" not in output
+    assert "your-org" not in output
+    assert "url: https://example.invalid/missing returned 404" in output
+
+
+def test_github_releases_stale_version_warns(tmp_path: Path, monkeypatch: Any) -> None:
+    _write_config(
+        tmp_path,
+        '[audit-instructions]\ngithub_releases = ["autumngarage/cortex"]\nscan_files = ["CLAUDE.md"]\n',
+    )
+    (tmp_path / "CLAUDE.md").write_text(
+        "autumngarage/cortex is currently on v0.0.1 — install it.\n"
+    )
+
+    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["gh", "api"] and "/releases/latest" in args[2]:
+            return subprocess.CompletedProcess(args, 0, stdout="v1.0.0\n", stderr="")
+        raise AssertionError(f"unexpected subprocess: {args}")
+
+    monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    exit_code, output = _run(tmp_path)
+
+    assert exit_code == 0
+    assert "github release version mismatch" in output
+    assert "v0.0.1" in output
+    assert "v1.0.0" in output
+
+
+def test_github_releases_current_version_no_warning(tmp_path: Path, monkeypatch: Any) -> None:
+    _write_config(
+        tmp_path,
+        '[audit-instructions]\ngithub_releases = ["autumngarage/cortex"]\nscan_files = ["CLAUDE.md"]\n',
+    )
+    (tmp_path / "CLAUDE.md").write_text(
+        "autumngarage/cortex is currently on v1.0.0 — install it.\n"
+    )
+
+    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["gh", "api"] and "/releases/latest" in args[2]:
+            return subprocess.CompletedProcess(args, 0, stdout="v1.0.0\n", stderr="")
+        raise AssertionError(f"unexpected subprocess: {args}")
+
+    monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    exit_code, output = _run(tmp_path)
+
+    assert exit_code == 0
+    assert "github release version mismatch" not in output
+    assert output == "audit-instructions: checked 1 claims, all verified\n"
+
+
+def test_github_releases_gh_failure_warns_without_crashing(tmp_path: Path, monkeypatch: Any) -> None:
+    _write_config(
+        tmp_path,
+        '[audit-instructions]\ngithub_releases = ["autumngarage/private-repo"]\nscan_files = ["CLAUDE.md"]\n',
+    )
+    (tmp_path / "CLAUDE.md").write_text("autumngarage/private-repo v0.1.0\n")
+
+    def fake_run(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["gh", "api"]:
+            return subprocess.CompletedProcess(args, 1, stdout="", stderr="could not resolve to a Repository")
+        raise AssertionError(f"unexpected subprocess: {args}")
+
+    monkeypatch.setattr("shutil.which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    exit_code, output = _run(tmp_path)
+
+    assert exit_code == 0
+    assert "audit-instructions: gh api failed for autumngarage/private-repo" in output
+    assert "could not resolve to a Repository" in output
+
+
 def test_brew_and_gh_absent_degrade_gracefully(tmp_path: Path, monkeypatch: Any) -> None:
     monkeypatch.setenv("PATH", "")
     _write_config(
@@ -303,6 +393,7 @@ def test_brew_and_gh_absent_degrade_gracefully(tmp_path: Path, monkeypatch: Any)
 [audit-instructions]
 homebrew_tap = "autumngarage/cortex"
 github_repos = ["autumngarage/cortex"]
+github_releases = ["autumngarage/cortex"]
 """,
     )
 
@@ -311,3 +402,4 @@ github_repos = ["autumngarage/cortex"]
     assert exit_code == 0
     assert "brew not installed, skipping homebrew_tap check" in output
     assert "gh not installed, skipping github_repos checks" in output
+    assert "gh not installed, skipping github_releases checks" in output
