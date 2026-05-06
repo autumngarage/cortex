@@ -2,7 +2,7 @@
 
 > **Cortex is a file-format protocol for project memory.** Six layers of documents per project, each with a mechanical, authoring, and retrieval contract. Consumed by humans and AI coding agents. The CLI named `cortex` is one implementation; other tools (Sentinel, Touchstone, Claude Code sessions, humans) read and write the same files by the same rules.
 
-**Spec version:** 0.5.0
+**Spec version:** 1.0.0
 **Status:** Active
 **Protocol companion:** [`.cortex/protocol.md`](./.cortex/protocol.md) defines when and how agents write; SPEC.md defines what the files look like.
 
@@ -17,7 +17,7 @@ Seven rules, each inherited from prior art (sources in `docs/PRIOR_ART.md`):
 3. **One authoring mode per layer.** Diataxis discipline. Doctrine is Explanation, Procedures are How-to, Map/State are Reference, Plans are a named trail (Memex), Journal is timestamped facts. Don't mix.
 4. **Atomic entries with explicit triggers.** Zettelkasten atomicity + SRE postmortem triggers. One decision per Doctrine entry; one event per Journal entry; no trigger → no entry. Agent-driven writes follow a declared trigger set ([`.cortex/protocol.md`](./.cortex/protocol.md)) — silent discretionary background writes are forbidden.
 5. **Promotion pipeline, not free-form.** Ahrens' graduation from fleeting → permanent. Journal entries earn promotion to Doctrine when they generalize. Plans earn promotion to Procedures when they stabilize. Promotion is deliberate, linked back to the originator, and surfaced as a managed queue with operational rules (§ 4.7).
-6. **Regeneration is first-class, staleness is surfaced.** Map and State regenerate from primary sources. Every generated layer declares seven metadata fields (§ 3.2, § 3.3, § 5) — Generated, Generator, Sources, Corpus, Omitted, Incomplete, Conflicts-preserved. Stale-beyond-threshold regeneration surfaces a warning. Missing or incomplete inputs are declared, not hidden.
+6. **Regeneration is first-class, staleness is surfaced.** Map and State regenerate from primary sources. Every generated layer declares eight metadata fields (§ 3.2, § 3.3, § 4.5, § 5) — Generated, Generator, Sources, Corpus, Omitted, Incomplete, Conflicts-preserved, Spec. Stale-beyond-threshold regeneration surfaces a warning. Missing or incomplete inputs are declared, not hidden.
 7. **The Protocol is the write contract.** Agent writes to `.cortex/` happen under one of two authorities: explicit human invocation, or a declared Tier 1 Protocol trigger ([`.cortex/protocol.md`](./.cortex/protocol.md) § 2). Both are auditable. No third path exists.
 
 ---
@@ -302,8 +302,8 @@ Every promotion sets `Promoted-from:` on the **new** entry (the promotee). Wheth
 
 **Summary:** `Promoted-from:` on the new entry is the one invariant canonical link. `Promoted-to:` on the source is authored only where the source layer is mutable. On append-only and immutable layers it must not appear; reverse traversal there is derived.
 
-### 4.5 Generated layers declare seven metadata fields
-`Generated`, `Generator`, `Sources`, `Corpus`, `Omitted`, `Incomplete`, `Conflicts-preserved`. Missing fields fail `cortex doctor`. See § 3.2, § 3.3, and § 5 for details.
+### 4.5 Generated layers declare eight metadata fields
+`Generated`, `Generator`, `Sources`, `Corpus`, `Omitted`, `Incomplete`, `Conflicts-preserved`, `Spec`. Missing fields fail `cortex doctor`. See § 3.2, § 3.3, and § 5 for details.
 
 ### 4.5.1 Per-fact verification timestamps (additive)
 
@@ -380,7 +380,7 @@ Cortex is **append-only at write and tiered at read**. Nothing is ever deleted; 
 
 **Monthly digest.** On a configurable cadence (default monthly), `cortex` proposes a Journal digest — a summary of the period's key decisions and learnings, with citations to the originals. Human approves in the `cortex` interactive flow. Digest lives in `journal/` with `Type: digest`. Originals stay in warm/cold.
 
-**Digests obey the seven-field metadata contract** (§ 3.2, § 3.3, § 4.5) plus two digest-specific rules:
+**Digests obey the eight-field metadata contract** (§ 3.2, § 3.3, § 4.5) plus two digest-specific rules:
 
 ### 5.3 Digest depth cap
 A digest may cite other digests at most **one level deep**. Quarterly digests may cite monthly digests, but must **also cite ≥5 raw Journal entries directly**. Digest-of-digest-of-digest is forbidden — this bounds drift under repeated consolidation.
@@ -425,6 +425,8 @@ Tools must declare which spec major versions they support. Readers encountering 
 **v0.4.0-dev adds T1.10 plus the § 4.2 Doctrine-resolution clarification.** Protocol § 2 gains a tenth Tier-1 trigger — `T1.10: A tagged release / distribution artifact shipped` — paired with a new `journal/release.md` template and a new `release` value in the § 3.5 `Type:` enum. Rationale grounded in the conductor case study (`docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md`): downstream documentation references *released* artifacts, not merged commits, and a release without a journal record is how the conductor incident's stale `CLAUDE.md` claim about the Homebrew tap survived eight subsequent releases. T1.10's audit walks `git tag --list` and matches each tag against a `Type: release` journal entry within 72h whose **`Tag:`** scalar (a new release-specific bold-inline / frontmatter field) equals the tag name — so one release entry resolves exactly one tag. Without the Tag field, an entry is ambiguous about which tag it records and the matcher declines to satisfy any T1.10 fire on its behalf, forcing the writer to be explicit. § 4.2 also formalizes Doctrine entries as a valid deferral resolution target alongside Plans and Journal entries — the practical pattern when a follow-up resolves to "out of scope per Doctrine N" rather than to a piece of work being tracked elsewhere. Additive change — no existing fields, layouts, or invariants are modified. Bumped as a minor under § 7's "new Protocol triggers" rule (consumers need to opt into the new trigger and `release` enum value, so it is not a clarification patch).
 
 **v0.5.0-dev adds per-fact `Verified:` timestamps (§ 4.5.1).** Generated-layer bullets may now carry an optional end-of-bullet verification date, and consumers such as `cortex manifest` may surface stale verification warnings inline. Additive change — unparsed tags remain plain markdown, and existing generated layers without tags remain valid.
+
+**v1.0.0 is the spec freeze.** The strict major-for-breaking rule (above) now applies. No `0.x`-era changes in this release — 1.0.0 is identical to the 0.5.0-dev draft except: (1) the `-dev` suffix is dropped, (2) `Spec:` is added to the § 4.5 required-fields enumeration as the eighth metadata field (it was already emitted by the reference implementation and present in the § 3.2 / § 3.3 example headers; the omission from § 4.5 was a documentation gap). Tools that conform to 0.5.0-dev conform to 1.0.0; no migration is required.
 
 **Protocol version relationship.** [`.cortex/protocol.md`](./.cortex/protocol.md) carries its own version. A Protocol version is compatible with one or more SPEC.md versions, declared in the Protocol's header. A major SPEC bump always requires a Protocol review; a minor SPEC bump may or may not trigger a Protocol bump depending on whether new triggers are needed.
 
