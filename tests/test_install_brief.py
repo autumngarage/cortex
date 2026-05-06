@@ -273,3 +273,81 @@ def test_closes_flag_single_issue(tmp_path: Path) -> None:
     result = CliRunner().invoke(cli, ["install-brief", str(target), "--closes", "99"])
     assert result.exit_code == 0, result.output
     assert "Closes-issue: #99" in result.output
+
+
+# ── --closes flag: dual-artifact output ───────────────────────────────────
+
+
+def test_closes_produces_dual_artifact_section(tmp_path: Path) -> None:
+    target = _make_git_repo(tmp_path / "myrepo")
+    (target / "pyproject.toml").touch()
+
+    result = CliRunner().invoke(cli, ["install-brief", str(target), "--closes", "100,200"])
+    assert result.exit_code == 0, result.output
+    # Both target files must be mentioned
+    assert "cortex-install-baseline" in result.output
+    assert "plans/cortex-install-followups.md" in result.output
+
+
+def test_closes_journal_section_uses_refs_not_checkboxes(tmp_path: Path) -> None:
+    target = _make_git_repo(tmp_path / "myrepo")
+    (target / "pyproject.toml").touch()
+
+    result = CliRunner().invoke(cli, ["install-brief", str(target), "--closes", "100,200"])
+    assert result.exit_code == 0, result.output
+    # Journal template must reference issues via Refs:, not [ ] boxes
+    assert "Refs: cortex#100, cortex#200" in result.output
+
+
+def test_closes_plan_section_contains_checkboxes_per_issue(tmp_path: Path) -> None:
+    target = _make_git_repo(tmp_path / "myrepo")
+    (target / "pyproject.toml").touch()
+
+    result = CliRunner().invoke(cli, ["install-brief", str(target), "--closes", "100,200"])
+    assert result.exit_code == 0, result.output
+    # Follow-up plan must have one [ ] per tracked issue
+    assert "- [ ] cortex#100" in result.output
+    assert "- [ ] cortex#200" in result.output
+
+
+def test_closes_plan_section_has_active_status(tmp_path: Path) -> None:
+    target = _make_git_repo(tmp_path / "myrepo")
+    (target / "pyproject.toml").touch()
+
+    result = CliRunner().invoke(cli, ["install-brief", str(target), "--closes", "100,200"])
+    assert result.exit_code == 0, result.output
+    assert "Status: active" in result.output
+
+
+def test_closes_plan_cites_journal_journal_cites_plan(tmp_path: Path) -> None:
+    target = _make_git_repo(tmp_path / "myrepo")
+    (target / "pyproject.toml").touch()
+
+    result = CliRunner().invoke(cli, ["install-brief", str(target), "--closes", "100,200"])
+    assert result.exit_code == 0, result.output
+    # Journal template cites the plan
+    assert "Cites: plans/cortex-install-followups" in result.output
+    # Plan template cites the journal
+    assert "Cites: journal/" in result.output
+
+
+def test_no_closes_flag_gives_single_artifact(tmp_path: Path) -> None:
+    target = _make_git_repo(tmp_path / "myrepo")
+    (target / "pyproject.toml").touch()
+
+    result = CliRunner().invoke(cli, ["install-brief", str(target)])
+    assert result.exit_code == 0, result.output
+    # Without --closes, no follow-up plan section
+    assert "plans/cortex-install-followups.md" not in result.output
+    assert "dual-artifact" not in result.output
+    # Original single-artifact Phase 5 heading still present
+    assert "Phase 5 — Baseline journal entry" in result.output
+
+
+def test_closes_output_format_includes_artifact_lines(tmp_path: Path) -> None:
+    target = _make_git_repo(tmp_path / "myrepo")
+    (target / "pyproject.toml").touch()
+
+    result = CliRunner().invoke(cli, ["install-brief", str(target), "--closes", "100"])
+    assert result.exit_code == 0, result.output
+    assert "Artifacts written:" in result.output

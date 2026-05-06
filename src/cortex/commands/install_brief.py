@@ -194,6 +194,72 @@ def _source_exclude_hint(language: str) -> str:
     return "<source directories> — exclude from diff scope"
 
 
+def _dual_artifact_phase5(name: str, closes: list[int]) -> str:
+    """Return Phase 5 block for installs with tracked upstream issues (--closes provided).
+
+    When issues are tracked, the install should produce two files:
+    - A journal-baseline entry (append-only, no [ ] boxes, uses Refs: for issues)
+    - A follow-up plan (mutable, [ ] checkboxes per issue, Status: active)
+    """
+    refs_field = ", ".join(f"cortex#{n}" for n in closes)
+    tracked_items = "\n".join(
+        f"- [ ] cortex#{n} — [describe what this tracks]" for n in closes
+    )
+    filed_items = "\n".join(f"- cortex#{n} — [brief description]" for n in closes)
+
+    journal_template = (
+        "---\n"
+        "Type: decision\n"
+        f"Title: cortex-install-baseline — {name}\n"
+        "Date: YYYY-MM-DD\n"
+        "Author: agent\n"
+        "Status: canonical\n"
+        f"Refs: {refs_field}\n"
+        "Cites: plans/cortex-install-followups\n"
+        "---\n\n"
+        "## What happened\n\n"
+        "[Narrative: what cortex init found, what pre-existing state existed, what was configured]\n\n"
+        "## What was filed\n\n"
+        "Issues filed upstream against autumngarage/cortex:\n"
+        f"{filed_items}\n\n"
+        "Follow-up tracking lives in `.cortex/plans/cortex-install-followups.md`"
+        " (see `Cites:` above).\n"
+    )
+
+    plan_template = (
+        "---\n"
+        "Type: plan\n"
+        f"Title: cortex-install-followups — {name}\n"
+        "Status: active\n"
+        "Author: agent\n"
+        "Written: YYYY-MM-DD\n"
+        "Goal-hash: <compute-on-write>\n"
+        "Updated-by: cortex install-brief\n"
+        "Cites: journal/YYYY-MM-DD-cortex-install-baseline\n"
+        "---\n\n"
+        "## Goal\n\n"
+        f"Track upstream issues filed during the Cortex install on {name}. When all\n"
+        "referenced issues are closed, set Status: shipped.\n\n"
+        "## Success criteria\n\n"
+        "- All referenced issues below are closed.\n\n"
+        "## Tracked items\n\n"
+        f"{tracked_items}\n"
+    )
+
+    return (
+        "### Phase 5 — Baseline journal + follow-up plan (dual-artifact)\n\n"
+        f"Because upstream issues were filed ({refs_field}), author **two** files.\n"
+        "The journal records what happened (append-only, no `[ ]` boxes);\n"
+        "the plan owns all tracking (mutable, checkbox-driven).\n\n"
+        "**File 1: `.cortex/journal/YYYY-MM-DD-cortex-install-baseline.md`**"
+        " (append-only — no `[ ]` boxes)\n\n"
+        f"```markdown\n{journal_template}```\n\n"
+        "**File 2: `.cortex/plans/cortex-install-followups.md`**"
+        " (mutable — tracking lives here, not in the journal)\n\n"
+        f"```markdown\n{plan_template}```\n"
+    )
+
+
 def _build_brief(
     *,
     target: Path,
@@ -263,6 +329,24 @@ def _build_brief(
 
     # Source exclude hint
     source_exclude = _source_exclude_hint(language)
+
+    # Phase 5: dual-artifact (journal + plan) when --closes is provided; single otherwise.
+    if closes:
+        phase5_section = _dual_artifact_phase5(name, closes)
+        artifact_output_lines = (
+            "Artifacts written: .cortex/journal/<date>-cortex-install-baseline.md ✅\n"
+            "                   .cortex/plans/cortex-install-followups.md ✅\n"
+        )
+    else:
+        phase5_section = (
+            "### Phase 5 — Baseline journal entry\n\n"
+            "- [ ] `cortex journal draft decision --title \"cortex-install-baseline\"`"
+            " — capture install findings\n"
+            "- [ ] Record any pre-existing `cortex doctor` warnings as known debt"
+            " (do not silently patch)\n"
+            "- [ ] File any issues surfaced against Cortex upstream (autumngarage/cortex)\n"
+        )
+        artifact_output_lines = ""
 
     # Issue-closing trailers section (injected into Phase 6 when --closes was passed)
     if closes:
@@ -340,12 +424,7 @@ Paste into `.cortex/config.toml` and fill in the blanks:
 - [ ] Scope check: `git diff --stat main` touches ONLY `.cortex/`, `.gitignore`, `CLAUDE.md`, `AGENTS.md`
 - [ ] No diff in: {source_exclude}{"" if not touchstone_paths else (chr(10) + "- [ ] No diff in: " + ", ".join(f"`{p}`" for p in touchstone_paths))}
 
-### Phase 5 — Baseline journal entry
-
-- [ ] `cortex journal draft decision --title "cortex-install-baseline"` — capture install findings
-- [ ] Record any pre-existing `cortex doctor` warnings as known debt (do not silently patch)
-- [ ] File any issues surfaced against Cortex upstream (autumngarage/cortex)
-
+{phase5_section}
 ### Phase 6 — Ship
 
 - [ ] `git checkout -b chore/install-cortex`
@@ -363,7 +442,7 @@ PR: <URL on {github_slug}>
 cortex doctor: <N> errors / <N> warnings (before) → <N> errors / <N> warnings (after)
 cortex doctor --audit-instructions: <N> claims checked, all verified / <N> failures
 Issues filed: <list or "none">
-Scope check: diff touches only .cortex/, .gitignore, CLAUDE.md, AGENTS.md ✅
+{artifact_output_lines}Scope check: diff touches only .cortex/, .gitignore, CLAUDE.md, AGENTS.md ✅
 ```
 """
     return brief  # noqa: RET504
@@ -392,8 +471,10 @@ Scope check: diff touches only .cortex/, .gitignore, CLAUDE.md, AGENTS.md ✅
     "--closes",
     "closes_issues",
     default="",
-    help="Comma-separated issue numbers to close (e.g. 162,163). "
-    "Embeds Closes-issue: trailer instructions in the Phase 6 Ship checklist.",
+    help="Comma-separated issue numbers to track (e.g. 162,163). "
+    "Triggers dual-artifact output: a journal-baseline (append-only, no [ ] boxes) "
+    "and a follow-up plan (mutable, [ ] checkboxes). "
+    "Also embeds Closes-issue: trailer instructions in the Phase 6 Ship checklist.",
 )
 def install_brief_command(
     target_path: Path,
