@@ -135,6 +135,10 @@ def audit_instructions(project_root: Path) -> AuditInstructionsReport:
         checked += len(config.github_releases)
         findings.extend(audit_github_releases_latest(config.github_releases, scan))
 
+    if config.paas_repos:
+        checked += len(config.paas_repos)
+        findings.extend(audit_github_paas_repos(config.paas_repos))
+
     return AuditInstructionsReport(checked=checked, findings=tuple(findings))
 
 
@@ -307,6 +311,32 @@ def audit_github_releases_latest(repos: tuple[str, ...], scan: ScanResult) -> li
                 _version_locations_by_marker(scan, repo),
             )
         )
+    return findings
+
+
+def audit_github_paas_repos(repos: tuple[str, ...]) -> list[Finding]:
+    """Check that PaaS-deployed repos (no GitHub releases by design) are reachable."""
+    if shutil.which("gh") is None:
+        return [Finding("warning", "gh not installed, skipping paas_repos checks")]
+
+    findings: list[Finding] = []
+    for repo in repos:
+        try:
+            completed = subprocess.run(
+                ["gh", "api", f"repos/{repo}", "--jq", ".full_name"],
+                check=False,
+                capture_output=True,
+                text=True,
+                timeout=SUBPROCESS_TIMEOUT_SECONDS,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            findings.append(Finding("warning", f"paas repo: {repo} check failed: {exc}"))
+            continue
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip() or f"exit {completed.returncode}"
+            findings.append(Finding("warning", f"paas repo: {repo} not reachable ({detail})"))
+            continue
+        findings.append(Finding("ok", f"paas repo: {repo} reachable (deploy-on-merge, no release tags expected)"))
     return findings
 
 

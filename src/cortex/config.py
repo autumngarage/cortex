@@ -19,6 +19,7 @@ class AuditInstructionsConfig:
     pypi_package: str | None = None
     github_repos: tuple[str, ...] = ()
     github_releases: tuple[str, ...] = ()
+    paas_repos: tuple[str, ...] = ()
     urls: tuple[str, ...] = ()
     scan_files: tuple[str, ...] = field(default_factory=lambda: tuple(DEFAULT_AUDIT_SCAN_FILES))
     discovery_mode: bool = True
@@ -63,6 +64,7 @@ def load_audit_instructions_config(project_root: Path) -> AuditInstructionsConfi
         pypi_package=_optional_string(raw.get("pypi_package")),
         github_repos=_string_tuple(raw.get("github_repos")),
         github_releases=_string_tuple(raw.get("github_releases")),
+        paas_repos=_string_tuple(raw.get("paas_repos")),
         urls=_string_tuple(raw.get("urls")),
         scan_files=scan_files,
         discovery_mode=False,
