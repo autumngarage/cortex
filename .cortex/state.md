@@ -1,16 +1,16 @@
 ---
-Generated: 2026-05-06T08:31:52-04:00
+Generated: 2026-05-06T09:30:04-04:00
 Generator: cortex refresh-state v0.8.3
 Sources:
-  - HEAD sha: f9483781c909110903918e2303eb11dc5c16d996
+  - HEAD sha: 281829fd424a5da9d86196be59a38a3d22eb83a3
   - .cortex/plans/*.md (10 files)
-  - .cortex/journal/*.md (55 entries, 2026-04-17..2026-05-06)
+  - .cortex/journal/*.md (57 entries, 2026-04-17..2026-05-06)
   - .cortex/doctrine/*.md (7 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
   - SPEC version: 0.5.0
   - pyproject.toml: 0.8.3 + cortex package version: 0.8.3
-Corpus: 55 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 57 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -71,6 +71,7 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 - **2026-05-05** — PR #126 merged — docs: record touchstone cortex install (`.cortex/journal/2026-05-05-pr-merged-0956.md`, Type: pr-merged)
 - **2026-05-06** — Cortex v0.8.3 released — installable baseline for vesper dogfood (`.cortex/journal/2026-05-06-cortex-v083-released-installable-baseline-for-vesp.md`, Type: release)
 - **2026-05-06** — PR #133 merged — docs(journal): record v0.8.3 release (`.cortex/journal/2026-05-06-pr-merged-0810.md`, Type: pr-merged)
+- **2026-05-06** — PR #144 merged — docs(plan): tick v0.9.0 vesper install checkbox (`.cortex/journal/2026-05-06-pr-merged-0835.md`, Type: pr-merged)
 
 ## Stale-now / handle-later
 
