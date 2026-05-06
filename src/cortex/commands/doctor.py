@@ -26,7 +26,7 @@ from cortex.audit_instructions import (
     format_audit_instructions_human,
 )
 from cortex.banner import SUBTITLE_DOCTOR, cortex_version, print_banner
-from cortex.doctor_checks import run_audit_checks, run_plain_checks
+from cortex.doctor_checks import run_audit_checks, run_plain_checks, run_pr_trailer_checks
 from cortex.siblings import detect_siblings, format_sibling_block
 from cortex.validation import Issue, Severity, run_all_checks
 
@@ -73,6 +73,15 @@ def _format_issue(issue: Issue) -> str:
     "and URLs cited in CLAUDE.md, AGENTS.md, and README.md. Use with --strict to fail on warnings.",
 )
 @click.option(
+    "--audit-pr-trailers",
+    "run_audit_pr_trailers",
+    is_flag=True,
+    default=False,
+    help="Warn when commits or the open PR reference an issue without a "
+    "Closes-issue: / Closes: / Fixes: trailer. "
+    "Use Refs: #N to explicitly opt out of auto-close for a mention.",
+)
+@click.option(
     "--strict",
     is_flag=True,
     default=False,
@@ -102,6 +111,7 @@ def doctor_command(
     run_audit: bool,
     run_audit_digests: bool,
     run_audit_instructions: bool,
+    run_audit_pr_trailers: bool,
     strict: bool,
     as_json: bool,
     since_days: int,
@@ -134,6 +144,8 @@ def doctor_command(
     issues.extend(run_plain_checks(target_path))
     if run_audit:
         issues.extend(run_audit_checks(target_path, since_days=since_days))
+    if run_audit_pr_trailers:
+        issues.extend(run_pr_trailer_checks(target_path))
     issues = sorted(issues, key=lambda i: (i.severity.value, i.path, i.message))
 
     errors = [i for i in issues if i.severity is Severity.ERROR]

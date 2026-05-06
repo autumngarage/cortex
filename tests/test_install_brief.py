@@ -242,3 +242,34 @@ def test_sibling_repos_listed_in_brief(tmp_path: Path) -> None:
         siblings = ib._enumerate_cortex_siblings(target)
 
     assert any("otherrepo" in s for s in siblings)
+
+
+# ── --closes flag: issue-closing trailer instructions ─────────────────────
+
+
+def test_closes_flag_embeds_trailer_instructions(tmp_path: Path) -> None:
+    target = _make_git_repo(tmp_path / "myrepo")
+    (target / "pyproject.toml").touch()
+
+    result = CliRunner().invoke(cli, ["install-brief", str(target), "--closes", "162,163"])
+    assert result.exit_code == 0, result.output
+    assert "Closes-issue: #162" in result.output
+    assert "Closes-issue: #163" in result.output
+
+
+def test_closes_flag_absent_no_trailer_instructions(tmp_path: Path) -> None:
+    target = _make_git_repo(tmp_path / "myrepo")
+    (target / "pyproject.toml").touch()
+
+    result = CliRunner().invoke(cli, ["install-brief", str(target)])
+    assert result.exit_code == 0, result.output
+    assert "Closes-issue:" not in result.output
+
+
+def test_closes_flag_single_issue(tmp_path: Path) -> None:
+    target = _make_git_repo(tmp_path / "myrepo")
+    (target / "pyproject.toml").touch()
+
+    result = CliRunner().invoke(cli, ["install-brief", str(target), "--closes", "99"])
+    assert result.exit_code == 0, result.output
+    assert "Closes-issue: #99" in result.output

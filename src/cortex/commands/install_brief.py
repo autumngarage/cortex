@@ -206,6 +206,7 @@ def _build_brief(
     touchstone_paths: list[str],
     siblings: list[str],
     include_references: bool,
+    closes: list[int] | None = None,
 ) -> str:
     name = target.name
     github_slug = f"{owner}/{repo}" if owner and repo else "<owner>/<repo>"
@@ -262,6 +263,18 @@ def _build_brief(
 
     # Source exclude hint
     source_exclude = _source_exclude_hint(language)
+
+    # Issue-closing trailers section (injected into Phase 6 when --closes was passed)
+    if closes:
+        trailer_items = "\n".join(
+            f"  - `Closes-issue: #{n}`" for n in closes
+        )
+        closing_trailers_note = (
+            f"- [ ] Add these issue-closing trailers to the commit body "
+            f"(`cortex doctor --audit-pr-trailers` will verify them):\n{trailer_items}\n"
+        )
+    else:
+        closing_trailers_note = ""
 
     # Config skeleton
     scan_files_toml = '["CLAUDE.md", "AGENTS.md", "README.md"]'
@@ -338,7 +351,7 @@ Paste into `.cortex/config.toml` and fill in the blanks:
 - [ ] `git checkout -b chore/install-cortex`
 - [ ] `git add .cortex/ .gitignore CLAUDE.md AGENTS.md` (stage explicit paths — no `git add .`)
 - [ ] `git commit -m "chore: install Cortex"`
-- [ ] Open PR on {github_slug} — use the shared PR body from `docs/install-pr-templates.md`
+{closing_trailers_note}- [ ] Open PR on {github_slug} — use the shared PR body from `docs/install-pr-templates.md`
 - [ ] **Merge path:** `cd {target} && bash scripts/merge-pr.sh <pr-number>` (preferred — runs Conductor review). Fast path: `gh pr merge <n> --repo {github_slug} --squash --delete-branch` (skips review — use only when target has no `scripts/merge-pr.sh`).
 
 ## Output format
@@ -375,10 +388,18 @@ Scope check: diff touches only .cortex/, .gitignore, CLAUDE.md, AGENTS.md ✅
     default=False,
     help="Omit prior-install PR references.",
 )
+@click.option(
+    "--closes",
+    "closes_issues",
+    default="",
+    help="Comma-separated issue numbers to close (e.g. 162,163). "
+    "Embeds Closes-issue: trailer instructions in the Phase 6 Ship checklist.",
+)
 def install_brief_command(
     target_path: Path,
     output_path: Path | None,
     omit_references: bool,
+    closes_issues: str,
 ) -> None:
     """Generate a self-contained Cortex install brief for delegating to an agent.
 
@@ -426,6 +447,12 @@ def install_brief_command(
             err=True,
         )
 
+    closes: list[int] = []
+    for part in closes_issues.split(","):
+        part = part.strip()
+        if part.isdigit():
+            closes.append(int(part))
+
     language, manifest = _detect_ecosystem(target)
     paas_marker = _detect_paas(target)
     homebrew_tap = _detect_homebrew_tap(target) if paas_marker is None else None
@@ -443,6 +470,7 @@ def install_brief_command(
         touchstone_paths=touchstone_paths,
         siblings=siblings,
         include_references=not omit_references,
+        closes=closes or None,
     )
 
     if output_path is not None:
