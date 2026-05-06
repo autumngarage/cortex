@@ -61,6 +61,7 @@ the transient paths. Conflicts with `--no-gitignore`.
 
 from __future__ import annotations
 
+import contextlib
 import re
 import shlex
 import shutil
@@ -76,6 +77,7 @@ from cortex import (
     __version__ as CORTEX_VERSION,  # noqa: N812 — namespaced re-export, deliberate caps.
 )
 from cortex.banner import SUBTITLE_INIT, cortex_version, print_banner
+from cortex.doctor_checks import run_plain_checks
 from cortex.init_scan import (
     Category,
     Finding,
@@ -87,6 +89,7 @@ from cortex.init_seeders import seed_doctrine, seed_plan, seed_plans
 from cortex.seed import SeedConflictError, SeedSourceError, seed_doctrine_from
 from cortex.shell import git_remediation_cmd, run_git
 from cortex.state_migration import is_legacy_hand_authored_state
+from cortex.validation import Severity, run_all_checks
 
 CURRENT_SPEC_VERSION = SPEC_VERSION_LITERAL
 
@@ -243,6 +246,68 @@ def _legacy_state_migration_hint(cortex_dir: Path) -> str:
     except OSError:
         return ""
     return ""
+
+
+def _capture_pre_existing_cortex_content(cortex_dir: Path) -> set[Path]:
+    """Return absolute .md paths in doctrine/, plans/, journal/ that exist before this init.
+
+    Called before any scaffold writes so the set represents truly pre-existing
+    user content — not files this invocation creates. `.gitkeep` is excluded.
+    """
+    pre_existing: set[Path] = set()
+    for subdir in ("doctrine", "plans", "journal"):
+        d = cortex_dir / subdir
+        if d.is_dir():
+            for p in d.glob("*.md"):
+                if p.is_file():
+                    pre_existing.add(p.resolve())
+    return pre_existing
+
+
+def _emit_pre_existing_summary(project_root: Path, pre_existing: set[Path]) -> None:
+    """Print a summary of pre-existing .cortex/ content after scaffold complete.
+
+    Runs doctor programmatically and filters issues to pre-existing files only
+    so the user can distinguish install-introduced issues from issues their
+    pre-existing content already had. Only called when pre_existing is non-empty.
+    """
+    cortex_dir = (project_root / ".cortex").resolve()
+    project_root_resolved = project_root.resolve()
+
+    n_plans = sum(1 for p in pre_existing if p.parent == cortex_dir / "plans")
+    n_doctrine = sum(1 for p in pre_existing if p.parent == cortex_dir / "doctrine")
+    n_journal = sum(1 for p in pre_existing if p.parent == cortex_dir / "journal")
+
+    # Build relative path strings matching doctor's issue.path format
+    rel_pre: set[str] = set()
+    for p in pre_existing:
+        with contextlib.suppress(ValueError):
+            rel_pre.add(str(p.relative_to(project_root_resolved)))
+
+    try:
+        issues = run_all_checks(project_root)
+        issues.extend(run_plain_checks(project_root))
+        pre_issues = [i for i in issues if i.path in rel_pre]
+        n_errors = sum(1 for i in pre_issues if i.severity is Severity.ERROR)
+        n_warnings = sum(1 for i in pre_issues if i.severity is Severity.WARNING)
+        doctor_clause = (
+            f"`cortex doctor` reports {n_errors} error{'s' if n_errors != 1 else ''} / "
+            f"{n_warnings} warning{'s' if n_warnings != 1 else ''} on this content"
+        )
+    except Exception:
+        doctor_clause = "`cortex doctor` can triage this content"
+
+    plan_str = f"{n_plans} pre-existing plan{'s' if n_plans != 1 else ''}"
+    doc_str = f"{n_doctrine} doctrine entr{'ies' if n_doctrine != 1 else 'y'}"
+    jour_str = f"{n_journal} journal entr{'ies' if n_journal != 1 else 'y'}"
+
+    click.echo("")
+    click.echo(f"  note: found {plan_str}, {doc_str}, {jour_str}.")
+    click.echo(f"        {doctor_clause} (not introduced by this install).")
+    click.echo(
+        "        Run `cortex doctor` to triage; most v0.3-shape scaffolds will need"
+        " `cortex migrate-state` to convert legacy hand-authored state.md."
+    )
 
 
 # Import block the interactive wizard appends to CLAUDE.md / AGENTS.md. The
@@ -982,6 +1047,10 @@ def init_command(
 
     data_root = _package_data_root()
 
+    # Capture pre-existing content before any scaffold writes so the set
+    # reflects only what was there before this invocation.
+    pre_existing = _capture_pre_existing_cortex_content(cortex_dir)
+
     cortex_dir.mkdir(exist_ok=True)
 
     # When we get here, either the directory is fresh/empty, or --force is set.
@@ -1051,6 +1120,9 @@ def init_command(
         )
 
     click.echo(f"Scaffolded {cortex_dir} (spec v{CURRENT_SPEC_VERSION}).")
+
+    if pre_existing:
+        _emit_pre_existing_summary(target_path, pre_existing)
 
     # Absorb existing structure surfaced by the scan into ``.cortex/``.
     # Each candidate gets a per-file Y/n prompt on TTY; --yes accepts all;
