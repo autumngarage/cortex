@@ -19,6 +19,14 @@ the template's ``{{ nnn }}``, ``{{ short title }}``, ``{{ full sha }}``,
 ``gh pr view`` plus ``git log`` context. Placeholders the resolved context
 cannot fill stay as-is so the user knows what to fill on ``--edit``.
 
+For ``--type release`` (T1.10), the command resolves the git tag from
+``--tag VTAG`` (when given) or by reading the most recent semver tag
+matching ``^v\\d+\\.\\d+\\.\\d+$`` from ``git tag --list``. It then pulls
+``gh release view <tag>`` for the release name / URL, and (in ``--no-edit``
+mode) seeds the ``## What shipped`` bullets from ``git log <prev_tag>..<tag>``
+PR-shaped subjects. Mirrors pr-merged: missing context warns on stderr and
+leaves the placeholder intact rather than failing or silently wedging.
+
 ``gh`` is optional. If it's not installed, not authenticated, or there is
 no open PR for the current branch, the PR-context block degrades to a note;
 the command never blocks on missing optional tooling.
@@ -56,6 +64,10 @@ _PR_NUMBER_IN_SUBJECT_RE = re.compile(r"\(#(\d{1,6})\)\s*$")
 _PR_INFER_LOOKBACK_DAYS = 14
 # Window for finding a recent journal slug to populate `{{ <date>-<slug> }}`.
 _JOURNAL_SLUG_LOOKBACK_DAYS = 7
+# Default release-tag detection (Protocol § 2 / T1.10): semver tags only.
+# Projects using calendar versioning override per-project; we keep the CLI
+# default in sync with the Protocol's default.
+_RELEASE_TAG_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 # Valid type names are lowercase identifiers with optional dashes — same
 # shape as the bundled template stems (decision, pr-merged, release, ...).
 # Restricting here closes a path-traversal hole: ``journal_type`` flows into
@@ -286,6 +298,384 @@ def _recent_journal_slug(project_root: Path) -> str | None:
     return candidates[0][1]
 
 
+def _recent_plan_slug(project_root: Path) -> str | None:
+    """Return the stem of the most-recently-modified active plan in `.cortex/plans/`.
+
+    Used to populate ``{{ <slug> }}`` in the release template's ``**Cites:**``
+    line. Most release entries cite the plan that drove the work; selecting
+    the most-recently-modified plan is a useful default — humans correct on
+    ``--edit``. Returns ``None`` when no plan files exist; the placeholder
+    stays intact.
+    """
+    plans_dir = project_root / ".cortex" / "plans"
+    if not plans_dir.is_dir():
+        return None
+    candidates = sorted(
+        plans_dir.glob("*.md"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if not candidates:
+        return None
+    return candidates[0].stem
+
+
+def _latest_release_tag(project_root: Path) -> str | None:
+    """Return the most recent semver-shaped tag, or None on failure.
+
+    Uses ``git tag --list --sort=-version:refname`` and filters for
+    ``^v\\d+\\.\\d+\\.\\d+$``. Returns ``None`` when git is unavailable or no
+    matching tag exists; callers degrade by leaving placeholders intact.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "tag",
+                "--list",
+                "--sort=-version:refname",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return None
+    if result.returncode != 0:
+        return None
+    for line in result.stdout.splitlines():
+        tag = line.strip()
+        if _RELEASE_TAG_RE.match(tag):
+            return tag
+    return None
+
+
+def _previous_release_tag(project_root: Path, tag: str) -> str | None:
+    """Return the semver tag immediately preceding ``tag``, or None.
+
+    Best-effort: scans ``git tag --list --sort=-version:refname`` for
+    semver-shaped tags and returns the first one that is not ``tag``. If
+    the only tag is ``tag`` (first release), returns None — callers fall
+    back to "all commits reachable from ``tag``" or warn.
+    """
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "tag",
+                "--list",
+                "--sort=-version:refname",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return None
+    if result.returncode != 0:
+        return None
+    seen_target = False
+    for line in result.stdout.splitlines():
+        candidate = line.strip()
+        if not _RELEASE_TAG_RE.match(candidate):
+            continue
+        if not seen_target:
+            if candidate == tag:
+                seen_target = True
+            continue
+        return candidate
+    return None
+
+
+def _gh_release_view_json(project_root: Path, tag: str) -> dict[str, str] | None:
+    """Return a dict of GitHub Release fields, or None on any failure.
+
+    Keys returned (when present): ``tagName``, ``name``, ``body``,
+    ``publishedAt``, ``url``, ``isPrerelease``. Failures (gh missing, not
+    authenticated, release not found, parse error) all return ``None`` so
+    callers degrade by leaving placeholders intact.
+    """
+    if shutil.which("gh") is None:
+        return None
+    auth = subprocess.run(
+        ["gh", "auth", "status"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if auth.returncode != 0:
+        return None
+    rel = subprocess.run(
+        [
+            "gh",
+            "release",
+            "view",
+            tag,
+            "--json",
+            "tagName,name,body,publishedAt,targetCommitish,isPrerelease,url",
+        ],
+        cwd=project_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if rel.returncode != 0 or not rel.stdout.strip():
+        return None
+    try:
+        data = json.loads(rel.stdout)
+    except json.JSONDecodeError:
+        return None
+    out: dict[str, str] = {}
+    for key in ("tagName", "name", "body", "publishedAt", "url", "targetCommitish"):
+        value = data.get(key)
+        if isinstance(value, str) and value:
+            out[key] = value
+    pre = data.get("isPrerelease")
+    if isinstance(pre, bool):
+        out["isPrerelease"] = "true" if pre else "false"
+    return out
+
+
+def _pr_subjects_since_tag(
+    project_root: Path, prev_tag: str | None, tag: str
+) -> list[tuple[int, str]]:
+    """Return a list of ``(pr_number, subject_without_(#N))`` for PRs landed
+    between ``prev_tag`` (exclusive) and ``tag`` (inclusive).
+
+    Squash-merge convention: subjects look like ``feat: foo (#123)``. We
+    parse the trailing ``(#NNN)`` and use it as the PR number, returning the
+    subject sans the suffix as the human-readable bullet. Empty list on any
+    git failure or when no PR-shaped subjects are found; callers degrade by
+    leaving placeholders intact.
+    """
+    revrange = f"{prev_tag}..{tag}" if prev_tag else tag
+    try:
+        result = subprocess.run(
+            [
+                "git",
+                "-C",
+                str(project_root),
+                "log",
+                revrange,
+                "--pretty=format:%s",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return []
+    if result.returncode != 0:
+        return []
+    out: list[tuple[int, str]] = []
+    seen: set[int] = set()
+    for line in result.stdout.splitlines():
+        match = _PR_NUMBER_IN_SUBJECT_RE.search(line)
+        if not match:
+            continue
+        try:
+            number = int(match.group(1))
+        except ValueError:  # pragma: no cover — regex enforces digits
+            continue
+        if number in seen:
+            continue
+        seen.add(number)
+        # Strip the trailing ` (#NNN)` and any whitespace so the subject is
+        # ready to drop into a bullet.
+        subject = _PR_NUMBER_IN_SUBJECT_RE.sub("", line).rstrip()
+        out.append((number, subject))
+    return out
+
+
+def _present_downstream_doc_files(project_root: Path) -> list[str]:
+    """Return the subset of conventional downstream-doc paths that exist.
+
+    The Downstream-docs section of the release template is the seed for
+    the v0.5.0 ``--audit-instructions`` check, which walks listed paths and
+    flags stale references. Listing only files that actually exist keeps
+    the seed honest; the human can add tap-repo / external paths on edit.
+    """
+    candidates = ("CLAUDE.md", "AGENTS.md", "README.md", "docs/PITCH.md")
+    return [name for name in candidates if (project_root / name).exists()]
+
+
+def _substitute_release_placeholders(
+    body: str,
+    *,
+    tag: str | None,
+    release_name: str | None,
+    release_published_date: str | None,
+    release_url: str | None,
+    plan_slug: str | None,
+    journal_slug: str | None,
+) -> tuple[str, list[str]]:
+    """Replace release template placeholders from resolved context.
+
+    Mirrors :func:`_substitute_pr_merged_placeholders`: each placeholder is
+    replaced only when its source value is non-None; missing sources leave
+    the original ``{{ ... }}`` token in place so the user knows what to
+    fill on ``--edit``. Returns ``(rewritten_body, unfilled_labels)`` so the
+    caller can emit a stderr ``warning:`` (engineering principle: no silent
+    failures).
+    """
+    unfilled: list[str] = []
+
+    if tag is not None:
+        # `{{ git tag, e.g. v0.3.0 }}` appears twice (header + Artifact block).
+        body = body.replace("{{ git tag, e.g. v0.3.0 }}", tag)
+        version = tag.removeprefix("v") if tag.startswith("v") else tag
+        body = body.replace("{{ vX.Y.Z }}", version)
+        title_value = (
+            f"Release {tag} — {release_name}" if release_name else f"Release {tag}"
+        )
+        body = body.replace("{{ Release vX.Y.Z — short title }}", title_value)
+    else:
+        unfilled.append("git tag")
+
+    if release_url is not None:
+        body = body.replace(
+            "{{ link to GitHub Release page or release-notes section }}",
+            release_url,
+        )
+    else:
+        unfilled.append("release URL")
+
+    if plan_slug is not None:
+        body = body.replace("{{ <slug> }}", plan_slug)
+    else:
+        unfilled.append("plan slug")
+
+    if journal_slug is not None:
+        body = body.replace("{{ <date>-<slug> }}", journal_slug)
+    else:
+        unfilled.append("recent journal slug")
+
+    # The Date placeholder has already been substituted with `today` upstream;
+    # if a release publishedAt date is available and differs, we leave today
+    # as-is since `today` is what the writer actually saw. The template's
+    # `Date:` field is "when this entry was authored," not "when the artifact
+    # shipped" — `Tag:` answers the latter.
+    _ = release_published_date  # reserved for future use; not currently consumed
+
+    return body, unfilled
+
+
+def _substitute_release_body_no_edit(
+    body: str,
+    *,
+    tag: str | None,
+    release_name: str | None,
+    pr_subjects: list[tuple[int, str]],
+    downstream_docs: list[str],
+) -> str:
+    """Remove prompt-only release body placeholders for no-edit drafts.
+
+    Edit-mode keeps template prompts visible for humans. In no-edit mode the
+    invariant is stricter: an auto-committed Journal entry must not contain
+    unresolved ``{{ ... }}`` prompts, and must not claim a deferred checkbox
+    exists when no SPEC § 4.2 target has been resolved.
+    """
+    # The lede callout: rewrite or strip.
+    if tag:
+        lede = f"> Release {tag} shipped."
+        if release_name:
+            lede = f"> {release_name} ({tag})."
+        body = re.sub(
+            r"^> \{\{ One sentence:.*\}\}$",
+            lede,
+            body,
+            count=1,
+            flags=re.MULTILINE,
+        )
+    else:
+        body = re.sub(
+            r"^> \{\{ One sentence:.*\}\}\n?",
+            "",
+            body,
+            count=1,
+            flags=re.MULTILINE,
+        )
+
+    # Artifact block: Kind / Location seeded best-effort. We only commit
+    # values we can derive; otherwise we use a "fill on edit" sentinel so
+    # the no-edit invariant (no `{{ }}`) holds.
+    body = re.sub(
+        r"\{\{ Homebrew tap \| PyPI release \| Docker image \| GitHub Release \| git tag \| other \}\}",
+        "GitHub Release",
+        body,
+        count=1,
+    )
+    body = re.sub(
+        r"\{\{ e\.g\. `autumngarage/cortex` tap formula.*?\}\}",
+        "_(fill on edit — tap formula / PyPI / Docker / etc.)_",
+        body,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+    # `## What shipped` — replace the bullet placeholder with PR subjects.
+    if pr_subjects:
+        bullets = [f"- {subject} (#{number})" for number, subject in pr_subjects]
+    else:
+        summary = release_name or (f"Release {tag}" if tag else "Release")
+        bullets = [f"- {summary}"]
+    body = re.sub(
+        r"\{\{ Bulleted list of user-visible changes in this release\..*?\}\}",
+        "\n".join(bullets),
+        body,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+    # `## Downstream docs this changes` — replace the example bullets with
+    # the present-files set. We replace from the first `- {{ CLAUDE.md ...`
+    # bullet through the trailing `- {{ ... }}` placeholder.
+    if downstream_docs:
+        downstream_block = "\n".join(f"- `{name}`" for name in downstream_docs)
+    else:
+        downstream_block = "_(none in this repo)_"
+    body = re.sub(
+        r"- \{\{ CLAUDE\.md.*?\}\}\n- \{\{ \.\.\. \}\}",
+        downstream_block,
+        body,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+    # `## Follow-ups` placeholder checkbox: SPEC § 4.2 says deferred items
+    # must resolve to another layer in the same commit. An auto-drafted
+    # release with no resolved target leaves the placeholder as a stale
+    # ``[ ]``; replace it with `_None._` (matches pr-merged behavior).
+    body = re.sub(
+        r"^- \[ \] \{\{ item .*?\}\}$",
+        "_None._",
+        body,
+        count=1,
+        flags=re.MULTILINE,
+    )
+
+    # `**Cites:**` line: strip any unresolved `{{ ... }}` segments so the
+    # `--no-edit` invariant (no surviving `{{` tokens) holds. Mirrors
+    # pr-merged's _rewrite_cites behavior.
+    def _rewrite_cites(match: re.Match[str]) -> str:
+        resolved = [
+            part.strip()
+            for part in match.group(1).split(",")
+            if "{{" not in part and part.strip()
+        ]
+        if not resolved:
+            return "**Cites:** _(none — fill on edit)_"
+        return f"**Cites:** {', '.join(resolved)}"
+
+    return re.sub(
+        r"^\*\*Cites:\*\* (.+)$", _rewrite_cites, body, count=1, flags=re.MULTILINE
+    )
+
+
 def _substitute_pr_merged_placeholders(
     body: str,
     *,
@@ -473,6 +863,26 @@ def _render_context_block(
     ),
 )
 @click.option(
+    "--tag",
+    "release_tag",
+    default=None,
+    help=(
+        "Git tag for `--type release`. When omitted, defaults to the most recent semver "
+        "tag (`^v\\d+\\.\\d+\\.\\d+$`). Pulls release notes via `gh release view <tag>` "
+        "when `gh` is available; degrades gracefully otherwise. Ignored for other types."
+    ),
+)
+@click.option(
+    "--plan-slug",
+    "plan_slug",
+    default=None,
+    help=(
+        "Plan stem for `--type release`'s `**Cites:** plans/<slug>` field. "
+        "Defaults to the most-recently-modified file under `.cortex/plans/`. "
+        "Ignored for other types."
+    ),
+)
+@click.option(
     "--path",
     "target_path",
     type=click.Path(file_okay=False, dir_okay=True, exists=True, path_type=Path),
@@ -487,6 +897,8 @@ def draft_command(
     slug_override: str | None,
     no_edit: bool,
     pr_number: int | None,
+    release_tag: str | None,
+    plan_slug: str | None,
     target_path: Path,
 ) -> None:
     """Create a new Journal entry of TYPE from a template and open it in $EDITOR.
@@ -589,10 +1001,96 @@ def draft_command(
                     err=True,
                 )
 
+    # T1.10 (release): mirror the pr-merged path. Resolve the tag (explicit
+    # `--tag` or latest matching `^v\d+\.\d+\.\d+$`), pull `gh release view`
+    # metadata best-effort, seed `What shipped` from `git log <prev>..<tag>`
+    # PR-shaped subjects.
+    resolved_tag: str | None = None
+    if journal_type == "release":
+        resolved_tag = release_tag or _latest_release_tag(project_root)
+        release_data: dict[str, str] | None = None
+        if resolved_tag is not None:
+            release_data = _gh_release_view_json(project_root, resolved_tag)
+        release_name = release_data.get("name") if release_data else None
+        release_url = release_data.get("url") if release_data else None
+        release_published_date: str | None = None
+        if release_data and "publishedAt" in release_data:
+            # publishedAt is RFC3339; we only need the date prefix.
+            published = release_data["publishedAt"]
+            if len(published) >= 10:
+                release_published_date = published[:10]
+        resolved_plan_slug = plan_slug or _recent_plan_slug(project_root)
+        body, unfilled = _substitute_release_placeholders(
+            body,
+            tag=resolved_tag,
+            release_name=release_name,
+            release_published_date=release_published_date,
+            release_url=release_url,
+            plan_slug=resolved_plan_slug,
+            journal_slug=_recent_journal_slug(project_root),
+        )
+        if resolved_tag is None:
+            # No tag could be resolved at all — surface why so the user knows
+            # the entry will need hand-editing (no silent failures).
+            click.echo(
+                "warning: could not resolve a tag for release draft "
+                "(no `--tag VTAG` and `git tag --list` produced no "
+                f"`{_RELEASE_TAG_RE.pattern}`-shaped tags); placeholders "
+                "left intact.",
+                err=True,
+            )
+        elif release_data is None:
+            click.echo(
+                f"warning: release draft for {resolved_tag} found the tag "
+                "but could not fetch GitHub Release metadata "
+                "(`gh` missing/unauthenticated, or no release exists for "
+                "the tag); placeholders that depend on `gh release view` "
+                "left intact.",
+                err=True,
+            )
+        if unfilled:
+            click.echo(
+                "warning: release draft left placeholders intact for: "
+                f"{', '.join(unfilled)}.",
+                err=True,
+            )
+        if no_edit:
+            prev_tag = (
+                _previous_release_tag(project_root, resolved_tag)
+                if resolved_tag is not None
+                else None
+            )
+            pr_subjects = (
+                _pr_subjects_since_tag(project_root, prev_tag, resolved_tag)
+                if resolved_tag is not None
+                else []
+            )
+            body = _substitute_release_body_no_edit(
+                body,
+                tag=resolved_tag,
+                release_name=release_name,
+                pr_subjects=pr_subjects,
+                downstream_docs=_present_downstream_doc_files(project_root),
+            )
+            remaining_placeholders = re.findall(r"\{\{[^}]+\}\}", body)
+            if remaining_placeholders:
+                click.echo(
+                    "warning: release --no-edit draft left body "
+                    "placeholders intact for: "
+                    f"{', '.join(remaining_placeholders)}.",
+                    err=True,
+                )
+
     if slug_override:
         slug = _normalize_slug(slug_override)
     elif title:
         slug = _normalize_slug(title)
+    elif journal_type == "release" and resolved_tag is not None:
+        # `<date>-release-<tag-without-v>.md` is the canonical release-entry
+        # filename. Keeps tag-resolution unambiguous for the `--audit-instructions`
+        # check (T1.10's `Tag:` scalar is the source of truth, but a tag-shaped
+        # filename helps humans grep).
+        slug = f"release-{resolved_tag.removeprefix('v') if resolved_tag.startswith('v') else resolved_tag}"
     else:
         # Use the type + HHMM so multiple drafts of the same type on the
         # same day don't collide before the user gives them real names.
