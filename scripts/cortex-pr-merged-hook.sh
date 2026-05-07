@@ -17,10 +17,12 @@
 #      asking `gh repo view`.
 #   2. The repo has a `.cortex/` directory at the same level as `.git/`.
 #   3. The `cortex` CLI is on $PATH.
-#   4. `.touchstone-config` has `cortex_pr_merged_hook=auto` or `=on`.
-#      Default for newly-bootstrapped projects: `auto`. Value `off`
-#      disables. Missing key is treated as `auto` (so projects that
-#      haven't migrated yet still benefit when the other gates pass).
+#   4. `.touchstone-config` has `cortex_pr_merged_hook=auto`, `=on`, or
+#      `=force`. Default for newly-bootstrapped projects: `auto`. Value
+#      `off` disables. Missing key is treated as `auto` (so projects
+#      that haven't migrated yet still benefit when the other gates
+#      pass). Value `force` skips the substantive-merge gate and always
+#      journals — see "Substantive-merge gate" below.
 #   5. The most recent commit on the default branch is NOT itself an
 #      auto-draft pr-merged entry. The hook recognizes its own output
 #      and refuses to recurse (cortex#193). Detection signal: the merged
@@ -29,6 +31,16 @@
 #      written journal commit with that subject is also skipped, but
 #      that's correct (the human is journaling the merge themselves —
 #      no auto-draft needed).
+#   6. After the recursion guard, the hook consults
+#      `cortex check-triggers --since HEAD~1` to decide whether the
+#      merge is substantive enough to warrant a Journal entry
+#      (cortex#206). If no Tier 1 triggers fire, the hook silently
+#      exits 0 — half the merges to a healthy trunk are typo fixes,
+#      CI tweaks, and one-line docs that don't need their own meta-PR.
+#      If any trigger fires, the hook falls through to the journal-
+#      draft path AND appends a "## Triggers fired" section to the
+#      drafted entry so the auto-draft is informative, not a
+#      regurgitation of the PR title.
 #
 # Failure modes (no silent failures past activation):
 #   - cortex missing mid-flow (between detection and exec): log to stderr
@@ -55,6 +67,15 @@
 #                                 when config says auto/on. Useful for
 #                                 tests that want to verify a path
 #                                 without firing the writer.
+#   TOUCHSTONE_CORTEX_HOOK_FORCE
+#                               — set to 1/true/on to bypass the
+#                                 substantive-merge gate (cortex#206).
+#                                 Always journal, regardless of whether
+#                                 `cortex check-triggers` reports any
+#                                 fired triggers. Equivalent to
+#                                 `cortex_pr_merged_hook=force` in
+#                                 `.touchstone-config`. Useful for ops
+#                                 who want every merge journaled.
 #   TOUCHSTONE_CORTEX_HOOK_SKIP_PUSH
 #                               — set to 1/true/on to commit on the
 #                                 feature branch but skip the push +
@@ -153,16 +174,25 @@ if truthy "${TOUCHSTONE_CORTEX_HOOK_DISABLE:-0}"; then
 fi
 
 config_value="$(read_config_value "$PROJECT_DIR/.touchstone-config" cortex_pr_merged_hook)"
+# `force_journal` is the single in-script signal for "skip the
+# substantive-merge gate (cortex#206) and always journal." Both the
+# config value `=force` and the env var TOUCHSTONE_CORTEX_HOOK_FORCE
+# resolve into it so downstream code has one knob to read.
+force_journal=0
 case "$config_value" in
   off | OFF | Off) exit 0 ;;
   on | ON | On | auto | AUTO | Auto | "") ;; # default to auto when absent
+  force | FORCE | Force) force_journal=1 ;;
   *)
     # Unknown value — treat as off but warn so the project can fix the
     # config without surprise behavior.
-    log "cortex-pr-merged-hook: unknown cortex_pr_merged_hook='$config_value' (expected: auto|on|off); skipping."
+    log "cortex-pr-merged-hook: unknown cortex_pr_merged_hook='$config_value' (expected: auto|on|off|force); skipping."
     exit 0
     ;;
 esac
+if truthy "${TOUCHSTONE_CORTEX_HOOK_FORCE:-0}"; then
+  force_journal=1
+fi
 
 # Recursion guard (cortex#193). The merge that fired this hook may have
 # been the auto-draft from a prior invocation — that PR's squash-merge
@@ -186,7 +216,71 @@ if ! command -v cortex >/dev/null 2>&1; then
   exit 0
 fi
 
-# 2. Activated path — from here on, errors are visible failures.
+# 2. Substantive-merge gate (cortex#206).
+#
+# Half the merges to a healthy trunk are typo fixes, CI tweaks, and
+# one-line doc edits that don't warrant their own meta-PR. Consult
+# `cortex check-triggers --since HEAD~1` before drafting: only proceed
+# when at least one Tier 1 trigger fired against the merged diff.
+#
+# Failure-mode contract (every degradation visible per
+# engineering-principles.md "No silent failures"):
+#   - check-triggers subcommand missing (older cortex) or exits non-zero
+#     → log one stderr line and fall back to journal-every-merge. A
+#     spurious entry is recoverable; a silently-skipped one is not.
+#   - check-triggers exits 0 with empty stdout → silent exit 0. THIS
+#     is the gate firing successfully and is the one legitimate silent
+#     skip in the script.
+#   - check-triggers exits 0 with one or more NDJSON lines → continue
+#     and seed the drafted entry with the firing-trigger context.
+#   - HEAD~1 absent (initial-commit edge case) → fall back to journal-
+#     every-merge, same one-line stderr notice. Better to journal than
+#     to skip on a malformed history.
+#
+# `force_journal=1` (set by `cortex_pr_merged_hook=force` or by
+# TOUCHSTONE_CORTEX_HOOK_FORCE) bypasses the gate entirely. The gate
+# is also bypassed when HEAD has no parent.
+fired_triggers_ndjson=""
+if [ "$force_journal" -eq 0 ]; then
+  if ! git -C "$PROJECT_DIR" rev-parse --verify --quiet HEAD~1 >/dev/null 2>&1; then
+    log "cortex-pr-merged-hook: HEAD has no parent commit; substantive-merge gate skipped, falling back to journal-every-merge."
+  else
+    check_triggers_stdout=""
+    check_triggers_stderr=""
+    check_triggers_status=0
+    # Capture stdout and stderr separately so we can both inspect the
+    # NDJSON and surface real errors verbatim. The temp file is
+    # cleaned up on every exit path.
+    ct_stderr_file="$(mktemp -t cortex-pr-merged-hook.XXXXXX 2>/dev/null || mktemp)"
+    trap 'rm -f "$ct_stderr_file"' EXIT
+    check_triggers_stdout="$(cd "$PROJECT_DIR" && cortex check-triggers --since HEAD~1 2>"$ct_stderr_file")" \
+      || check_triggers_status=$?
+    check_triggers_stderr="$(cat "$ct_stderr_file" 2>/dev/null || true)"
+    rm -f "$ct_stderr_file"
+    trap - EXIT
+
+    if [ "$check_triggers_status" -ne 0 ]; then
+      # Subcommand missing OR a real cortex-side error. Surface both
+      # so the operator can tell which: the one-line notice is the
+      # required fall-back signal; the verbatim stderr (if any) gives
+      # actionable context. Then fall back to journal-every-merge.
+      if [ -n "$check_triggers_stderr" ]; then
+        printf '%s\n' "$check_triggers_stderr" >&2
+      fi
+      log "cortex-pr-merged-hook: cortex check-triggers unavailable; falling back to journal-every-merge."
+    elif [ -z "$check_triggers_stdout" ]; then
+      # Gate fired correctly: no Tier 1 triggers in the merged diff.
+      # This is the ONE silent skip in the script. Documented in
+      # engineering-principles.md "No silent failures" as the
+      # successful-gate case.
+      exit 0
+    else
+      fired_triggers_ndjson="$check_triggers_stdout"
+    fi
+  fi
+fi
+
+# 3. Activated path — from here on, errors are visible failures.
 
 # Refuse to run on a dirty tree: we'd silently fold uncommitted user work
 # into the auto-commit. The caller (merge-pr.sh) leaves a clean tree by
@@ -201,9 +295,18 @@ fi
 # the absolute path on stdout. We capture stdout to grab that path; we
 # leave stderr untouched so any cortex-side warnings (gh not auth'd, etc)
 # surface to the operator running the merge.
+#
+# CORTEX_PR_MERGED_FIRED_TRIGGERS is exported so a future `cortex
+# journal draft pr-merged` enhancement can seed the entry's body
+# directly from the firing-trigger context. Today the consumer side
+# is not implemented (cortex#206 keeps that as a follow-up); the
+# hook handles the seeding post-hoc by appending a `## Triggers
+# fired` section to the file after the draft writes it.
 draft_stdout=""
 draft_status=0
-draft_stdout="$(cd "$PROJECT_DIR" && cortex journal draft pr-merged --no-edit)" \
+draft_stdout="$(cd "$PROJECT_DIR" \
+  && CORTEX_PR_MERGED_FIRED_TRIGGERS="$fired_triggers_ndjson" \
+     cortex journal draft pr-merged --no-edit)" \
   || draft_status=$?
 if [ "$draft_status" -ne 0 ]; then
   log "cortex-pr-merged-hook: cortex journal draft pr-merged exited $draft_status."
@@ -225,7 +328,35 @@ if [ ! -f "$candidate" ]; then
   exit 1
 fi
 
-# 3. Stage + commit on a feature branch (NOT the default branch — see
+# Seed the drafted entry with a `## Triggers fired` section so the
+# auto-draft is informative instead of a regurgitation of the PR
+# title (cortex#206). Parse via jq when available; fall back to the
+# raw NDJSON with a stderr warning when jq is missing — losing
+# information here would defeat the purpose of the gate.
+if [ -n "$fired_triggers_ndjson" ]; then
+  {
+    printf '\n## Triggers fired\n\n'
+    if command -v jq >/dev/null 2>&1; then
+      printf '%s\n' "$fired_triggers_ndjson" | while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        # `files` is optional; jq's `// empty` collapses absent → "".
+        files="$(printf '%s' "$line" | jq -r '(.files // []) | join(", ")' 2>/dev/null || true)"
+        trigger="$(printf '%s' "$line" | jq -r '.trigger // ""' 2>/dev/null || true)"
+        reason="$(printf '%s' "$line" | jq -r '.reason // ""' 2>/dev/null || true)"
+        if [ -n "$files" ]; then
+          printf -- '- %s — %s (files: %s)\n' "$trigger" "$reason" "$files"
+        else
+          printf -- '- %s — %s\n' "$trigger" "$reason"
+        fi
+      done
+    else
+      log "cortex-pr-merged-hook: jq not on PATH; appending raw NDJSON to triggers section."
+      printf '```ndjson\n%s\n```\n' "$fired_triggers_ndjson"
+    fi
+  } >> "$candidate"
+fi
+
+# 4. Stage + commit on a feature branch (NOT the default branch — see
 # cortex#194 and `principles/git-workflow.md`'s "Never commit on the
 # default branch" rule). Then ship via a PR.
 rel_path="${candidate#"$PROJECT_DIR"/}"
@@ -282,7 +413,7 @@ if truthy "${TOUCHSTONE_CORTEX_HOOK_SKIP_PUSH:-0}"; then
   exit 0
 fi
 
-# 4. Push + open auto-merge PR. Failures here are degraded gracefully:
+# 5. Push + open auto-merge PR. Failures here are degraded gracefully:
 # the original PR has already merged, and the auto-draft is preserved
 # locally on a named branch the operator can ship by hand.
 push_failed=0
@@ -364,7 +495,7 @@ if [ "$merge_status" -ne 0 ]; then
   exit 0
 fi
 
-# 5. Return to default branch and best-effort sync.
+# 6. Return to default branch and best-effort sync.
 git -C "$PROJECT_DIR" checkout -q "$default_branch" 2>/dev/null || true
 git -C "$PROJECT_DIR" pull --ff-only --quiet 2>/dev/null || true
 
