@@ -553,6 +553,241 @@ def test_decision_template_substitution_unchanged(
     assert re.search(r"^# \{\{[^}]+\}\}", body, re.MULTILINE), body[:200]
 
 
+# --- cortex#192 release placeholder substitution ---------------------------
+
+
+def _stub_gh_release_in_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    pr_payload: dict[str, object] | None = None,
+    release_payload: dict[str, object] | None = None,
+) -> Path:
+    """Install a fake `gh` on PATH that handles `pr view`, `release view`,
+    and `auth status`. Either payload may be ``None`` to simulate the
+    "not found" path (gh exits 1 when the underlying object is missing).
+    """
+    import json as _json
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(exist_ok=True)
+    pr_path = bin_dir / "pr-payload.json"
+    rel_path = bin_dir / "release-payload.json"
+    if pr_payload is not None:
+        pr_path.write_text(_json.dumps(pr_payload))
+    if release_payload is not None:
+        rel_path.write_text(_json.dumps(release_payload))
+    shim = bin_dir / "gh"
+    pr_branch = (
+        f'    cat "{pr_path}"\n    exit 0\n'
+        if pr_payload is not None
+        else '    echo "no pull request found" >&2\n    exit 1\n'
+    )
+    rel_branch = (
+        f'    cat "{rel_path}"\n    exit 0\n'
+        if release_payload is not None
+        else '    echo "release not found" >&2\n    exit 1\n'
+    )
+    shim.write_text(
+        "#!/bin/bash\n"
+        'case "$1" in\n'
+        "  auth)\n"
+        "    exit 0\n"
+        "    ;;\n"
+        "  pr)\n"
+        f"{pr_branch}"
+        "    ;;\n"
+        "  release)\n"
+        f"{rel_branch}"
+        "    ;;\n"
+        "  *)\n"
+        "    echo \"unexpected gh invocation: $@\" >&2\n"
+        "    exit 2\n"
+        "    ;;\n"
+        "esac\n"
+    )
+    shim.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    return bin_dir
+
+
+def _tag_at_head(project: Path, tag: str) -> None:
+    _run(project, "tag", tag)
+
+
+def test_release_with_explicit_tag_substitutes_placeholders(
+    git_project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """`--tag v9.9.9` substitutes the Tag header line correctly."""
+    _stub_gh_release_in_path(
+        monkeypatch,
+        tmp_path,
+        release_payload={
+            "tagName": "v9.9.9",
+            "name": "Cortex v9.9.9 — test release",
+            "body": "## What changed\n\n- Fixed everything",
+            "publishedAt": "2026-05-06T12:00:00Z",
+            "url": "https://example.com/releases/v9.9.9",
+            "isPrerelease": False,
+        },
+    )
+    _tag_at_head(git_project, "v9.9.9")
+    result = _draft(git_project, "release", "--tag", "v9.9.9")
+    assert result.exit_code == 0, result.output
+    today = date.today().isoformat()
+    target = git_project / ".cortex" / "journal" / f"{today}-release-9.9.9.md"
+    assert target.exists(), list((git_project / ".cortex" / "journal").iterdir())
+    body = target.read_text()
+    # Header `Tag:` is filled.
+    assert "**Tag:** v9.9.9" in body
+    assert "{{ git tag, e.g. v0.3.0 }}" not in body
+    # Title is filled (release name).
+    assert body.startswith("# Release v9.9.9 — Cortex v9.9.9 — test release"), body[:200]
+    # Artifact block: Version stripped of `v` prefix.
+    assert "- **Version:** 9.9.9" in body
+    # Release URL is in.
+    assert "https://example.com/releases/v9.9.9" in body
+
+
+def test_release_default_tag_uses_latest_semver_tag(
+    git_project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """No `--tag` → picks the most recent `^v\\d+\\.\\d+\\.\\d+$` tag."""
+    # Make a couple of commits + tag two semver-shaped versions; non-semver
+    # tags (``not-a-release``) must be ignored even if they sort later.
+    extra = git_project / "EXTRA.md"
+    extra.write_text("a\n")
+    _run(git_project, "add", "EXTRA.md")
+    _run(git_project, "commit", "-m", "feat: a (#1)")
+    _tag_at_head(git_project, "v0.1.0")
+    extra.write_text("b\n")
+    _run(git_project, "add", "EXTRA.md")
+    _run(git_project, "commit", "-m", "feat: b (#2)")
+    _tag_at_head(git_project, "v0.2.0")
+    _tag_at_head(git_project, "not-a-release")
+    _stub_gh_release_in_path(
+        monkeypatch,
+        tmp_path,
+        release_payload={
+            "tagName": "v0.2.0",
+            "name": "v0.2.0",
+            "url": "https://example.com/releases/v0.2.0",
+            "publishedAt": "2026-05-06T12:00:00Z",
+        },
+    )
+    result = _draft(git_project, "release")
+    assert result.exit_code == 0, result.output
+    today = date.today().isoformat()
+    target = git_project / ".cortex" / "journal" / f"{today}-release-0.2.0.md"
+    assert target.exists(), list((git_project / ".cortex" / "journal").iterdir())
+    body = target.read_text()
+    assert "**Tag:** v0.2.0" in body
+
+
+def test_release_no_tag_warns_and_leaves_placeholders(
+    git_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No tag at all → raw template + stderr warning (no silent failure)."""
+    # Hide gh so we don't accidentally hit a real release lookup.
+    bin_dir = git_project / "isolated-bin"
+    bin_dir.mkdir()
+    monkeypatch.setenv("PATH", str(bin_dir))
+    result = _draft(git_project, "release")
+    assert result.exit_code == 0, result.output
+    today = date.today().isoformat()
+    files = list(
+        (git_project / ".cortex" / "journal").glob(f"{today}-release-*.md")
+    )
+    assert files, list((git_project / ".cortex" / "journal").iterdir())
+    body = files[0].read_text()
+    # Placeholders survive — no substitution context available.
+    assert "{{ git tag, e.g. v0.3.0 }}" in body
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "warning" in combined.lower()
+    assert "could not resolve a tag" in combined
+
+
+def test_release_no_edit_strips_lede_and_seeds_what_shipped(
+    git_project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """No-edit release drafts must not auto-commit raw `{{ ... }}` prompts,
+    must rewrite the lede callout, and must seed `What shipped` bullets
+    from PR-shaped commit subjects between the previous tag and this one."""
+    extra = git_project / "EXTRA.md"
+    extra.write_text("a\n")
+    _run(git_project, "add", "EXTRA.md")
+    _run(git_project, "commit", "-m", "feat: a (#1)")
+    _tag_at_head(git_project, "v0.1.0")
+    # Two PR-shaped commits between v0.1.0 and v0.2.0.
+    extra.write_text("b\n")
+    _run(git_project, "add", "EXTRA.md")
+    _run(git_project, "commit", "-m", "feat: shiny new feature (#42)")
+    extra.write_text("c\n")
+    _run(git_project, "add", "EXTRA.md")
+    _run(git_project, "commit", "-m", "fix: stop the bleeding (#43)")
+    _tag_at_head(git_project, "v0.2.0")
+    _stub_gh_release_in_path(
+        monkeypatch,
+        tmp_path,
+        release_payload={
+            "tagName": "v0.2.0",
+            "name": "Cortex v0.2.0 — second slice",
+            "body": "## What changed\n\n- did stuff",
+            "publishedAt": "2026-05-06T12:00:00Z",
+            "url": "https://example.com/releases/v0.2.0",
+        },
+    )
+    result = _draft(git_project, "release", "--tag", "v0.2.0")
+    assert result.exit_code == 0, result.output
+    today = date.today().isoformat()
+    target = git_project / ".cortex" / "journal" / f"{today}-release-0.2.0.md"
+    assert target.exists()
+    body = target.read_text()
+    # Split off the auto-context HTML comment block — `(#1)` will appear
+    # there because the auto-context lists `git log` output, not the
+    # release-window seed.
+    real_body = body.split("<!--", 1)[0]
+    # No raw `{{ ... }}` placeholders survive in --no-edit mode.
+    assert "{{" not in real_body, f"Unfilled placeholders survived: {real_body}"
+    # Lede callout was rewritten.
+    assert "Cortex v0.2.0 — second slice" in real_body
+    # `What shipped` seeded with PR-shaped subjects.
+    assert "- feat: shiny new feature (#42)" in real_body
+    assert "- fix: stop the bleeding (#43)" in real_body
+    # The prior `v0.1.0`'s commit (#1) is excluded from the seed — the
+    # window is `<prev>..<tag>` exclusive at the prev end.
+    assert "(#1)" not in real_body
+    # `Follow-ups` placeholder checkbox replaced with `_None._` (matches
+    # pr-merged behavior; a deferred `[ ]` without a SPEC § 4.2 target is
+    # a stale claim).
+    followups = body.split("## Follow-ups (deferred to future work)", 1)[1].split(
+        "(Per SPEC", 1
+    )[0]
+    assert "- [ ]" not in followups
+    assert "_None._" in followups
+
+
+def test_release_filename_is_release_dash_tag_without_v(
+    git_project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The default filename shape is `<date>-release-<tag-without-v>.md`."""
+    _stub_gh_release_in_path(
+        monkeypatch,
+        tmp_path,
+        release_payload={
+            "tagName": "v3.5.7",
+            "name": "v3.5.7",
+            "url": "https://example.com/r/v3.5.7",
+            "publishedAt": "2026-05-06T12:00:00Z",
+        },
+    )
+    _tag_at_head(git_project, "v3.5.7")
+    result = _draft(git_project, "release", "--tag", "v3.5.7")
+    assert result.exit_code == 0, result.output
+    today = date.today().isoformat()
+    target = git_project / ".cortex" / "journal" / f"{today}-release-3.5.7.md"
+    assert target.exists(), list((git_project / ".cortex" / "journal").iterdir())
+
+
 def test_project_template_override_wins(git_project: Path) -> None:
     # Drop a custom decision.md template under the project; draft should use it.
     custom = git_project / ".cortex" / "templates" / "journal" / "decision.md"
