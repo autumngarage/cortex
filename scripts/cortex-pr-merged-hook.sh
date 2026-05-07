@@ -21,6 +21,14 @@
 #      Default for newly-bootstrapped projects: `auto`. Value `off`
 #      disables. Missing key is treated as `auto` (so projects that
 #      haven't migrated yet still benefit when the other gates pass).
+#   5. The most recent commit on the default branch is NOT itself an
+#      auto-draft pr-merged entry. The hook recognizes its own output
+#      and refuses to recurse (cortex#193). Detection signal: the merged
+#      commit's subject matches `^docs\(journal\): auto-draft pr-merged
+#      entry`. This is a deliberate, narrow false-positive: a human-
+#      written journal commit with that subject is also skipped, but
+#      that's correct (the human is journaling the merge themselves —
+#      no auto-draft needed).
 #
 # Failure modes (no silent failures past activation):
 #   - cortex missing mid-flow (between detection and exec): log to stderr
@@ -86,6 +94,12 @@ read_config_value() {
   printf '%s' "$result"
 }
 
+# Match the canonical auto-draft commit subject. Used both to recognize
+# our own previous output (recursion guard, cortex#193) and to compose
+# the new auto-draft commit message; keep both call sites in sync by
+# reading the prefix from one constant.
+AUTO_DRAFT_SUBJECT_PREFIX='docs(journal): auto-draft pr-merged entry'
+
 resolve_default_branch() {
   if [ -n "${TOUCHSTONE_DEFAULT_BRANCH:-}" ]; then
     printf '%s' "$TOUCHSTONE_DEFAULT_BRANCH"
@@ -131,6 +145,21 @@ case "$config_value" in
     # Unknown value — treat as off but warn so the project can fix the
     # config without surprise behavior.
     log "cortex-pr-merged-hook: unknown cortex_pr_merged_hook='$config_value' (expected: auto|on|off); skipping."
+    exit 0
+    ;;
+esac
+
+# Recursion guard (cortex#193). The merge that fired this hook may have
+# been the auto-draft from a prior invocation — that PR's squash-merge
+# carries the same subject we'd use for a new auto-draft, and re-firing
+# would generate an infinite chain of meta-PRs (auto-draft of an
+# auto-draft of an auto-draft …). Inspect the most recent commit on the
+# default branch and bail if it's already one of ours.
+last_subject="$(git -C "$PROJECT_DIR" log -1 --format=%s HEAD 2>/dev/null || true)"
+case "$last_subject" in
+  "$AUTO_DRAFT_SUBJECT_PREFIX"*)
+    # The merge that triggered us IS an auto-draft. Nothing to journal.
+    # Silent exit 0 — this is expected behavior, not a failure.
     exit 0
     ;;
 esac
@@ -187,7 +216,7 @@ pr_suffix=""
 if [ -n "${TOUCHSTONE_MERGED_PR:-}" ]; then
   pr_suffix=" for #${TOUCHSTONE_MERGED_PR}"
 fi
-commit_message="docs(journal): auto-draft pr-merged entry${pr_suffix}"
+commit_message="${AUTO_DRAFT_SUBJECT_PREFIX}${pr_suffix}"
 
 if ! git -C "$PROJECT_DIR" add -- "$rel_path"; then
   log "cortex-pr-merged-hook: git add '$rel_path' failed."
