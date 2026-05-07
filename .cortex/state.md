@@ -1,10 +1,10 @@
 ---
-Generated: 2026-05-06T19:17:27-04:00
+Generated: 2026-05-06T20:34:14-04:00
 Generator: cortex refresh-state v1.1.0
 Sources:
-  - HEAD sha: 5cd020e54e81197db56c831f65aaf2053e049b90
+  - HEAD sha: fd62709f23e515cc7359fdcf1dc5321277e24715
   - .cortex/plans/*.md (10 files)
-  - .cortex/journal/*.md (77 entries, 2026-04-17..2026-05-07)
+  - .cortex/journal/*.md (81 entries, 2026-04-17..2026-05-07)
   - .cortex/doctrine/*.md (7 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
@@ -90,6 +90,10 @@ Sources-hash:
   .cortex/journal/2026-05-06-pr-merged-1831.md: e9709f093edef6c184bd82d1e07c8998186d502a9152959cfb35db83ae0cf10b
   .cortex/journal/2026-05-06-pr-merged-1846.md: e896213d3436a46cf2bc219e7eb7df976a69adb2b2d3064cbf8594c3c6833a9b
   .cortex/journal/2026-05-06-pr-merged-1913.md: 7b8c4e753ec24f81400547b7e88ac73bbb86f98154b64be18c4d300b3379322a
+  .cortex/journal/2026-05-06-pr-merged-1919.md: 93c2e69847ebb60e81e2ac7146a4914929852be6b3d8442e6f4921c9e4504b7c
+  .cortex/journal/2026-05-06-pr-merged-1952.md: 008bf6eb7a2929805d6cafcba8b2ae08bec6749f868c27034ab367feabce61dc
+  .cortex/journal/2026-05-06-pr-merged-2015.md: b2127d11510be4ec4d0e2b1502a63278cd0fdd83c8b2b8644550d5c92f1e6502
+  .cortex/journal/2026-05-06-pr-merged-install-followup-plan.md: bdb85320c2ad27bf5bab17eea3b566a53366c520ed4040511fc1cab6834396ab
   .cortex/journal/2026-05-06-pre-10-compatibility-audit-v03-and-v05-forward-com.md: 677ee49aad6c9c09f58f5842d10ead7578b01f4e559b94b75816aaa66b063613
   .cortex/journal/2026-05-06-v090-behavioral-exit-bar-review-gate-exit-declared.md: 45866242b9c2e95316bd3b325a45ed181228200d184dda09f110b859d6a5e655
   .cortex/journal/2026-05-06-v090-dogfood-retrieval-validation-across-three-tar.md: 9864bb736576da17152b2068a905af9264c5f3e3f000fc349dc7387fa54b181f
@@ -118,7 +122,7 @@ Sources-hash:
   .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476
   .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44
   docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c
-Corpus: 77 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 81 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -196,6 +200,10 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 - **2026-05-06** — PR #178 merged — feat(state): hash-based source tracking replaces mtime for staleness check (closes cortex#171) (`.cortex/journal/2026-05-06-pr-merged-1831.md`, Type: pr-merged)
 - **2026-05-06** — PR #177 merged — feat(doctor,install-brief): enforce issue-closing trailer convention via doctor audit + brief prefill (closes cortex#173) (`.cortex/journal/2026-05-06-pr-merged-1846.md`, Type: pr-merged)
 - **2026-05-06** — PR #179 merged — chore(state): refresh state.md ahead of v1.1.0 release (`.cortex/journal/2026-05-06-pr-merged-1913.md`, Type: pr-merged)
+- **2026-05-06** — PR #180 merged — docs(journal): record v1.1.0 release — root-cause fixes (`.cortex/journal/2026-05-06-pr-merged-1919.md`, Type: pr-merged)
+- **2026-05-06** — PR #184 merged — feat(doctor): warn on Generator-version drift between derived layers and current CLI (closes cortex#183) (`.cortex/journal/2026-05-06-pr-merged-1952.md`, Type: pr-merged)
+- **2026-05-06** — PR #187 merged — feat(doctor): cross-reference [ ] #N checkboxes with GitHub issue state (closes cortex#181) (`.cortex/journal/2026-05-06-pr-merged-2015.md`, Type: pr-merged)
+- **2026-05-06** — PR #185 merged — feat(install-brief): dual-artifact follow-up plan (`.cortex/journal/2026-05-06-pr-merged-install-followup-plan.md`, Type: pr-merged)
 
 ## Stale-now / handle-later
 
