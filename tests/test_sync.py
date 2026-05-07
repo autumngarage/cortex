@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,6 +12,7 @@ from click.testing import CliRunner
 
 import cortex
 from cortex.cli import cli
+from cortex.commands import _auto_sync as auto_sync_mod
 from cortex.commands.init import init_command
 
 # ---------------------------------------------------------------------------
@@ -155,11 +157,41 @@ def _read_marker(project: Path) -> str | None:
     return marker.read_text().strip()
 
 
+def _commit_all(project: Path, message: str = "baseline") -> None:
+    subprocess.run(["git", "init"], cwd=project, check=True, capture_output=True)
+    subprocess.run(["git", "add", "."], cwd=project, check=True, capture_output=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Cortex Test",
+            "-c",
+            "user.email=cortex@example.test",
+            "commit",
+            "-m",
+            message,
+        ],
+        cwd=project,
+        check=True,
+        capture_output=True,
+    )
+
+
+def _git_result(stdout: str = "", returncode: int = 0) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(
+        args=["git"],
+        returncode=returncode,
+        stdout=stdout,
+        stderr="",
+    )
+
+
 def test_auto_sync_runs_on_minor_bump(
     scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project = scaffolded_project
     _set_marker(project, "1.0.0")
+    _commit_all(project)
     monkeypatch.setattr(cortex, "__version__", "1.1.0")
     monkeypatch.setattr("cortex.commands.sync.__version__", "1.1.0")
     monkeypatch.setattr("cortex.commands._auto_sync.__version__", "1.1.0")
@@ -172,6 +204,97 @@ def test_auto_sync_runs_on_minor_bump(
     assert result.exit_code == 0, result.output
     assert "auto-sync" in result.output, result.output
     assert _read_marker(project) == "1.1.0"
+
+
+def test_auto_sync_skips_when_tree_is_dirty(
+    scaffolded_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project = scaffolded_project
+    _set_marker(project, "1.0.0")
+    _commit_all(project)
+    (project / "untracked.txt").write_text("dirty\n")
+    monkeypatch.setattr(auto_sync_mod, "__version__", "1.1.0")
+
+    with patch("cortex.commands.sync.run_sync") as run_sync:
+        auto_sync_mod.maybe_auto_sync(project, "status", disabled=False)
+
+    run_sync.assert_not_called()
+    assert _read_marker(project) == "1.0.0"
+    assert (
+        "==> auto-sync: skipped (working tree is dirty); "
+        "run `cortex sync` after committing"
+    ) in capsys.readouterr().err
+
+
+def test_auto_sync_skips_on_release_bump_on_feature_branch(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = scaffolded_project
+    _set_marker(project, "1.0.0")
+    monkeypatch.setattr(auto_sync_mod, "__version__", "1.1.0")
+
+    git_results = [
+        _git_result(""),
+        _git_result("chore: release v1.3.0\n"),
+        _git_result("chore/release-v1.3.0\n"),
+        _git_result("origin/main\n"),
+    ]
+
+    with (
+        patch("cortex.commands._auto_sync.subprocess.run", side_effect=git_results),
+        patch("cortex.commands.sync.run_sync") as run_sync,
+    ):
+        auto_sync_mod.maybe_auto_sync(project, "status", disabled=False)
+
+    run_sync.assert_not_called()
+    assert _read_marker(project) == "1.0.0"
+
+
+def test_auto_sync_runs_on_release_bump_on_main(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = scaffolded_project
+    _set_marker(project, "1.0.0")
+    monkeypatch.setattr(auto_sync_mod, "__version__", "1.1.0")
+
+    git_results = [
+        _git_result(""),
+        _git_result("chore: release v1.3.0\n"),
+        _git_result("main\n"),
+        _git_result("origin/main\n"),
+    ]
+
+    with (
+        patch("cortex.commands._auto_sync.subprocess.run", side_effect=git_results),
+        patch("cortex.commands.sync.run_sync") as run_sync,
+    ):
+        auto_sync_mod.maybe_auto_sync(project, "status", disabled=False)
+
+    run_sync.assert_called_once_with(
+        project,
+        run_doctor=False,
+        output_prefix="==> auto-sync:",
+    )
+    assert _read_marker(project) == "1.1.0"
+
+
+def test_auto_sync_skips_when_git_status_unavailable(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = scaffolded_project
+    _set_marker(project, "1.0.0")
+    monkeypatch.setattr(auto_sync_mod, "__version__", "1.1.0")
+
+    with (
+        patch("cortex.commands._auto_sync.subprocess.run", side_effect=FileNotFoundError),
+        patch("cortex.commands.sync.run_sync") as run_sync,
+    ):
+        auto_sync_mod.maybe_auto_sync(project, "status", disabled=False)
+
+    run_sync.assert_not_called()
+    assert _read_marker(project) == "1.0.0"
 
 
 def test_auto_sync_skips_on_patch_bump(
@@ -336,6 +459,7 @@ def test_auto_sync_swallows_systemexit_from_require_compatible(
     cortex_dir.mkdir()
     # No SPEC_VERSION file — require_compatible will call sys.exit(2).
     (cortex_dir / ".last-cli-version").write_text("1.0.0")
+    _commit_all(tmp_path)
 
     monkeypatch.setattr(cortex, "__version__", "1.1.0")
     monkeypatch.setattr("cortex.commands._auto_sync.__version__", "1.1.0")
