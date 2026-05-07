@@ -328,7 +328,7 @@ pr_url="$(gh pr create \
   --body "$pr_body" \
   --head "$feature_branch" \
   --base "$default_branch" \
-  "${label_args[@]}" 2>&1)" || pr_create_status=$?
+  ${label_args[@]+"${label_args[@]}"} 2>&1)" || pr_create_status=$?
 
 if [ "$pr_create_status" -ne 0 ]; then
   log "cortex-pr-merged-hook: 'gh pr create' failed (exit ${pr_create_status})."

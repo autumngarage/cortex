@@ -108,6 +108,41 @@ def _make_gh_blocking_shim(bin_dir: Path) -> Path:
     return log_file
 
 
+def _make_gh_no_label_success_shim(bin_dir: Path) -> Path:
+    """Write a ``gh`` shim for the production happy path where the
+    optional ``cortex-auto-draft`` label is absent. ``gh label list``
+    returns zero rows, while PR creation and auto-merge succeed."""
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    log_file = bin_dir / "gh.calls.log"
+    log_file.write_text("", encoding="utf-8")
+    shim = bin_dir / "gh"
+    shim.write_text(
+        textwrap.dedent(
+            f"""\
+            #!/usr/bin/env bash
+            printf '%s\\n' "$*" >> {log_file!s}
+            case "$1 $2" in
+              "label list")
+                exit 0
+                ;;
+              "pr create")
+                printf 'https://github.com/autumngarage/cortex/pull/777\\n'
+                exit 0
+                ;;
+              "pr merge")
+                exit 0
+                ;;
+            esac
+            printf 'unexpected gh invocation: %s\\n' "$*" >&2
+            exit 4
+            """
+        ),
+        encoding="utf-8",
+    )
+    shim.chmod(0o755)
+    return log_file
+
+
 def _make_failing_cortex_shim(bin_dir: Path) -> Path:
     """Write a ``cortex`` shim that fails loudly if invoked. Used by the
     recursion-guard test to assert the writer never fires."""
@@ -399,6 +434,54 @@ def test_hook_handles_gh_pr_create_failure_gracefully(
     )
     # Operator-actionable stderr names the branch.
     assert expected_branch in result.stderr
+
+
+def test_hook_succeeds_when_cortex_auto_draft_label_is_absent(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """Regression for cortex#203: under ``set -u``, an absent optional
+    label must not leave ``label_args`` unbound before ``gh pr create``."""
+    project, bin_dir = project_repo
+    journal_path = project / ".cortex" / "journal" / "auto.md"
+    _make_cortex_shim(bin_dir, journal_path)
+    gh_log = _make_gh_no_label_success_shim(bin_dir)
+    remote_dir = project.parent / "remote.git"
+    subprocess.run(
+        ["git", "init", "--bare", "-q", str(remote_dir)],
+        check=True,
+        capture_output=True,
+    )
+    _git("remote", "add", "origin", str(remote_dir), cwd=project)
+    _git("push", "-u", "--quiet", "origin", "main", cwd=project)
+
+    result = _run_hook(
+        project,
+        bin_dir,
+        extra_env={
+            "TOUCHSTONE_MERGED_PR": "203",
+            "TOUCHSTONE_CORTEX_HOOK_SKIP_PUSH": "0",
+        },
+    )
+
+    assert result.returncode == 0, (
+        f"hook exited {result.returncode}; stderr:\n{result.stderr}"
+    )
+    expected_branch = "docs/journal-pr-203"
+    branches = _git("branch", "--list", expected_branch, cwd=project).stdout
+    assert expected_branch in branches, (
+        f"expected '{expected_branch}' to exist; got: {branches!r}"
+    )
+    feature_subject = _git(
+        "log", "-1", "--format=%s", expected_branch, cwd=project
+    ).stdout.strip()
+    assert feature_subject == "docs(journal): auto-draft pr-merged entry for #203"
+    files = _git("show", f"{expected_branch}:.cortex/journal/auto.md", cwd=project)
+    assert files.stdout == "placeholder\n"
+    gh_calls = gh_log.read_text(encoding="utf-8")
+    assert "label list" in gh_calls
+    assert "pr create" in gh_calls
+    assert "--label" not in gh_calls
+    assert "pr merge 777 --squash --delete-branch --auto" in gh_calls
 
 
 def test_hook_silent_skip_when_off_in_config(
