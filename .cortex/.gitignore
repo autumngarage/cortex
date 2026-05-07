@@ -1,2 +1,4 @@
 .index/
 .cache/
+.last-cli-version
+.last-cli-version.tmp
