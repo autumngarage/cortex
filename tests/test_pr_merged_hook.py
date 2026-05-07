@@ -61,20 +61,64 @@ def _git_init(target: Path) -> None:
     _git("commit", "-q", "-m", "initial", cwd=target)
 
 
-def _make_cortex_shim(bin_dir: Path, journal_path: Path) -> Path:
-    """Write a ``cortex`` shim that simulates ``cortex journal draft
-    pr-merged --no-edit``: it creates the journal file and prints the
-    absolute path on stdout. Records every invocation to a sidecar log so
-    a test can assert the shim was (or wasn't) called."""
+# Default NDJSON for the cortex shim's ``check-triggers`` branch. One
+# T1.1 hit so the substantive-merge gate (cortex#206) trips and the
+# hook proceeds to draft a journal entry. Existing tests written
+# before the gate landed assume the writer always runs; defaulting to
+# "trigger fired" keeps them green without per-test fixture churn.
+_DEFAULT_CHECK_TRIGGERS_NDJSON = (
+    '{"trigger":"T1.1","reason":"diff touches `principles/`",'
+    '"template":".cortex/templates/journal/decision.md",'
+    '"ref":"HEAD~1..HEAD","files":["principles/foo.md"]}'
+)
+
+
+def _make_cortex_shim(
+    bin_dir: Path,
+    journal_path: Path,
+    *,
+    check_triggers_ndjson: str = _DEFAULT_CHECK_TRIGGERS_NDJSON,
+    check_triggers_status: int = 0,
+    check_triggers_stderr: str = "",
+) -> Path:
+    """Write a ``cortex`` shim that simulates the two subcommands the
+    pr-merged hook calls:
+
+    * ``cortex check-triggers --since HEAD~1`` — the substantive-merge
+      gate (cortex#206). The shim emits ``check_triggers_ndjson`` on
+      stdout, ``check_triggers_stderr`` on stderr, and exits with
+      ``check_triggers_status``. Default is one fired T1.1 hit so the
+      gate trips green and the hook proceeds; pass ``""`` to
+      simulate "no triggers fired" (silent-skip path).
+    * ``cortex journal draft pr-merged --no-edit`` — creates the
+      journal file at ``journal_path`` and prints the absolute path on
+      stdout, matching the real CLI contract.
+
+    Records every invocation to a sidecar log so tests can assert the
+    shim was (or wasn't) called and with what subcommand."""
     bin_dir.mkdir(parents=True, exist_ok=True)
     log_file = bin_dir / "cortex.calls.log"
     log_file.write_text("", encoding="utf-8")
     shim = bin_dir / "cortex"
+    # Encode any literal `'` in shim output so the heredoc-free
+    # template stays valid. Keep newlines as `\n` so NDJSON multi-line
+    # payloads survive the trip through PATH dispatch.
+    ndjson_escaped = check_triggers_ndjson.replace("'", "'\\''")
+    stderr_escaped = check_triggers_stderr.replace("'", "'\\''")
     shim.write_text(
         textwrap.dedent(
             f"""\
             #!/usr/bin/env bash
             printf '%s\\n' "$*" >> {log_file!s}
+            if [ "$1" = "check-triggers" ]; then
+              if [ -n '{stderr_escaped}' ]; then
+                printf '%s' '{stderr_escaped}' >&2
+              fi
+              if [ -n '{ndjson_escaped}' ]; then
+                printf '%s\\n' '{ndjson_escaped}'
+              fi
+              exit {check_triggers_status}
+            fi
             mkdir -p {journal_path.parent!s}
             printf 'placeholder\\n' > {journal_path!s}
             printf '%s\\n' {journal_path!s}
@@ -321,12 +365,15 @@ def test_hook_creates_feature_branch_for_auto_draft(
         "log", "-1", "--format=%s", expected_branch, cwd=project
     ).stdout.strip()
     assert feature_subject == "docs(journal): auto-draft pr-merged entry for #175"
-    # The feature branch's tree contains the journal file.
+    # The feature branch's tree contains the journal file. The hook
+    # appends a `## Triggers fired` section after the draft writes it
+    # (cortex#206), so assert prefix + the triggers stanza separately.
     files = _git(
         "show", f"{expected_branch}:.cortex/journal/2026-05-07-pr-merged.md",
         cwd=project,
     ).stdout
-    assert files == "placeholder\n"
+    assert files.startswith("placeholder\n"), files
+    assert "## Triggers fired" in files
 
 
 def test_hook_does_not_commit_to_default_branch(
@@ -476,7 +523,8 @@ def test_hook_succeeds_when_cortex_auto_draft_label_is_absent(
     ).stdout.strip()
     assert feature_subject == "docs(journal): auto-draft pr-merged entry for #203"
     files = _git("show", f"{expected_branch}:.cortex/journal/auto.md", cwd=project)
-    assert files.stdout == "placeholder\n"
+    assert files.stdout.startswith("placeholder\n"), files.stdout
+    assert "## Triggers fired" in files.stdout
     gh_calls = gh_log.read_text(encoding="utf-8")
     assert "label list" in gh_calls
     assert "pr create" in gh_calls
@@ -519,3 +567,257 @@ def test_hook_silent_skip_when_disable_env_set(
 
     assert result.returncode == 0, result.stderr
     assert log_file.read_text(encoding="utf-8") == ""
+
+
+# ---------------------------------------------------------------------------
+# cortex#206 — substantive-merge gate via `cortex check-triggers`
+# ---------------------------------------------------------------------------
+
+
+def test_hook_skips_when_check_triggers_returns_empty(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """When ``cortex check-triggers --since HEAD~1`` exits 0 with empty
+    stdout, the merge wasn't substantive enough to warrant a Journal
+    entry: the hook must silent-skip with no feature branch, no
+    journal file, no commit. This is the core gate behavior — half
+    the merges to a healthy trunk are typo fixes that don't need
+    their own meta-PR."""
+    project, bin_dir = project_repo
+    journal_path = project / ".cortex" / "journal" / "auto.md"
+    log_file = _make_cortex_shim(
+        bin_dir,
+        journal_path,
+        check_triggers_ndjson="",  # gate trips: no triggers fired
+    )
+    main_head_before = _git("rev-parse", "main", cwd=project).stdout.strip()
+
+    result = _run_hook(project, bin_dir)
+
+    assert result.returncode == 0, result.stderr
+    # No feature branch was created.
+    branches = _git("branch", "--list", "docs/journal-pr-*", cwd=project).stdout
+    assert branches.strip() == "", (
+        f"expected no docs/journal-pr-* branch when gate trips; got: {branches!r}"
+    )
+    # Default branch unchanged.
+    main_head_after = _git("rev-parse", "main", cwd=project).stdout.strip()
+    assert main_head_after == main_head_before
+    # Journal file was never written by the draft path.
+    assert not journal_path.exists()
+    # The shim recorded only the check-triggers call — never `journal draft`.
+    calls = log_file.read_text(encoding="utf-8")
+    assert "check-triggers" in calls
+    assert "journal draft" not in calls
+
+
+def test_hook_proceeds_when_t1_4_fires(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """A T1.4 (file-deletion >100 lines) hit must produce a journal
+    entry whose body lists the trigger and its files."""
+    project, bin_dir = project_repo
+    journal_path = project / ".cortex" / "journal" / "auto.md"
+    ndjson = (
+        '{"trigger":"T1.4",'
+        '"reason":"file deletion exceeds 100 lines (deleted 142 from src/foo.py)",'
+        '"template":".cortex/templates/journal/decision.md",'
+        '"ref":"HEAD~1..HEAD","files":["src/foo.py"],"lines_deleted":142}'
+    )
+    _make_cortex_shim(bin_dir, journal_path, check_triggers_ndjson=ndjson)
+
+    result = _run_hook(
+        project,
+        bin_dir,
+        extra_env={"TOUCHSTONE_MERGED_PR": "300"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    expected_branch = "docs/journal-pr-300"
+    branches = _git("branch", "--list", expected_branch, cwd=project).stdout
+    assert expected_branch in branches
+    body = _git(
+        "show", f"{expected_branch}:.cortex/journal/auto.md", cwd=project
+    ).stdout
+    assert "## Triggers fired" in body
+    assert "T1.4" in body
+    assert "src/foo.py" in body
+
+
+def test_hook_proceeds_when_t1_1_fires(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """A T1.1 (diff touches principles/) hit must produce a journal
+    entry whose body lists the trigger and its files."""
+    project, bin_dir = project_repo
+    journal_path = project / ".cortex" / "journal" / "auto.md"
+    ndjson = (
+        '{"trigger":"T1.1",'
+        '"reason":"diff touches `.cortex/doctrine/`, `.cortex/plans/`, '
+        '`principles/`, or `SPEC.md`",'
+        '"template":".cortex/templates/journal/decision.md",'
+        '"ref":"HEAD~1..HEAD","files":["principles/foo.md"]}'
+    )
+    _make_cortex_shim(bin_dir, journal_path, check_triggers_ndjson=ndjson)
+
+    result = _run_hook(
+        project,
+        bin_dir,
+        extra_env={"TOUCHSTONE_MERGED_PR": "301"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    expected_branch = "docs/journal-pr-301"
+    body = _git(
+        "show", f"{expected_branch}:.cortex/journal/auto.md", cwd=project
+    ).stdout
+    assert "## Triggers fired" in body
+    assert "T1.1" in body
+    assert "principles/foo.md" in body
+
+
+def test_hook_force_flag_bypasses_gate_via_env(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """``TOUCHSTONE_CORTEX_HOOK_FORCE=1`` must bypass the gate entirely:
+    even when ``cortex check-triggers`` returns empty (no triggers),
+    the hook still produces a journal entry."""
+    project, bin_dir = project_repo
+    journal_path = project / ".cortex" / "journal" / "auto.md"
+    log_file = _make_cortex_shim(
+        bin_dir,
+        journal_path,
+        check_triggers_ndjson="",  # gate would trip without --force
+    )
+
+    result = _run_hook(
+        project,
+        bin_dir,
+        extra_env={
+            "TOUCHSTONE_MERGED_PR": "400",
+            "TOUCHSTONE_CORTEX_HOOK_FORCE": "1",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    expected_branch = "docs/journal-pr-400"
+    branches = _git("branch", "--list", expected_branch, cwd=project).stdout
+    assert expected_branch in branches, (
+        f"force flag must bypass gate; expected '{expected_branch}', "
+        f"got: {branches!r}"
+    )
+    # Force-bypass also skips the check-triggers call entirely (cheap
+    # bypass, no point in evaluating). The shim log shows only the
+    # journal-draft invocation.
+    calls = log_file.read_text(encoding="utf-8")
+    assert "journal draft pr-merged --no-edit" in calls
+    assert "check-triggers" not in calls
+
+
+def test_hook_force_via_config_value(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """``cortex_pr_merged_hook=force`` in ``.touchstone-config`` must
+    have the same bypass effect as the env var. Lets a project pin
+    the behavior without a per-invocation flag."""
+    project, bin_dir = project_repo
+    (project / ".touchstone-config").write_text(
+        "cortex_pr_merged_hook=force\n", encoding="utf-8"
+    )
+    # Commit the config edit so the hook's dirty-tree gate doesn't
+    # see it as uncommitted user work — mirrors the fixture's
+    # post-merge cleanliness invariant.
+    _git("add", ".touchstone-config", cwd=project)
+    _git("commit", "-q", "-m", "config: pin cortex_pr_merged_hook=force", cwd=project)
+    journal_path = project / ".cortex" / "journal" / "auto.md"
+    _make_cortex_shim(bin_dir, journal_path, check_triggers_ndjson="")
+
+    result = _run_hook(
+        project,
+        bin_dir,
+        extra_env={"TOUCHSTONE_MERGED_PR": "401"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    expected_branch = "docs/journal-pr-401"
+    branches = _git("branch", "--list", expected_branch, cwd=project).stdout
+    assert expected_branch in branches
+
+
+def test_hook_falls_back_when_check_triggers_missing(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """When the cortex CLI is on PATH but the ``check-triggers``
+    subcommand is unavailable (older cortex), the hook must fall back
+    to journal-every-merge AND print the documented one-line stderr
+    notice. A spurious entry is recoverable; a silently-skipped one
+    is not."""
+    project, bin_dir = project_repo
+    journal_path = project / ".cortex" / "journal" / "auto.md"
+    _make_cortex_shim(
+        bin_dir,
+        journal_path,
+        # Simulate the legacy "unknown subcommand" error: non-zero
+        # exit and a stderr message that names the missing
+        # subcommand. The hook must surface both.
+        check_triggers_status=2,
+        check_triggers_stderr="Error: No such command 'check-triggers'.\n",
+    )
+
+    result = _run_hook(
+        project,
+        bin_dir,
+        extra_env={"TOUCHSTONE_MERGED_PR": "500"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    # The fall-back path produced a journal entry.
+    expected_branch = "docs/journal-pr-500"
+    branches = _git("branch", "--list", expected_branch, cwd=project).stdout
+    assert expected_branch in branches
+    # The one-line fall-back notice is present, naming the gate that
+    # failed open. This is the "every degradation visible" contract.
+    assert (
+        "cortex check-triggers unavailable; falling back to journal-every-merge"
+        in result.stderr
+    )
+    # And the verbatim cortex-side stderr is preserved so the
+    # operator can tell *why* it was unavailable.
+    assert "No such command 'check-triggers'" in result.stderr
+
+
+def test_recursion_guard_runs_before_check_triggers(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """The recursion guard (cortex#193) MUST short-circuit before any
+    cortex invocation, including ``check-triggers``. A meta-PR's
+    squash-merge subject already matches the auto-draft prefix; if the
+    guard didn't run first we'd both pay the check-triggers
+    round-trip AND risk firing the writer on our own output."""
+    project, bin_dir = project_repo
+    # Loud-failure shim — any cortex invocation (including
+    # check-triggers) makes the test fail.
+    log_file = _make_failing_cortex_shim(bin_dir)
+    # HEAD subject matches the auto-draft recursion prefix.
+    (project / ".cortex" / "journal" / "auto-draft.md").write_text(
+        "x\n", encoding="utf-8"
+    )
+    _git("add", ".cortex/journal/auto-draft.md", cwd=project)
+    _git(
+        "commit", "-q",
+        "-m", "docs(journal): auto-draft pr-merged entry for #99",
+        cwd=project,
+    )
+    head_before = _git("rev-parse", "HEAD", cwd=project).stdout.strip()
+
+    result = _run_hook(project, bin_dir)
+
+    assert result.returncode == 0, result.stderr
+    # Default branch unmoved AND cortex was never invoked — proving
+    # the recursion guard short-circuits before the gate.
+    head_after = _git("rev-parse", "HEAD", cwd=project).stdout.strip()
+    assert head_after == head_before
+    assert log_file.read_text(encoding="utf-8") == "", (
+        "recursion guard must run before any cortex invocation; "
+        f"shim was called: {log_file.read_text(encoding='utf-8')!r}"
+    )
