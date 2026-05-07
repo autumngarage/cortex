@@ -13,6 +13,11 @@ from pathlib import Path
 import click
 
 from cortex import SUPPORTED_PROTOCOL_VERSIONS, SUPPORTED_SPEC_VERSIONS, __version__
+from cortex.commands._auto_sync import (
+    auto_sync_via_env_disabled,
+    maybe_auto_sync,
+    project_root_from_path_override,
+)
 from cortex.commands.doctor import doctor_command
 from cortex.commands.grep import grep_command
 from cortex.commands.init import init_command
@@ -67,8 +72,23 @@ def _detect_install_method() -> str:
         "Equivalent to `cortex status --path X`."
     ),
 )
+@click.option(
+    "--no-auto-sync",
+    is_flag=True,
+    default=False,
+    help=(
+        "Skip the auto-sync hook that fires after a minor version bump. "
+        "Equivalent to `[sync] auto = false` in `.cortex/config.toml` or "
+        "`CORTEX_NO_AUTO_SYNC=1` in the environment."
+    ),
+)
 @click.pass_context
-def cli(ctx: click.Context, status_only: bool, path_override: Path | None) -> None:
+def cli(
+    ctx: click.Context,
+    status_only: bool,
+    path_override: Path | None,
+    no_auto_sync: bool,
+) -> None:
     """Cortex — project memory protocol and reference CLI.
 
     Running ``cortex`` with no subcommand prints the project status: active
@@ -76,6 +96,17 @@ def cli(ctx: click.Context, status_only: bool, path_override: Path | None) -> No
     Use ``cortex status --json`` for machine-readable output, or ``--path``
     to target a project other than the current directory.
     """
+    # Auto-sync hook (Layer 2 of cortex#190). Fires before the dispatched
+    # subcommand body runs. Skipped during init/sync/migrate-state, when
+    # opt-out is set, or when the marker indicates only a patch bump.
+    project_root = project_root_from_path_override(path_override)
+    auto_sync_disabled = no_auto_sync or auto_sync_via_env_disabled()
+    maybe_auto_sync(
+        project_root,
+        ctx.invoked_subcommand,
+        disabled=auto_sync_disabled,
+    )
+
     if ctx.invoked_subcommand is None:
         target = path_override if path_override is not None else Path.cwd()
         run_status(target, as_json=False)

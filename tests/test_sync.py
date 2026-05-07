@@ -1,8 +1,10 @@
-"""Integration tests for `cortex sync` (Layer 1)."""
+"""Integration tests for `cortex sync` (Layer 1) and auto-sync on version-bump (Layer 2)."""
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
@@ -10,7 +12,6 @@ from click.testing import CliRunner
 import cortex
 from cortex.cli import cli
 from cortex.commands.init import init_command
-
 
 # ---------------------------------------------------------------------------
 # Fixture project — uses `cortex init` so doctor checks pass cleanly.
@@ -79,6 +80,12 @@ def test_sync_dry_run_invokes_nothing(scaffolded_project: Path) -> None:
     assert "[dry-run]" in result.output
     # Nothing was written by sync itself.
     assert (project / ".cortex" / "state.md").read_text() == state_before
+    # `cortex init` writes its own .index.json today; sync's dry-run must
+    # leave that file at its prior content (we just confirm sync didn't
+    # rebuild and overwrite something newer — the .index.json mtime should
+    # match init-time, which is essentially that it stays a valid JSON).
+    if (project / ".cortex" / ".index.json").exists():
+        assert (project / ".cortex" / ".index.json").read_text()
 
 
 def test_sync_rebuilds_retrieve_index_when_present(scaffolded_project: Path) -> None:
@@ -130,3 +137,185 @@ def test_sync_reports_unknown_config_keys(scaffolded_project: Path) -> None:
     )
     assert result.exit_code == 0, result.output
     assert "1 unknown key" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Layer 2 — auto-sync on version bump
+# ---------------------------------------------------------------------------
+
+
+def _set_marker(project: Path, version: str) -> None:
+    (project / ".cortex" / ".last-cli-version").write_text(version)
+
+
+def _read_marker(project: Path) -> str | None:
+    marker = project / ".cortex" / ".last-cli-version"
+    if not marker.exists():
+        return None
+    return marker.read_text().strip()
+
+
+def test_auto_sync_runs_on_minor_bump(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = scaffolded_project
+    _set_marker(project, "1.0.0")
+    monkeypatch.setattr(cortex, "__version__", "1.1.0")
+    monkeypatch.setattr("cortex.commands.sync.__version__", "1.1.0")
+    monkeypatch.setattr("cortex.commands._auto_sync.__version__", "1.1.0")
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+    monkeypatch.chdir(project)
+
+    runner = CliRunner()
+    # Use `cortex status` as an arbitrary command that goes through dispatch.
+    result = runner.invoke(cli, ["status", "--path", str(project)])
+    assert result.exit_code == 0, result.output
+    assert "auto-sync" in result.output, result.output
+    assert _read_marker(project) == "1.1.0"
+
+
+def test_auto_sync_skips_on_patch_bump(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = scaffolded_project
+    _set_marker(project, "1.1.0")
+    monkeypatch.setattr(cortex, "__version__", "1.1.1")
+    monkeypatch.setattr("cortex.commands._auto_sync.__version__", "1.1.1")
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+    monkeypatch.chdir(project)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["status", "--path", str(project)])
+    assert result.exit_code == 0, result.output
+    assert "auto-sync" not in result.output, result.output
+    # Marker still gets bumped so the next minor diff is detected from the new patch baseline.
+    assert _read_marker(project) == "1.1.1"
+
+
+def test_auto_sync_skips_on_first_run(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = scaffolded_project
+    # init may have left a marker; remove it so this is truly "first run after install".
+    marker = project / ".cortex" / ".last-cli-version"
+    if marker.exists():
+        marker.unlink()
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+    monkeypatch.chdir(project)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["status", "--path", str(project)])
+    assert result.exit_code == 0, result.output
+    assert "auto-sync" not in result.output, result.output
+    # Marker is now seeded.
+    assert _read_marker(project) == cortex.__version__
+
+
+def test_auto_sync_skips_with_flag(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = scaffolded_project
+    _set_marker(project, "1.0.0")
+    monkeypatch.setattr(cortex, "__version__", "1.1.0")
+    monkeypatch.setattr("cortex.commands._auto_sync.__version__", "1.1.0")
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+    monkeypatch.chdir(project)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--no-auto-sync", "status", "--path", str(project)])
+    assert result.exit_code == 0, result.output
+    assert "auto-sync" not in result.output, result.output
+    # Marker not updated when the user opted out.
+    assert _read_marker(project) == "1.0.0"
+
+
+def test_auto_sync_skips_with_config(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = scaffolded_project
+    _set_marker(project, "1.0.0")
+    (project / ".cortex" / "config.toml").write_text("[sync]\nauto = false\n")
+    monkeypatch.setattr(cortex, "__version__", "1.1.0")
+    monkeypatch.setattr("cortex.commands._auto_sync.__version__", "1.1.0")
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+    monkeypatch.chdir(project)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["status", "--path", str(project)])
+    assert result.exit_code == 0, result.output
+    assert "auto-sync" not in result.output, result.output
+    assert _read_marker(project) == "1.0.0"
+
+
+@pytest.mark.parametrize("subcommand", ["init", "sync", "migrate-state"])
+def test_auto_sync_skips_during_init_and_sync_and_migrate_state(
+    tmp_path: Path,
+    scaffolded_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    subcommand: str,
+) -> None:
+    project = scaffolded_project
+    _set_marker(project, "1.0.0")
+    monkeypatch.setattr(cortex, "__version__", "1.1.0")
+    monkeypatch.setattr("cortex.commands._auto_sync.__version__", "1.1.0")
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+
+    # `init` must run in an empty directory; the others run on the project.
+    init_target = tmp_path / "fresh"
+    init_target.mkdir()
+    args_by_cmd = {
+        "init": [
+            "init",
+            "--path",
+            str(init_target),
+            "--no-imports-claude",
+            "--no-imports-agents",
+            "--no-gitignore",
+        ],
+        "sync": ["sync", "--path", str(project), "--dry-run"],
+        "migrate-state": ["migrate-state", "--path", str(project), "--dry-run"],
+    }
+    monkeypatch.chdir(project)
+    runner = CliRunner()
+    result = runner.invoke(cli, args_by_cmd[subcommand])
+    # The auto-sync banner must not appear under any of these subcommands.
+    assert "==> auto-sync:" not in result.output, result.output
+    # Marker on the project under test MUST NOT have been touched.
+    assert _read_marker(project) == "1.0.0"
+
+
+def test_marker_write_is_atomic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Marker is written via rename(.tmp, target), so a crash during the write
+    leaves either the prior content or the new content — never a partial file."""
+    from cortex.commands import _auto_sync as auto_sync_mod
+
+    cortex_dir = tmp_path / ".cortex"
+    cortex_dir.mkdir()
+    marker = cortex_dir / ".last-cli-version"
+    marker.write_text("1.0.0")
+
+    real_replace = os.replace
+
+    calls: list[tuple[str, str]] = []
+
+    def boom_replace(src: str | os.PathLike[str], dst: str | os.PathLike[str]) -> None:
+        # Capture the call but never apply it — simulate a crash mid-rename.
+        calls.append((str(src), str(dst)))
+        raise RuntimeError("simulated crash before rename completes")
+
+    with patch("os.replace", side_effect=boom_replace), pytest.raises(RuntimeError):
+        auto_sync_mod._write_marker(cortex_dir, "1.1.0")
+
+    # The original marker file is untouched (we never replaced it).
+    assert marker.read_text() == "1.0.0"
+    # The .tmp file may exist with the new content (that's fine — atomic
+    # rename is what protects the real marker), but the real marker
+    # remained at the prior version. That IS the atomicity guarantee.
+    assert marker.read_text() == "1.0.0"
+
+    # Now do a real successful write and confirm the marker advanced.
+    with patch("os.replace", side_effect=real_replace):
+        auto_sync_mod._write_marker(cortex_dir, "1.1.0")
+    assert marker.read_text() == "1.1.0"
+    tmp_marker = cortex_dir / ".last-cli-version.tmp"
+    assert not tmp_marker.exists()

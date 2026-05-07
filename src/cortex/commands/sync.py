@@ -38,7 +38,6 @@ from cortex.index import refresh_index
 from cortex.state_render import build_state_inputs, render_state
 from cortex.validation import Severity, run_all_checks
 
-
 _GENERATOR_VERSION_RE = re.compile(
     r"Generator:\s*cortex\s+refresh-state\s+v(?P<version>\S+)"
 )
