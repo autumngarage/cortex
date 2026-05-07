@@ -18,6 +18,7 @@ from cortex.commands._auto_sync import (
     maybe_auto_sync,
     project_root_from_path_override,
 )
+from cortex.commands.check_triggers import check_triggers_command
 from cortex.commands.doctor import doctor_command
 from cortex.commands.grep import grep_command
 from cortex.commands.init import init_command
@@ -128,6 +129,7 @@ def version_command() -> None:
 
 cli.add_command(init_command)
 cli.add_command(install_brief_command)
+cli.add_command(check_triggers_command)
 cli.add_command(doctor_command)
 cli.add_command(manifest_command)
 cli.add_command(migrate_state_command)
