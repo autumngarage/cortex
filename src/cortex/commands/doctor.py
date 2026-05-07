@@ -26,7 +26,12 @@ from cortex.audit_instructions import (
     format_audit_instructions_human,
 )
 from cortex.banner import SUBTITLE_DOCTOR, cortex_version, print_banner
-from cortex.doctor_checks import run_audit_checks, run_plain_checks, run_pr_trailer_checks
+from cortex.doctor_checks import (
+    run_audit_checks,
+    run_issue_ref_checks,
+    run_plain_checks,
+    run_pr_trailer_checks,
+)
 from cortex.siblings import detect_siblings, format_sibling_block
 from cortex.validation import Issue, Severity, run_all_checks
 
@@ -82,6 +87,16 @@ def _format_issue(issue: Issue) -> str:
     "Use Refs: #N to explicitly opt out of auto-close for a mention.",
 )
 @click.option(
+    "--audit-issue-refs",
+    "run_audit_issue_refs",
+    is_flag=True,
+    default=False,
+    help="Cross-reference open [ ] checkboxes in .cortex/ content with GitHub issue state. "
+    "Warns when a checkbox references a closed issue. Requires the `gh` CLI. "
+    "Results cache for 24h in .cortex/.cache/issue-state.json. "
+    "Use with --strict to fail on warnings.",
+)
+@click.option(
     "--strict",
     is_flag=True,
     default=False,
@@ -112,6 +127,7 @@ def doctor_command(
     run_audit_digests: bool,
     run_audit_instructions: bool,
     run_audit_pr_trailers: bool,
+    run_audit_issue_refs: bool,
     strict: bool,
     as_json: bool,
     since_days: int,
@@ -146,6 +162,8 @@ def doctor_command(
         issues.extend(run_audit_checks(target_path, since_days=since_days))
     if run_audit_pr_trailers:
         issues.extend(run_pr_trailer_checks(target_path))
+    if run_audit_issue_refs:
+        issues.extend(run_issue_ref_checks(target_path))
     issues = sorted(issues, key=lambda i: (i.severity.value, i.path, i.message))
 
     errors = [i for i in issues if i.severity is Severity.ERROR]
