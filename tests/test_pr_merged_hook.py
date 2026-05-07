@@ -5,12 +5,20 @@ a real on-disk git repo (``tmp_path``). No bash mocking — the harness mirrors
 ``test_shell.py``'s "real git" pattern so regressions surface against actual
 shell behavior, not against a mock contract.
 
-cortex#193 — the hook fires on every default-branch merge, including merges
-of the auto-draft PRs the hook itself produces. Without a recursion guard
-the resulting chain has no terminator.
+Two companion bugs the hook must defend against (both surfaced together in
+the vesper 2026-05-06 / 2026-05-07 session):
 
-The fixtures wire ``cortex`` onto PATH as a small shell shim that records
-calls and produces the stdout the hook expects.
+* cortex#193 — the hook fires on every default-branch merge, including
+  merges of the auto-draft PRs the hook itself produces. Without a
+  recursion guard the resulting chain has no terminator.
+* cortex#194 — the hook used to commit on local ``main`` and push directly
+  to ``origin/main``. In projects enforcing ``no-commit-to-branch`` (the
+  autumn-garage default) the push was rejected, the commit stranded on
+  local main, and ``main`` ended up diverged from ``origin``. The fix is
+  feature-branch + PR shipping.
+
+The fixtures wire ``cortex`` (and, where needed, ``gh``) onto PATH as small
+shell shims that record calls and produce the stdout the hook expects.
 """
 
 from __future__ import annotations
@@ -70,6 +78,28 @@ def _make_cortex_shim(bin_dir: Path, journal_path: Path) -> Path:
             mkdir -p {journal_path.parent!s}
             printf 'placeholder\\n' > {journal_path!s}
             printf '%s\\n' {journal_path!s}
+            """
+        ),
+        encoding="utf-8",
+    )
+    shim.chmod(0o755)
+    return log_file
+
+
+def _make_gh_blocking_shim(bin_dir: Path) -> Path:
+    """Write a ``gh`` shim that fails for any subcommand, so the hook
+    has to take its degraded path. Records calls."""
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    log_file = bin_dir / "gh.calls.log"
+    log_file.write_text("", encoding="utf-8")
+    shim = bin_dir / "gh"
+    shim.write_text(
+        textwrap.dedent(
+            f"""\
+            #!/usr/bin/env bash
+            printf '%s\\n' "$*" >> {log_file!s}
+            printf 'gh shim: forced failure\\n' >&2
+            exit 4
             """
         ),
         encoding="utf-8",
@@ -210,3 +240,199 @@ def test_recursion_guard_uses_real_git_log(
     assert "journal draft pr-merged --no-edit" in log_file.read_text(
         encoding="utf-8"
     )
+
+
+# ---------------------------------------------------------------------------
+# cortex#194 — feature-branch shipping
+# ---------------------------------------------------------------------------
+
+
+def test_hook_creates_feature_branch_for_auto_draft(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """Skip-push mode preserves the new commit on a ``docs/journal-pr-*``
+    feature branch, NOT on the default branch. The branch name embeds
+    the source-PR number when available."""
+    project, bin_dir = project_repo
+    journal_path = (
+        project / ".cortex" / "journal" / "2026-05-07-pr-merged.md"
+    )
+    _make_cortex_shim(bin_dir, journal_path)
+    main_head_before = _git("rev-parse", "main", cwd=project).stdout.strip()
+
+    result = _run_hook(
+        project,
+        bin_dir,
+        extra_env={
+            "TOUCHSTONE_MERGED_PR": "175",
+            "TOUCHSTONE_CORTEX_HOOK_SKIP_PUSH": "1",
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    # Default branch UNCHANGED.
+    main_head_after = _git("rev-parse", "main", cwd=project).stdout.strip()
+    assert main_head_after == main_head_before, (
+        "main moved; the hook must not commit to the default branch."
+    )
+    # Feature branch exists with the expected name.
+    expected_branch = "docs/journal-pr-175"
+    branches = _git("branch", "--list", expected_branch, cwd=project).stdout
+    assert expected_branch in branches, (
+        f"expected branch '{expected_branch}' to exist; got: {branches!r}"
+    )
+    # The feature-branch HEAD's commit subject matches the hook's contract.
+    feature_subject = _git(
+        "log", "-1", "--format=%s", expected_branch, cwd=project
+    ).stdout.strip()
+    assert feature_subject == "docs(journal): auto-draft pr-merged entry for #175"
+    # The feature branch's tree contains the journal file.
+    files = _git(
+        "show", f"{expected_branch}:.cortex/journal/2026-05-07-pr-merged.md",
+        cwd=project,
+    ).stdout
+    assert files == "placeholder\n"
+
+
+def test_hook_does_not_commit_to_default_branch(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """Direct invariant of cortex#194: after the hook runs, the default
+    branch's tip must equal what it was before. This is asserted
+    independently of the feature-branch existence check so a future
+    refactor that drops the branch creation but reintroduces the
+    commit-on-main step is still caught."""
+    project, bin_dir = project_repo
+    journal_path = project / ".cortex" / "journal" / "auto.md"
+    _make_cortex_shim(bin_dir, journal_path)
+    head_before = _git("rev-parse", "main", cwd=project).stdout.strip()
+
+    result = _run_hook(project, bin_dir)
+
+    assert result.returncode == 0, result.stderr
+    head_after = _git("rev-parse", "main", cwd=project).stdout.strip()
+    assert head_after == head_before
+
+
+def test_hook_branch_slug_falls_back_to_timestamp_when_no_pr_number(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """When ``TOUCHSTONE_MERGED_PR`` isn't set the branch name must still
+    be unique (a timestamp slug, by convention). We don't pin the exact
+    timestamp, only the prefix and that *some* uniquifying slug appears."""
+    project, bin_dir = project_repo
+    journal_path = project / ".cortex" / "journal" / "auto.md"
+    _make_cortex_shim(bin_dir, journal_path)
+
+    result = _run_hook(project, bin_dir)
+
+    assert result.returncode == 0, result.stderr
+    branches = _git("branch", "--list", "docs/journal-pr-*", cwd=project).stdout
+    matched = [
+        b.strip().lstrip("* ").strip() for b in branches.splitlines() if b.strip()
+    ]
+    assert matched, f"expected at least one docs/journal-pr-* branch; got: {branches!r}"
+    # Slug must be non-empty.
+    for branch in matched:
+        slug = branch.removeprefix("docs/journal-pr-")
+        assert slug, f"branch '{branch}' has no slug"
+
+
+def test_hook_handles_gh_pr_create_failure_gracefully(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """If ``gh pr create`` fails (gh missing, label wrong, branch
+    protection refusing auto-merge) the hook MUST:
+
+      * preserve the journal commit on the feature branch,
+      * print a stderr line telling the operator how to ship it manually,
+      * exit 0 (the source PR has merged; this is the journal step, not
+        the merge step — failing here would noisily fail the whole merge
+        pipeline for a recoverable problem).
+    """
+    project, bin_dir = project_repo
+    journal_path = project / ".cortex" / "journal" / "auto.md"
+    _make_cortex_shim(bin_dir, journal_path)
+    _make_gh_blocking_shim(bin_dir)
+    # Add a bare local remote so the push step can succeed without a
+    # network call. The branch will get pushed to this remote; gh pr
+    # create then fails (forced) and the hook degrades gracefully.
+    remote_dir = project.parent / "remote.git"
+    subprocess.run(
+        ["git", "init", "--bare", "-q", str(remote_dir)],
+        check=True,
+        capture_output=True,
+    )
+    _git("remote", "add", "origin", str(remote_dir), cwd=project)
+    _git("push", "-u", "--quiet", "origin", "main", cwd=project)
+
+    result = _run_hook(
+        project,
+        bin_dir,
+        extra_env={
+            "TOUCHSTONE_MERGED_PR": "200",
+            # Allow the push step to actually run.
+            "TOUCHSTONE_CORTEX_HOOK_SKIP_PUSH": "0",
+        },
+    )
+
+    # Exit 0 — gh failure is recoverable, not a hard fail.
+    assert result.returncode == 0, (
+        f"hook exited {result.returncode}; stderr:\n{result.stderr}"
+    )
+    # Default branch unchanged on origin.
+    main_head_after_remote = subprocess.run(
+        ["git", "-C", str(project), "rev-parse", "main"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    main_head_initial = subprocess.run(
+        ["git", "-C", str(project), "rev-parse", "origin/main"],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert main_head_after_remote == main_head_initial
+    # Feature branch with the commit still exists locally.
+    expected_branch = "docs/journal-pr-200"
+    branches = _git("branch", "--list", expected_branch, cwd=project).stdout
+    assert expected_branch in branches, (
+        f"expected '{expected_branch}' to be preserved on degraded path; "
+        f"got: {branches!r}"
+    )
+    # Operator-actionable stderr names the branch.
+    assert expected_branch in result.stderr
+
+
+def test_hook_silent_skip_when_off_in_config(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """``cortex_pr_merged_hook=off`` is the documented kill-switch and
+    must short-circuit before invoking ``cortex``. Re-asserts a property
+    that pre-existed the bug fixes; included so the test file owns the
+    full activation contract, not just the new behavior."""
+    project, bin_dir = project_repo
+    log_file = _make_failing_cortex_shim(bin_dir)
+    (project / ".touchstone-config").write_text(
+        "cortex_pr_merged_hook=off\n", encoding="utf-8"
+    )
+
+    result = _run_hook(project, bin_dir)
+
+    assert result.returncode == 0, result.stderr
+    assert log_file.read_text(encoding="utf-8") == ""
+
+
+def test_hook_silent_skip_when_disable_env_set(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """``TOUCHSTONE_CORTEX_HOOK_DISABLE`` is the per-invocation
+    short-circuit; same activation-contract regression check."""
+    project, bin_dir = project_repo
+    log_file = _make_failing_cortex_shim(bin_dir)
+
+    result = _run_hook(
+        project,
+        bin_dir,
+        extra_env={"TOUCHSTONE_CORTEX_HOOK_DISABLE": "1"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert log_file.read_text(encoding="utf-8") == ""
