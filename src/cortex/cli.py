@@ -27,6 +27,7 @@ from cortex.commands.refresh_index import refresh_index_command
 from cortex.commands.refresh_state import refresh_state_command
 from cortex.commands.retrieve import retrieve_command
 from cortex.commands.status import run_status, status_command
+from cortex.commands.sync import sync_command
 
 
 def _detect_install_method() -> str:
@@ -108,6 +109,7 @@ cli.add_command(retrieve_command)
 cli.add_command(next_command)
 cli.add_command(journal_group)
 cli.add_command(plan_group)
+cli.add_command(sync_command)
 
 
 if __name__ == "__main__":
