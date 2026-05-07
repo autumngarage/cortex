@@ -200,10 +200,16 @@ def maybe_auto_sync(
         from cortex.commands.sync import run_sync
 
         run_sync(project_root, run_doctor=False, output_prefix="==> auto-sync:")
-    except Exception as exc:
-        # Auto-sync MUST NOT block the user's command. If sync itself
-        # fails, surface the failure (no silent failures principle)
-        # but keep going with the user's intended invocation.
+    except BaseException as exc:
+        # Auto-sync MUST NOT block the user's command. We catch
+        # BaseException (not just Exception) so that SystemExit from
+        # underlying writers — e.g. `require_compatible` calls
+        # `sys.exit(2)` when SPEC_VERSION is missing or unsupported —
+        # turns into a visible warning instead of taking down the
+        # outer command. KeyboardInterrupt remains the operator's
+        # call to make: re-raise so Ctrl+C still propagates.
+        if isinstance(exc, KeyboardInterrupt):
+            raise
         click.echo(
             f"warning: auto-sync failed: {exc}; continuing with original command.",
             err=True,

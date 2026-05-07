@@ -319,3 +319,34 @@ def test_marker_write_is_atomic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert marker.read_text() == "1.1.0"
     tmp_marker = cortex_dir / ".last-cli-version.tmp"
     assert not tmp_marker.exists()
+
+
+def test_auto_sync_swallows_systemexit_from_require_compatible(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression for the BaseException catch.
+
+    `cortex.compat.require_compatible` calls `sys.exit(2)` (raising
+    `SystemExit`) when `.cortex/SPEC_VERSION` is missing or unsupported.
+    `SystemExit` is NOT a subclass of `Exception`, so a bare
+    `except Exception` would let it propagate and hard-exit the user's
+    actual command. Auto-sync must swallow it and continue.
+    """
+    cortex_dir = tmp_path / ".cortex"
+    cortex_dir.mkdir()
+    # No SPEC_VERSION file — require_compatible will call sys.exit(2).
+    (cortex_dir / ".last-cli-version").write_text("1.0.0")
+
+    monkeypatch.setattr(cortex, "__version__", "1.1.0")
+    monkeypatch.setattr("cortex.commands._auto_sync.__version__", "1.1.0")
+    monkeypatch.chdir(tmp_path)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["status", "--path", str(tmp_path)])
+    # The user-facing command should still complete (status itself may
+    # report its own error, but the process must not be hard-exited
+    # with code 2 from require_compatible inside auto-sync). Status
+    # against a missing .cortex/ exits non-zero; the assertion is that
+    # auto-sync's warning line appears, proving the SystemExit was
+    # caught and converted to a visible warning.
+    assert "warning: auto-sync failed" in result.output, result.output
