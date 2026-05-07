@@ -38,6 +38,8 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
+import subprocess
 import tomllib
 from pathlib import Path
 
@@ -47,6 +49,11 @@ from cortex import __version__
 
 MARKER_FILENAME = ".last-cli-version"
 MARKER_TMP_FILENAME = ".last-cli-version.tmp"
+RELEASE_COMMIT_SUBJECT_RE = re.compile(r"^chore(\(.*\))?: release v\d+\.\d+\.\d+")
+DIRTY_TREE_SKIP_NOTICE = (
+    "==> auto-sync: skipped (working tree is dirty); "
+    "run `cortex sync` after committing"
+)
 
 # Commands that MUST never trigger auto-sync. Each entry is the click
 # command name as registered on the top-level group. The list is
@@ -124,6 +131,77 @@ def _config_disables_auto_sync(cortex_dir: Path) -> bool:
     return sync_section.get("auto") is False
 
 
+def _git_stdout(project_root: Path, args: list[str]) -> str | None:
+    """Return stripped git stdout, or None when git exits non-zero."""
+
+    result = subprocess.run(
+        ["git", *args],
+        cwd=project_root,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
+
+
+def _working_tree_is_dirty(project_root: Path) -> bool | None:
+    """Return True when git reports any staged/unstaged/untracked change.
+
+    None means git is unavailable, so the caller cannot safely auto-sync.
+    A non-zero git status is treated as dirty by design.
+    """
+
+    try:
+        status = _git_stdout(project_root, ["status", "--porcelain"])
+    except FileNotFoundError:
+        return None
+    return status is None or bool(status)
+
+
+def _release_commit_on_non_default_branch(project_root: Path) -> bool:
+    """Return True for a release-bump commit before it has landed on default."""
+
+    subject = _git_stdout(project_root, ["log", "-1", "--format=%s"])
+    if subject is None or not RELEASE_COMMIT_SUBJECT_RE.match(subject):
+        return False
+
+    current_branch = _git_stdout(project_root, ["branch", "--show-current"]) or ""
+    default_branch = (
+        _git_stdout(project_root, ["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])
+        or ""
+    )
+    if default_branch.startswith("origin/"):
+        default_branch = default_branch.removeprefix("origin/")
+
+    return not current_branch or not default_branch or current_branch != default_branch
+
+
+def _auto_sync_preflight_allows(project_root: Path) -> bool:
+    """Gate expensive auto-sync regeneration on a safe Git state."""
+
+    dirty = _working_tree_is_dirty(project_root)
+    if dirty is None:
+        click.echo(
+            "==> auto-sync: skipped (git unavailable); run `cortex sync` manually",
+            err=True,
+        )
+        return False
+    if dirty:
+        click.echo(DIRTY_TREE_SKIP_NOTICE, err=True)
+        return False
+
+    if _release_commit_on_non_default_branch(project_root):
+        click.echo(
+            "==> auto-sync: skipped (release commit on feature branch)",
+            err=True,
+        )
+        return False
+
+    return True
+
+
 def maybe_auto_sync(
     project_root: Path,
     invoked_subcommand: str | None,
@@ -189,6 +267,9 @@ def maybe_auto_sync(
         # don't run sync — patch releases are by convention safe.
         with contextlib.suppress(OSError):
             _write_marker(cortex_dir, current)
+        return
+
+    if not _auto_sync_preflight_allows(project_root):
         return
 
     # Minor (or major) bump. Run sync, then advance the marker.
