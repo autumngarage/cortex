@@ -246,6 +246,14 @@ def project_repo(tmp_path: Path) -> tuple[Path, Path]:
     _git_init(project)
     (project / ".cortex" / "journal").mkdir(parents=True)
     (project / ".cortex" / "state.md").write_text("# state\n", encoding="utf-8")
+    # SPEC_VERSION marker is the real-repo signal that this store has
+    # opted into Cortex writer paths. The hook's #220 gate (added 2026-05-08)
+    # silently skips the auto-draft when this file is missing, so every
+    # test that expects the writer to RUN must have it present. The
+    # missing-marker behavior gets its own dedicated test below.
+    (project / ".cortex" / "SPEC_VERSION").write_text(
+        "1.1.0\n", encoding="utf-8"
+    )
     (project / ".touchstone-config").write_text(
         "cortex_pr_merged_hook=auto\n", encoding="utf-8"
     )
@@ -316,6 +324,62 @@ def test_recursion_guard_uses_real_git_log(
 
     assert result.returncode == 0, result.stderr
     # cortex WAS invoked: the guard lets non-auto-draft heads through.
+    assert "journal draft pr-merged --no-edit" in log_file.read_text(
+        encoding="utf-8"
+    )
+
+
+# ---------------------------------------------------------------------------
+# cortex#220 — SPEC_VERSION-missing skip
+# ---------------------------------------------------------------------------
+
+
+def test_hook_skips_cleanly_when_spec_version_missing(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """A repo can have a ``.cortex/`` directory (e.g. created by a
+    hook scaffolder) without yet committing to the writer paths — the
+    canonical signal for that is the absence of ``.cortex/SPEC_VERSION``.
+
+    In that state the hook MUST exit 0 with one informational stderr
+    line and MUST NOT invoke ``cortex journal draft`` (which itself
+    refuses on missing SPEC_VERSION and would surface as exit 2 — the
+    cortex#220 failure mode).
+    """
+    project, bin_dir = project_repo
+    # Remove the marker the fixture committed.
+    spec_version = project / ".cortex" / "SPEC_VERSION"
+    spec_version.unlink()
+    _git("add", "-A", cwd=project)
+    _git("commit", "-q", "-m", "remove SPEC_VERSION", cwd=project)
+    # Loud-failure shim — proves the writer never runs.
+    log_file = _make_failing_cortex_shim(bin_dir)
+    head_before = _git("rev-parse", "main", cwd=project).stdout.strip()
+
+    result = _run_hook(project, bin_dir)
+
+    assert result.returncode == 0, result.stderr
+    assert "SPEC_VERSION missing" in result.stderr, result.stderr
+    # Default branch unchanged (no auto-commit).
+    head_after = _git("rev-parse", "main", cwd=project).stdout.strip()
+    assert head_after == head_before
+    # cortex shim was never invoked — gate fired before the writer.
+    assert log_file.read_text(encoding="utf-8") == ""
+
+
+def test_hook_proceeds_when_spec_version_present(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """The default fixture has ``.cortex/SPEC_VERSION`` — confirm the
+    gate is a real lookup (not a constant short-circuit) by verifying
+    that the writer DOES run when the marker is present."""
+    project, bin_dir = project_repo
+    journal_path = project / ".cortex" / "journal" / "with-marker.md"
+    log_file = _make_cortex_shim(bin_dir, journal_path)
+
+    result = _run_hook(project, bin_dir)
+
+    assert result.returncode == 0, result.stderr
     assert "journal draft pr-merged --no-edit" in log_file.read_text(
         encoding="utf-8"
     )
