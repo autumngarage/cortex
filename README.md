@@ -8,7 +8,7 @@
 
 > *Project memory for AI-assisted work.*
 >
-> by **[Autumn Garage](https://github.com/autumngarage/autumn-garage)** · alongside [Touchstone](https://github.com/autumngarage/touchstone) · [Sentinel](https://github.com/autumngarage/sentinel) · [Conductor](https://github.com/autumngarage/conductor)
+> by **[Autumn Garage](https://github.com/autumngarage/autumn-garage)** · alongside [Touchstone](https://github.com/autumngarage/touchstone) · [Sentinel](https://github.com/autumngarage/sentinel) · [Conductor](https://github.com/autumngarage/conductor) · [Alchemist](https://github.com/autumngarage/alchemist) — Cortex is a protocol for agent project memory that treats your exact git repo as the memory store.
 
 # Cortex
 
