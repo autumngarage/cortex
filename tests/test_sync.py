@@ -146,19 +146,48 @@ def test_sync_reports_unknown_config_keys(scaffolded_project: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _ensure_git_repo(project: Path) -> None:
+    subprocess.run(["git", "init"], cwd=project, check=True, capture_output=True)
+
+
+def _git_dir(project: Path) -> Path:
+    result = subprocess.run(
+        ["git", "rev-parse", "--git-dir"],
+        cwd=project,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    raw = result.stdout.strip()
+    git_dir = Path(raw)
+    if not git_dir.is_absolute():
+        git_dir = project / git_dir
+    return git_dir.resolve()
+
+
 def _set_marker(project: Path, version: str) -> None:
-    (project / ".cortex" / ".last-cli-version").write_text(version)
+    _ensure_git_repo(project)
+    marker = _git_dir(project) / "cortex" / ".last-cli-version"
+    marker.parent.mkdir(parents=True, exist_ok=True)
+    marker.write_text(version)
 
 
 def _read_marker(project: Path) -> str | None:
-    marker = project / ".cortex" / ".last-cli-version"
+    try:
+        marker = _git_dir(project) / "cortex" / ".last-cli-version"
+    except subprocess.CalledProcessError:
+        return None
     if not marker.exists():
         return None
     return marker.read_text().strip()
 
 
+def _legacy_marker(project: Path) -> Path:
+    return project / ".cortex" / ".last-cli-version"
+
+
 def _commit_all(project: Path, message: str = "baseline") -> None:
-    subprocess.run(["git", "init"], cwd=project, check=True, capture_output=True)
+    _ensure_git_repo(project)
     subprocess.run(["git", "add", "."], cwd=project, check=True, capture_output=True)
     subprocess.run(
         [
@@ -168,21 +197,13 @@ def _commit_all(project: Path, message: str = "baseline") -> None:
             "-c",
             "user.email=cortex@example.test",
             "commit",
+            "--allow-empty",
             "-m",
             message,
         ],
         cwd=project,
         check=True,
         capture_output=True,
-    )
-
-
-def _git_result(stdout: str = "", returncode: int = 0) -> subprocess.CompletedProcess[str]:
-    return subprocess.CompletedProcess(
-        args=["git"],
-        returncode=returncode,
-        stdout=stdout,
-        stderr="",
     )
 
 
@@ -256,17 +277,14 @@ def test_auto_sync_skips_on_release_bump_on_feature_branch(
 ) -> None:
     project = scaffolded_project
     _set_marker(project, "1.0.0")
+    _commit_all(project)
     monkeypatch.setattr(auto_sync_mod, "__version__", "1.1.0")
 
-    git_results = [
-        _git_result(""),
-        _git_result("chore: release v1.3.0\n"),
-        _git_result("chore/release-v1.3.0\n"),
-        _git_result("origin/main\n"),
-    ]
-
     with (
-        patch("cortex.commands._auto_sync.subprocess.run", side_effect=git_results),
+        patch(
+            "cortex.commands._auto_sync._release_commit_on_non_default_branch",
+            return_value=True,
+        ),
         patch("cortex.commands.sync.run_sync") as run_sync,
     ):
         auto_sync_mod.maybe_auto_sync(project, "status", disabled=False)
@@ -280,17 +298,14 @@ def test_auto_sync_runs_on_release_bump_on_main(
 ) -> None:
     project = scaffolded_project
     _set_marker(project, "1.0.0")
+    _commit_all(project)
     monkeypatch.setattr(auto_sync_mod, "__version__", "1.1.0")
 
-    git_results = [
-        _git_result(""),
-        _git_result("chore: release v1.3.0\n"),
-        _git_result("main\n"),
-        _git_result("origin/main\n"),
-    ]
-
     with (
-        patch("cortex.commands._auto_sync.subprocess.run", side_effect=git_results),
+        patch(
+            "cortex.commands._auto_sync._release_commit_on_non_default_branch",
+            return_value=False,
+        ),
         patch("cortex.commands.sync.run_sync") as run_sync,
     ):
         auto_sync_mod.maybe_auto_sync(project, "status", disabled=False)
@@ -342,10 +357,15 @@ def test_auto_sync_skips_on_first_run(
     scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     project = scaffolded_project
-    # init may have left a marker; remove it so this is truly "first run after install".
-    marker = project / ".cortex" / ".last-cli-version"
+    # Initialize git so the marker has a place to live (gitdir-relative).
+    _ensure_git_repo(project)
+    # Remove both marker locations so this is truly "first run after install".
+    marker = _git_dir(project) / "cortex" / ".last-cli-version"
     if marker.exists():
         marker.unlink()
+    legacy = _legacy_marker(project)
+    if legacy.exists():
+        legacy.unlink()
     monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
     monkeypatch.chdir(project)
 
@@ -353,8 +373,136 @@ def test_auto_sync_skips_on_first_run(
     result = runner.invoke(cli, ["status", "--path", str(project)])
     assert result.exit_code == 0, result.output
     assert "auto-sync" not in result.output, result.output
-    # Marker is now seeded.
+    # Marker is now seeded in git metadata, not the worktree.
     assert _read_marker(project) == cortex.__version__
+    assert not _legacy_marker(project).exists()
+
+
+def test_auto_sync_seeds_marker_in_git_metadata_not_worktree(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = scaffolded_project
+    _ensure_git_repo(project)
+    marker = _git_dir(project) / "cortex" / ".last-cli-version"
+    if marker.exists():
+        marker.unlink()
+    legacy = _legacy_marker(project)
+    if legacy.exists():
+        legacy.unlink()
+
+    monkeypatch.setattr(auto_sync_mod, "__version__", "2.0.0")
+    auto_sync_mod.maybe_auto_sync(project, "status", disabled=False)
+
+    assert marker.read_text().strip() == "2.0.0"
+    assert not legacy.exists()
+
+
+def test_auto_sync_seed_is_noop_outside_git_checkout(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    project = scaffolded_project
+    # No git metadata present; marker writes should be skipped cleanly.
+    assert not (project / ".git").exists()
+    legacy = _legacy_marker(project)
+    if legacy.exists():
+        legacy.unlink()
+
+    monkeypatch.setattr(auto_sync_mod, "__version__", "2.0.0")
+    auto_sync_mod.maybe_auto_sync(project, "status", disabled=False)
+
+    assert _read_marker(project) is None
+    assert not legacy.exists()
+
+
+def test_legacy_marker_is_migrated_to_gitdir_on_first_read(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pre-existing `.cortex/.last-cli-version` migrates to the gitdir on first
+    upgraded run: the value moves to `<gitdir>/cortex/.last-cli-version` and
+    the legacy file is removed. This is the backwards-compatibility path
+    every existing Cortex user hits on first upgrade past this fix."""
+
+    project = scaffolded_project
+    _ensure_git_repo(project)
+    new_marker = _git_dir(project) / "cortex" / ".last-cli-version"
+    if new_marker.exists():
+        new_marker.unlink()
+    legacy = _legacy_marker(project)
+    legacy.write_text("1.4.2")
+
+    # Reading the marker should drive migration as a side-effect.
+    value = auto_sync_mod._read_marker(project)
+
+    assert value == "1.4.2"
+    assert new_marker.read_text().strip() == "1.4.2"
+    assert not legacy.exists()
+
+
+def test_legacy_marker_migration_skipped_outside_git_checkout(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Migration is best-effort. With no git metadata available, the legacy
+    file is left alone (rather than deleted with no destination) and the
+    user-facing command continues without crashing — a warning is emitted
+    so the deferred migration is visible."""
+
+    project = scaffolded_project
+    assert not (project / ".git").exists()
+    legacy = _legacy_marker(project)
+    legacy.write_text("1.4.2")
+
+    value = auto_sync_mod._read_marker(project)
+
+    # No gitdir → cannot migrate → returns None (and emits a warning to
+    # stderr, which we don't capture here — the visible-failure
+    # invariant is that the legacy file stays put for the next run.)
+    assert value is None
+    assert legacy.exists()
+    assert legacy.read_text() == "1.4.2"
+
+
+def test_legacy_marker_cleaned_up_when_new_marker_already_exists(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Both markers present (e.g., upgraded run partially completed
+    earlier): the new marker is authoritative, and the legacy file is
+    cleaned up so the dirty-tree problem doesn't recur."""
+
+    project = scaffolded_project
+    _ensure_git_repo(project)
+    new_marker = _git_dir(project) / "cortex" / ".last-cli-version"
+    new_marker.parent.mkdir(parents=True, exist_ok=True)
+    new_marker.write_text("1.5.0")
+    legacy = _legacy_marker(project)
+    legacy.write_text("1.4.2")
+
+    value = auto_sync_mod._read_marker(project)
+
+    # New marker wins; legacy is removed.
+    assert value == "1.5.0"
+    assert new_marker.read_text().strip() == "1.5.0"
+    assert not legacy.exists()
+
+
+def test_legacy_marker_with_empty_content_is_cleaned_up(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty legacy marker has no value to migrate; it's removed
+    silently rather than seeded as the empty string."""
+
+    project = scaffolded_project
+    _ensure_git_repo(project)
+    new_marker = _git_dir(project) / "cortex" / ".last-cli-version"
+    if new_marker.exists():
+        new_marker.unlink()
+    legacy = _legacy_marker(project)
+    legacy.write_text("   \n")
+
+    value = auto_sync_mod._read_marker(project)
+
+    assert value is None
+    assert not legacy.exists()
+    assert not new_marker.exists()
 
 
 def test_auto_sync_skips_with_flag(
@@ -435,9 +583,9 @@ def test_marker_write_is_atomic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     leaves either the prior content or the new content — never a partial file."""
     from cortex.commands import _auto_sync as auto_sync_mod
 
-    cortex_dir = tmp_path / ".cortex"
-    cortex_dir.mkdir()
-    marker = cortex_dir / ".last-cli-version"
+    _ensure_git_repo(tmp_path)
+    marker = _git_dir(tmp_path) / "cortex" / ".last-cli-version"
+    marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text("1.0.0")
 
     real_replace = os.replace
@@ -450,7 +598,7 @@ def test_marker_write_is_atomic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
         raise RuntimeError("simulated crash before rename completes")
 
     with patch("os.replace", side_effect=boom_replace), pytest.raises(RuntimeError):
-        auto_sync_mod._write_marker(cortex_dir, "1.1.0")
+        auto_sync_mod._write_marker(tmp_path, "1.1.0")
 
     # The original marker file is untouched (we never replaced it).
     assert marker.read_text() == "1.0.0"
@@ -461,9 +609,9 @@ def test_marker_write_is_atomic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 
     # Now do a real successful write and confirm the marker advanced.
     with patch("os.replace", side_effect=real_replace):
-        auto_sync_mod._write_marker(cortex_dir, "1.1.0")
+        auto_sync_mod._write_marker(tmp_path, "1.1.0")
     assert marker.read_text() == "1.1.0"
-    tmp_marker = cortex_dir / ".last-cli-version.tmp"
+    tmp_marker = marker.with_name(".last-cli-version.tmp")
     assert not tmp_marker.exists()
 
 
@@ -481,7 +629,7 @@ def test_auto_sync_swallows_systemexit_from_require_compatible(
     cortex_dir = tmp_path / ".cortex"
     cortex_dir.mkdir()
     # No SPEC_VERSION file — require_compatible will call sys.exit(2).
-    (cortex_dir / ".last-cli-version").write_text("1.0.0")
+    _set_marker(tmp_path, "1.0.0")
     _commit_all(tmp_path)
 
     monkeypatch.setattr(cortex, "__version__", "1.1.0")

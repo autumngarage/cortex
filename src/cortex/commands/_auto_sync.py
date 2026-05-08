@@ -2,10 +2,10 @@
 
 This module is the single startup hook that fires from
 ``cortex.cli.cli`` before any subcommand body runs. It compares the
-installed CLI's ``__version__`` against ``.cortex/.last-cli-version``
-(the marker file) and, when the difference is at least minor,
-invokes the same code path as ``cortex sync`` with the doctor pass
-disabled.
+installed CLI's ``__version__`` against a marker in git metadata
+(``.git/cortex/.last-cli-version``) and, when the difference is at
+least minor, invokes the same code path as ``cortex sync`` with the
+doctor pass disabled.
 
 Design notes:
 
@@ -17,6 +17,13 @@ Design notes:
   ``.last-cli-version.tmp`` then ``os.replace``s into place, so a
   crash mid-write leaves either the prior or the new content but
   never a half-file.
+- **Marker lives outside the working tree.** Operational state belongs
+  in git metadata (``<gitdir>/cortex/.last-cli-version``), not
+  ``.cortex/``. This avoids dirty-worktree false positives.
+- **Legacy marker migration is best-effort.** If an old
+  ``.cortex/.last-cli-version`` exists, we migrate it to the gitdir
+  marker on first upgraded run and delete the legacy file. Failures are
+  logged and ignored so user commands still run.
 - **Skip list is explicit.** ``init``, ``sync``, and
   ``migrate-state`` cannot trigger auto-sync, regardless of marker
   state — those commands either pre-date the marker (init) or
@@ -50,12 +57,12 @@ from cortex import __version__
 
 MARKER_FILENAME = ".last-cli-version"
 MARKER_TMP_FILENAME = ".last-cli-version.tmp"
+MARKER_SUBDIR = "cortex"
 RELEASE_COMMIT_SUBJECT_RE = re.compile(r"^chore(\(.*\))?: release v\d+\.\d+\.\d+")
 PLANNED_WRITE_PATTERNS: tuple[str, ...] = (
     ".cortex/state.md",
     ".cortex/.index.json",
     ".cortex/.index/**",
-    f".cortex/{MARKER_FILENAME}",
 )
 
 # Commands that MUST never trigger auto-sync. Each entry is the click
@@ -89,20 +96,140 @@ def _parse_minor(version: str) -> tuple[int, int] | None:
         return None
 
 
-def _read_marker(cortex_dir: Path) -> str | None:
-    """Return the marker contents (stripped), or None if missing/unreadable."""
+def _git_dir(project_root: Path) -> Path | None:
+    """Return the resolved gitdir for `project_root`, or None when unavailable.
 
-    marker_path = cortex_dir / MARKER_FILENAME
-    if not marker_path.is_file():
+    Fast path: when ``project_root/.git`` is a real directory, return it
+    directly — no subprocess. This covers the overwhelming majority of
+    invocations (every normal checkout) and keeps auto-sync's startup
+    cost off the hot path. Only fall back to ``git rev-parse --git-dir``
+    for the worktree / submodule case where ``.git`` is a file pointing
+    at the real gitdir, or where the project is nested inside a parent
+    repo. Skip entirely when ``.git`` is absent — we won't be a git repo.
+    """
+
+    direct = project_root / ".git"
+    if direct.is_dir():
+        return direct.resolve()
+    if not direct.is_file():
+        # Either `.git` is absent (not a git checkout) or it's some
+        # exotic file-system entity. Either way, we can't safely write
+        # operational state — skip cleanly.
         return None
+
+    # `.git` is a file (linked worktree or submodule). Read the gitdir
+    # pointer directly to avoid a subprocess. The file format is a
+    # single line `gitdir: <path>` per `git-worktree(1)`.
+    try:
+        gitfile_text = direct.read_text()
+    except OSError:
+        return None
+
+    gitdir_line = next(
+        (line for line in gitfile_text.splitlines() if line.startswith("gitdir:")),
+        None,
+    )
+    if gitdir_line is None:
+        return None
+
+    git_dir = Path(gitdir_line[len("gitdir:") :].strip())
+    git_dir = (project_root / git_dir).resolve() if not git_dir.is_absolute() else git_dir.resolve()
+
+    if not git_dir.exists() or not git_dir.is_dir():
+        return None
+    return git_dir
+
+
+def _legacy_marker_path(project_root: Path) -> Path:
+    return project_root / ".cortex" / MARKER_FILENAME
+
+
+def _marker_path(project_root: Path) -> Path | None:
+    """Return marker path under git metadata, or None outside git checkouts."""
+
+    git_dir = _git_dir(project_root)
+    if git_dir is None:
+        return None
+    return git_dir / MARKER_SUBDIR / MARKER_FILENAME
+
+
+def _migrate_legacy_marker(project_root: Path, marker_path: Path | None) -> str | None:
+    """Best-effort migration from `.cortex/.last-cli-version` to gitdir marker.
+
+    Returns the migrated version when migration succeeded; otherwise None.
+    Any migration failure is logged and ignored.
+    """
+
+    legacy_path = _legacy_marker_path(project_root)
+    if not legacy_path.is_file():
+        return None
+
+    if marker_path is None:
+        click.echo(
+            "warning: auto-sync marker migration skipped (git metadata unavailable)",
+            err=True,
+        )
+        return None
+
+    if marker_path.is_file():
+        # New marker already present; best-effort cleanup of legacy residue.
+        with contextlib.suppress(OSError):
+            legacy_path.unlink()
+        return None
+
+    try:
+        value = legacy_path.read_text().strip()
+    except OSError as exc:
+        click.echo(
+            f"warning: auto-sync marker migration failed: could not read legacy marker: {exc}",
+            err=True,
+        )
+        return None
+
+    if not value:
+        with contextlib.suppress(OSError):
+            legacy_path.unlink()
+        return None
+
+    try:
+        _write_marker(project_root, value)
+        legacy_path.unlink()
+    except OSError as exc:
+        click.echo(
+            f"warning: auto-sync marker migration failed: {exc}",
+            err=True,
+        )
+        return None
+
+    return value
+
+
+def _read_marker(project_root: Path) -> str | None:
+    """Return marker contents (stripped), or None if missing/unreadable.
+
+    If the legacy worktree marker exists, attempt one-time best-effort
+    migration to the gitdir marker first.
+    """
+
+    marker_path = _marker_path(project_root)
+
+    migrated = _migrate_legacy_marker(project_root, marker_path)
+    if migrated is not None:
+        return migrated
+
+    if marker_path is None or not marker_path.is_file():
+        return None
+
     try:
         return marker_path.read_text().strip() or None
     except OSError:
         return None
 
 
-def _write_marker(cortex_dir: Path, version: str) -> None:
-    """Write the marker atomically.
+def _write_marker(project_root: Path, version: str) -> None:
+    """Write the marker atomically under git metadata.
+
+    No-op when `project_root` is not in a git checkout.
 
     Writes ``.last-cli-version.tmp`` first, then ``os.replace``s it
     onto the target. The replace is atomic on POSIX and on Windows
@@ -111,9 +238,12 @@ def _write_marker(cortex_dir: Path, version: str) -> None:
     rename is fine — the new value is the truth.
     """
 
-    cortex_dir.mkdir(parents=True, exist_ok=True)
-    tmp_path = cortex_dir / MARKER_TMP_FILENAME
-    target_path = cortex_dir / MARKER_FILENAME
+    target_path = _marker_path(project_root)
+    if target_path is None:
+        return
+
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = target_path.with_name(MARKER_TMP_FILENAME)
     tmp_path.write_text(version)
     os.replace(tmp_path, target_path)
 
@@ -280,7 +410,7 @@ def maybe_auto_sync(
         # do nothing than corrupt the marker.
         return
 
-    marker_value = _read_marker(cortex_dir)
+    marker_value = _read_marker(project_root)
     if marker_value is None:
         # First-ever invocation against this store — seed the marker
         # without syncing. The seed is what Layer 2 compares against
@@ -289,7 +419,7 @@ def maybe_auto_sync(
         # Best-effort write; never block the user's command on a
         # marker-write failure.
         with contextlib.suppress(OSError):
-            _write_marker(cortex_dir, current)
+            _write_marker(project_root, current)
         return
 
     if marker_value == current:
@@ -301,7 +431,7 @@ def maybe_auto_sync(
         # version so we get back to a known state, but don't sync —
         # we have no idea what the prior version actually was.
         with contextlib.suppress(OSError):
-            _write_marker(cortex_dir, current)
+            _write_marker(project_root, current)
         return
 
     if marker_minor == current_minor:
@@ -309,7 +439,7 @@ def maybe_auto_sync(
         # comparison runs against the latest patch baseline, but
         # don't run sync — patch releases are by convention safe.
         with contextlib.suppress(OSError):
-            _write_marker(cortex_dir, current)
+            _write_marker(project_root, current)
         return
 
     if not _auto_sync_preflight_allows(project_root):
@@ -341,7 +471,7 @@ def maybe_auto_sync(
         return
 
     try:
-        _write_marker(cortex_dir, current)
+        _write_marker(project_root, current)
     except OSError as exc:
         click.echo(
             f"warning: auto-sync ran but could not update marker: {exc}",
