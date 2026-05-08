@@ -1,15 +1,15 @@
 ---
-Generated: 2026-05-07T15:41:16-04:00
-Generator: cortex refresh-state v1.4.0
+Generated: 2026-05-08T10:54:06-04:00
+Generator: cortex refresh-state v1.5.0
 Sources:
-  - HEAD sha: unavailable
+  - HEAD sha: ceee10eb36ca389d676ed7a57118004ebc49745b
   - .cortex/plans/*.md (10 files)
-  - .cortex/journal/*.md (91 entries, 2026-04-17..2026-05-07)
+  - .cortex/journal/*.md (92 entries, 2026-04-17..2026-05-08)
   - .cortex/doctrine/*.md (7 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
   - SPEC version: 0.5.0
-  - pyproject.toml: 1.4.0 + cortex package version: 1.4.0
+  - pyproject.toml: 1.5.0 + cortex package version: 1.5.0
 Sources-hash:
   .cortex/doctrine/0001-why-cortex-exists.md: e20d6d52fac419bf22ad43ddf01762f03504f348ef0b2cc30d3983b4c8bec063
   .cortex/doctrine/0002-compose-by-file-contract-not-code.md: 2063446ef8eaf51db05712759124cb21ce26557179607fe59c4ff126f0e4edf3
@@ -109,6 +109,7 @@ Sources-hash:
   .cortex/journal/2026-05-07-pr-merged-1450.md: 3fa398d302f2d58e4f564b6af06071ca49a29b24ba0533a807f512bbc9eaa998
   .cortex/journal/2026-05-07-v1.3.0-released.md: 187a8395d4a5fcc9f68953a0f59a26fb718e9a6fa749d767599925f03dcf6d8b
   .cortex/journal/2026-05-07-v1.3.1-released.md: 3bf6a0c54dd6ffea09b5f3686952dde568caa3e521e8db4b5eea70d212cd8bc4
+  .cortex/journal/2026-05-08-last-cli-version-marker-moved-to-gitdir.md: 735b7304928b684266ea33eb3f4cf74e8dd1a48c6053b29a86cb2aea0a5c8ed5
   .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
   .cortex/plans/cortex-v0.3.0.md: d78e60537e30ed81d8464575191674253822ed4953a055ca2a14a9626c5f8b6f
   .cortex/plans/cortex-v1.md: 3a8aed197e9e994d02cf1e143c5abe1e5bb821c5a0c39145b3040c69a1eb5b65
@@ -132,7 +133,7 @@ Sources-hash:
   .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476
   .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44
   docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c
-Corpus: 91 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 92 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:

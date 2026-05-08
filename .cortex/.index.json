@@ -1,6 +1,6 @@
 {
   "spec": "0.5.0",
-  "generated": "2026-05-06T14:19:59-04:00",
+  "generated": "2026-05-08T10:52:37-04:00",
   "candidates": [
     {
       "id": "2026-04-17-competitive-positioning-and-claude-code-risk",
@@ -196,6 +196,15 @@
       "source": ".cortex/journal/2026-05-06-v10-doctrine-review-all-7-hold-no-supersedes.md",
       "type": "decision",
       "last_touched": "2026-05-06",
+      "tags": [],
+      "supersedes": null,
+      "promoted_to": null
+    },
+    {
+      "id": "2026-05-08-last-cli-version-marker-moved-to-gitdir",
+      "source": ".cortex/journal/2026-05-08-last-cli-version-marker-moved-to-gitdir.md",
+      "type": "decision",
+      "last_touched": "2026-05-08",
       "tags": [],
       "supersedes": null,
       "promoted_to": null
