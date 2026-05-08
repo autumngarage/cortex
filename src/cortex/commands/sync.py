@@ -31,11 +31,11 @@ from pathlib import Path
 import click
 
 from cortex import __version__
+from cortex.commands.refresh_state import refresh_state
 from cortex.compat import require_compatible
 from cortex.config import load_refresh_index_config
 from cortex.doctor_checks import check_config_toml_schema
 from cortex.index import refresh_index
-from cortex.state_render import build_state_inputs, render_state
 from cortex.validation import Severity, run_all_checks
 
 _GENERATOR_VERSION_RE = re.compile(
@@ -102,19 +102,7 @@ def _retrieve_index_present(cortex_dir: Path) -> bool:
 def _do_refresh_state(project_root: Path) -> bool:
     """Regenerate state.md. Returns True on success."""
 
-    cortex_dir = project_root / ".cortex"
-    require_compatible(cortex_dir)
-    try:
-        rendered = render_state(build_state_inputs(project_root))
-    except Exception as exc:
-        click.echo(f"error: refresh-state failed: {exc}", err=True)
-        return False
-    try:
-        (cortex_dir / "state.md").write_text(rendered)
-    except OSError as exc:
-        click.echo(f"error: could not write state.md: {exc}", err=True)
-        return False
-    return True
+    return refresh_state(project_root).ok
 
 
 def _do_refresh_index(project_root: Path, *, include_retrieve: bool) -> bool:

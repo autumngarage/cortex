@@ -37,6 +37,7 @@ Design notes:
 from __future__ import annotations
 
 import contextlib
+import fnmatch
 import os
 import re
 import subprocess
@@ -50,9 +51,11 @@ from cortex import __version__
 MARKER_FILENAME = ".last-cli-version"
 MARKER_TMP_FILENAME = ".last-cli-version.tmp"
 RELEASE_COMMIT_SUBJECT_RE = re.compile(r"^chore(\(.*\))?: release v\d+\.\d+\.\d+")
-DIRTY_TREE_SKIP_NOTICE = (
-    "==> auto-sync: skipped (working tree is dirty); "
-    "run `cortex sync` after committing"
+PLANNED_WRITE_PATTERNS: tuple[str, ...] = (
+    ".cortex/state.md",
+    ".cortex/.index.json",
+    ".cortex/.index/**",
+    f".cortex/{MARKER_FILENAME}",
 )
 
 # Commands that MUST never trigger auto-sync. Each entry is the click
@@ -146,18 +149,55 @@ def _git_stdout(project_root: Path, args: list[str]) -> str | None:
     return result.stdout.strip()
 
 
-def _working_tree_is_dirty(project_root: Path) -> bool | None:
-    """Return True when git reports any staged/unstaged/untracked change.
+def _dirty_path_in_planned_write_set(project_root: Path) -> str | None:
+    """Return the first dirty path auto-sync may write, or "" when git fails.
 
-    None means git is unavailable, so the caller cannot safely auto-sync.
-    A non-zero git status is treated as dirty by design.
+    None means there is no overlap. An empty string means git is unavailable or
+    status failed, so the caller cannot safely auto-sync.
     """
 
     try:
-        status = _git_stdout(project_root, ["status", "--porcelain"])
+        result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=project_root,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
     except FileNotFoundError:
-        return None
-    return status is None or bool(status)
+        return ""
+    if result.returncode != 0:
+        return ""
+    for path in _paths_from_porcelain(result.stdout):
+        if _path_overlaps_planned_writes(path):
+            return path
+    return None
+
+
+def _paths_from_porcelain(status: str) -> list[str]:
+    """Extract paths from porcelain v1 output."""
+
+    paths: list[str] = []
+    for line in status.splitlines():
+        if len(line) < 4:
+            continue
+        path_field = line[3:].strip()
+        if not path_field:
+            continue
+        if " -> " in path_field:
+            old_path, new_path = path_field.split(" -> ", 1)
+            paths.extend([old_path.strip(), new_path.strip()])
+            continue
+        paths.append(path_field.strip())
+    return paths
+
+
+def _path_overlaps_planned_writes(path: str) -> bool:
+    normalized = path.strip().strip('"')
+    return any(
+        fnmatch.fnmatchcase(normalized, pattern)
+        for pattern in PLANNED_WRITE_PATTERNS
+    )
 
 
 def _release_commit_on_non_default_branch(project_root: Path) -> bool:
@@ -181,15 +221,18 @@ def _release_commit_on_non_default_branch(project_root: Path) -> bool:
 def _auto_sync_preflight_allows(project_root: Path) -> bool:
     """Gate expensive auto-sync regeneration on a safe Git state."""
 
-    dirty = _working_tree_is_dirty(project_root)
-    if dirty is None:
+    conflicting_path = _dirty_path_in_planned_write_set(project_root)
+    if conflicting_path == "":
         click.echo(
             "==> auto-sync: skipped (git unavailable); run `cortex sync` manually",
             err=True,
         )
         return False
-    if dirty:
-        click.echo(DIRTY_TREE_SKIP_NOTICE, err=True)
+    if conflicting_path is not None:
+        click.echo(
+            f"==> auto-sync: skipped — dirty file in planned write set: {conflicting_path}",
+            err=True,
+        )
         return False
 
     if _release_commit_on_non_default_branch(project_root):
