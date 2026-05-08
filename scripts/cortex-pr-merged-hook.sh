@@ -31,7 +31,10 @@
 #      written journal commit with that subject is also skipped, but
 #      that's correct (the human is journaling the merge themselves —
 #      no auto-draft needed).
-#   6. After the recursion guard, the hook consults
+#   6. `.cortex/SPEC_VERSION` exists. If `.cortex/` exists but the
+#      marker is missing, the repo has not completed Cortex init for
+#      writer paths yet — log one informational line and skip cleanly.
+#   7. After the recursion guard + SPEC_VERSION gate, the hook consults
 #      `cortex check-triggers --since HEAD~1` to decide whether the
 #      merge is substantive enough to warrant a Journal entry
 #      (cortex#206). If no Tier 1 triggers fire, the hook silently
@@ -41,6 +44,17 @@
 #      draft path AND appends a "## Triggers fired" section to the
 #      drafted entry so the auto-draft is informative, not a
 #      regurgitation of the PR title.
+#
+# NOTE on pre-commit hook behavior (cortex#204 root cause): an older
+# deployed shape of this hook committed directly on local `main` and
+# only failed later at branch-protection push time. The current shape
+# (since cortex#194 / PR #200) commits on a `docs/journal-pr-*` feature
+# branch and ships via `gh pr create` + `gh pr merge --auto`, so the
+# `no-commit-to-branch` rule (configured for `--branch main --branch
+# master`) is honored without bypass. The auto-draft commit on the
+# feature branch DOES pass `--no-verify` — see the rationale at the
+# `git commit` call site below; that bypass applies only to the
+# feature branch and never to a default-branch commit.
 #
 # Failure modes (no silent failures past activation):
 #   - cortex missing mid-flow (between detection and exec): log to stderr
@@ -208,6 +222,11 @@ case "$last_subject" in
     exit 0
     ;;
 esac
+
+if [ ! -f "$PROJECT_DIR/.cortex/SPEC_VERSION" ]; then
+  log "cortex: .cortex/ exists but SPEC_VERSION missing; skipping auto-draft"
+  exit 0
+fi
 
 if ! command -v cortex >/dev/null 2>&1; then
   # Detection passed (`.cortex/` exists, config is auto/on) but the CLI
