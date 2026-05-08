@@ -414,6 +414,97 @@ def test_auto_sync_seed_is_noop_outside_git_checkout(
     assert not legacy.exists()
 
 
+def test_legacy_marker_is_migrated_to_gitdir_on_first_read(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pre-existing `.cortex/.last-cli-version` migrates to the gitdir on first
+    upgraded run: the value moves to `<gitdir>/cortex/.last-cli-version` and
+    the legacy file is removed. This is the backwards-compatibility path
+    every existing Cortex user hits on first upgrade past this fix."""
+
+    project = scaffolded_project
+    _ensure_git_repo(project)
+    new_marker = _git_dir(project) / "cortex" / ".last-cli-version"
+    if new_marker.exists():
+        new_marker.unlink()
+    legacy = _legacy_marker(project)
+    legacy.write_text("1.4.2")
+
+    # Reading the marker should drive migration as a side-effect.
+    value = auto_sync_mod._read_marker(project)
+
+    assert value == "1.4.2"
+    assert new_marker.read_text().strip() == "1.4.2"
+    assert not legacy.exists()
+
+
+def test_legacy_marker_migration_skipped_outside_git_checkout(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Migration is best-effort. With no git metadata available, the legacy
+    file is left alone (rather than deleted with no destination) and the
+    user-facing command continues without crashing — a warning is emitted
+    so the deferred migration is visible."""
+
+    project = scaffolded_project
+    assert not (project / ".git").exists()
+    legacy = _legacy_marker(project)
+    legacy.write_text("1.4.2")
+
+    value = auto_sync_mod._read_marker(project)
+
+    # No gitdir → cannot migrate → returns None (and emits a warning to
+    # stderr, which we don't capture here — the visible-failure
+    # invariant is that the legacy file stays put for the next run.)
+    assert value is None
+    assert legacy.exists()
+    assert legacy.read_text() == "1.4.2"
+
+
+def test_legacy_marker_cleaned_up_when_new_marker_already_exists(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Both markers present (e.g., upgraded run partially completed
+    earlier): the new marker is authoritative, and the legacy file is
+    cleaned up so the dirty-tree problem doesn't recur."""
+
+    project = scaffolded_project
+    _ensure_git_repo(project)
+    new_marker = _git_dir(project) / "cortex" / ".last-cli-version"
+    new_marker.parent.mkdir(parents=True, exist_ok=True)
+    new_marker.write_text("1.5.0")
+    legacy = _legacy_marker(project)
+    legacy.write_text("1.4.2")
+
+    value = auto_sync_mod._read_marker(project)
+
+    # New marker wins; legacy is removed.
+    assert value == "1.5.0"
+    assert new_marker.read_text().strip() == "1.5.0"
+    assert not legacy.exists()
+
+
+def test_legacy_marker_with_empty_content_is_cleaned_up(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty legacy marker has no value to migrate; it's removed
+    silently rather than seeded as the empty string."""
+
+    project = scaffolded_project
+    _ensure_git_repo(project)
+    new_marker = _git_dir(project) / "cortex" / ".last-cli-version"
+    if new_marker.exists():
+        new_marker.unlink()
+    legacy = _legacy_marker(project)
+    legacy.write_text("   \n")
+
+    value = auto_sync_mod._read_marker(project)
+
+    assert value is None
+    assert not legacy.exists()
+    assert not new_marker.exists()
+
+
 def test_auto_sync_skips_with_flag(
     scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
