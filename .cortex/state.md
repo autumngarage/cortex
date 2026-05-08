@@ -1,15 +1,15 @@
 ---
-Generated: 2026-05-08T10:54:06-04:00
+Generated: 2026-05-08T13:48:33-04:00
 Generator: cortex refresh-state v1.5.0
 Sources:
-  - HEAD sha: ceee10eb36ca389d676ed7a57118004ebc49745b
+  - HEAD sha: 26d8937f2e28cd8f4dc4037804e011dd680546cc
   - .cortex/plans/*.md (10 files)
-  - .cortex/journal/*.md (92 entries, 2026-04-17..2026-05-08)
-  - .cortex/doctrine/*.md (7 entries)
+  - .cortex/journal/*.md (93 entries, 2026-04-17..2026-05-08)
+  - .cortex/doctrine/*.md (8 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
   - SPEC version: 0.5.0
-  - pyproject.toml: 1.5.0 + cortex package version: 1.5.0
+  - pyproject.toml: 1.5.1 + cortex package version: 1.5.0
 Sources-hash:
   .cortex/doctrine/0001-why-cortex-exists.md: e20d6d52fac419bf22ad43ddf01762f03504f348ef0b2cc30d3983b4c8bec063
   .cortex/doctrine/0002-compose-by-file-contract-not-code.md: 2063446ef8eaf51db05712759124cb21ce26557179607fe59c4ff126f0e4edf3
@@ -18,6 +18,7 @@ Sources-hash:
   .cortex/doctrine/0005-scope-boundaries-v2.md: 804bcd31702a00887b603efae46867ed66acb7fe61b30d80df038f6b24a73684
   .cortex/doctrine/0006-scope-boundaries-v3.md: 773ff81c5c8a3a1736ad1b640f026b14ace0f6d8198f165534a034906b4e88df
   .cortex/doctrine/0007-canonical-ownership-of-state-and-plans.md: eeb749c99679b6beccb9ddadf56eb5a7f7aabf387df9c80b407811411a826099
+  .cortex/doctrine/candidate-pr-merged-staging.md: df448622732f240ce23279fdab304382da1ab8701a8445fd95b3c06cceecb5f7
   .cortex/journal/2026-04-17-competitive-positioning-and-claude-code-risk.md: 9f5416382cf595d0718df52135c80f64b442d0f37783a498a06abb56531e5796
   .cortex/journal/2026-04-17-cortex-init-shipped.md: 1cdd2f44a174be0bb5dabc5ce50ca06223be90250d8ce26d9ac33f05b7162b82
   .cortex/journal/2026-04-17-cursor-retreat-and-scale-design.md: b5da79d2510de0a9660f07b99292d83b1b193792d080d81ba69fe75d1b2788aa
@@ -110,6 +111,7 @@ Sources-hash:
   .cortex/journal/2026-05-07-v1.3.0-released.md: 187a8395d4a5fcc9f68953a0f59a26fb718e9a6fa749d767599925f03dcf6d8b
   .cortex/journal/2026-05-07-v1.3.1-released.md: 3bf6a0c54dd6ffea09b5f3686952dde568caa3e521e8db4b5eea70d212cd8bc4
   .cortex/journal/2026-05-08-last-cli-version-marker-moved-to-gitdir.md: 735b7304928b684266ea33eb3f4cf74e8dd1a48c6053b29a86cb2aea0a5c8ed5
+  .cortex/journal/2026-05-08-pr-merged-hook-spec-version-skip-and-comment-truth.md: 6ab38fe4d04567bca96d3b83010c500dbb817133a9ffd528136736e3f30a49cb
   .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
   .cortex/plans/cortex-v0.3.0.md: d78e60537e30ed81d8464575191674253822ed4953a055ca2a14a9626c5f8b6f
   .cortex/plans/cortex-v1.md: 3a8aed197e9e994d02cf1e143c5abe1e5bb821c5a0c39145b3040c69a1eb5b65
@@ -133,7 +135,7 @@ Sources-hash:
   .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476
   .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44
   docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c
-Corpus: 92 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 93 Journal entries, 10 Plans, 8 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
