@@ -1,4 +1,7 @@
 ```text
+> by **[Autumn Garage](https://github.com/autumngarage/autumn-garage)** · alongside [Touchstone](https://github.com/autumngarage/touchstone) · [Sentinel](https://github.com/autumngarage/sentinel) · [Conductor](https://github.com/autumngarage/conductor) · [Alchemist](https://github.com/autumngarage/alchemist) — Project memory for AI-assisted work.
+
+```
   ____           _
  / ___|___  _ __| |_ _____  __
 | |   / _ \| '__| __/ _ \ \/ /
@@ -7,8 +10,6 @@
 ```
 
 > *Project memory for AI-assisted work.*
->
-> by **[Autumn Garage](https://github.com/autumngarage/autumn-garage)** · alongside [Touchstone](https://github.com/autumngarage/touchstone) · [Sentinel](https://github.com/autumngarage/sentinel) · [Conductor](https://github.com/autumngarage/conductor)
 
 # Cortex
 
