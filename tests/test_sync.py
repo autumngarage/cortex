@@ -206,7 +206,7 @@ def test_auto_sync_runs_on_minor_bump(
     assert _read_marker(project) == "1.1.0"
 
 
-def test_auto_sync_skips_when_tree_is_dirty(
+def test_auto_sync_proceeds_when_unrelated_file_is_dirty(
     scaffolded_project: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
@@ -214,7 +214,31 @@ def test_auto_sync_skips_when_tree_is_dirty(
     project = scaffolded_project
     _set_marker(project, "1.0.0")
     _commit_all(project)
-    (project / "untracked.txt").write_text("dirty\n")
+    (project / "audits").mkdir()
+    (project / "audits" / "draft.md").write_text("dirty\n")
+    monkeypatch.setattr(auto_sync_mod, "__version__", "1.1.0")
+
+    with patch("cortex.commands.sync.run_sync") as run_sync:
+        auto_sync_mod.maybe_auto_sync(project, "status", disabled=False)
+
+    run_sync.assert_called_once_with(
+        project,
+        run_doctor=False,
+        output_prefix="==> auto-sync:",
+    )
+    assert _read_marker(project) == "1.1.0"
+    assert "dirty file in planned write set" not in capsys.readouterr().err
+
+
+def test_auto_sync_skips_when_planned_write_set_is_dirty(
+    scaffolded_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    project = scaffolded_project
+    _set_marker(project, "1.0.0")
+    _commit_all(project)
+    (project / ".cortex" / "state.md").write_text("dirty state\n")
     monkeypatch.setattr(auto_sync_mod, "__version__", "1.1.0")
 
     with patch("cortex.commands.sync.run_sync") as run_sync:
@@ -223,8 +247,7 @@ def test_auto_sync_skips_when_tree_is_dirty(
     run_sync.assert_not_called()
     assert _read_marker(project) == "1.0.0"
     assert (
-        "==> auto-sync: skipped (working tree is dirty); "
-        "run `cortex sync` after committing"
+        "==> auto-sync: skipped — dirty file in planned write set: .cortex/state.md"
     ) in capsys.readouterr().err
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from click.testing import CliRunner, Result
@@ -98,6 +99,12 @@ def _run_refresh(project: Path, *args: str) -> Result:
     )
 
 
+def _set_old_mtime(path: Path) -> int:
+    old = 1_000_000_000
+    os.utime(path, (old, old))
+    return path.stat().st_mtime_ns
+
+
 def test_refresh_state_is_idempotent(tmp_path: Path) -> None:
     _write_fixture(tmp_path)
     first = _run_refresh(tmp_path)
@@ -107,6 +114,85 @@ def test_refresh_state_is_idempotent(tmp_path: Path) -> None:
     second = _run_refresh(tmp_path)
     assert second.exit_code == 0, second.output
     assert (tmp_path / ".cortex" / "state.md").read_text() == first_text
+
+
+def test_refresh_state_skips_write_when_sources_hash_unchanged(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    state = tmp_path / ".cortex" / "state.md"
+    first = _run_refresh(tmp_path)
+    assert first.exit_code == 0, first.output
+    first_text = state.read_text()
+    old_mtime = _set_old_mtime(state)
+
+    second = _run_refresh(tmp_path)
+
+    assert second.exit_code == 0, second.output
+    assert state.read_text() == first_text
+    assert state.stat().st_mtime_ns == old_mtime
+    assert (
+        "==> refresh-state: source content unchanged; skipping rewrite "
+        "(use --force to override)"
+    ) in second.output
+
+
+def test_refresh_state_writes_when_sources_hash_changes(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    state = tmp_path / ".cortex" / "state.md"
+    first = _run_refresh(tmp_path)
+    assert first.exit_code == 0, first.output
+    first_text = state.read_text()
+    old_mtime = _set_old_mtime(state)
+    journal = tmp_path / ".cortex" / "journal" / "2026-04-20-release.md"
+    journal.write_text(journal.read_text() + "\nNew source material.\n")
+
+    second = _run_refresh(tmp_path)
+
+    assert second.exit_code == 0, second.output
+    assert state.stat().st_mtime_ns != old_mtime
+    assert state.read_text() != first_text
+
+
+def test_refresh_state_force_flag_writes_regardless(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    state = tmp_path / ".cortex" / "state.md"
+    first = _run_refresh(tmp_path)
+    assert first.exit_code == 0, first.output
+    old_mtime = _set_old_mtime(state)
+
+    forced = _run_refresh(tmp_path, "--force")
+
+    assert forced.exit_code == 0, forced.output
+    assert state.stat().st_mtime_ns != old_mtime
+    assert "source content unchanged; skipping rewrite" not in forced.output
+
+
+def test_refresh_state_writes_when_existing_file_has_no_sources_hash(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    state = tmp_path / ".cortex" / "state.md"
+    old_mtime = _set_old_mtime(state)
+
+    result = _run_refresh(tmp_path)
+
+    assert result.exit_code == 0, result.output
+    assert state.stat().st_mtime_ns != old_mtime
+    assert "Sources-hash:" in state.read_text()
+
+
+def test_refresh_state_warns_and_writes_on_malformed_sources_hash(tmp_path: Path) -> None:
+    _write_fixture(tmp_path)
+    state = tmp_path / ".cortex" / "state.md"
+    first = _run_refresh(tmp_path)
+    assert first.exit_code == 0, first.output
+    state.write_text(state.read_text().replace("Sources-hash:\n", "Sources-hash: [broken\n", 1))
+    old_mtime = _set_old_mtime(state)
+
+    result = _run_refresh(tmp_path)
+
+    assert result.exit_code == 0, result.output
+    assert state.stat().st_mtime_ns != old_mtime
+    assert "warning:" in result.output
+    assert "malformed Sources-hash field" in result.output
+    assert "Sources-hash:\n" in state.read_text()
 
 
 def test_refresh_state_preserves_marker_region_verbatim(tmp_path: Path) -> None:
