@@ -293,6 +293,7 @@ def _replace_file_chunks(conn: sqlite3.Connection, source: SourceFile) -> None:
     body_start_line = _body_start_line(text, body)
     frontmatter_json = json.dumps(frontmatter, sort_keys=True) if frontmatter else None
     chunks = chunk_markdown(body)
+    next_chunk_id = int(conn.execute("SELECT COALESCE(MAX(id), 0) + 1 FROM chunks").fetchone()[0])
 
     conn.execute("DELETE FROM chunks WHERE path = ?", (source.rel_path,))
     for chunk in chunks:
@@ -300,12 +301,13 @@ def _replace_file_chunks(conn: sqlite3.Connection, source: SourceFile) -> None:
         conn.execute(
             """
             INSERT INTO chunks (
-              path, chunk_idx, start_line, end_line, content,
+              id, path, chunk_idx, start_line, end_line, content,
               frontmatter_json, file_mtime, file_size, content_hash
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
+                next_chunk_id,
                 source.rel_path,
                 chunk.chunk_idx,
                 body_start_line + chunk.start_line - 1,
@@ -317,6 +319,7 @@ def _replace_file_chunks(conn: sqlite3.Connection, source: SourceFile) -> None:
                 digest,
             ),
         )
+        next_chunk_id += 1
 
 
 def _body_start_line(text: str, body: str) -> int:
@@ -478,6 +481,7 @@ def backfill_embeddings(
                 "with `CORTEX_CACHE_DIR` cleared to rebuild from scratch."
             )
 
+        _delete_orphan_embeddings(conn)
         pending = chunks_missing_embeddings(conn)
         if not pending:
             _set_meta(conn, "embedding_model", model_name or "test-embedder")
@@ -528,7 +532,10 @@ def has_populated_embeddings(project_root: Path) -> bool:
     target = retrieve_index_path(project_root)
     if not target.exists():
         return False
-    conn = sqlite3.connect(target)
+    try:
+        conn = open_index_with_vec(target)
+    except (sqlite3.DatabaseError, SqliteVecUnavailableError):
+        return False
     try:
         if not has_embeddings_table(conn):
             return False
@@ -538,6 +545,46 @@ def has_populated_embeddings(project_root: Path) -> bool:
         return False
     finally:
         conn.close()
+
+
+def count_embedding_index_gaps(project_root: Path) -> int | None:
+    """Return missing chunk embeddings plus orphan embedding rows, if readable."""
+
+    target = retrieve_index_path(project_root)
+    if not target.exists():
+        return None
+    try:
+        conn = open_index_with_vec(target)
+    except (sqlite3.DatabaseError, SqliteVecUnavailableError):
+        return None
+    try:
+        missing = len(chunks_missing_embeddings(conn))
+        if not has_embeddings_table(conn):
+            return missing
+        orphaned = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM embeddings
+            LEFT JOIN chunks ON chunks.id = embeddings.rowid
+            WHERE chunks.id IS NULL
+            """
+        ).fetchone()[0]
+        return missing + int(orphaned)
+    except sqlite3.DatabaseError:
+        return None
+    finally:
+        conn.close()
+
+
+def _delete_orphan_embeddings(conn: sqlite3.Connection) -> None:
+    if not has_embeddings_table(conn):
+        return
+    conn.execute(
+        """
+        DELETE FROM embeddings
+        WHERE rowid NOT IN (SELECT id FROM chunks)
+        """
+    )
 
 
 def _get_meta(conn: sqlite3.Connection, key: str) -> str | None:

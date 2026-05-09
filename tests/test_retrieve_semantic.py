@@ -29,10 +29,12 @@ from cortex.retrieve import embeddings as embeddings_module
 from cortex.retrieve.embeddings import (
     EMBED_DIMENSION,
     EMBED_MODEL_NAME,
+    EmbedderProbe,
     EmbeddingUnavailableError,
     cortex_model_cache_dir,
     reset_probe_cache,
 )
+from cortex.retrieve.index import EmbeddingBackfillResult
 from cortex.retrieve.query import RetrieveHit, hit_to_json, rrf_fuse
 
 
@@ -273,6 +275,107 @@ def test_probe_cache_force_reprobes() -> None:
         assert mock_probe.call_count == 2
 
 
+def test_missing_embeddings_do_not_backfill_without_explicit_opt_in(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import cortex.commands.retrieve as retrieve_cmd
+
+    def fail_backfill(_project_root: Path) -> EmbeddingBackfillResult:
+        raise AssertionError("semantic backfill should be opt-in")
+
+    mode, embed_callable = retrieve_cmd._resolve_mode(
+        tmp_path,
+        requested="hybrid",
+        no_rebuild=False,
+        build_embeddings=False,
+        has_embeddings_now=False,
+        backfill_embeddings_fn=fail_backfill,
+        embedding_gap_count_fn=lambda _project_root: None,
+        indexed_chunks=7,
+        index_path=tmp_path / ".cortex" / ".index" / "chunks.sqlite",
+    )
+
+    captured = capsys.readouterr()
+    assert mode == "bm25"
+    assert embed_callable is None
+    assert "requires built embeddings" in captured.err
+    assert "--build-embeddings" in captured.err
+
+
+def test_build_embeddings_opt_in_backfills_and_reports_meter(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import cortex.commands.retrieve as retrieve_cmd
+
+    cache_dir = tmp_path / "models"
+    monkeypatch.setattr(
+        embeddings_module,
+        "probe_embedder",
+        lambda _project_root=None: EmbedderProbe(True, None, cache_dir),
+    )
+
+    def fake_backfill(_project_root: Path) -> EmbeddingBackfillResult:
+        return EmbeddingBackfillResult(embedded_chunks=3, skipped_chunks=0)
+
+    mode, embed_callable = retrieve_cmd._resolve_mode(
+        tmp_path,
+        requested="semantic",
+        no_rebuild=False,
+        build_embeddings=True,
+        has_embeddings_now=False,
+        backfill_embeddings_fn=fake_backfill,
+        embedding_gap_count_fn=lambda _project_root: None,
+        indexed_chunks=5,
+        index_path=tmp_path / ".cortex" / ".index" / "chunks.sqlite",
+    )
+
+    captured = capsys.readouterr()
+    assert mode == "semantic"
+    assert embed_callable is None
+    assert "indexed_chunks=5" in captured.err
+    assert "embedded_chunks=3" in captured.err
+    assert EMBED_MODEL_NAME in captured.err
+    assert str(cache_dir) in captured.err
+
+
+def test_partial_existing_embeddings_fall_back_without_opt_in(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import cortex.commands.retrieve as retrieve_cmd
+
+    monkeypatch.setattr(
+        embeddings_module,
+        "probe_embedder",
+        lambda _project_root=None: EmbedderProbe(True, None, tmp_path / "models"),
+    )
+
+    def fail_backfill(_project_root: Path) -> EmbeddingBackfillResult:
+        raise AssertionError("partial embeddings should not backfill without opt-in")
+
+    mode, embed_callable = retrieve_cmd._resolve_mode(
+        tmp_path,
+        requested="hybrid",
+        no_rebuild=False,
+        build_embeddings=False,
+        has_embeddings_now=True,
+        backfill_embeddings_fn=fail_backfill,
+        embedding_gap_count_fn=lambda _project_root: 2,
+        indexed_chunks=5,
+        index_path=tmp_path / ".cortex" / ".index" / "chunks.sqlite",
+    )
+
+    captured = capsys.readouterr()
+    assert mode == "bm25"
+    assert embed_callable is None
+    assert "2 index gap" in captured.err
+    assert "--build-embeddings" in captured.err
+
+
 # --------------------------------------------------------------------------
 # 6. Constants honored
 # --------------------------------------------------------------------------
@@ -283,6 +386,45 @@ def test_embed_model_pinned_per_brief() -> None:
 
     assert EMBED_MODEL_NAME == "BAAI/bge-small-en-v1.5"
     assert EMBED_DIMENSION == 384
+
+
+def test_has_populated_embeddings_uses_vec_loaded_connection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import cortex.retrieve.index as index_mod
+
+    _scaffold(tmp_path)
+    target = index_mod.retrieve_index_path(tmp_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(b"placeholder")
+    opened: list[Path] = []
+
+    class FakeConnection:
+        def execute(self, sql: str) -> FakeConnection:
+            if "sqlite_master" in sql:
+                return self
+            if "COUNT(*) FROM embeddings" in sql:
+                return self
+            raise AssertionError(sql)
+
+        def fetchone(self) -> tuple[str] | tuple[int]:
+            if not hasattr(self, "_seen_table"):
+                self._seen_table = True
+                return ("embeddings",)
+            return (4,)
+
+        def close(self) -> None:
+            pass
+
+    def fake_open(path: Path) -> FakeConnection:
+        opened.append(path)
+        return FakeConnection()
+
+    monkeypatch.setattr(index_mod, "open_index_with_vec", fake_open)
+
+    assert index_mod.has_populated_embeddings(tmp_path) is True
+    assert opened == [target]
 
 
 # --------------------------------------------------------------------------
