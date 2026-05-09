@@ -68,6 +68,22 @@ def test_bundled_protocol_guidance_prefers_manifest_then_fallback(repo_root: Pat
     assert "currently 4k tokens" in shipped
 
 
+def test_bundled_protocol_guidance_is_lookup_first(repo_root: Path) -> None:
+    shipped = (repo_root / "src" / "cortex" / "_data" / "protocol.md").read_text()
+    normalized = " ".join(shipped.split())
+
+    hot_policy_idx = shipped.index("Default hot/cold policy")
+    manifest_idx = shipped.index("Use the bounded manifest and hot files", hot_policy_idx)
+    grep_idx = shipped.index("Use `cortex grep`", hot_policy_idx)
+    retrieve_idx = shipped.index("Use `cortex retrieve --mode bm25|semantic|hybrid`", hot_policy_idx)
+    open_idx = shipped.index("Open only the files or snippets", hot_policy_idx)
+
+    assert hot_policy_idx < manifest_idx < grep_idx < retrieve_idx < open_idx
+    assert "Agents MUST NOT bulk-read `.cortex/journal/**`" in normalized
+    assert "Grep MUST work for every Cortex project" in shipped
+    assert "Retrieve MAY work" in shipped
+
+
 def test_templates_tree_matches_canonical(repo_root: Path) -> None:
     canonical = _collect_tree(repo_root / ".cortex" / "templates")
     shipped = _collect_tree(repo_root / "src" / "cortex" / "_data" / "templates")

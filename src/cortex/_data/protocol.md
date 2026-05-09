@@ -2,7 +2,7 @@
 
 > The set of rules an agent follows to read and write `.cortex/`. Projects import this file into `AGENTS.md` (or `CLAUDE.md`) so every agent working on the project follows the same contract.
 
-**Protocol version:** 0.3.0 (ships with SPEC.md v0.5.0; § 1 makes manifest-first agent loading explicit and documents the delegation budget profile — additive minor per SPEC § 6)
+**Protocol version:** 0.3.1 (ships with SPEC.md v1.1.0; § 1 clarifies hot/cold context and grep-vs-retrieve lookup policy — clarification patch per SPEC § 6)
 **Status:** Active
 **Imports:** this file is imported into `AGENTS.md` via `@.cortex/protocol.md`
 
@@ -28,9 +28,41 @@ The manifest is a token-budgeted slice of `.cortex/`, not the whole store. Defau
 | Journal entries from last 72h + latest digest | ~1.5k | By date |
 | Promotion-queue depth summary | ~100t | Count only |
 
+**Default hot/cold policy.** Coding and PR-review sessions load hot context first:
+`state.md`, generated `map.md` when present, active Plans, `Load-priority:
+always` Doctrine, recent Journal entries selected by the manifest window, and
+files cited directly by the task. Cold context is everything else: unrelated
+Journal history, archived or superseded Plans, templates, procedures, and
+Doctrine entries not selected by priority, recency, or citation. Agents MUST
+NOT bulk-read `.cortex/journal/**` or the whole `.cortex/` tree by default.
+Cold context is reached through lookup or explicit citation, then opened as
+returned files or snippets.
+
 **No semantic retrieval at session start.** Cortex storage is markdown + git + grep — not a vector store (Doctrine 0006 #1, supersedes 0005). The default manifest loads Doctrine by `Load-priority: always` pins plus recency, never by embedding similarity. Cortex's CLI ships an opt-in `cortex retrieve` interface (non-normative reference implementation, gitignored derived index — see Doctrine 0006 #1) for projects that want semantic retrieval over `.cortex/` without rolling their own; the Protocol itself does not include retrieval, and consumers may bypass `cortex retrieve` entirely.
 
-**Mid-session retrieval is grep, optionally hybrid.** When the agent needs Doctrine or Journal content not in the manifest, it greps `.cortex/` directly or uses `cortex grep` (a frontmatter-aware wrapper shipping in Phase B). Once `cortex retrieve` ships (see `.cortex/plans/cortex-retrieve.md`), agents may also call `cortex retrieve --json` for hybrid (BM25 + semantic) retrieval over the derived index — but this is opt-in convenience, not Protocol contract. The Protocol primitive is ripgrep; everything else layers on top.
+**Mid-session retrieval is lookup-first.** When the agent needs Doctrine,
+Journal, or Plan content not in the manifest, it follows this order:
+
+1. Use the bounded manifest and hot files already loaded.
+2. Use `cortex grep` (or direct `rg` over `.cortex/`) for exact lookup.
+3. Use `cortex retrieve --mode bm25|semantic|hybrid` only when ranking,
+   conceptual search, or synonym expansion adds value and the derived index is
+   available.
+4. Open only the files or snippets returned by grep, retrieve, or explicit
+   citations.
+
+Grep MUST work for every Cortex project. Retrieve MAY work: it is an optional
+convenience over a gitignored derived index, not a Protocol dependency. Agents
+should start with grep unless the query is conceptual, grep returns too many
+hits to inspect, or grep returns zero hits for a question that is probably
+worded differently in the corpus.
+
+| Use grep when... | Use retrieve when... |
+|---|---|
+| The query is an exact string, identifier, filename, heading, date, trigger, status, or frontmatter field. | The query is conceptual, e.g. "why did we decide X?" or "what prior incidents resemble this?" |
+| The corpus is small enough to inspect directly (default warning thresholds: <=20 Doctrine entries or <=100 Journal entries). | The corpus is large enough that ranked results save meaningful review time. |
+| The task is audit or verification and needs every hit, not top-K ranking. | A ranked top-K answer is acceptable and the agent will verify by opening cited files. |
+| The environment has no Cortex CLI, no populated retrieve index, or no permission to build one. | A grep query would require several OR/synonym variants or misses obvious conceptual matches. |
 
 **Graceful degradation.** At 32k context, the manifest falls back to State only. At 100k+, it may include Journal from last 7d. The CLI computes the slice; the agent receives the output.
 
