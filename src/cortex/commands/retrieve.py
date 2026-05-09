@@ -49,6 +49,23 @@ _HYBRID_DEFAULT_NOTICE_KEY = "hybrid-default-flip"
     help="Emit stable JSON: [{path, score, frontmatter, excerpt}]. Suitable for scripting.",
 )
 @click.option(
+    "--for-agent",
+    "for_agent",
+    is_flag=True,
+    default=False,
+    help=(
+        "Emit citation-first JSON for agents: path, line range, metadata, "
+        "top blockquote summary, capped excerpt, and next-step hint."
+    ),
+)
+@click.option(
+    "--excerpt-chars",
+    type=click.IntRange(min=80),
+    default=600,
+    show_default=True,
+    help="Maximum excerpt characters per result in --for-agent output.",
+)
+@click.option(
     "--no-rebuild",
     is_flag=True,
     default=False,
@@ -68,6 +85,8 @@ def retrieve_command(
     mode: str | None,
     top_k: int,
     as_json: bool,
+    for_agent: bool,
+    excerpt_chars: int,
     no_rebuild: bool,
     target_path: Path,
 ) -> None:
@@ -101,6 +120,7 @@ def retrieve_command(
             retrieve_index_exists,
         )
         from cortex.retrieve.query import (
+            hit_to_agent_json,
             hit_to_json,
             query_bm25,
             query_hybrid,
@@ -115,7 +135,7 @@ def retrieve_command(
                     "warning: retrieve index does not exist; --no-rebuild skipped build",
                     err=True,
                 )
-                _emit_hits([], as_json=as_json)
+                _emit_hits([], as_json=as_json, for_agent=for_agent)
                 return
             if is_stale(project_root):
                 click.echo(
@@ -129,7 +149,7 @@ def retrieve_command(
         # Bail early when the corpus has no indexed content.
         total_chunks = get_indexed_chunk_count(project_root)
         if total_chunks == 0:
-            if as_json:
+            if as_json or for_agent:
                 click.echo(json.dumps([]))
             else:
                 click.echo(
@@ -163,16 +183,60 @@ def retrieve_command(
 
     except FTS5UnavailableError:
         click.echo(FTS5_FALLBACK_MESSAGE, err=True)
-        _run_grep_fallback(project_root, query, as_json=as_json)
+        _run_grep_fallback(
+            project_root,
+            query,
+            as_json=as_json,
+            for_agent=for_agent,
+            excerpt_chars=excerpt_chars,
+        )
         return
     except Exception as exc:
         click.echo(f"error: cortex retrieve failed: {exc}", err=True)
         sys.exit(1)
 
-    _emit_hits(hits, as_json=as_json, hit_to_json=hit_to_json, query=query, total_count=total_chunks)
+    _emit_hits(
+        hits,
+        as_json=as_json,
+        for_agent=for_agent,
+        hit_to_json=hit_to_json,
+        hit_to_agent_json=hit_to_agent_json,
+        project_root=project_root,
+        excerpt_chars=excerpt_chars,
+        query=query,
+        total_count=total_chunks,
+    )
 
 
-def _emit_hits(hits, *, as_json: bool, hit_to_json=None, query: str | None = None, total_count: int | None = None) -> None:  # type: ignore[no-untyped-def]
+def _emit_hits(  # type: ignore[no-untyped-def]
+    hits,
+    *,
+    as_json: bool,
+    for_agent: bool,
+    hit_to_json=None,
+    hit_to_agent_json=None,
+    project_root: Path | None = None,
+    excerpt_chars: int = 600,
+    query: str | None = None,
+    total_count: int | None = None,
+) -> None:
+    if for_agent:
+        if hit_to_agent_json is None or project_root is None:
+            click.echo(json.dumps([]))
+        else:
+            click.echo(
+                json.dumps(
+                    [
+                        hit_to_agent_json(
+                            hit,
+                            project_root=project_root,
+                            excerpt_chars=excerpt_chars,
+                        )
+                        for hit in hits
+                    ]
+                )
+            )
+        return
     if as_json:
         if hit_to_json is None:
             click.echo(json.dumps([]))
@@ -316,7 +380,14 @@ def _maybe_emit_hybrid_default_notice(project_root: Path) -> None:
         pass
 
 
-def _run_grep_fallback(project_root: Path, query: str, *, as_json: bool) -> None:
+def _run_grep_fallback(
+    project_root: Path,
+    query: str,
+    *,
+    as_json: bool,
+    for_agent: bool,
+    excerpt_chars: int,
+) -> None:
     result = subprocess.run(
         [
             sys.executable,
@@ -337,6 +408,34 @@ def _run_grep_fallback(project_root: Path, query: str, *, as_json: bool) -> None
         if result.stderr:
             click.echo(result.stderr, err=True, nl=False)
         sys.exit(result.returncode)
+    if for_agent:
+        excerpt = result.stdout.strip()
+        hits = []
+        if excerpt:
+            capped = excerpt[:excerpt_chars].rstrip()
+            omitted = len(excerpt) > excerpt_chars
+            hits.append(
+                {
+                    "path": "cortex grep fallback",
+                    "citation": "cortex grep fallback",
+                    "line_range": {"start": None, "end": None},
+                    "score": 0.0,
+                    "layer": None,
+                    "type": None,
+                    "status": None,
+                    "frontmatter": None,
+                    "summary": None,
+                    "excerpt": capped,
+                    "excerpt_omitted": omitted,
+                    "omission": f"excerpt truncated to {excerpt_chars} characters" if omitted else None,
+                    "excerpt_limit_chars": excerpt_chars,
+                    "next_step": "Use `cortex grep` directly, then open the returned file path.",
+                }
+            )
+        click.echo(json.dumps(hits))
+        if result.stderr:
+            click.echo(result.stderr, err=True, nl=False)
+        return
     if as_json:
         excerpt = result.stdout.strip()
         hits = []

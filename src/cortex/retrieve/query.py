@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from cortex.frontmatter import parse_frontmatter
 from cortex.retrieve.index import (
     open_index_with_vec,
     retrieve_index_path,
@@ -43,6 +44,9 @@ class RetrieveHit:
     score: float
     frontmatter: dict[str, Any] | None
     excerpt: str
+    source_path: str | None = None
+    start_line: int | None = None
+    end_line: int | None = None
 
 
 def query_bm25(project_root: Path, query: str, *, top_k: int) -> list[RetrieveHit]:
@@ -56,6 +60,7 @@ def query_bm25(project_root: Path, query: str, *, top_k: int) -> list[RetrieveHi
             SELECT
               chunks.path,
               chunks.start_line,
+              chunks.end_line,
               chunks.content,
               chunks.frontmatter_json,
               bm25(chunks_fts) AS rank
@@ -84,6 +89,9 @@ def query_bm25(project_root: Path, query: str, *, top_k: int) -> list[RetrieveHi
                 score=score,
                 frontmatter=frontmatter,
                 excerpt=_excerpt(row["content"], query),
+                source_path=str(row["path"]),
+                start_line=int(row["start_line"]),
+                end_line=int(row["end_line"]),
             )
         )
     return sorted(hits, key=lambda hit: hit.score, reverse=True)[:top_k]
@@ -123,6 +131,7 @@ def query_semantic(
               chunks.id,
               chunks.path,
               chunks.start_line,
+              chunks.end_line,
               chunks.content,
               chunks.frontmatter_json,
               embeddings.distance AS distance
@@ -155,6 +164,9 @@ def query_semantic(
                 score=score,
                 frontmatter=frontmatter,
                 excerpt=_excerpt(row["content"], query),
+                source_path=str(row["path"]),
+                start_line=int(row["start_line"]),
+                end_line=int(row["end_line"]),
             )
         )
     hits.sort(key=lambda hit: hit.score, reverse=True)
@@ -225,6 +237,9 @@ def rrf_fuse(
                 score=score,
                 frontmatter=base.frontmatter,
                 excerpt=base.excerpt,
+                source_path=base.source_path,
+                start_line=base.start_line,
+                end_line=base.end_line,
             )
         )
     return fused
@@ -241,6 +256,54 @@ def hit_to_json(hit: RetrieveHit) -> dict[str, Any]:
     }
 
 
+def hit_to_agent_json(
+    hit: RetrieveHit,
+    *,
+    project_root: Path,
+    excerpt_chars: int,
+) -> dict[str, Any]:
+    """Return the citation-first JSON contract for token-bounded agent lookup."""
+
+    source_path, start_line = _split_hit_path(hit)
+    end_line = hit.end_line
+    full_path = project_root / ".cortex" / source_path
+    metadata = _metadata_for_file(full_path, hit.frontmatter)
+    excerpt, excerpt_omitted, omission = cap_text(hit.excerpt, excerpt_chars)
+    line_range = {
+        "start": start_line,
+        "end": end_line,
+    }
+    citation = _citation(source_path, start_line, end_line)
+    layer = source_path.split("/", 1)[0] if source_path else None
+    status = _metadata_value(metadata, "Status")
+    entry_type = _metadata_value(metadata, "Type")
+
+    return {
+        "path": f".cortex/{source_path}",
+        "citation": citation,
+        "line_range": line_range,
+        "score": hit.score,
+        "layer": layer,
+        "type": entry_type,
+        "status": status,
+        "frontmatter": metadata or None,
+        "summary": _top_blockquote_summary(full_path),
+        "excerpt": excerpt,
+        "excerpt_omitted": excerpt_omitted,
+        "omission": omission,
+        "excerpt_limit_chars": excerpt_chars,
+        "next_step": _next_step(source_path, start_line, end_line),
+    }
+
+
+def cap_text(text: str, limit: int) -> tuple[str, bool, str | None]:
+    """Cap ``text`` by character count and report whether anything was omitted."""
+
+    if len(text) <= limit:
+        return text, False, None
+    return text[:limit].rstrip(), True, f"excerpt truncated to {limit} characters"
+
+
 def _excerpt(content: str, query: str) -> str:
     terms = [term.lower() for term in query.split() if term.strip()]
     lines = content.splitlines()
@@ -253,6 +316,79 @@ def _excerpt(content: str, query: str) -> str:
             end = min(len(lines), idx + 2)
             return "\n".join(lines[start:end]).strip()
     return "\n".join(lines[:3]).strip()
+
+
+def _split_hit_path(hit: RetrieveHit) -> tuple[str, int | None]:
+    if hit.source_path is not None:
+        return hit.source_path, hit.start_line
+    path, sep, line = hit.path.rpartition(":")
+    if sep and line.isdigit():
+        return path, int(line)
+    return hit.path, hit.start_line
+
+
+def _citation(source_path: str, start_line: int | None, end_line: int | None) -> str:
+    prefixed = f".cortex/{source_path}"
+    if start_line is None:
+        return prefixed
+    if end_line is None or end_line == start_line:
+        return f"{prefixed}:{start_line}"
+    return f"{prefixed}:{start_line}-{end_line}"
+
+
+def _next_step(source_path: str, start_line: int | None, end_line: int | None) -> str:
+    citation = _citation(source_path, start_line, end_line)
+    return f"Open `{citation}` if the summary/excerpt is relevant; otherwise search narrower."
+
+
+def _metadata_for_file(path: Path, indexed_frontmatter: dict[str, Any] | None) -> dict[str, Any]:
+    metadata: dict[str, Any] = dict(indexed_frontmatter or {})
+    try:
+        text = path.read_text()
+    except OSError:
+        return metadata
+    frontmatter, _body = parse_frontmatter(text)
+    metadata.update(frontmatter)
+    for line in text.splitlines()[:40]:
+        if line.startswith("**") and ":**" in line:
+            key, _, value = line[2:].partition(":**")
+            metadata.setdefault(key.strip(), value.strip())
+    return metadata
+
+
+def _metadata_value(metadata: dict[str, Any], key: str) -> str | None:
+    value = metadata.get(key)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _top_blockquote_summary(path: Path) -> str | None:
+    try:
+        text = path.read_text()
+    except OSError:
+        return None
+    _frontmatter, body = parse_frontmatter(text)
+    collected: list[str] = []
+    for line in body.splitlines()[:80]:
+        stripped = line.strip()
+        if not stripped:
+            if collected:
+                break
+            continue
+        if stripped.startswith("## "):
+            break
+        if stripped.startswith("# "):
+            continue
+        if stripped.startswith("**") and ":**" in stripped:
+            continue
+        if stripped.startswith(">"):
+            collected.append(stripped.removeprefix(">").strip())
+            continue
+        if collected:
+            break
+    summary = "\n".join(line for line in collected if line).strip()
+    return summary or None
 
 
 def _score(path: str, content: str, query: str, rank: float) -> float:

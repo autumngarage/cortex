@@ -78,6 +78,7 @@ cortex init                 # scaffold .cortex/ in a project (idempotent); scans
                             # via `Imported-from:` frontmatter — no flag needed
 cortex manifest --budget N  # token-budgeted session-start slice per Protocol § 1
 cortex grep <pattern>       # frontmatter-aware ripgrep wrapper; see docs/grep.md
+cortex retrieve <query>     # ranked lookup over the derived index; --for-agent emits compact citations
 cortex update               # bring this repo's .cortex/ up to date in one step
 cortex update --check       # verify generated layers are current without writing files
 cortex refresh-state        # regenerate .cortex/state.md
@@ -90,7 +91,7 @@ cortex sync                 # deprecated alias for cortex update
 cortex version
 ```
 
-See [`docs/grep.md`](./docs/grep.md) for `cortex grep --frontmatter` filter syntax and examples.
+See [`docs/grep.md`](./docs/grep.md) for `cortex grep --frontmatter` filter syntax and examples, and [`docs/retrieve.md`](./docs/retrieve.md) for citation-first `cortex retrieve --for-agent` output.
 
 External tools can seed their own default Doctrine without making Cortex opinionated: `cortex init --seed-from <dir>` copies one-level Markdown packs into `.cortex/doctrine/`, preserving bytes and frontmatter exactly. Numbered pack files keep their requested `NNNN-` prefix; unnumbered files are assigned from `0100` upward using their H1 slug. By default Cortex aborts before copying if a destination Doctrine entry or requested number already exists; `--merge skip-existing` makes pack installs idempotent for cases like Sentinel's planned baseline Doctrine pack.
 
@@ -205,6 +206,7 @@ Each tool writes to its own files and reads the others only as best-effort. Noth
 - **[`SPEC.md`](./SPEC.md)** — The normative specification for the `.cortex/` file format and protocol.
 - **[`docs/config-reference.md`](./docs/config-reference.md)** — Per-project `.cortex/config.toml` schema reference (every key, type, default, worked example).
 - **[`docs/spec-conformance.md`](./docs/spec-conformance.md)** — The SPEC-to-test traceability matrix, proving CLI conformance.
+- **[`docs/retrieve.md`](./docs/retrieve.md)** — Citation-first `cortex retrieve --for-agent` output and the recommended agent lookup loop.
 - **[`docs/PITCH.md`](./docs/PITCH.md)** — A plain-language overview of Cortex.
 - **[`docs/CASE-STUDIES.md`](./docs/CASE-STUDIES.md)** — Documented case studies: the conductor incident and the three-target v0.9.0 dogfood gate.
 - **[`docs/install-pr-templates.md`](./docs/install-pr-templates.md)** — Reusable copy and checklist for Cortex install PRs on sibling projects.
