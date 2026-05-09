@@ -226,6 +226,86 @@ def test_json_output_schema(tmp_path: Path) -> None:
     assert isinstance(data[0]["excerpt"], str)
 
 
+def test_for_agent_output_includes_summary_metadata_and_citation(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    _write(
+        project,
+        "journal/2026-05-09-lookup.md",
+        "# Lookup Decision\n\n"
+        "**Date:** 2026-05-09\n"
+        "**Type:** decision\n\n"
+        "> Prefer compact citation-first lookup before opening source files.\n\n"
+        "## Context\n"
+        "The needle appears in a compact retrieval entry.\n",
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        ["retrieve", "needle", "--for-agent", "--path", str(project)],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    hit = data[0]
+    assert hit["path"] == ".cortex/journal/2026-05-09-lookup.md"
+    assert hit["citation"].startswith(".cortex/journal/2026-05-09-lookup.md:")
+    assert hit["line_range"]["start"] <= hit["line_range"]["end"]
+    assert hit["layer"] == "journal"
+    assert hit["type"] == "decision"
+    assert hit["summary"] == "Prefer compact citation-first lookup before opening source files."
+    assert "needle" in hit["excerpt"]
+    assert hit["excerpt_omitted"] is False
+    assert hit["omission"] is None
+    assert "Open `" in hit["next_step"]
+
+
+def test_for_agent_output_handles_entries_without_summary(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    _write(
+        project,
+        "plans/no-summary.md",
+        "---\nStatus: active\n---\n\n# No Summary\n\n## Work\nneedle plan body\n",
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        ["retrieve", "needle", "--for-agent", "--path", str(project)],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    assert data[0]["path"] == ".cortex/plans/no-summary.md"
+    assert data[0]["summary"] is None
+    assert data[0]["status"] == "active"
+
+
+def test_for_agent_output_caps_long_excerpt(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+    long_line = "needle " + ("filler " * 200)
+    _write(project, "doctrine/0001-long.md", f"## Long\n{long_line}\n")
+
+    result = CliRunner().invoke(
+        cli,
+        [
+            "retrieve",
+            "needle",
+            "--for-agent",
+            "--excerpt-chars",
+            "120",
+            "--path",
+            str(project),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.output)
+    hit = data[0]
+    assert len(hit["excerpt"]) <= 120
+    assert hit["excerpt_omitted"] is True
+    assert hit["omission"] == "excerpt truncated to 120 characters"
+    assert hit["excerpt_limit_chars"] == 120
+
+
 def test_punctuation_query_is_treated_as_literal_text(tmp_path: Path) -> None:
     project = _project(tmp_path)
     _write(project, "journal/2026-05-01-release.md", "## Release\nv0.3.0 shipped on 2026-05-01.\n")
