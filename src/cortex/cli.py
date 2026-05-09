@@ -33,7 +33,7 @@ from cortex.commands.refresh_index import refresh_index_command
 from cortex.commands.refresh_state import refresh_state_command
 from cortex.commands.retrieve import retrieve_command
 from cortex.commands.status import run_status, status_command
-from cortex.commands.sync import sync_command
+from cortex.commands.sync import sync_command, update_command
 
 
 def _detect_install_method() -> str:
@@ -98,7 +98,7 @@ def cli(
     to target a project other than the current directory.
     """
     # Auto-sync hook (Layer 2 of cortex#190). Fires before the dispatched
-    # subcommand body runs. Skipped during init/sync/migrate-state, when
+    # subcommand body runs. Skipped during init/update/sync/migrate-state, when
     # opt-out is set, or when the marker indicates only a patch bump.
     project_root = project_root_from_path_override(path_override)
     auto_sync_disabled = no_auto_sync or auto_sync_via_env_disabled()
@@ -142,6 +142,7 @@ cli.add_command(retrieve_command)
 cli.add_command(next_command)
 cli.add_command(journal_group)
 cli.add_command(plan_group)
+cli.add_command(update_command)
 cli.add_command(sync_command)
 
 

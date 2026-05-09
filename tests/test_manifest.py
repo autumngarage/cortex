@@ -314,7 +314,8 @@ def test_human_budget_summary_exposes_plan_omissions(
 def test_json_budget_diagnostics_expose_journal_omissions(
     scaffolded_project: Path,
 ) -> None:
-    journal = _write_journal(scaffolded_project, "2026-05-05", "large")
+    today = datetime.now(UTC).date().isoformat()
+    journal = _write_journal(scaffolded_project, today, "large")
     journal.write_text(journal.read_text() + "\n" + ("journal body " * 1000))
 
     payload = _run_manifest_json(scaffolded_project, "--budget", "3000")
@@ -327,10 +328,10 @@ def test_json_budget_diagnostics_expose_journal_omissions(
     )
     assert _list_value(journal_section, "included_entries") == []
     assert _list_value(journal_section, "truncated_entries") == [
-        ".cortex/journal/2026-05-05-large.md"
+        f".cortex/journal/{today}-large.md"
     ]
     assert _list_value(journal_section, "omitted_entries") == [
-        ".cortex/journal/2026-05-05-large.md"
+        f".cortex/journal/{today}-large.md"
     ]
     assert _int_value(journal_section, "omitted_count") == 1
 

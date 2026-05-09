@@ -78,10 +78,15 @@ cortex init                 # scaffold .cortex/ in a project (idempotent); scans
                             # via `Imported-from:` frontmatter — no flag needed
 cortex manifest --budget N  # token-budgeted session-start slice per Protocol § 1
 cortex grep <pattern>       # frontmatter-aware ripgrep wrapper; see docs/grep.md
+cortex update               # bring this repo's .cortex/ up to date in one step
+cortex update --check       # verify generated layers are current without writing files
+cortex refresh-state        # regenerate .cortex/state.md
+cortex refresh-index        # rebuild .cortex/.index.json
 cortex doctor               # validate .cortex/ against SPEC
 cortex doctor --audit       # check Tier-1 Protocol triggers have matching Journal entries
 cortex doctor --audit-digests
 cortex promote <id>         # stub pending v0.6.0 .index.json writer + promote writer
+cortex sync                 # deprecated alias for cortex update
 cortex version
 ```
 
