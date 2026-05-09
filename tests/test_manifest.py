@@ -149,6 +149,26 @@ def test_journal_window_respected(scaffolded_project: Path) -> None:
     assert "2026-01-01-ancient.md" not in rendered
 
 
+def test_default_manifest_excludes_unrelated_journal_history_without_index(
+    scaffolded_project: Path,
+) -> None:
+    now = datetime(2026, 4, 17, tzinfo=UTC)
+    fresh = _write_journal(scaffolded_project, "2026-04-17", "fresh")
+    fresh.write_text("# fresh\n\n**Date:** 2026-04-17\n\nFRESH_SENTINEL\n")
+    cold = _write_journal(scaffolded_project, "2026-01-01", "unrelated-history")
+    cold.write_text("# unrelated history\n\n**Date:** 2026-01-01\n\nCOLD_HISTORY_SENTINEL\n")
+    index = scaffolded_project / ".cortex" / ".index.json"
+    if index.exists():
+        index.unlink()
+
+    rendered = build_manifest(scaffolded_project, 8000, now=now).render()
+
+    assert "FRESH_SENTINEL" in rendered
+    assert "COLD_HISTORY_SENTINEL" not in rendered
+    assert "2026-01-01-unrelated-history.md" not in rendered
+    assert "Promotion-queue: unavailable" in rendered
+
+
 def test_promotion_summary_without_index(scaffolded_project: Path) -> None:
     exit_code, output = _run_manifest(scaffolded_project, 8000)
     assert exit_code == 0
