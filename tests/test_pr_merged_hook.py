@@ -24,6 +24,7 @@ shell shims that record calls and produce the stdout the hook expects.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import textwrap
 from pathlib import Path
@@ -110,6 +111,9 @@ def _make_cortex_shim(
             f"""\
             #!/usr/bin/env bash
             printf '%s\\n' "$*" >> {log_file!s}
+            if [ "${{1:-}}" = "--no-auto-sync" ]; then
+              shift
+            fi
             if [ "$1" = "check-triggers" ]; then
               if [ -n '{stderr_escaped}' ]; then
                 printf '%s' '{stderr_escaped}' >&2
@@ -122,6 +126,57 @@ def _make_cortex_shim(
             mkdir -p {journal_path.parent!s}
             printf 'placeholder\\n' > {journal_path!s}
             printf '%s\\n' {journal_path!s}
+            """
+        ),
+        encoding="utf-8",
+    )
+    shim.chmod(0o755)
+    return log_file
+
+
+def _make_git_shim(
+    bin_dir: Path,
+    *,
+    fail_checkout_branch: bool = False,
+    fail_add: bool = False,
+) -> Path:
+    """Write a `git` shim that delegates to the real binary except for
+    targeted failure injection. Used to simulate hook-local git failures
+    without mocking the bash script."""
+
+    real_git = shutil.which("git")
+    assert real_git is not None
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    log_file = bin_dir / "git.calls.log"
+    log_file.write_text("", encoding="utf-8")
+    shim = bin_dir / "git"
+    checkout_block = (
+        "if [ \"${cmd_args[0]:-}\" = \"checkout\" ] && [ \"${cmd_args[1]:-}\" = \"-q\" ] "
+        "&& [ \"${cmd_args[2]:-}\" = \"-b\" ]; then\n"
+        "  printf 'git shim: forced checkout -b failure\\n' >&2\n"
+        "  exit 42\n"
+        "fi\n"
+        if fail_checkout_branch
+        else ""
+    )
+    add_block = (
+        "if [ \"${cmd_args[0]:-}\" = \"add\" ]; then\n"
+        "  printf 'git shim: forced add failure\\n' >&2\n"
+        "  exit 43\n"
+        "fi\n"
+        if fail_add
+        else ""
+    )
+    shim.write_text(
+        textwrap.dedent(
+            f"""\
+            #!/usr/bin/env bash
+            printf '%s\\n' "$*" >> {log_file!s}
+            cmd_args=("$@")
+            if [ "${{cmd_args[0]:-}}" = "-C" ]; then
+              cmd_args=("${{cmd_args[@]:2}}")
+            fi
+            {checkout_block}{add_block}exec {real_git!s} "$@"
             """
         ),
         encoding="utf-8",
@@ -458,6 +513,65 @@ def test_hook_does_not_commit_to_default_branch(
     assert result.returncode == 0, result.stderr
     head_after = _git("rev-parse", "main", cwd=project).stdout.strip()
     assert head_after == head_before
+
+
+def test_hook_creates_feature_branch_before_journal_draft(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """Regression for cortex#247: branch creation must happen before
+    `cortex journal draft` writes into `.cortex/journal/`. If branch
+    creation fails, the draft command must not run and `main` stays clean."""
+
+    project, bin_dir = project_repo
+    journal_path = project / ".cortex" / "journal" / "auto.md"
+    cortex_log = _make_cortex_shim(bin_dir, journal_path)
+    _make_git_shim(bin_dir, fail_checkout_branch=True)
+    main_head_before = _git("rev-parse", "main", cwd=project).stdout.strip()
+
+    result = _run_hook(
+        project,
+        bin_dir,
+        extra_env={"TOUCHSTONE_MERGED_PR": "247"},
+    )
+
+    assert result.returncode == 1, result.stderr
+    assert "failed before journal draft" in result.stderr
+    assert not journal_path.exists()
+    cortex_calls = cortex_log.read_text(encoding="utf-8")
+    assert "--no-auto-sync check-triggers --since HEAD~1" in cortex_calls
+    assert "journal draft pr-merged --no-edit" not in cortex_calls
+    assert _git("rev-parse", "main", cwd=project).stdout.strip() == main_head_before
+    assert _git("branch", "--show-current", cwd=project).stdout.strip() == "main"
+    assert _git("status", "--porcelain", cwd=project).stdout.strip() == ""
+
+
+def test_hook_add_failure_preserves_draft_on_recovery_branch(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """If a local git failure happens after drafting, the hook must not
+    return to `main` with surprise journal dirt. It leaves the operator on
+    the named recovery branch with explicit instructions."""
+
+    project, bin_dir = project_repo
+    journal_path = project / ".cortex" / "journal" / "auto.md"
+    _make_cortex_shim(bin_dir, journal_path)
+    _make_git_shim(bin_dir, fail_add=True)
+    main_head_before = _git("rev-parse", "main", cwd=project).stdout.strip()
+
+    result = _run_hook(
+        project,
+        bin_dir,
+        extra_env={"TOUCHSTONE_MERGED_PR": "248"},
+    )
+
+    assert result.returncode == 1, result.stderr
+    assert "git add" in result.stderr
+    assert "docs/journal-pr-248" in result.stderr
+    assert "do not commit this journal file to main" in result.stderr
+    assert _git("rev-parse", "main", cwd=project).stdout.strip() == main_head_before
+    assert _git("branch", "--show-current", cwd=project).stdout.strip() == "docs/journal-pr-248"
+    assert journal_path.exists()
+    assert "## Triggers fired" in journal_path.read_text(encoding="utf-8")
 
 
 def test_hook_branch_slug_falls_back_to_timestamp_when_no_pr_number(

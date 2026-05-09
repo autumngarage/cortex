@@ -35,7 +35,7 @@
 #      marker is missing, the repo has not completed Cortex init for
 #      writer paths yet — log one informational line and skip cleanly.
 #   7. After the recursion guard + SPEC_VERSION gate, the hook consults
-#      `cortex check-triggers --since HEAD~1` to decide whether the
+#      `cortex --no-auto-sync check-triggers --since HEAD~1` to decide whether the
 #      merge is substantive enough to warrant a Journal entry
 #      (cortex#206). If no Tier 1 triggers fire, the hook silently
 #      exits 0 — half the merges to a healthy trunk are typo fixes,
@@ -63,7 +63,10 @@
 #   - `cortex journal draft` exits non-zero: stderr surfaced, exit 1.
 #   - Empty stdout (no path returned): stderr message, exit 1.
 #   - Returned path doesn't exist after the call: stderr message, exit 1.
-#   - `git commit` on the feature branch fails: stderr message, exit 1.
+#   - `git add` / `git commit` on the feature branch fails: stderr message
+#     naming the recovery branch, exit 1. The operator is left on the
+#     recovery branch so the generated Journal file is not surprise dirt
+#     on the default branch.
 #   - `git push` of the feature branch fails: stderr message naming the
 #     local branch the operator can ship manually, exit 1.
 #   - `gh pr create` fails (gh missing, auth, branch protection refusing
@@ -272,7 +275,7 @@ if [ "$force_journal" -eq 0 ]; then
     # cleaned up on every exit path.
     ct_stderr_file="$(mktemp -t cortex-pr-merged-hook.XXXXXX 2>/dev/null || mktemp)"
     trap 'rm -f "$ct_stderr_file"' EXIT
-    check_triggers_stdout="$(cd "$PROJECT_DIR" && cortex check-triggers --since HEAD~1 2>"$ct_stderr_file")" \
+    check_triggers_stdout="$(cd "$PROJECT_DIR" && cortex --no-auto-sync check-triggers --since HEAD~1 2>"$ct_stderr_file")" \
       || check_triggers_status=$?
     check_triggers_stderr="$(cat "$ct_stderr_file" 2>/dev/null || true)"
     rm -f "$ct_stderr_file"
@@ -310,6 +313,36 @@ if [ -n "$(git -C "$PROJECT_DIR" status --porcelain)" ]; then
   exit 1
 fi
 
+# Create the recovery/feature branch BEFORE writing into `.cortex/journal/`.
+# If anything after this point fails, the generated entry is isolated away
+# from the default branch instead of becoming surprise dirt on main/master
+# (cortex#247).
+pr_suffix=""
+branch_slug=""
+if [ -n "${TOUCHSTONE_MERGED_PR:-}" ]; then
+  pr_suffix=" for #${TOUCHSTONE_MERGED_PR}"
+  branch_slug="${TOUCHSTONE_MERGED_PR}"
+else
+  # No source-PR number to thread through. Use a date+time slug for
+  # branch uniqueness so concurrent merges don't collide.
+  branch_slug="$(date -u +%Y%m%d-%H%M%S)"
+fi
+commit_message="${AUTO_DRAFT_SUBJECT_PREFIX}${pr_suffix}"
+feature_branch="docs/journal-pr-${branch_slug}"
+
+# If the branch already exists locally (rare — leftover from a previous
+# failed run), pick a unique suffix so we don't `checkout -b` onto an
+# existing ref.
+if git -C "$PROJECT_DIR" show-ref --quiet --verify "refs/heads/${feature_branch}"; then
+  feature_branch="${feature_branch}-$(date -u +%H%M%S)"
+  log "cortex-pr-merged-hook: feature branch existed; using ${feature_branch} instead."
+fi
+
+if ! git -C "$PROJECT_DIR" checkout -q -b "$feature_branch"; then
+  log "cortex-pr-merged-hook: git checkout -b '$feature_branch' failed before journal draft; default branch remains unchanged."
+  exit 1
+fi
+
 # `cortex journal draft pr-merged --no-edit` writes the entry and prints
 # the absolute path on stdout. We capture stdout to grab that path; we
 # leave stderr untouched so any cortex-side warnings (gh not auth'd, etc)
@@ -329,6 +362,7 @@ draft_stdout="$(cd "$PROJECT_DIR" \
   || draft_status=$?
 if [ "$draft_status" -ne 0 ]; then
   log "cortex-pr-merged-hook: cortex journal draft pr-merged exited $draft_status."
+  log "  The hook is on recovery branch ${feature_branch}; inspect the worktree there before returning to ${default_branch}."
   exit 1
 fi
 
@@ -339,11 +373,13 @@ fi
 candidate="$(printf '%s\n' "$draft_stdout" | awk 'NF{p=$0} END{print p}')"
 if [ -z "$candidate" ]; then
   log "cortex-pr-merged-hook: cortex journal draft returned no path on stdout."
+  log "  The hook is on recovery branch ${feature_branch}; default branch remains unchanged."
   exit 1
 fi
 
 if [ ! -f "$candidate" ]; then
   log "cortex-pr-merged-hook: returned path '$candidate' is not a regular file."
+  log "  The hook is on recovery branch ${feature_branch}; default branch remains unchanged."
   exit 1
 fi
 
@@ -375,41 +411,14 @@ if [ -n "$fired_triggers_ndjson" ]; then
   } >> "$candidate"
 fi
 
-# 4. Stage + commit on a feature branch (NOT the default branch — see
+# 4. Stage + commit on the feature branch (NOT the default branch — see
 # cortex#194 and `principles/git-workflow.md`'s "Never commit on the
 # default branch" rule). Then ship via a PR.
 rel_path="${candidate#"$PROJECT_DIR"/}"
-pr_suffix=""
-branch_slug=""
-if [ -n "${TOUCHSTONE_MERGED_PR:-}" ]; then
-  pr_suffix=" for #${TOUCHSTONE_MERGED_PR}"
-  branch_slug="${TOUCHSTONE_MERGED_PR}"
-else
-  # No source-PR number to thread through. Use a date+time slug for
-  # branch uniqueness so concurrent merges don't collide.
-  branch_slug="$(date -u +%Y%m%d-%H%M%S)"
-fi
-commit_message="${AUTO_DRAFT_SUBJECT_PREFIX}${pr_suffix}"
-feature_branch="docs/journal-pr-${branch_slug}"
-
-# If the branch already exists locally (rare — leftover from a previous
-# failed run), pick a unique suffix so we don't `checkout -b` onto an
-# existing ref.
-if git -C "$PROJECT_DIR" show-ref --quiet --verify "refs/heads/${feature_branch}"; then
-  feature_branch="${feature_branch}-$(date -u +%H%M%S)"
-  log "cortex-pr-merged-hook: feature branch existed; using ${feature_branch} instead."
-fi
-
-if ! git -C "$PROJECT_DIR" checkout -q -b "$feature_branch"; then
-  log "cortex-pr-merged-hook: git checkout -b '$feature_branch' failed."
-  exit 1
-fi
 
 if ! git -C "$PROJECT_DIR" add -- "$rel_path"; then
   log "cortex-pr-merged-hook: git add '$rel_path' failed."
-  # Best-effort return to default branch so we don't leave the operator
-  # parked on a half-prepared feature branch.
-  git -C "$PROJECT_DIR" checkout -q "$default_branch" 2>/dev/null || true
+  log "  The draft remains on recovery branch ${feature_branch}; do not commit this journal file to ${default_branch}."
   exit 1
 fi
 
@@ -420,7 +429,7 @@ fi
 # safety and would slow every merge by minutes.
 if ! git -C "$PROJECT_DIR" commit --no-verify -m "$commit_message" >/dev/null; then
   log "cortex-pr-merged-hook: git commit failed."
-  git -C "$PROJECT_DIR" checkout -q "$default_branch" 2>/dev/null || true
+  log "  The draft remains on recovery branch ${feature_branch}; do not commit this journal file to ${default_branch}."
   exit 1
 fi
 

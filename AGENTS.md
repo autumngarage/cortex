@@ -64,6 +64,19 @@ This file is the source of truth for how AI reviewers (Codex, Claude, etc.) shou
 
 ---
 
+## Unexpected Journal Dirt Recovery
+
+Tracked `.cortex/journal/*.md` files are project memory; do **not** add them to `.gitignore`. When an unexpected Journal file appears in the worktree, classify it before staging anything:
+
+- Expected source-branch entry: keep it with the current PR only when it records that branch's decision, incident, release, or merge context.
+- Unexpected file on `main`/`master`: do not commit it to the default branch. Check recent hook output and `git log` to decide whether it belongs on a named recovery branch or duplicates an already-landed entry.
+- Stranded auto-draft `pr-merged` entry: preserve it on the hook's `docs/journal-pr-*` recovery branch when possible; remove it only after confirming a replacement or duplicate exists, and record the reason.
+- Unclear provenance: stop and surface the path, `git status --short`, current branch, and recent hook output instead of guessing.
+
+This preserves the Journal append-only invariant without folding generated merge metadata into unrelated work.
+
+---
+
 ## What to prioritize (in order)
 
 1. **Spec integrity.** Cortex is a spec-first project. Any PR that changes `SPEC.md` must bump the spec version per SPEC.md §6 — major for breaking, minor for additive, patch for clarifications. PRs that change implementation behavior without a matching spec update (when spec applies) must be flagged. Silent drift between spec and implementation is the highest-severity failure mode.

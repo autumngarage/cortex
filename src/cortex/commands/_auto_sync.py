@@ -27,8 +27,9 @@ Design notes:
 - **Skip list is explicit.** ``init``, ``update``, ``sync``, and
   ``migrate-state`` cannot trigger auto-sync, regardless of marker
   state — those commands either pre-date the marker (init) or
-  already ARE the update code path (update/sync) or are explicitly lossy and
-  must require operator consent (migrate-state). Init's own marker
+  already ARE the update code path (update/sync), are explicitly lossy and
+  must require operator consent (migrate-state), or are documented as
+  read-only inspection primitives (check-triggers). Init's own marker
   write at scaffold time is the seed; we never assume init succeeds
   to suppress the auto-sync, the skip list does.
 - **Patch bumps do not trigger.** A patch release should be safe to
@@ -77,6 +78,7 @@ SKIP_COMMANDS: frozenset[str] = frozenset({
     "sync",
     "migrate-state",
     "version",
+    "check-triggers",
 })
 
 

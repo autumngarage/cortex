@@ -45,6 +45,8 @@ At this stage the repo is **spec-first**: the protocol in [SPEC.md](./SPEC.md) i
 - Treat Claude Code memory as cached guidance, not canonical truth. Verify against this repo before acting on a remembered command, flag, path, or version.
 - Do not write memory for facts cheap to derive from `README.md`, `SPEC.md`, `.cortex/plans/cortex-v1.md`, or the code itself.
 - If you write memory mentioning a command, flag, file path, version, or workflow, include the date (YYYY-MM-DD) and the canonical source checked.
+- Do not add `.cortex/journal/` to `.gitignore`. Journal files are tracked project memory.
+- If an unexpected `.cortex/journal/*.md` file appears, classify it before staging: keep it only when it belongs to the current source branch; never commit surprise Journal dirt to `main`/`master`; preserve stranded auto-draft `pr-merged` entries on a named `docs/journal-pr-*` recovery branch when possible; stop and surface `git status`, current branch, path, and recent hook output when provenance is unclear.
 
 ## Cortex-Specific Principles
 
