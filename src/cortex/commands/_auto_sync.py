@@ -4,12 +4,12 @@ This module is the single startup hook that fires from
 ``cortex.cli.cli`` before any subcommand body runs. It compares the
 installed CLI's ``__version__`` against a marker in git metadata
 (``.git/cortex/.last-cli-version``) and, when the difference is at
-least minor, invokes the same code path as ``cortex sync`` with the
+least minor, invokes the same code path as ``cortex update`` with the
 doctor pass disabled.
 
 Design notes:
 
-- **One code path with `cortex sync`.** Auto-sync calls
+- **One code path with `cortex update`.** Auto-sync calls
   :func:`cortex.commands.sync.run_sync`. There is no parallel
   implementation that could drift apart from the operator-driven
   command.
@@ -24,10 +24,10 @@ Design notes:
   ``.cortex/.last-cli-version`` exists, we migrate it to the gitdir
   marker on first upgraded run and delete the legacy file. Failures are
   logged and ignored so user commands still run.
-- **Skip list is explicit.** ``init``, ``sync``, and
+- **Skip list is explicit.** ``init``, ``update``, ``sync``, and
   ``migrate-state`` cannot trigger auto-sync, regardless of marker
   state — those commands either pre-date the marker (init) or
-  already ARE the sync code path (sync) or are explicitly lossy and
+  already ARE the update code path (update/sync) or are explicitly lossy and
   must require operator consent (migrate-state). Init's own marker
   write at scaffold time is the seed; we never assume init succeeds
   to suppress the auto-sync, the skip list does.
@@ -73,6 +73,7 @@ PLANNED_WRITE_PATTERNS: tuple[str, ...] = (
 # than guess.
 SKIP_COMMANDS: frozenset[str] = frozenset({
     "init",
+    "update",
     "sync",
     "migrate-state",
     "version",
@@ -354,7 +355,7 @@ def _auto_sync_preflight_allows(project_root: Path) -> bool:
     conflicting_path = _dirty_path_in_planned_write_set(project_root)
     if conflicting_path == "":
         click.echo(
-            "==> auto-sync: skipped (git unavailable); run `cortex sync` manually",
+            "==> auto-sync: skipped (git unavailable); run `cortex update` manually",
             err=True,
         )
         return False

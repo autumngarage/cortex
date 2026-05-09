@@ -1,4 +1,4 @@
-"""Integration tests for `cortex sync` (Layer 1) and auto-sync on version-bump (Layer 2)."""
+"""Integration tests for `cortex update` (Layer 1) and auto-sync on version-bump (Layer 2)."""
 
 from __future__ import annotations
 
@@ -30,16 +30,16 @@ def scaffolded_project(tmp_path: Path) -> Path:
 
 
 # ---------------------------------------------------------------------------
-# Layer 1 — `cortex sync`
+# Layer 1 — `cortex update`
 # ---------------------------------------------------------------------------
 
 
-def test_sync_runs_refresh_state_and_index_and_doctor(scaffolded_project: Path) -> None:
+def test_update_runs_refresh_state_and_index_and_doctor(scaffolded_project: Path) -> None:
     project = scaffolded_project
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["sync", "--path", str(project)],
+        ["update", "--path", str(project)],
         env={"CORTEX_DETERMINISTIC": "1"},
     )
     assert result.exit_code == 0, result.output
@@ -53,15 +53,15 @@ def test_sync_runs_refresh_state_and_index_and_doctor(scaffolded_project: Path) 
     assert "refresh-index" in result.output
     assert "config.toml" in result.output
     assert "doctor" in result.output
-    assert "Sync complete" in result.output
+    assert "Update complete" in result.output
 
 
-def test_sync_no_doctor_flag_skips_doctor(scaffolded_project: Path) -> None:
+def test_update_no_doctor_flag_skips_doctor(scaffolded_project: Path) -> None:
     project = scaffolded_project
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["sync", "--path", str(project), "--no-doctor"],
+        ["update", "--path", str(project), "--no-doctor"],
         env={"CORTEX_DETERMINISTIC": "1"},
     )
     assert result.exit_code == 0, result.output
@@ -69,47 +69,48 @@ def test_sync_no_doctor_flag_skips_doctor(scaffolded_project: Path) -> None:
     assert "cortex doctor" not in result.output
 
 
-def test_sync_dry_run_invokes_nothing(scaffolded_project: Path) -> None:
+def test_update_dry_run_invokes_nothing(scaffolded_project: Path) -> None:
     project = scaffolded_project
     state_before = (project / ".cortex" / "state.md").read_text()
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["sync", "--path", str(project), "--dry-run"],
+        ["update", "--path", str(project), "--dry-run"],
         env={"CORTEX_DETERMINISTIC": "1"},
     )
     assert result.exit_code == 0, result.output
     assert "[dry-run]" in result.output
-    # Nothing was written by sync itself.
+    assert "would update" in result.output
+    # Nothing was written by update itself.
     assert (project / ".cortex" / "state.md").read_text() == state_before
-    # `cortex init` writes its own .index.json today; sync's dry-run must
-    # leave that file at its prior content (we just confirm sync didn't
+    # `cortex init` writes its own .index.json today; update's dry-run must
+    # leave that file at its prior content (we just confirm update didn't
     # rebuild and overwrite something newer — the .index.json mtime should
     # match init-time, which is essentially that it stays a valid JSON).
     if (project / ".cortex" / ".index.json").exists():
         assert (project / ".cortex" / ".index.json").read_text()
 
 
-def test_sync_rebuilds_retrieve_index_when_present(scaffolded_project: Path) -> None:
+def test_update_rebuilds_retrieve_index_when_present(scaffolded_project: Path) -> None:
     project = scaffolded_project
     # Mark the project as having opted into retrieve.
     (project / ".cortex" / ".index").mkdir(exist_ok=True)
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["sync", "--path", str(project), "--no-doctor"],
+        ["update", "--path", str(project), "--no-doctor"],
         env={"CORTEX_DETERMINISTIC": "1"},
     )
     # Output prints the `--retrieve` modifier when an .index/ dir exists.
     assert "--retrieve" in result.output, result.output
 
 
-def test_sync_is_idempotent(scaffolded_project: Path) -> None:
+def test_update_is_idempotent(scaffolded_project: Path) -> None:
     project = scaffolded_project
     runner = CliRunner()
     first = runner.invoke(
         cli,
-        ["sync", "--path", str(project), "--no-doctor"],
+        ["update", "--path", str(project), "--no-doctor"],
         env={"CORTEX_DETERMINISTIC": "1"},
     )
     assert first.exit_code == 0, first.output
@@ -117,14 +118,14 @@ def test_sync_is_idempotent(scaffolded_project: Path) -> None:
 
     second = runner.invoke(
         cli,
-        ["sync", "--path", str(project), "--no-doctor"],
+        ["update", "--path", str(project), "--no-doctor"],
         env={"CORTEX_DETERMINISTIC": "1"},
     )
     assert second.exit_code == 0, second.output
     assert (project / ".cortex" / "state.md").read_text() == state_after_first
 
 
-def test_sync_reports_unknown_config_keys(scaffolded_project: Path) -> None:
+def test_update_reports_unknown_config_keys(scaffolded_project: Path) -> None:
     project = scaffolded_project
     (project / ".cortex" / "config.toml").write_text(
         "[refresh-index]\n"
@@ -134,11 +135,106 @@ def test_sync_reports_unknown_config_keys(scaffolded_project: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["sync", "--path", str(project), "--no-doctor"],
+        ["update", "--path", str(project), "--no-doctor"],
         env={"CORTEX_DETERMINISTIC": "1"},
     )
     assert result.exit_code == 0, result.output
     assert "1 unknown key" in result.output
+
+
+def test_sync_alias_warns_and_runs_update(scaffolded_project: Path) -> None:
+    project = scaffolded_project
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["sync", "--path", str(project), "--dry-run"],
+        env={"CORTEX_DETERMINISTIC": "1"},
+    )
+    assert result.exit_code == 0, result.output
+    assert "`cortex sync` is deprecated; use `cortex update`" in result.output
+    assert "would update" in result.output
+
+
+def test_update_check_passes_when_generated_layers_are_current(scaffolded_project: Path) -> None:
+    project = scaffolded_project
+    runner = CliRunner()
+    update = runner.invoke(
+        cli,
+        ["update", "--path", str(project), "--no-doctor"],
+        env={"CORTEX_DETERMINISTIC": "1"},
+    )
+    assert update.exit_code == 0, update.output
+    state_before = (project / ".cortex" / "state.md").read_text()
+
+    check = runner.invoke(
+        cli,
+        ["update", "--path", str(project), "--check", "--no-doctor"],
+        env={"CORTEX_DETERMINISTIC": "1"},
+    )
+    assert check.exit_code == 0, check.output
+    assert "Update check passed" in check.output
+    assert (project / ".cortex" / "state.md").read_text() == state_before
+
+
+def test_update_check_reports_stale_state_without_writing(scaffolded_project: Path) -> None:
+    project = scaffolded_project
+    runner = CliRunner()
+    update = runner.invoke(
+        cli,
+        ["update", "--path", str(project), "--no-doctor"],
+        env={"CORTEX_DETERMINISTIC": "1"},
+    )
+    assert update.exit_code == 0, update.output
+    state_before = (project / ".cortex" / "state.md").read_text()
+    template = project / ".cortex" / "templates" / "journal" / "decision.md"
+    template.write_text(template.read_text() + "\n<!-- stale check regression -->\n")
+
+    check = runner.invoke(
+        cli,
+        ["update", "--path", str(project), "--check", "--no-doctor"],
+        env={"CORTEX_DETERMINISTIC": "1"},
+    )
+    assert check.exit_code == 1, check.output
+    assert ".cortex/state.md is stale" in check.output
+    assert (project / ".cortex" / "state.md").read_text() == state_before
+
+
+def test_update_check_reports_generator_drift_and_update_rewrites_it(
+    scaffolded_project: Path,
+) -> None:
+    project = scaffolded_project
+    runner = CliRunner()
+    update = runner.invoke(
+        cli,
+        ["update", "--path", str(project), "--no-doctor"],
+        env={"CORTEX_DETERMINISTIC": "1"},
+    )
+    assert update.exit_code == 0, update.output
+
+    state_path = project / ".cortex" / "state.md"
+    current_generator = f"Generator: cortex refresh-state v{cortex.__version__}"
+    drifted_text = state_path.read_text().replace(
+        current_generator,
+        "Generator: cortex refresh-state v0.8.0",
+    )
+    state_path.write_text(drifted_text)
+
+    check = runner.invoke(
+        cli,
+        ["update", "--path", str(project), "--check", "--no-doctor"],
+        env={"CORTEX_DETERMINISTIC": "1"},
+    )
+    assert check.exit_code == 1, check.output
+    assert ".cortex/state.md Generator was v0.8.0" in check.output
+    assert state_path.read_text() == drifted_text
+
+    fixed = runner.invoke(
+        cli,
+        ["update", "--path", str(project), "--no-doctor"],
+        env={"CORTEX_DETERMINISTIC": "1"},
+    )
+    assert fixed.exit_code == 0, fixed.output
+    assert current_generator in state_path.read_text()
 
 
 # ---------------------------------------------------------------------------
@@ -541,8 +637,8 @@ def test_auto_sync_skips_with_config(
     assert _read_marker(project) == "1.0.0"
 
 
-@pytest.mark.parametrize("subcommand", ["init", "sync", "migrate-state"])
-def test_auto_sync_skips_during_init_and_sync_and_migrate_state(
+@pytest.mark.parametrize("subcommand", ["init", "update", "sync", "migrate-state"])
+def test_auto_sync_skips_during_init_update_sync_and_migrate_state(
     tmp_path: Path,
     scaffolded_project: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -566,6 +662,7 @@ def test_auto_sync_skips_during_init_and_sync_and_migrate_state(
             "--no-imports-agents",
             "--no-gitignore",
         ],
+        "update": ["update", "--path", str(project), "--dry-run"],
         "sync": ["sync", "--path", str(project), "--dry-run"],
         "migrate-state": ["migrate-state", "--path", str(project), "--dry-run"],
     }
