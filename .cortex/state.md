@@ -1,15 +1,15 @@
 ---
-Generated: 2026-05-09T21:52:54-04:00
-Generator: cortex refresh-state v1.6.1
+Generated: 2026-05-09T22:06:34-04:00
+Generator: cortex refresh-state v1.6.2
 Sources:
-  - HEAD sha: eb493c48cd4163cb9532c9d59bd6dcef4d1ed638
+  - HEAD sha: c04e4296e04a9bdde456fa4c9fd12aa72295a0bd
   - .cortex/plans/*.md (11 files)
-  - .cortex/journal/*.md (100 entries, 2026-04-17..2026-05-09)
+  - .cortex/journal/*.md (101 entries, 2026-04-17..2026-05-09)
   - .cortex/doctrine/*.md (9 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
   - SPEC version: 0.5.0
-  - pyproject.toml: 1.6.1 + cortex package version: 1.6.1
+  - pyproject.toml: 1.6.2 + cortex package version: 1.6.2
 Sources-hash:
   .cortex/doctrine/0001-why-cortex-exists.md: e20d6d52fac419bf22ad43ddf01762f03504f348ef0b2cc30d3983b4c8bec063
   .cortex/doctrine/0002-compose-by-file-contract-not-code.md: 2063446ef8eaf51db05712759124cb21ce26557179607fe59c4ff126f0e4edf3
@@ -118,6 +118,7 @@ Sources-hash:
   .cortex/journal/2026-05-09-pr-merged-2108.md: 5a57004cdd5dd4649501b18e8dc13a9c04a9cecf807682e642dd5d2a6bed5d85
   .cortex/journal/2026-05-09-pr-merged-2146.md: 1448a64e305e25b47267e4bb402530b1d663ec0015539af8ab18434bfe9f4088
   .cortex/journal/2026-05-09-release-1.6.1.md: 0e5d56ae4d03b90f4682c21f2875cc249d3f29bff975e566a21a412912d71ed2
+  .cortex/journal/2026-05-09-release-1.6.2.md: 66061fd252d4258bf85904884cbc930356ceab0e7eb711a1381a5ea825421b3f
   .cortex/journal/2026-05-09-token-budget-instrumentation.md: ff5a39e0531a879de42abfa4a43057d2b7ec9c5ab62021767eef7e3473c39d6b
   .cortex/journal/2026-05-09-v160-released.md: 5b125734816de04a727a1b79481d9aab45ce81d6b4dc1f2cb96b56083be0c64a
   .cortex/plans/context-integrity-production.md: 77cbe783fa81d261aac04ebaebdd16250b7ae0a816fb1c01b1d3f5a49b5664d2
@@ -144,7 +145,7 @@ Sources-hash:
   .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476
   .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44
   docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c
-Corpus: 100 Journal entries, 11 Plans, 9 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 101 Journal entries, 11 Plans, 9 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -242,6 +243,7 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 - **2026-05-09** — PR #255 merged — docs: define cortex context integrity roadmap (`.cortex/journal/2026-05-09-pr-merged-2108.md`, Type: pr-merged)
 - **2026-05-09** — PR #257 merged — feat(manifest): expose token budget guardrails (`.cortex/journal/2026-05-09-pr-merged-2146.md`, Type: pr-merged)
 - **2026-05-09** — Cortex v1.6.1 released — retrieval cost controls + clean-main hook hardening (`.cortex/journal/2026-05-09-release-1.6.1.md`, Type: release)
+- **2026-05-09** — Cortex v1.6.2 released — context integrity roadmap + token budget guardrails (`.cortex/journal/2026-05-09-release-1.6.2.md`, Type: release)
 - **2026-05-09** — Cortex v1.6.0 released — update command primary verb (`.cortex/journal/2026-05-09-v160-released.md`, Type: release)
 
 ## Stale-now / handle-later
