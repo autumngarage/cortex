@@ -1,5 +1,5 @@
 ---
-Generated: 2026-04-24T16:55:00-04:00
+Generated: 2026-05-09T20:59:12-04:00
 Generator: hand-authored (`cortex refresh-map` LLM regeneration was in original Phase E but is **deferred from the v1.0 path** to v1.x per the 2026-04-24 production-release rerank — solo author already knows the map; real value lands when a contributor lands on the dogfood target's repo or a fresh agent on a clone gets visibly confused by this stub. See plans/cortex-v1 ## Follow-ups (deferred).)
 Sources:
   - .cortex/plans/cortex-v1.md `## Follow-ups (deferred)` #1 (the deferral target)

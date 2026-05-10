@@ -1,11 +1,11 @@
 ---
-Generated: 2026-05-09T20:29:32-04:00
+Generated: 2026-05-09T21:01:57-04:00
 Generator: cortex refresh-state v1.6.1
 Sources:
-  - HEAD sha: 5a84d68eb52cf6d30166e951c2a131b634800a25
-  - .cortex/plans/*.md (10 files)
-  - .cortex/journal/*.md (96 entries, 2026-04-17..2026-05-09)
-  - .cortex/doctrine/*.md (8 entries)
+  - HEAD sha: 9cb16a4c7ce59f5d4ddcc627ef0cf59dc28f5d67
+  - .cortex/plans/*.md (11 files)
+  - .cortex/journal/*.md (97 entries, 2026-04-17..2026-05-09)
+  - .cortex/doctrine/*.md (9 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
   - SPEC version: 0.5.0
@@ -18,6 +18,7 @@ Sources-hash:
   .cortex/doctrine/0005-scope-boundaries-v2.md: 804bcd31702a00887b603efae46867ed66acb7fe61b30d80df038f6b24a73684
   .cortex/doctrine/0006-scope-boundaries-v3.md: 773ff81c5c8a3a1736ad1b640f026b14ace0f6d8198f165534a034906b4e88df
   .cortex/doctrine/0007-canonical-ownership-of-state-and-plans.md: eeb749c99679b6beccb9ddadf56eb5a7f7aabf387df9c80b407811411a826099
+  .cortex/doctrine/0008-context-integrity-build-system.md: 094dd806fa57a5198cebb06ba5e5138c529b75e637f2400e5d89a33e04b7caa2
   .cortex/doctrine/candidate-pr-merged-staging.md: df448622732f240ce23279fdab304382da1ab8701a8445fd95b3c06cceecb5f7
   .cortex/journal/2026-04-17-competitive-positioning-and-claude-code-risk.md: 9f5416382cf595d0718df52135c80f64b442d0f37783a498a06abb56531e5796
   .cortex/journal/2026-04-17-cortex-init-shipped.md: 1cdd2f44a174be0bb5dabc5ce50ca06223be90250d8ce26d9ac33f05b7162b82
@@ -113,8 +114,10 @@ Sources-hash:
   .cortex/journal/2026-05-08-alchemist-228.md: 83a0612690900fd601f84e1716fe031127cdbda7994875783a67913229d23fe4
   .cortex/journal/2026-05-08-last-cli-version-marker-moved-to-gitdir.md: 735b7304928b684266ea33eb3f4cf74e8dd1a48c6053b29a86cb2aea0a5c8ed5
   .cortex/journal/2026-05-08-pr-merged-hook-spec-version-skip-and-comment-truth.md: 6ab38fe4d04567bca96d3b83010c500dbb817133a9ffd528136736e3f30a49cb
+  .cortex/journal/2026-05-09-context-build-system-vision.md: 7cd285b49d0e843a6527d36717f156d4e72bf134d0e9b780deec8455063ec452
   .cortex/journal/2026-05-09-release-1.6.1.md: 0e5d56ae4d03b90f4682c21f2875cc249d3f29bff975e566a21a412912d71ed2
   .cortex/journal/2026-05-09-v160-released.md: 5b125734816de04a727a1b79481d9aab45ce81d6b4dc1f2cb96b56083be0c64a
+  .cortex/plans/context-integrity-production.md: 3a89dec132bab2271573ac92514a259bfc3dc2e90c0b6c784413b6a7c11154ec
   .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
   .cortex/plans/cortex-v0.3.0.md: d78e60537e30ed81d8464575191674253822ed4953a055ca2a14a9626c5f8b6f
   .cortex/plans/cortex-v1.md: 3a8aed197e9e994d02cf1e143c5abe1e5bb821c5a0c39145b3040c69a1eb5b65
@@ -138,7 +141,7 @@ Sources-hash:
   .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476
   .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44
   docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c
-Corpus: 96 Journal entries, 10 Plans, 8 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 97 Journal entries, 11 Plans, 9 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -154,8 +157,9 @@ Spec: 0.5.0
 <!-- cortex:hand -->
 ## Current work
 
-**One launch roadmap:**
+**Active roadmaps:**
 - [`plans/cortex-v1.md`](./plans/cortex-v1.md) (Ship Cortex v1.0) — the master sequence: **shipped readiness tiers → retrieval interface → v0.9.0 three-target dogfood gate → v1.0 ceremony + compatibility**. The next concrete action lives in that plan's `## Pickup pointer` section.
+- [`plans/context-integrity-production.md`](./plans/context-integrity-production.md) (Build production context integrity) — the productization plan for Cortex as a context build system: budget instrumentation (#244), facts-file handoff (#243), source-PR journal staging (#207), production doctor profile, usage telemetry (#235), and evidence-gated semantic top-up (#234).
 - [`plans/cortex-retrieve.md`](./plans/cortex-retrieve.md) — Cortex-side retrieval sub-plan is shipped and retained for design history. Downstream Sentinel consumption is tracked in autumngarage/sentinel#111, not as a Cortex blocker.
 
 This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) are the **canonical** answers to "where are we" and "what's next" per [Doctrine 0007](./doctrine/0007-canonical-ownership-of-state-and-plans.md). Repo-root duplicates (ROADMAP.md, STATUS.md, PLAN.md, NEXT.md) are anti-pattern — README links here instead.
@@ -166,6 +170,7 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 - **Release integrity is shipped at v0.8.2.** cortex#107 is closed: the corrective `v0.8.2` tag contains matching package metadata, release.yml verifies tag metadata before Homebrew tap bump. <!-- cortex:no-stale-check -->
 - **v0.9.0 dogfood gate is closed.** Cortex installed on conductor (autumngarage/conductor#178), touchstone (autumngarage/touchstone#151), and vesper (henrymodisett/vesper#167). 9 dogfood-surfaced bugs filed and closed in 4 swarm PRs (cortex#145–#148). Fresh-clone acceptance + bare-repo degradation CI fixtures permanent (PRs #150, #151). Retrieval validated per target (PR #149). Behavioral exit-bar review declared the gate exit (PR #152). v0.9.0 released 2026-05-06; `/opt/homebrew/bin/cortex` reports `0.9.0`. <!-- cortex:no-stale-check -->
 - **v1.0.0 — production release** is the active next stage. Three ceremony items already shipped (config.toml schema reference, SPEC-to-test traceability matrix, doctrine review — all 7 hold, no supersedes). Remaining swarmable work: SPEC freeze, README/PITCH/CASE-STUDIES refresh, PRIOR_ART codesight+Karpathy add, CLI help-text polish. User-involved items: pre-1.0 compatibility audit against v0.3/v0.5 fixture repos, brew-install smoke test on a clean machine.
+- **Context integrity production plan is active.** Doctrine 0008 makes the product boundary explicit: Cortex is Context CI for agents, not a generic memory bank. The active plan turns that into measurable production behavior through budget reports, narrow Conductor/facts-file handoffs, source-PR journal staging, production doctor diagnostics, and telemetry-backed retrieval decisions.
 
 **Deferred from v1.0** (full list with revisit conditions in [`plans/cortex-v1.md`](./plans/cortex-v1.md) `## Follow-ups (deferred)`): LLM polish features (`refresh-map`, `refresh-state --enhance`, `cortex next --enhance`); triad-mode infrastructure; Sentinel end-of-cycle hook; Touchstone pre-push `--strict`; interactive per-candidate prompts; doctor audits for runtime triggers (T1.2/T1.6/T1.7); single-authority drift + full claim-trace doctor checks; MCP transport surface; standalone `cortex import-knowledge` command; doctrine-conflict resolution in `cortex promote`; manifest detection edge-case test fixtures; retention/cleanup destructive automation. **Note:** retrieval was previously in this list — promoted to v0.7.0 on 2026-05-02 because grep alone doesn't scale past ~100 entries on real-project corpora.
 
@@ -176,6 +181,7 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 
 ## Active plans
 
+- `context-integrity-production` — Build production context integrity; Goal-hash `5372e371`; 0% complete (0/10 checkboxes)
 - `cortex-v1` — Ship Cortex v1.0; Goal-hash `9e961737`; 96% complete (44/46 checkboxes)
 
 ## Shipped recently

@@ -6,17 +6,17 @@
  \____\___/|_|   \__\___/_/\_\
 ```
 
-> *Project memory for AI-assisted work.*
+> *Context integrity for AI-assisted work.*
 >
-> by **[Autumn Garage](https://github.com/autumngarage/autumn-garage)** · alongside [Touchstone](https://github.com/autumngarage/touchstone) · [Sentinel](https://github.com/autumngarage/sentinel) · [Conductor](https://github.com/autumngarage/conductor) · [Alchemist](https://github.com/autumngarage/alchemist) — Cortex is a protocol for agent project memory that treats your exact git repo as the memory store.
+> by **[Autumn Garage](https://github.com/autumngarage/autumn-garage)** · alongside [Touchstone](https://github.com/autumngarage/touchstone) · [Sentinel](https://github.com/autumngarage/sentinel) · [Conductor](https://github.com/autumngarage/conductor) · [Alchemist](https://github.com/autumngarage/alchemist) — Cortex is a git-native context build system for AI agents.
 
 # Cortex
 
-> **Cortex is a protocol for agent project memory that treats your exact git repo as the memory store.** Instead of introducing a new database, daemon, or vector index, it defines a directory of structured Markdown files (`.cortex/`) that agents evolve alongside code. It is grepable, diffable, and auditable with existing tools, adding the missing agent memory convention without replacing your workspace.
+> **Cortex is a git-native context build system for AI agents.** It treats project memory as source code: primary facts live in structured Markdown under `.cortex/`, generated context surfaces declare their inputs, and `cortex doctor` verifies the invariants before stale or uncited context quietly steers an agent. Instead of introducing a new database, daemon, or mandatory vector index, Cortex keeps the memory store grepable, diffable, and auditable with existing tools.
 
-**Status:** v0.9.0 released 2026-05-06 — production-ready. Latest release notes: [GitHub Releases](https://github.com/autumngarage/cortex/releases). [`SPEC.md`](./SPEC.md) v1.1.0; [`.cortex/protocol.md`](./.cortex/protocol.md) v0.3.1.
+**Status:** v1.6.1 released 2026-05-09. Latest release notes: [GitHub Releases](https://github.com/autumngarage/cortex/releases). [`SPEC.md`](./SPEC.md) v1.1.0; [`.cortex/protocol.md`](./.cortex/protocol.md) v0.3.1.
 
-**For "where are we now" and "what's next" — read [`.cortex/state.md`](./.cortex/state.md) (current state) and [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) (the one master launch plan).** Those are the canonical sources, kept current by Cortex itself; this README does not restate them. Eating our own dog food: a single canonical owner per fact is [Doctrine 0007](./.cortex/doctrine/0007-canonical-ownership-of-state-and-plans.md), and `cortex doctor` warns when repo-root files duplicate `.cortex/` content.
+**For "where are we now" and "what's next" — read [`.cortex/state.md`](./.cortex/state.md) (current state), [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) (launch sequence), and [`.cortex/plans/context-integrity-production.md`](./.cortex/plans/context-integrity-production.md) (context-integrity roadmap).** Those are the canonical sources, kept current by Cortex itself; this README does not restate them. Eating our own dog food: a single canonical owner per fact is [Doctrine 0007](./.cortex/doctrine/0007-canonical-ownership-of-state-and-plans.md), and `cortex doctor` warns when repo-root files duplicate `.cortex/` content.
 
 **New here?** Start with [`docs/PITCH.md`](./docs/PITCH.md) — plain-language one-liner, vision, and day-in-the-life walkthrough.
 
@@ -46,6 +46,42 @@ Cortex defines a `.cortex/` directory per project with six layers, and a **Proto
 | **Procedures** | How do we do X safely? | Versioned how-tos and interface contracts. |
 
 Every layer has a single authoring mode (Diataxis discipline), a single write trigger, and a single retrieval contract. See [SPEC.md](./SPEC.md) for the full contract per layer.
+
+### Context build system
+
+The product line is now explicit: Cortex is not just a folder of notes. It is the build, budget, and verification layer for agent context.
+
+**Reusable thesis:** Cortex compiles human-authored project memory in Markdown + git into bounded, auditable context for agents.
+
+**Context integrity** means five narrow things: freshness, provenance, budget-fit, policy compliance, and reviewability. It does not mean Cortex proves every fact true or guarantees the agent's final output is correct.
+
+| Class | Examples | Cortex contract | Consumers |
+|---|---|---|---|
+| Source artifacts | Doctrine, Plans, Journal, Procedures, git history | Human-authoritative or append-only inputs; LLMs may propose edits but do not bypass gates. | Agents, humans, sibling tools. |
+| Derived artifacts | State, Map, manifests, retrieve indexes, reports | Generated from source inputs; declare source files, source hashes, omissions, and incomplete inputs. | Session-start manifests, review gates, Conductor/Sentinel/Touchstone/Alchemist integrations. |
+| Integrity checks | `cortex doctor`, audit checks, budget checks | Fail visibly on stale, malformed, uncited, over-budget, or policy-violating context. | CI, pre-merge review, local agent startup. |
+
+- **Sources:** Doctrine, Plans, Journal, Procedures, git history, and optional sibling-tool outputs are the inputs.
+- **Build artifacts:** State, Map, manifest slices, retrieve indexes, and future production reports are generated from those inputs.
+- **Invalidation:** generated files carry `Generated`, `Sources`, `Sources-hash`, `Incomplete`, and `Conflicts-preserved` metadata so stale context is visible.
+- **Budgeting:** session-start context is compiled through `cortex manifest --budget <N>`; deeper lookup goes through `cortex grep` and `cortex retrieve` instead of dumping the corpus into the model.
+- **Verification:** `cortex doctor` is the context CI gate. The next production plan extends it into explicit budget, handoff, and source-PR checks so context correctness can be enforced the same way test correctness is enforced.
+
+The durable product decision is [Doctrine 0008](./.cortex/doctrine/0008-context-integrity-build-system.md). The staged build plan is [`.cortex/plans/context-integrity-production.md`](./.cortex/plans/context-integrity-production.md).
+
+Use Cortex when a project needs durable agent context that survives sessions, tools, and teammates; when generated context must be reviewable in PRs; or when CI should fail before an agent works from stale or over-budget context. Do not use Cortex as a general agent framework, cloud memory service, vector database replacement, personal knowledge-management app, or proof that an agent's output is correct.
+
+Golden path on a normal repo:
+
+```bash
+cortex init
+git add .cortex/
+git commit -m "chore: initialize cortex memory"
+cortex manifest --budget 8000
+cortex doctor
+```
+
+After that, agents read the bounded manifest at session start, write Journal entries as work produces durable lessons, and CI/review can reject stale generated context before it steers a follow-up session.
 
 ### The Protocol
 
@@ -211,14 +247,16 @@ Each tool writes to its own files and reads the others only as best-effort. Noth
 - **[`docs/CASE-STUDIES.md`](./docs/CASE-STUDIES.md)** — Documented case studies: the conductor incident and the three-target v0.9.0 dogfood gate.
 - **[`docs/install-pr-templates.md`](./docs/install-pr-templates.md)** — Reusable copy and checklist for Cortex install PRs on sibling projects.
 - **[`docs/PRIOR_ART.md`](./docs/PRIOR_ART.md)** — Research and influences.
+- **[Doctrine 0008](./.cortex/doctrine/0008-context-integrity-build-system.md)** — The durable decision that Cortex owns context integrity, not generic memory-bank, RAG, or agent-framework scope.
+- **[Context integrity production plan](./.cortex/plans/context-integrity-production.md)** — The staged roadmap for turning that positioning into production behavior.
 
 ---
 
 ## Status and plan
 
-**Production-ready (v0.9.0, released 2026-05-06).** Three reference installs in the wild: `conductor`, `touchstone`, and `vesper` install Cortex via the Homebrew tap. Nine dogfood-surfaced bugs filed and closed in v0.9.0; CI fixtures are now permanent for fresh-clone acceptance and bare-repo degradation. See [`docs/CASE-STUDIES.md`](./docs/CASE-STUDIES.md) for the gate evidence.
+**Production-ready and installed via Homebrew.** Three reference installs in the wild: `conductor`, `touchstone`, and `vesper` install Cortex via the Homebrew tap. The v0.9.0 dogfood gate surfaced nine real bugs and turned fresh-clone acceptance plus bare-repo degradation into permanent CI fixtures. Current releases continue to tighten context integrity around that baseline; see [`docs/CASE-STUDIES.md`](./docs/CASE-STUDIES.md) for the gate evidence.
 
-For "where are we now" and "what's next": [`.cortex/state.md`](./.cortex/state.md) is the canonical current state; [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) is the master launch sequence. README deliberately keeps only this pointer per [Doctrine 0007](./.cortex/doctrine/0007-canonical-ownership-of-state-and-plans.md) — repo-root files that restate `.cortex/` content are anti-pattern.
+For "where are we now" and "what's next": [`.cortex/state.md`](./.cortex/state.md) is the canonical current state; [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) is the master launch sequence, and [`.cortex/plans/context-integrity-production.md`](./.cortex/plans/context-integrity-production.md) owns the new context-integrity roadmap. README deliberately keeps only this pointer per [Doctrine 0007](./.cortex/doctrine/0007-canonical-ownership-of-state-and-plans.md) — repo-root files that restate `.cortex/` content are anti-pattern.
 
 LLM-additive features (`cortex refresh-map`, `cortex refresh-state --enhance`, `cortex next --enhance`) and triad-mode infrastructure (`.cortex/pending/` + `cortex doctrine draft` + T1.7 Touchstone pre-merge hook) are deliberately **deferred from the v1.0 path** to v1.x. See [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) `## Follow-ups (deferred)` for the full deferral list with revisit conditions per item.
 
