@@ -31,6 +31,18 @@ Recommended flow:
    explicitly intend to pay the semantic-index cost.
 5. Open only the cited file or line range that the compact result justifies.
 
+Semantic backfill is opt-in. A lookup such as `cortex retrieve "query" --mode
+hybrid` falls back to BM25 when embeddings are missing and tells you how to
+build them. To pay the cost deliberately, run one of:
+
+```bash
+cortex refresh-index --retrieve --semantic
+cortex retrieve "query" --mode hybrid --build-embeddings
+```
+
+When embedding backfill runs, Cortex reports the indexed chunk count, embedded
+chunk count, model name, index path, and model-cache path.
+
 ## Budgets
 
 `--for-agent` defaults to 600 excerpt characters per result. Tune it for the

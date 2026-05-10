@@ -66,6 +66,15 @@ _HYBRID_DEFAULT_NOTICE_KEY = "hybrid-default-flip"
     help="Maximum excerpt characters per result in --for-agent output.",
 )
 @click.option(
+    "--build-embeddings",
+    is_flag=True,
+    default=False,
+    help=(
+        "Explicitly build/backfill semantic embeddings before semantic or "
+        "hybrid retrieval. Without this, missing embeddings fall back to BM25."
+    ),
+)
+@click.option(
     "--no-rebuild",
     is_flag=True,
     default=False,
@@ -87,6 +96,7 @@ def retrieve_command(
     as_json: bool,
     for_agent: bool,
     excerpt_chars: int,
+    build_embeddings: bool,
     no_rebuild: bool,
     target_path: Path,
 ) -> None:
@@ -107,17 +117,26 @@ def retrieve_command(
         sys.exit(2)
 
     warn_if_incompatible(cortex_dir)
+    if build_embeddings and no_rebuild:
+        raise click.UsageError("--build-embeddings cannot be combined with --no-rebuild.")
+    if build_embeddings and mode == "bm25":
+        raise click.UsageError(
+            "--build-embeddings applies to semantic/hybrid retrieval; "
+            "use `cortex refresh-index --retrieve --semantic` to build without querying."
+        )
 
     try:
         from cortex.retrieve.index import (
             FTS5UnavailableError,
             backfill_embeddings,
+            count_embedding_index_gaps,
             ensure_fts5_available,
             get_indexed_chunk_count,
             has_populated_embeddings,
             is_stale,
             rebuild_index,
             retrieve_index_exists,
+            retrieve_index_path,
         )
         from cortex.retrieve.query import (
             hit_to_agent_json,
@@ -163,8 +182,12 @@ def retrieve_command(
             project_root,
             requested=mode,
             no_rebuild=no_rebuild,
+            build_embeddings=build_embeddings,
             has_embeddings_now=has_populated_embeddings(project_root),
             backfill_embeddings_fn=backfill_embeddings,
+            embedding_gap_count_fn=count_embedding_index_gaps,
+            indexed_chunks=total_chunks,
+            index_path=retrieve_index_path(project_root),
         )
 
         # Step 3: run the chosen retrieval path.
@@ -260,29 +283,32 @@ def _resolve_mode(  # type: ignore[no-untyped-def]
     *,
     requested: str | None,
     no_rebuild: bool,
+    build_embeddings: bool,
     has_embeddings_now: bool,
     backfill_embeddings_fn,
+    embedding_gap_count_fn,
+    indexed_chunks: int,
+    index_path: Path,
 ):
     """Pick the effective mode + an embedder when needed.
 
     Returns ``(effective_mode, embed_callable_or_None)``.
 
-    Default-mode flip rule (per brief):
-        * If no embeddings table is populated (and ``--no-rebuild``), default
-          stays at ``bm25``. Explicit ``--mode semantic|hybrid`` triggers a
-          fallback notice + bm25.
-        * If no embeddings table is populated and ``--no-rebuild`` is FALSE,
-          we attempt the embedder probe + backfill. Success → flips default
-          to ``hybrid`` and emits the one-time notice. Failure → bm25 with
-          a clear stderr line.
-        * If embeddings table is populated, default is ``hybrid``. Explicit
-          ``--mode bm25`` always honored.
+    Cost rule:
+        * Existing embeddings allow semantic/hybrid lookup.
+        * Missing embeddings never trigger model load/backfill unless
+          ``build_embeddings`` is true.
+        * BM25 remains the default low-cost lookup path.
     """
 
-    from cortex.retrieve.embeddings import EmbeddingUnavailableError, probe_embedder
+    from cortex.retrieve.embeddings import (
+        EMBED_MODEL_NAME,
+        EmbeddingUnavailableError,
+        probe_embedder,
+    )
 
     explicit = requested is not None
-    desired = requested or ("hybrid" if has_embeddings_now else "bm25")
+    desired = requested or ("hybrid" if has_embeddings_now or build_embeddings else "bm25")
 
     # If user explicitly chose bm25, no embedder work to do.
     if desired == "bm25":
@@ -305,16 +331,48 @@ def _resolve_mode(  # type: ignore[no-untyped-def]
             )
         return "bm25", None
 
+    if not has_embeddings_now and not build_embeddings:
+        if explicit:
+            click.echo(
+                "warning: semantic/hybrid retrieval requires built embeddings; "
+                "falling back to --mode bm25. Run `cortex refresh-index "
+                "--retrieve --semantic` or retry with `--build-embeddings` "
+                "to opt into semantic backfill.",
+                err=True,
+            )
+        return "bm25", None
+
     # Probe before doing anything heavy. probe_embedder caches in-process.
     probe = probe_embedder(project_root)
     if not probe.available:
         _stderr_fallback_notice(probe.error, explicit=explicit)
         return "bm25", None
 
-    # Backfill if the embeddings table isn't populated yet.
-    if not has_embeddings_now:
+    if has_embeddings_now and not build_embeddings:
+        gap_count = embedding_gap_count_fn(project_root)
+        if gap_count is None:
+            click.echo(
+                "warning: could not verify semantic embeddings completeness; "
+                "falling back to --mode bm25. Run `cortex refresh-index "
+                "--retrieve --semantic` to rebuild semantic embeddings.",
+                err=True,
+            )
+            return "bm25", None
+        if gap_count > 0:
+            click.echo(
+                f"warning: semantic embeddings have {gap_count} index gap(s) "
+                "(missing chunk embeddings or orphan vector rows); falling back "
+                "to --mode bm25. Run `cortex refresh-index --retrieve "
+                "--semantic` or retry with `--build-embeddings` to backfill.",
+                err=True,
+            )
+            return "bm25", None
+
+    # Backfill only when the caller explicitly opted in. This also fills
+    # chunks added after a prior semantic build.
+    if build_embeddings:
         try:
-            backfill_embeddings_fn(project_root)
+            result = backfill_embeddings_fn(project_root)
         except (
             EmbeddingUnavailableError,
             RuntimeError,
@@ -325,12 +383,36 @@ def _resolve_mode(  # type: ignore[no-untyped-def]
                 err=True,
             )
             return "bm25", None
-        # Default-mode flip notice — only when the user didn't ask explicitly
-        # and we just backfilled (i.e. behaviour is changing under them).
+        _emit_embedding_meter(
+            indexed_chunks=indexed_chunks,
+            embedded_chunks=getattr(result, "embedded_chunks", 0),
+            model_name=EMBED_MODEL_NAME,
+            index_path=index_path,
+            cache_dir=probe.cache_dir,
+        )
         if not explicit:
             _maybe_emit_hybrid_default_notice(project_root)
 
     return desired, None
+
+
+def _emit_embedding_meter(
+    *,
+    indexed_chunks: int,
+    embedded_chunks: int,
+    model_name: str,
+    index_path: Path,
+    cache_dir: Path | None,
+) -> None:
+    """Surface semantic-index work without contaminating JSON stdout."""
+
+    cache = str(cache_dir) if cache_dir is not None else "unavailable"
+    click.echo(
+        "cortex retrieve: semantic embeddings ready "
+        f"(indexed_chunks={indexed_chunks}, embedded_chunks={embedded_chunks}, "
+        f"model={model_name}, index={index_path}, cache={cache})",
+        err=True,
+    )
 
 
 def _stderr_fallback_notice(err, *, explicit: bool) -> None:  # type: ignore[no-untyped-def]

@@ -87,6 +87,96 @@ def test_incremental_rebuild_replaces_only_edited_file_chunks(tmp_path: Path) ->
     assert after[("doctrine/0001.md", 0)] != before[("doctrine/0001.md", 0)]
 
 
+def test_changed_chunk_gets_fresh_rowid_so_stale_embedding_is_orphaned(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = _project(tmp_path)
+    edited = _write(project, "doctrine/0001.md", "## One\nalpha old\n")
+    rebuild_index(project)
+    index = retrieve_index_path(project)
+    conn = sqlite3.connect(index)
+    try:
+        old_id = int(conn.execute("SELECT id FROM chunks WHERE path = ?", ("doctrine/0001.md",)).fetchone()[0])
+        conn.execute("CREATE TABLE embeddings(rowid INTEGER PRIMARY KEY, embedding BLOB)")
+        conn.execute("INSERT INTO embeddings(rowid, embedding) VALUES (?, ?)", (old_id, b"old-vector"))
+        conn.commit()
+    finally:
+        conn.close()
+
+    time.sleep(0.01)
+    edited.write_text("## One\nalpha changed\n")
+    rebuild_index(project)
+
+    conn = sqlite3.connect(index)
+    try:
+        new_id = int(conn.execute("SELECT id FROM chunks WHERE path = ?", ("doctrine/0001.md",)).fetchone()[0])
+        joined = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM chunks
+            JOIN embeddings ON embeddings.rowid = chunks.id
+            WHERE chunks.path = ?
+            """,
+            ("doctrine/0001.md",),
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+    assert new_id > old_id
+    assert joined == 0
+
+    import cortex.retrieve.index as index_mod
+
+    monkeypatch.setattr(index_mod, "open_index_with_vec", sqlite3.connect)
+    assert index_mod.count_embedding_index_gaps(project) == 2
+
+
+def test_backfill_deletes_orphan_embedding_rows(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = _project(tmp_path)
+    edited = _write(project, "doctrine/0001.md", "## One\nalpha old\n")
+    rebuild_index(project)
+    index = retrieve_index_path(project)
+    conn = sqlite3.connect(index)
+    try:
+        old_id = int(conn.execute("SELECT id FROM chunks WHERE path = ?", ("doctrine/0001.md",)).fetchone()[0])
+        conn.execute("CREATE TABLE embeddings(rowid INTEGER PRIMARY KEY, embedding BLOB)")
+        conn.execute("INSERT INTO embeddings(rowid, embedding) VALUES (?, ?)", (old_id, b"old-vector"))
+        conn.execute("INSERT INTO meta(key, value) VALUES('embedding_dim', '1')")
+        conn.commit()
+    finally:
+        conn.close()
+
+    time.sleep(0.01)
+    edited.write_text("## One\nalpha changed\n")
+    rebuild_index(project)
+
+    import cortex.retrieve.index as index_mod
+
+    monkeypatch.setattr(index_mod, "open_index_with_vec", sqlite3.connect)
+    result = index_mod.backfill_embeddings(
+        project,
+        embed_callable=lambda texts: [[1.0] for _text in texts],
+        dimension=1,
+        model_name="test",
+    )
+
+    conn = sqlite3.connect(index)
+    try:
+        old_row = conn.execute("SELECT rowid FROM embeddings WHERE rowid = ?", (old_id,)).fetchone()
+        live_joined = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM chunks JOIN embeddings ON embeddings.rowid = chunks.id"
+            ).fetchone()[0]
+        )
+    finally:
+        conn.close()
+
+    assert result.embedded_chunks == 1
+    assert old_row is None
+    assert live_joined == 1
+
+
 def test_uncommitted_edit_invalidates_and_query_reflects_new_content(tmp_path: Path) -> None:
     project = _project(tmp_path)
     path = _write(project, "journal/2026-05-01-edit.md", "## Entry\noldterm only\n")
@@ -436,7 +526,7 @@ def test_cortex_grep_unaffected_by_retrieve_index_and_sqlite_import(tmp_path: Pa
     assert "sqlite3" not in sys.modules
 
 
-def test_refresh_index_retrieve_flag_builds_both_indexes(tmp_path: Path) -> None:
+def test_refresh_index_retrieve_flag_builds_bm25_index_only(tmp_path: Path) -> None:
     project = _project(tmp_path)
     _write(project, "journal/2026-05-01-note.md", "## Note\nretrieve flag\n")
 
@@ -449,6 +539,56 @@ def test_refresh_index_retrieve_flag_builds_both_indexes(tmp_path: Path) -> None
     assert with_retrieve.exit_code == 0, with_retrieve.output
     assert (project / ".cortex" / ".index.json").exists()
     assert retrieve_index_path(project).exists()
+    assert "semantic index:" not in with_retrieve.output
+
+
+def test_refresh_index_semantic_requires_retrieve(tmp_path: Path) -> None:
+    project = _project(tmp_path)
+
+    result = CliRunner().invoke(cli, ["refresh-index", "--semantic", "--path", str(project)])
+
+    assert result.exit_code != 0
+    assert "--semantic requires --retrieve" in result.output
+
+
+def test_refresh_index_retrieve_semantic_reports_meter(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = _project(tmp_path)
+    _write(project, "journal/2026-05-01-note.md", "## Note\nsemantic flag\n")
+
+    import cortex.retrieve.embeddings as embeddings_module
+    import cortex.retrieve.index as index_mod
+    from cortex.retrieve.embeddings import EMBED_MODEL_NAME, EmbedderProbe
+
+    cache_dir = tmp_path / "models"
+    monkeypatch.setattr(
+        embeddings_module,
+        "probe_embedder",
+        lambda _project_root=None: EmbedderProbe(True, None, cache_dir),
+    )
+    monkeypatch.setattr(
+        index_mod,
+        "backfill_embeddings",
+        lambda _project_root: index_mod.EmbeddingBackfillResult(
+            embedded_chunks=1,
+            skipped_chunks=0,
+        ),
+    )
+
+    result = CliRunner().invoke(
+        cli,
+        ["refresh-index", "--retrieve", "--semantic", "--path", str(project)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "retrieve index:" in result.output
+    assert "semantic index:" in result.output
+    assert "indexed_chunks=1" in result.output
+    assert "embedded_chunks=1" in result.output
+    assert EMBED_MODEL_NAME in result.output
+    assert str(cache_dir) in result.output
 
 
 def test_cortex_cache_dir_controls_index_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
