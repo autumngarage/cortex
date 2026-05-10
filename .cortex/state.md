@@ -1,10 +1,10 @@
 ---
-Generated: 2026-05-09T21:09:38-04:00
+Generated: 2026-05-09T21:27:35-04:00
 Generator: cortex refresh-state v1.6.1
 Sources:
-  - HEAD sha: 92a8b625779ea36944eaead36327a458dae4422d
+  - HEAD sha: 209db85931f69312d345cb515285b240167098e6
   - .cortex/plans/*.md (11 files)
-  - .cortex/journal/*.md (98 entries, 2026-04-17..2026-05-09)
+  - .cortex/journal/*.md (99 entries, 2026-04-17..2026-05-09)
   - .cortex/doctrine/*.md (9 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
@@ -117,8 +117,9 @@ Sources-hash:
   .cortex/journal/2026-05-09-context-build-system-vision.md: 7cd285b49d0e843a6527d36717f156d4e72bf134d0e9b780deec8455063ec452
   .cortex/journal/2026-05-09-pr-merged-2108.md: 5a57004cdd5dd4649501b18e8dc13a9c04a9cecf807682e642dd5d2a6bed5d85
   .cortex/journal/2026-05-09-release-1.6.1.md: 0e5d56ae4d03b90f4682c21f2875cc249d3f29bff975e566a21a412912d71ed2
+  .cortex/journal/2026-05-09-token-budget-instrumentation.md: ff5a39e0531a879de42abfa4a43057d2b7ec9c5ab62021767eef7e3473c39d6b
   .cortex/journal/2026-05-09-v160-released.md: 5b125734816de04a727a1b79481d9aab45ce81d6b4dc1f2cb96b56083be0c64a
-  .cortex/plans/context-integrity-production.md: 3a89dec132bab2271573ac92514a259bfc3dc2e90c0b6c784413b6a7c11154ec
+  .cortex/plans/context-integrity-production.md: 77cbe783fa81d261aac04ebaebdd16250b7ae0a816fb1c01b1d3f5a49b5664d2
   .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
   .cortex/plans/cortex-v0.3.0.md: d78e60537e30ed81d8464575191674253822ed4953a055ca2a14a9626c5f8b6f
   .cortex/plans/cortex-v1.md: 3a8aed197e9e994d02cf1e143c5abe1e5bb821c5a0c39145b3040c69a1eb5b65
@@ -142,7 +143,7 @@ Sources-hash:
   .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476
   .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44
   docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c
-Corpus: 98 Journal entries, 11 Plans, 9 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 99 Journal entries, 11 Plans, 9 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -182,7 +183,7 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 
 ## Active plans
 
-- `context-integrity-production` — Build production context integrity; Goal-hash `5372e371`; 0% complete (0/10 checkboxes)
+- `context-integrity-production` — Build production context integrity; Goal-hash `5372e371`; 10% complete (1/10 checkboxes)
 - `cortex-v1` — Ship Cortex v1.0; Goal-hash `9e961737`; 96% complete (44/46 checkboxes)
 
 ## Shipped recently

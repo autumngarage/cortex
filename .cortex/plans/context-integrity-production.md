@@ -5,6 +5,7 @@ Author: human
 Goal-hash: 5372e371
 Updated-by:
   - 2026-05-09T20:55 codex (created from context-build-system vision)
+  - 2026-05-09T21:27 codex (shipped #244 token-budget instrumentation slice)
 Cites: doctrine/0008-context-integrity-build-system, journal/2026-05-09-context-build-system-vision, state.md § Current work
 ---
 
@@ -51,7 +52,7 @@ Artifact policy for this plan:
 
 ## Work items
 
-- [ ] #244 — add token-budget instrumentation and guardrails for Cortex agent workflows.
+- [x] #244 — add token-budget instrumentation and guardrails for Cortex agent workflows.
 - [ ] #243 — add a narrow journal-drafting facts-file handoff for cheap model or Conductor summarization.
 - [ ] #207 — stage PR-merged journal entries on source PRs and finalize after merge.
 - [ ] Define context artifact contracts: source vs derived classes, schema/version fields, generated edit policy, and source-to-derived invalidation rules.
