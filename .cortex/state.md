@@ -1,15 +1,15 @@
 ---
-Generated: 2026-05-09T08:07:57-04:00
-Generator: cortex refresh-state v1.6.0
+Generated: 2026-05-09T20:29:32-04:00
+Generator: cortex refresh-state v1.6.1
 Sources:
-  - HEAD sha: 8bb68bd6598b29f46f824a0c1aabecb387843394
+  - HEAD sha: 5a84d68eb52cf6d30166e951c2a131b634800a25
   - .cortex/plans/*.md (10 files)
-  - .cortex/journal/*.md (95 entries, 2026-04-17..2026-05-09)
+  - .cortex/journal/*.md (96 entries, 2026-04-17..2026-05-09)
   - .cortex/doctrine/*.md (8 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
   - SPEC version: 0.5.0
-  - pyproject.toml: 1.6.0 + cortex package version: 1.6.0
+  - pyproject.toml: 1.6.1 + cortex package version: 1.6.1
 Sources-hash:
   .cortex/doctrine/0001-why-cortex-exists.md: e20d6d52fac419bf22ad43ddf01762f03504f348ef0b2cc30d3983b4c8bec063
   .cortex/doctrine/0002-compose-by-file-contract-not-code.md: 2063446ef8eaf51db05712759124cb21ce26557179607fe59c4ff126f0e4edf3
@@ -113,6 +113,7 @@ Sources-hash:
   .cortex/journal/2026-05-08-alchemist-228.md: 83a0612690900fd601f84e1716fe031127cdbda7994875783a67913229d23fe4
   .cortex/journal/2026-05-08-last-cli-version-marker-moved-to-gitdir.md: 735b7304928b684266ea33eb3f4cf74e8dd1a48c6053b29a86cb2aea0a5c8ed5
   .cortex/journal/2026-05-08-pr-merged-hook-spec-version-skip-and-comment-truth.md: 6ab38fe4d04567bca96d3b83010c500dbb817133a9ffd528136736e3f30a49cb
+  .cortex/journal/2026-05-09-release-1.6.1.md: 0e5d56ae4d03b90f4682c21f2875cc249d3f29bff975e566a21a412912d71ed2
   .cortex/journal/2026-05-09-v160-released.md: 5b125734816de04a727a1b79481d9aab45ce81d6b4dc1f2cb96b56083be0c64a
   .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
   .cortex/plans/cortex-v0.3.0.md: d78e60537e30ed81d8464575191674253822ed4953a055ca2a14a9626c5f8b6f
@@ -137,7 +138,7 @@ Sources-hash:
   .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476
   .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44
   docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c
-Corpus: 95 Journal entries, 10 Plans, 8 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 96 Journal entries, 10 Plans, 8 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -229,6 +230,7 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 - **2026-05-07** — PR #215 merged — docs(journal): record v1.3.1 release — hook label-args hotfix + auto-sync gate (`.cortex/journal/2026-05-07-pr-merged-1450.md`, Type: pr-merged)
 - **2026-05-07** — Release v1.3.0 — release/sync/triggers/hook trio (`.cortex/journal/2026-05-07-v1.3.0-released.md`, Type: release)
 - **2026-05-07** — Release v1.3.1 — pr-merged hook label-args hotfix + auto-sync push gating (`.cortex/journal/2026-05-07-v1.3.1-released.md`, Type: release)
+- **2026-05-09** — Cortex v1.6.1 released — retrieval cost controls + clean-main hook hardening (`.cortex/journal/2026-05-09-release-1.6.1.md`, Type: release)
 - **2026-05-09** — Cortex v1.6.0 released — update command primary verb (`.cortex/journal/2026-05-09-v160-released.md`, Type: release)
 
 ## Stale-now / handle-later
