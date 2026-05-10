@@ -113,8 +113,11 @@ cortex init                 # scaffold .cortex/ in a project (idempotent); scans
                             # absorb each one (Y/n) into Doctrine or Plans, citing the source
                             # via `Imported-from:` frontmatter — no flag needed
 cortex manifest --budget N  # token-budgeted session-start slice per Protocol § 1
+cortex manifest --show-budget
+                            # per-section estimates; normal coding startup target is 8k tokens
 cortex grep <pattern>       # frontmatter-aware ripgrep wrapper; see docs/grep.md
 cortex retrieve <query>     # ranked lookup over the derived index; --for-agent emits compact citations
+cortex journal draft <type> # scaffold Journal entries; warns above ~1200 estimated tokens unless --allow-large
 cortex update               # bring this repo's .cortex/ up to date in one step
 cortex update --check       # verify generated layers are current without writing files
 cortex refresh-state        # regenerate .cortex/state.md

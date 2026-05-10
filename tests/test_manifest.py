@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from click.testing import CliRunner
 
 from cortex.cli import cli
 from cortex.commands.init import init_command
-from cortex.manifest import build_manifest
+from cortex.manifest import build_manifest, estimate_tokens
 
 
 @pytest.fixture
@@ -288,6 +289,32 @@ def test_budget_strictly_enforced(scaffolded_project: Path) -> None:
     assert "truncated by budget" in rendered
 
 
+def test_manifest_default_output_shows_budget_usage(scaffolded_project: Path) -> None:
+    exit_code, output = _run_manifest(scaffolded_project, 8000)
+
+    assert exit_code == 0
+    assert "Budget: 8000 tokens" in output
+    assert "Estimated used: ~" in output
+    assert " tokens / ~" in output
+    assert " words (" in output
+    assert "Budget status:" in output
+    assert "Omitted entries:" in output
+
+
+def test_manifest_budget_status_counts_rendered_output(scaffolded_project: Path) -> None:
+    state = scaffolded_project / ".cortex" / "state.md"
+    state.write_text(state.read_text() + "\n" + ("state body " * 2000))
+    rendered = build_manifest(scaffolded_project, 3000).render()
+    match = re.search(r"^Estimated used: ~(\d+) tokens", rendered, re.MULTILINE)
+    assert match is not None
+
+    used_tokens = int(match.group(1))
+
+    assert used_tokens == estimate_tokens(rendered)
+    assert used_tokens > 3000
+    assert "Budget status: over by ~" in rendered
+
+
 def test_json_budget_diagnostics_expose_doctrine_omissions(
     scaffolded_project: Path,
 ) -> None:
@@ -303,8 +330,14 @@ def test_json_budget_diagnostics_expose_doctrine_omissions(
     payload = _run_manifest_json(scaffolded_project, "--budget", "3000")
     doctrine = _section(payload, "Doctrine")
 
+    assert _int_value(payload, "used_tokens") > 0
+    assert _int_value(payload, "used_words") > 0
+    assert _int_value(payload, "omitted_count") >= 1
+    assert isinstance(payload["over_budget"], bool)
+    assert _int_value(payload, "over_budget_tokens") >= 0
     assert _int_value(doctrine, "budget_tokens") > 0
     assert _int_value(doctrine, "used_tokens") <= _int_value(doctrine, "budget_tokens")
+    assert _int_value(doctrine, "used_words") >= 0
     assert _list_value(doctrine, "included_entries") == []
     assert _list_value(doctrine, "truncated_entries") == [".cortex/doctrine/0001-large.md"]
     assert _list_value(doctrine, "omitted_entries") == [".cortex/doctrine/0001-large.md"]

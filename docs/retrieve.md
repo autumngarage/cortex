@@ -24,7 +24,9 @@ The output is JSON. Each result starts with citation fields and compact context:
 
 Recommended flow:
 
-1. Run `cortex manifest --budget N` for session-start hot context.
+1. Run `cortex manifest --budget 8000` for normal session-start hot context.
+   Use `--show-budget` when tuning a workflow and `--json` when a wrapper needs
+   machine-readable token/omission metadata.
 2. Run `cortex grep` for exact strings, frontmatter, audit, and every-hit checks.
 3. Run `cortex retrieve --mode bm25 --for-agent` for ranked lookup.
 4. Use `semantic` or `hybrid` only when embeddings already exist or you
@@ -54,3 +56,9 @@ cortex retrieve "journal staging" --for-agent --excerpt-chars 240 --top-k 5
 
 The top blockquote summary is not part of the excerpt cap. Entries that need to
 be useful in agent lookup should keep that first blockquote concise and factual.
+
+Normal coding startup should fit in the default 8k-token manifest. Agent-to-agent
+delegation should start from `cortex manifest --profile delegation` (4k tokens by
+default). Generated Journal entries should stay under ~1200 estimated tokens
+unless the writer passes `cortex journal draft <type> --allow-large` and
+accepts the review cost explicitly.

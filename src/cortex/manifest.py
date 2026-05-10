@@ -104,6 +104,9 @@ class ManifestSection:
             return 0
         return estimate_tokens(self.body)
 
+    def used_words(self) -> int:
+        return estimate_words(self.body)
+
     def omitted_count(self) -> int:
         return len(self.omitted_entries())
 
@@ -141,6 +144,7 @@ class ManifestSection:
             "title": self.title,
             "budget_tokens": self.budget_tokens,
             "used_tokens": self.used_tokens(),
+            "used_words": self.used_words(),
             "included_count": self.included,
             "truncated_count": self.truncated,
             "omitted_count": len(omitted_paths),
@@ -163,6 +167,49 @@ class Manifest:
     promotion_summary: str = ""
 
     def render(self, *, show_budget: bool = False) -> str:
+        used_tokens, used_words = self.rendered_usage(show_budget=show_budget)
+        return self._render_with_usage(
+            show_budget=show_budget,
+            used_tokens=used_tokens,
+            used_words=used_words,
+        )
+
+    def rendered_usage(self, *, show_budget: bool = False) -> tuple[int, int]:
+        used_tokens = self.content_tokens()
+        used_words = self.content_words()
+        for _ in range(4):
+            rendered = self._render_with_usage(
+                show_budget=show_budget,
+                used_tokens=used_tokens,
+                used_words=used_words,
+            )
+            next_tokens = estimate_tokens(rendered)
+            next_words = estimate_words(rendered)
+            if next_tokens == used_tokens and next_words == used_words:
+                break
+            used_tokens = next_tokens
+            used_words = next_words
+        return used_tokens, used_words
+
+    def _render_with_usage(
+        self,
+        *,
+        show_budget: bool,
+        used_tokens: int,
+        used_words: int,
+    ) -> str:
+        percent = (
+            round((used_tokens / self.budget_tokens) * 100)
+            if self.budget_tokens
+            else 0
+        )
+        omitted_count = self.omitted_count()
+        budget_delta = used_tokens - self.budget_tokens
+        budget_status = (
+            f"over by ~{budget_delta} tokens"
+            if budget_delta > 0
+            else f"within budget (~{-budget_delta} tokens remaining)"
+        )
         header = [
             "# Cortex Session Manifest",
             "",
@@ -170,6 +217,12 @@ class Manifest:
             f"Project: {self.project_root}",
             f"Profile: {self.profile.name}",
             f"Budget: {self.budget_tokens} tokens (~{self.budget_tokens * CHARS_PER_TOKEN} chars)",
+            (
+                f"Estimated used: ~{used_tokens} tokens / ~{used_words} words "
+                f"({percent}% of budget)"
+            ),
+            f"Budget status: {budget_status}",
+            f"Omitted entries: {omitted_count}",
             f"Mode: {'degraded (state-only)' if self.degraded else 'full'}",
             f"Journal window: last {self.journal_hours}h",
             "",
@@ -208,13 +261,34 @@ class Manifest:
     def total_estimated_tokens(self) -> int:
         return estimate_tokens(self.render(show_budget=True))
 
+    def content_tokens(self) -> int:
+        section_tokens = sum(section.used_tokens() for section in self.sections)
+        if self.promotion_summary:
+            section_tokens += estimate_tokens(self.promotion_summary)
+        return section_tokens
+
+    def content_words(self) -> int:
+        section_words = sum(section.used_words() for section in self.sections)
+        if self.promotion_summary:
+            section_words += estimate_words(self.promotion_summary)
+        return section_words
+
+    def omitted_count(self) -> int:
+        return sum(section.omitted_count() for section in self.sections)
+
     def diagnostics(self) -> dict[str, Any]:
         sections = [section.diagnostics() for section in self.sections]
+        used_tokens, used_words = self.rendered_usage()
+        omitted_count = self.omitted_count()
         return {
             "project_root": str(self.project_root),
             "profile": self.profile.name,
             "budget_tokens": self.budget_tokens,
-            "used_tokens": sum(int(section["used_tokens"]) for section in sections),
+            "used_tokens": used_tokens,
+            "used_words": used_words,
+            "omitted_count": omitted_count,
+            "over_budget": used_tokens > self.budget_tokens,
+            "over_budget_tokens": max(0, used_tokens - self.budget_tokens),
             "degraded": self.degraded,
             "journal_hours": self.journal_hours,
             "promotion_summary": self.promotion_summary,
@@ -263,6 +337,10 @@ def _paths_preview(paths: list[str], *, limit: int = 5) -> str:
 
 def estimate_tokens(text: str) -> int:
     return max(1, len(text) // CHARS_PER_TOKEN)
+
+
+def estimate_words(text: str) -> int:
+    return len(re.findall(r"\S+", text))
 
 
 def _read_files_newest_first(dir_path: Path) -> list[Path]:

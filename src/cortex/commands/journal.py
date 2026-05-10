@@ -52,6 +52,7 @@ import click
 from cortex.compat import require_compatible
 from cortex.config import load_refresh_index_config
 from cortex.index import refresh_index
+from cortex.manifest import estimate_tokens, estimate_words
 
 _DATE_PLACEHOLDER = "{{ YYYY-MM-DD }}"
 _H1_TEMPLATE_RE = re.compile(r"^# \{\{[^}]+\}\}.*$", re.MULTILINE)
@@ -64,6 +65,7 @@ _PR_NUMBER_IN_SUBJECT_RE = re.compile(r"\(#(\d{1,6})\)\s*$")
 _PR_INFER_LOOKBACK_DAYS = 14
 # Window for finding a recent journal slug to populate `{{ <date>-<slug> }}`.
 _JOURNAL_SLUG_LOOKBACK_DAYS = 7
+DEFAULT_JOURNAL_DRAFT_WARNING_TOKENS = 1200
 # Default release-tag detection (Protocol § 2 / T1.10): semver tags only.
 # Projects using calendar versioning override per-project; we keep the CLI
 # default in sync with the Protocol's default.
@@ -829,6 +831,20 @@ def _render_context_block(
     return "\n".join(lines)
 
 
+def _journal_budget_warning(body: str, *, limit_tokens: int) -> str | None:
+    used_tokens = estimate_tokens(body)
+    if used_tokens <= limit_tokens:
+        return None
+    used_words = estimate_words(body)
+    return (
+        "warning: journal draft is "
+        f"~{used_tokens} tokens / ~{used_words} words; target is "
+        f"<={limit_tokens} tokens for reviewable agent handoffs. "
+        "Tighten the entry, split it into cited follow-ups, or pass "
+        "`--allow-large` to acknowledge the oversized draft."
+    )
+
+
 @click.command("draft")
 @click.argument("journal_type")
 @click.option(
@@ -849,6 +865,16 @@ def _render_context_block(
     is_flag=True,
     default=False,
     help="Write directly to .cortex/journal/ without opening $EDITOR.",
+)
+@click.option(
+    "--allow-large",
+    "allow_large",
+    is_flag=True,
+    default=False,
+    help=(
+        "Suppress the journal draft size warning. Default target is "
+        f"{DEFAULT_JOURNAL_DRAFT_WARNING_TOKENS} estimated tokens."
+    ),
 )
 @click.option(
     "--pr",
@@ -896,6 +922,7 @@ def draft_command(
     title: str | None,
     slug_override: str | None,
     no_edit: bool,
+    allow_large: bool,
     pr_number: int | None,
     release_tag: str | None,
     plan_slug: str | None,
@@ -1109,6 +1136,13 @@ def draft_command(
     commits = _gather_git_context(project_root)
     pr_text, gh_reason = _gather_gh_pr_context(project_root)
     body += _render_context_block(commits, pr_text, gh_reason)
+    if not allow_large:
+        budget_warning = _journal_budget_warning(
+            body,
+            limit_tokens=DEFAULT_JOURNAL_DRAFT_WARNING_TOKENS,
+        )
+        if budget_warning is not None:
+            click.echo(budget_warning, err=True)
 
     if no_edit:
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -1168,6 +1202,13 @@ def draft_command(
             )
             sys.exit(2)
         edited = tmp.read_text()
+        if not allow_large:
+            budget_warning = _journal_budget_warning(
+                edited,
+                limit_tokens=DEFAULT_JOURNAL_DRAFT_WARNING_TOKENS,
+            )
+            if budget_warning is not None:
+                click.echo(budget_warning, err=True)
         target.parent.mkdir(parents=True, exist_ok=True)
         try:
             with target.open("x") as f:

@@ -114,6 +114,44 @@ def test_draft_unknown_type_lists_known(git_project: Path) -> None:
     assert "release" in combined
 
 
+def test_oversized_journal_draft_warns(git_project: Path) -> None:
+    template = git_project / ".cortex" / "templates" / "journal" / "decision.md"
+    template.write_text(
+        "# Oversized draft\n\n"
+        "**Date:** {{ YYYY-MM-DD }}\n"
+        "**Type:** decision\n"
+        "**Trigger:** T2.4\n"
+        "**Cites:** _(none)_\n\n"
+        + ("word " * 6000)
+    )
+
+    result = _draft(git_project, "decision", "--slug", "oversized")
+
+    assert result.exit_code == 0, result.output
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "warning: journal draft is" in combined
+    assert "target is <=1200 tokens" in combined
+    assert "--allow-large" in combined
+
+
+def test_oversized_journal_draft_can_be_acknowledged(git_project: Path) -> None:
+    template = git_project / ".cortex" / "templates" / "journal" / "decision.md"
+    template.write_text(
+        "# Oversized draft\n\n"
+        "**Date:** {{ YYYY-MM-DD }}\n"
+        "**Type:** decision\n"
+        "**Trigger:** T2.4\n"
+        "**Cites:** _(none)_\n\n"
+        + ("word " * 6000)
+    )
+
+    result = _draft(git_project, "decision", "--slug", "oversized-ok", "--allow-large")
+
+    assert result.exit_code == 0, result.output
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "warning: journal draft is" not in combined
+
+
 def test_draft_refuses_overwrite(git_project: Path) -> None:
     a = _draft(git_project, "decision", "--slug", "same")
     assert a.exit_code == 0, a.output
@@ -160,6 +198,33 @@ def test_editor_command_with_args_is_split(git_project: Path, monkeypatch: pytes
     today = date.today().isoformat()
     target = git_project / ".cortex" / "journal" / f"{today}-split-editor.md"
     assert target.exists()
+
+
+def test_interactive_draft_warns_after_oversized_edit(
+    git_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    editor = tmp_path / "oversize-editor.sh"
+    editor.write_text(
+        "#!/bin/sh\n"
+        "printf '\\n%s\\n' '## Oversized edit' >> \"$1\"\n"
+        "i=0\n"
+        "while [ \"$i\" -lt 6000 ]; do printf 'word ' >> \"$1\"; i=$((i + 1)); done\n"
+    )
+    editor.chmod(0o755)
+    monkeypatch.setenv("EDITOR", str(editor))
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli,
+        ["journal", "draft", "decision", "--path", str(git_project), "--slug", "edited-large"],
+    )
+
+    assert result.exit_code == 0, result.output + (getattr(result, "stderr", "") or "")
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "warning: journal draft is" in combined
+    assert "target is <=1200 tokens" in combined
 
 
 def test_editor_failure_preserves_temp_draft(git_project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

@@ -18,7 +18,13 @@ cortex manifest --budget <N>
 
 Use `cortex manifest --profile delegation` for compact agent-to-agent handoffs; that profile defaults to half the normal session budget (currently 4k tokens) and emits the pickup pointer, invariants, and retrieval instructions instead of loading the full corpus. Callers may still pass `--budget <N>` when a larger or smaller delegation window is required.
 
-The manifest is a token-budgeted slice of `.cortex/`, not the whole store. Default load:
+Budget targets:
+
+- **Normal coding startup:** `cortex manifest --budget 8000` (default profile).
+- **Agent-to-agent delegation:** `cortex manifest --profile delegation` (4k tokens by default).
+- **Journal drafting:** keep generated entries under ~1200 estimated tokens unless the writer explicitly acknowledges a larger entry with `--allow-large`.
+
+The manifest is a token-budgeted slice of `.cortex/`, not the whole store. It reports estimated tokens/words used and omitted-entry counts in the header; `--show-budget` adds per-section estimates, and `--json` emits machine-readable budget diagnostics. Default load:
 
 | Component | Budget share | Selection |
 |---|---|---|
