@@ -66,7 +66,7 @@ JSON_SCHEMA_DRAFT_2020_12: dict[str, object] = {
     "type": "object",
     "required": ["type", "title"],
     "properties": {
-        "type": {"enum": list(TIER1_EVENT_TYPES)},
+        "type": {"enum": list(FACTS_DRAFT_SUPPORTED_TYPES)},
         "title": {"type": "string", "minLength": 1},
     },
     "allOf": [
@@ -834,7 +834,7 @@ def _expect_positive_int(value: object, field: str, issues: list[FactsValidation
     if value is None:
         issues.append(FactsValidationIssue(field=field, message="missing required field"))
         return None
-    if not isinstance(value, int):
+    if isinstance(value, bool) or not isinstance(value, int):
         issues.append(FactsValidationIssue(field=field, message="must be an integer"))
         return None
     if value <= 0:

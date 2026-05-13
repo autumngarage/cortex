@@ -1094,6 +1094,33 @@ def test_facts_file_field_type_mismatch_fails_without_write(
     assert "must be a list of strings" in combined
 
 
+def test_facts_file_rejects_bool_for_pr_number(git_project: Path, tmp_path: Path) -> None:
+    # Regression: Python's bool is a subclass of int, so a naive isinstance(value, int)
+    # check would accept JSON `true` as a valid pr_number and render "PR #True".
+    payload = {
+        "type": "pr-merged",
+        "title": "Bool pr_number",
+        "pr_number": True,
+        "branch": "feat/x",
+        "commit_range": "1..2",
+        "changed_files": ["a.py"],
+        "behavior_summary": "x",
+        "tests_run": ["pytest"],
+        "cortex_refs": {},
+        "followups": [],
+    }
+    facts = _write_json(tmp_path / "bool-pr.json", payload)
+
+    before = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+    result = _draft(git_project, "pr-merged", "--facts-file", str(facts), "--slug", "bool-pr")
+    after = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+
+    assert result.exit_code == 2, result.output
+    assert before == after
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert '"field": "pr_number"' in combined
+
+
 def test_facts_file_unsupported_type_visible_failure(git_project: Path, tmp_path: Path) -> None:
     payload = {
         "type": "incident",
@@ -1214,7 +1241,7 @@ def test_facts_file_schema_exports_tier1_event_types() -> None:
     type_property = properties["type"]
     assert isinstance(type_property, dict)
     enum_values = type_property.get("enum")
-    assert enum_values == ["pr-merged", "decision", "incident", "release", "plan-transition"]
+    assert enum_values == ["pr-merged", "decision", "release"]
 
 
 def test_project_template_override_wins(git_project: Path) -> None:
