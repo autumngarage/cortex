@@ -24,6 +24,7 @@ import click
 from cortex.compat import warn_if_incompatible
 from cortex.frontmatter import FrontmatterValue, parse_frontmatter
 from cortex.grep_filter import FrontmatterFilter, matches_all, parse_frontmatter_filter
+from cortex.usage import increment_usage
 
 LAYER_CHOICES = ("doctrine", "plans", "journal", "procedures", "templates")
 
@@ -150,7 +151,8 @@ def _render_filter_only_matches(
     target_path: Path,
     filters: tuple[FrontmatterFilter, ...],
     include_templates: bool,
-) -> None:
+) -> bool:
+    """Render frontmatter-only matches; True when at least one file matched."""
     matched = [
         path
         for path in _iter_filter_candidates(search_root, target_path, include_templates=include_templates)
@@ -158,9 +160,10 @@ def _render_filter_only_matches(
     ]
     if not matched:
         click.echo(f"no matches for frontmatter filters under {search_root.relative_to(target_path)}")
-        return
+        return False
     for path in matched:
         click.echo(_summarize_file(path, target_path))
+    return True
 
 
 @click.command(
@@ -168,6 +171,23 @@ def _render_filter_only_matches(
     context_settings={"ignore_unknown_options": True, "help_option_names": ["-h", "--help"]},
 )
 @click.argument("pattern", required=False)
+@click.option("-i", "ignore_case", is_flag=True, default=False, help="Pass through to ripgrep: ignore case.")
+@click.option("-w", "word_regexp", is_flag=True, default=False, help="Pass through to ripgrep: match whole words.")
+@click.option("-F", "fixed_strings", is_flag=True, default=False, help="Pass through to ripgrep: treat pattern as a literal.")
+@click.option(
+    "-l",
+    "--files-with-matches",
+    "files_with_matches",
+    is_flag=True,
+    default=False,
+    help="Pass through to ripgrep: print matching file paths only.",
+)
+@click.option(
+    "--max-count",
+    type=click.IntRange(min=1),
+    default=None,
+    help="Pass through to ripgrep: stop after NUM matches per file.",
+)
 @click.option(
     "--layer",
     type=click.Choice(LAYER_CHOICES),
@@ -207,6 +227,11 @@ def _render_filter_only_matches(
 def grep_command(
     *,
     pattern: str | None,
+    ignore_case: bool,
+    word_regexp: bool,
+    fixed_strings: bool,
+    files_with_matches: bool,
+    max_count: int | None,
     layer: str | None,
     target_path: Path,
     frontmatter_filters: tuple[str, ...],
@@ -259,6 +284,7 @@ def grep_command(
             filters=filters,
             include_templates=search_templates,
         )
+        increment_usage(target_path, "grep")
         return
 
     rg = _find_rg()
@@ -281,13 +307,62 @@ def grep_command(
         if search_templates
         else ["--glob", "!.cortex/templates/**", "--glob", "!templates/**", "--glob", "!**/templates/**"]
     )
-    cmd = [rg, "--json", *template_globs, *rg_args, "--", pattern, str(search_root)]
+    passthrough_flags: list[str] = []
+    if ignore_case:
+        passthrough_flags.append("-i")
+    if word_regexp:
+        passthrough_flags.append("-w")
+    if fixed_strings:
+        passthrough_flags.append("-F")
+    if files_with_matches:
+        passthrough_flags.append("-l")
+    if max_count is not None:
+        passthrough_flags.extend(["--max-count", str(max_count)])
+
+    files_only = files_with_matches or "-l" in rg_args or "--files-with-matches" in rg_args
+    cmd = [
+        rg,
+        "--no-heading",
+        "--line-number",
+        "--color=never",
+        *([] if files_only else ["--json"]),
+        *template_globs,
+        *passthrough_flags,
+        *rg_args,
+        "--",
+        pattern,
+        str(search_root),
+    ]
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
 
     if result.returncode == 2:
         # ripgrep convention: 2 = error (bad pattern, etc.).
         click.echo(result.stderr, err=True, nl=False)
         sys.exit(2)
+
+    if files_only:
+        emitted = False
+        for raw_line in result.stdout.splitlines():
+            path_text = raw_line.strip()
+            if not path_text:
+                continue
+            path = Path(path_text)
+            if filters and not _file_matches_filters(path, target_path, filters):
+                continue
+            click.echo(_summarize_file(path, target_path))
+            emitted = True
+        if not emitted:
+            if filters:
+                click.echo(
+                    f"no matches for {pattern!r} with frontmatter filters under "
+                    f"{search_root.relative_to(target_path)}"
+                )
+            else:
+                click.echo(f"no matches for {pattern!r} under {search_root.relative_to(target_path)}")
+        increment_usage(target_path, "grep")
+        if result.returncode == 1:
+            sys.exit(1)
+        return
 
     grouped, malformed = _parse_rg_json(result.stdout)
     if malformed:
@@ -298,6 +373,9 @@ def grep_command(
         )
     if not grouped:
         click.echo(f"no matches for {pattern!r} under {search_root.relative_to(target_path)}")
+        increment_usage(target_path, "grep")
+        if result.returncode == 1:
+            sys.exit(1)
         return
 
     emitted = False
@@ -314,3 +392,6 @@ def grep_command(
             click.echo(f"  {line_no}{marker}{text.rstrip()}")
     if not emitted:
         click.echo(f"no matches for {pattern!r} with frontmatter filters under {search_root.relative_to(target_path)}")
+    increment_usage(target_path, "grep")
+    if result.returncode == 1:
+        sys.exit(1)

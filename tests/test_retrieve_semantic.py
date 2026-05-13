@@ -124,10 +124,12 @@ def test_doctor_runtime_check_silent_when_no_retrieve_index(tmp_path: Path) -> N
 def test_doctor_runtime_check_fires_when_retrieve_index_exists_and_deps_missing(
     tmp_path: Path,
 ) -> None:
-    """User opted into retrieve (index dir exists) AND deps missing → warn."""
+    """User opted into retrieve (index file exists) AND deps missing → warn."""
 
     _scaffold(tmp_path)
-    (tmp_path / ".cortex" / ".index").mkdir(exist_ok=True)
+    index_dir = tmp_path / ".cortex" / ".index"
+    index_dir.mkdir(exist_ok=True)
+    (index_dir / "chunks.sqlite").touch()
 
     fake_missing = ImportError("simulated missing dep")
     with patch.dict("sys.modules", {"sqlite_vec": None, "fastembed": None}):

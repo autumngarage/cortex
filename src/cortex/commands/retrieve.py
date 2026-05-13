@@ -10,6 +10,7 @@ from pathlib import Path
 import click
 
 from cortex.compat import warn_if_incompatible
+from cortex.usage import UsageCounter, increment_usage
 
 FTS5_FALLBACK_MESSAGE = (
     "FTS5 extension not available in this sqlite3 build; cortex retrieve "
@@ -203,6 +204,8 @@ def retrieve_command(
             )
         else:  # pragma: no cover - defensive
             raise RuntimeError(f"unhandled retrieve mode: {effective_mode}")
+        counted_mode = mode or effective_mode
+        increment_usage(project_root, _usage_counter_for_mode(counted_mode))
 
     except FTS5UnavailableError:
         click.echo(FTS5_FALLBACK_MESSAGE, err=True)
@@ -229,6 +232,16 @@ def retrieve_command(
         query=query,
         total_count=total_chunks,
     )
+
+
+def _usage_counter_for_mode(mode: str) -> UsageCounter:
+    if mode == "bm25":
+        return "retrieve_bm25"
+    if mode == "semantic":
+        return "retrieve_semantic"
+    if mode == "hybrid":
+        return "retrieve_hybrid"
+    raise ValueError(f"unknown retrieve mode: {mode}")
 
 
 def _emit_hits(  # type: ignore[no-untyped-def]

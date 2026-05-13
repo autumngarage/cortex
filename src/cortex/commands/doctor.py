@@ -33,6 +33,7 @@ from cortex.doctor_checks import (
     run_pr_trailer_checks,
 )
 from cortex.siblings import detect_siblings, format_sibling_block
+from cortex.usage import read_usage
 from cortex.validation import Issue, Severity, run_all_checks
 
 
@@ -191,10 +192,51 @@ def doctor_command(
         instruction_warnings = _print_audit_instructions(target_path, as_json=as_json)
 
     if not as_json:
+        _print_usage_ratio(target_path)
         _print_siblings(target_path)
 
     if errors or (strict and (warnings or instruction_warnings)):
         sys.exit(1)
+
+
+def _print_usage_ratio(project_root: Path) -> None:
+    """Print local grep:retrieve usage ratio once both sides have data.
+
+    Threshold invariant (derive limits from domain): at least one grep hit and
+    at least one retrieve hit are required before we surface ratio math.
+    """
+
+    usage = read_usage(project_root)
+    counts_raw = usage.get("counts")
+    since_raw = usage.get("since")
+    if not isinstance(counts_raw, dict):
+        return
+    grep_count = counts_raw.get("grep")
+    retrieve_bm25 = counts_raw.get("retrieve_bm25")
+    retrieve_semantic = counts_raw.get("retrieve_semantic")
+    retrieve_hybrid = counts_raw.get("retrieve_hybrid")
+    if not (
+        isinstance(grep_count, int)
+        and isinstance(retrieve_bm25, int)
+        and isinstance(retrieve_semantic, int)
+        and isinstance(retrieve_hybrid, int)
+    ):
+        return
+
+    retrieve_total = retrieve_bm25 + retrieve_semantic + retrieve_hybrid
+    # Threshold constant: one successful call on each side.
+    min_side_hits = 1
+    if grep_count < min_side_hits or retrieve_total < min_side_hits:
+        return
+
+    ratio = grep_count / retrieve_total
+    since = since_raw if isinstance(since_raw, str) and since_raw else "unknown"
+    click.echo(
+        "info: lookup usage since "
+        f"{since}: grep={grep_count} retrieve(bm25/semantic/hybrid)="
+        f"{retrieve_bm25}/{retrieve_semantic}/{retrieve_hybrid}; "
+        f"grep:retrieve ratio {grep_count}:{retrieve_total} ({ratio:.1f})"
+    )
 
 
 def _print_siblings(project_root: Path) -> None:

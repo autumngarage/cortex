@@ -520,8 +520,8 @@ def test_cortex_grep_unaffected_by_retrieve_index_and_sqlite_import(tmp_path: Pa
     sys.modules.pop("sqlite3", None)
     second = CliRunner().invoke(cli, ["grep", "needle", "--path", str(project)])
 
-    assert first.exit_code == 0, first.output
-    assert second.exit_code == 0, second.output
+    assert first.exit_code == 1, first.output
+    assert second.exit_code == 1, second.output
     assert first.output == second.output
     assert "sqlite3" not in sys.modules
 
