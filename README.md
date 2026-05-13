@@ -36,7 +36,7 @@ cortex init        # scaffold .cortex/ in any project
 cortex doctor      # verify the scaffold
 ```
 
-Or from source with [`uv`](https://docs.astral.sh/uv/):
+Or from source with [`uv`](https://github.com/astral-sh/uv):
 
 ```bash
 uv tool install git+https://github.com/autumngarage/cortex
