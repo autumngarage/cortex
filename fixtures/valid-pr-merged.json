@@ -1,0 +1,22 @@
+{
+  "type": "pr-merged",
+  "title": "feat(journal): facts-file handoff",
+  "pr_number": 243,
+  "branch": "feat/journal-facts-file",
+  "commit_range": "a1b2c3d..d4e5f6a",
+  "changed_files": [
+    "src/cortex/commands/journal.py",
+    "src/cortex/journal_facts.py",
+    "tests/test_journal_draft.py"
+  ],
+  "behavior_summary": "Adds deterministic journal draft rendering from a compact facts packet.",
+  "tests_run": [
+    "uv run pytest tests/test_journal_draft.py"
+  ],
+  "cortex_refs": {
+    "plans": ["context-integrity-production"],
+    "spec": ["§ 4.2"],
+    "journal": ["2026-05-13-facts-file-track-a"]
+  },
+  "followups": []
+}

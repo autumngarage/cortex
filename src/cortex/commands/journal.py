@@ -43,6 +43,7 @@ import subprocess
 import sys
 import tempfile
 import unicodedata
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from importlib.resources import files
 from pathlib import Path
@@ -52,6 +53,7 @@ import click
 from cortex.compat import require_compatible
 from cortex.config import load_refresh_index_config
 from cortex.index import refresh_index
+from cortex.journal_facts import FactsFileError, load_and_validate_facts_file, render_facts_draft
 from cortex.manifest import estimate_tokens, estimate_words
 
 _DATE_PLACEHOLDER = "{{ YYYY-MM-DD }}"
@@ -845,6 +847,103 @@ def _journal_budget_warning(body: str, *, limit_tokens: int) -> str | None:
     )
 
 
+@dataclass(frozen=True)
+class _DraftWriteOutcome:
+    path: Path
+    body: str
+
+
+def _write_journal_entry(*, target: Path, body: str, project_root: Path) -> None:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        # Exclusive-create closes the TOCTOU race between the early
+        # existence check and this write — Journal is append-only
+        # (SPEC § 3.5 / Protocol § 4.1), so silently overwriting an
+        # entry that appeared in the meantime is a spec violation.
+        with target.open("x") as f:
+            f.write(body)
+    except FileExistsError:
+        click.echo(
+            f"error: {target} appeared between the existence check and "
+            f"the write (race or duplicate run); not overwriting "
+            f"(Journal is append-only).",
+            err=True,
+        )
+        sys.exit(2)
+    _refresh_index_after_write(project_root)
+
+
+def _derive_output_slug(
+    *,
+    journal_type: str,
+    title: str | None,
+    slug_override: str | None,
+    resolved_tag: str | None,
+) -> str:
+    if slug_override:
+        return _normalize_slug(slug_override)
+    if title:
+        return _normalize_slug(title)
+    if journal_type == "release" and resolved_tag is not None:
+        # `<date>-release-<tag-without-v>.md` is the canonical release-entry
+        # filename. Keeps tag-resolution unambiguous for the `--audit-instructions`
+        # check (T1.10's `Tag:` scalar is the source of truth, but a tag-shaped
+        # filename helps humans grep).
+        return f"release-{resolved_tag.removeprefix('v') if resolved_tag.startswith('v') else resolved_tag}"
+    # Use the type + HHMM so multiple drafts of the same type on the same day
+    # don't collide before the user gives them real names.
+    return f"{journal_type}-{datetime.now().strftime('%H%M')}"
+
+
+def _facts_file_draft(
+    *,
+    project_root: Path,
+    cortex_dir: Path,
+    journal_type: str,
+    template: str,
+    facts_file: Path,
+    allow_large: bool,
+    slug_override: str | None,
+) -> _DraftWriteOutcome:
+    packet = load_and_validate_facts_file(facts_file, expected_type=journal_type)
+    today = date.today().isoformat()
+    body = render_facts_draft(template=template, packet=packet, today=today)
+
+    # Keep filename behavior aligned with the existing draft flow:
+    # without CLI `--title`, default slugging is type+HHMM (or release-tag
+    # when type=release and a tag is present). Facts-file `title` affects the
+    # H1/body, not filename selection.
+    tag_value = packet.get("tag") if journal_type == "release" else None
+    release_tag = tag_value if isinstance(tag_value, str) else None
+    slug = _derive_output_slug(
+        journal_type=journal_type,
+        title=None,
+        slug_override=slug_override,
+        resolved_tag=release_tag,
+    )
+    filename = f"{today}-{slug}.md"
+    target = cortex_dir / "journal" / filename
+
+    if target.exists():
+        click.echo(
+            f"error: {target} already exists; pass --slug to differentiate "
+            f"or remove the existing entry.",
+            err=True,
+        )
+        sys.exit(2)
+
+    if not allow_large:
+        budget_warning = _journal_budget_warning(
+            body,
+            limit_tokens=DEFAULT_JOURNAL_DRAFT_WARNING_TOKENS,
+        )
+        if budget_warning is not None:
+            click.echo(budget_warning, err=True)
+
+    _write_journal_entry(target=target, body=body, project_root=project_root)
+    return _DraftWriteOutcome(path=target, body=body)
+
+
 @click.command("draft")
 @click.argument("journal_type")
 @click.option(
@@ -909,6 +1008,16 @@ def _journal_budget_warning(body: str, *, limit_tokens: int) -> str | None:
     ),
 )
 @click.option(
+    "--facts-file",
+    "facts_file",
+    type=click.Path(file_okay=True, dir_okay=False, exists=True, path_type=Path),
+    default=None,
+    help=(
+        "Path to a compact JSON facts packet for deterministic draft rendering. "
+        "Supported for `pr-merged`, `decision`, and `release`."
+    ),
+)
+@click.option(
     "--path",
     "target_path",
     type=click.Path(file_okay=False, dir_okay=True, exists=True, path_type=Path),
@@ -926,6 +1035,7 @@ def draft_command(
     pr_number: int | None,
     release_tag: str | None,
     plan_slug: str | None,
+    facts_file: Path | None,
     target_path: Path,
 ) -> None:
     """Create a new Journal entry of TYPE from a template and open it in $EDITOR.
@@ -968,6 +1078,45 @@ def draft_command(
             err=True,
         )
         sys.exit(2)
+
+    if facts_file is not None:
+        disallowed_flags: list[str] = []
+        if title is not None:
+            disallowed_flags.append("--title")
+        if pr_number is not None:
+            disallowed_flags.append("--pr")
+        if release_tag is not None:
+            disallowed_flags.append("--tag")
+        if plan_slug is not None:
+            disallowed_flags.append("--plan-slug")
+        if disallowed_flags:
+            click.echo(
+                "error: --facts-file cannot be combined with "
+                f"{', '.join(disallowed_flags)}; put these values in the facts packet.",
+                err=True,
+            )
+            sys.exit(2)
+        try:
+            outcome = _facts_file_draft(
+                project_root=project_root,
+                cortex_dir=cortex_dir,
+                journal_type=journal_type,
+                template=template,
+                facts_file=facts_file,
+                allow_large=allow_large,
+                slug_override=slug_override,
+            )
+        except FactsFileError as exc:
+            click.echo(
+                json.dumps(
+                    exc.as_structured_error(facts_file=facts_file, journal_type=journal_type),
+                    indent=2,
+                ),
+                err=True,
+            )
+            sys.exit(2)
+        click.echo(str(outcome.path))
+        return
 
     today = date.today().isoformat()
     body = template.replace(_DATE_PLACEHOLDER, today)
