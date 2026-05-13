@@ -30,6 +30,7 @@ from cortex.config import load_audit_instructions_config
 from cortex.frontmatter import FrontmatterValue, parse_frontmatter
 from cortex.index import read_index
 from cortex.plans import iter_plan_files
+from cortex.retrieve.index import retrieve_index_path
 from cortex.state_migration import is_legacy_hand_authored_state
 from cortex.validation import SEVEN_FIELDS, Issue, Severity
 
@@ -132,16 +133,16 @@ def run_plain_checks(project_root: Path) -> list[Issue]:
 def check_semantic_retrieval_runtime(project_root: Path) -> list[Issue]:
     """Surface whether semantic retrieval (S2) is available on this machine.
 
-    Gated on the user having opted into retrieve (i.e. ``.cortex/.index/``
-    exists — built by ``cortex refresh-index --retrieve`` or auto-rebuilt
-    after ``cortex retrieve``). Fresh scaffolds with no retrieve usage stay
-    silent; only projects actually using retrieve see the runtime warning.
+    Gated on the user having opted into retrieve (i.e. the retrieve index
+    file exists under ``.cortex/.index/``). Fresh scaffolds with no retrieve
+    usage stay silent; only projects actually using retrieve see the runtime
+    warning.
 
     Warning, not error: BM25 mode keeps working without these deps, and
     aarch64 Linux installs are documented to degrade gracefully.
     """
 
-    if not (project_root / ".cortex" / ".index").exists():
+    if not retrieve_index_path(project_root).exists():
         return []
     issues: list[Issue] = []
     missing: list[str] = []

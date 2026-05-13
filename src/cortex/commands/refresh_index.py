@@ -10,6 +10,7 @@ import click
 from cortex.compat import require_compatible
 from cortex.config import load_refresh_index_config
 from cortex.index import refresh_index
+from cortex.usage import reset_usage
 
 
 @click.command("refresh-index")
@@ -62,6 +63,7 @@ def refresh_index_command(
     require_compatible(cortex_dir)
     config = load_refresh_index_config(project_root)
     result = refresh_index(project_root, config)
+    reset_usage(project_root)
     for warning in result.warnings:
         click.echo(f"warning: {warning}", err=True)
     if include_retrieve:

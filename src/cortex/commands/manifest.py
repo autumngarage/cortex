@@ -11,6 +11,7 @@ import click
 
 from cortex.compat import warn_if_incompatible
 from cortex.manifest import MANIFEST_PROFILES, ManifestProfileName, build_manifest
+from cortex.usage import increment_usage
 
 
 @click.command("manifest")
@@ -82,6 +83,7 @@ def manifest_command(
         budget if budget is not None else profile_config.default_budget_tokens,
         profile=profile_name,
     )
+    increment_usage(target_path, "manifest")
     if as_json:
         click.echo(json.dumps(manifest.diagnostics(), indent=2, sort_keys=True))
         return

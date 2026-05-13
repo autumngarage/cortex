@@ -162,7 +162,7 @@ def test_no_matches_message(scaffolded_project: Path, monkeypatch: pytest.Monkey
     _install_fake_rg(monkeypatch, "", returncode=1)
     runner = CliRunner()
     result = runner.invoke(cli, ["grep", "missing", "--path", str(scaffolded_project)])
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert "no matches" in result.output
 
 
