@@ -6,7 +6,9 @@
  \____\___/|_|   \__\___/_/\_\
 ```
 
-Released via the Homebrew tap [autumngarage/homebrew-cortex](https://github.com/autumngarage/homebrew-cortex); see [GitHub Releases](https://github.com/autumngarage/cortex/releases) for the latest version. MIT-licensed.
+[![Release](https://img.shields.io/github/v/release/autumngarage/cortex?label=release&color=informational)](https://github.com/autumngarage/cortex/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Homebrew](https://img.shields.io/badge/brew-autumngarage%2Fcortex-orange)](https://github.com/autumngarage/homebrew-cortex)
 
 > **Git-native context build system for AI agents.**
 >
@@ -22,7 +24,7 @@ Cortex treats project memory as source code. Primary facts live in structured Ma
 
 **The crash.** A multi-hour design session crashes. Every research finding, every decision branch, every piece of iteration: gone. Git is clean. Memory is empty. The next session's honest answer to *"where were we?"* is *"I don't know."*
 
-**The retreat.** On 2025-11-22, Cursor shipped version 2.1 and removed the Memories feature it had introduced six months earlier. Official rationale: *"intentionally removed."* The long-running Cursor forum feature-request thread for persistent project memory (open since January 2025) remains unresolved. The community has been hand-building the same three-file `.brain/` convention in every repo: *"Cursor in the morning, Claude Code in the afternoon — both read the same `.brain/`."*
+**The retreat.** On 2025-11-22, Cursor shipped version 2.1 and removed the Memories feature it had introduced six months earlier. Official rationale: *"intentionally removed."* The [feature-request thread](https://forum.cursor.com/t/persistent-intelligent-project-memory/39109) for persistent project memory has been open since January 2025 and is still unresolved. The community has been hand-building the same three-file `.brain/` convention in every repo: *"Cursor in the morning, Claude Code in the afternoon — both read the same `.brain/`."*
 
 Projects accumulate reasoning that has nowhere to live. Chat context evaporates. Agent memory is machine-local. Vendors have tried and retreated. The pattern is clear; the spec was missing.
 
