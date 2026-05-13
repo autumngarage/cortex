@@ -155,8 +155,8 @@ Cortex is the spine that holds project memory across tools and time:
 
 Each tool installs independently and composes through **file contracts, never code imports**:
 
-- **Solo Cortex.** Any agent reading `AGENTS.md` follows the Protocol. Journal grows continuously; humans promote via the `cortex` interactive flow.
-- **With Touchstone.** The post-merge hook auto-drafts `pr-merged` journal entries via `cortex journal draft`. On architecturally-significant pre-merge diffs, Touchstone invokes `cortex doctrine draft` to create a durable Doctrine candidate the author reviews and promotes.
+- **Solo Cortex.** Any agent reading `AGENTS.md` follows the Protocol. Journal grows continuously; humans promote candidates via `cortex refresh-index` + `cortex promote <id>`.
+- **With Touchstone.** The post-merge hook auto-drafts `pr-merged` journal entries via `cortex journal draft`. Architecturally-significant pre-merge diffs (T1.7) are scoped to drop a `doctrine/candidate.md` draft for the author to review and promote; the `cortex doctrine draft` command and triad-mode enforcement are deferred from v1.0 — see [`plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) `## Follow-ups (deferred)`.
 - **With Sentinel.** Sentinel reads `.cortex/` (Doctrine + active Plans + recent Journal + digests) for cycle context. End-of-cycle writes a Journal entry. Next cycle reads the previous cycle's Journal. The loop closes.
 
 Solo Cortex is *good notes with conventions*. Triad Cortex is *enforced institutional memory*. Both are useful; the triad is where the loop closes. See [autumn-garage](https://github.com/autumngarage/autumn-garage) for the coordination repo.
