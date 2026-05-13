@@ -9,9 +9,11 @@ must work.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
+from collections.abc import Mapping
 from datetime import date
 from pathlib import Path
 
@@ -21,6 +23,7 @@ from click.testing import CliRunner, Result
 from cortex.cli import cli
 from cortex.commands.init import init_command
 from cortex.commands.journal import _normalize_slug
+from cortex.journal_facts import JSON_SCHEMA_DRAFT_2020_12
 
 
 def _run(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -50,6 +53,11 @@ def _draft(project: Path, *args: str) -> Result:
     return runner.invoke(
         cli, ["journal", "draft", *args, "--path", str(project), "--no-edit"]
     )
+
+
+def _write_json(path: Path, payload: Mapping[str, object]) -> Path:
+    path.write_text(json.dumps(payload, indent=2))
+    return path
 
 
 def test_draft_decision_writes_file_with_today(git_project: Path) -> None:
@@ -851,6 +859,362 @@ def test_release_filename_is_release_dash_tag_without_v(
     today = date.today().isoformat()
     target = git_project / ".cortex" / "journal" / f"{today}-release-3.5.7.md"
     assert target.exists(), list((git_project / ".cortex" / "journal").iterdir())
+
+
+def test_facts_file_pr_merged_writes_draft(git_project: Path, tmp_path: Path) -> None:
+    payload = {
+        "type": "pr-merged",
+        "title": "feat(journal): facts-file draft handoff",
+        "pr_number": 243,
+        "branch": "feat/journal-facts-file",
+        "commit_range": "1111111..2222222",
+        "changed_files": [
+            "src/cortex/commands/journal.py",
+            "src/cortex/journal_facts.py",
+            "tests/test_journal_draft.py",
+        ],
+        "diffstat": "3 files changed, 120 insertions(+), 5 deletions(-)",
+        "behavior_summary": "Adds deterministic journal draft rendering from a compact facts packet.",
+        "tests_run": ["uv run pytest tests/test_journal_draft.py"],
+        "cortex_refs": {
+            "plans": ["context-integrity-production"],
+            "doctrine": ["0001-why-cortex-exists"],
+            "spec": ["§ 4.2", "§ 7"],
+            "journal": ["2026-05-10-journal-draft-fixes"],
+        },
+        "followups": ["Wire PR-merged hook to emit this facts schema."],
+    }
+    facts = _write_json(tmp_path / "pr-merged-facts.json", payload)
+
+    result = _draft(git_project, "pr-merged", "--facts-file", str(facts), "--slug", "facts-pr")
+
+    assert result.exit_code == 0, result.output + (getattr(result, "stderr", "") or "")
+    today = date.today().isoformat()
+    target = git_project / ".cortex" / "journal" / f"{today}-facts-pr.md"
+    assert target.exists()
+    body = target.read_text()
+    assert body.startswith("# PR #243 merged — feat(journal): facts-file draft handoff")
+    assert "**Branch:** feat/journal-facts-file" in body
+    assert "**Merge-commit:** 2222222" in body
+    assert "- Changed files:" in body
+    assert "`src/cortex/journal_facts.py`" in body
+    assert "- Tests run:" in body
+    assert "- [ ] Wire PR-merged hook to emit this facts schema." in body
+    assert "Context auto-pulled at draft time" not in body
+
+
+def test_facts_file_decision_writes_draft(git_project: Path, tmp_path: Path) -> None:
+    payload = {
+        "type": "decision",
+        "title": "Prefer compact facts packet for journal drafting",
+        "trigger": "T2.4",
+        "summary": "The draft interface now accepts only compact facts-file context.",
+        "context": "Premium model sessions should not resend full corpus context for templated journal notes.",
+        "decision": "Add a strict schema and deterministic renderer for journal draft facts packets.",
+        "action_items": [
+            "Document schema examples for all Tier-1 event types.",
+            "Add CLI tests for malformed input behavior.",
+        ],
+        "cortex_refs": {
+            "plans": ["context-integrity-production"],
+            "spec": ["§ 4.2"],
+        },
+    }
+    facts = _write_json(tmp_path / "decision-facts.json", payload)
+
+    result = _draft(git_project, "decision", "--facts-file", str(facts), "--slug", "facts-decision")
+
+    assert result.exit_code == 0, result.output + (getattr(result, "stderr", "") or "")
+    today = date.today().isoformat()
+    target = git_project / ".cortex" / "journal" / f"{today}-facts-decision.md"
+    assert target.exists()
+    body = target.read_text()
+    assert body.startswith("# Prefer compact facts packet for journal drafting")
+    assert "**Type:** decision" in body
+    assert "**Trigger:** T2.4" in body
+    assert "- [ ] Document schema examples for all Tier-1 event types." in body
+    assert "{{" not in body
+
+
+def test_facts_file_release_writes_draft(git_project: Path, tmp_path: Path) -> None:
+    payload = {
+        "type": "release",
+        "title": "Release v1.6.3 — facts-file support",
+        "tag": "v1.6.3",
+        "summary": "Ships deterministic facts-file based journal drafting.",
+        "artifact": {
+            "kind": "GitHub Release",
+            "location": "https://github.com/autumngarage/cortex/releases/tag/v1.6.3",
+            "version": "1.6.3",
+            "release_notes": "https://github.com/autumngarage/cortex/releases/tag/v1.6.3",
+        },
+        "what_shipped": [
+            "Added `cortex journal draft <type> --facts-file <path>` for compact handoffs.",
+            "Added strict facts schema validation with structured error diagnostics.",
+        ],
+        "downstream_docs": ["README.md", "docs/config-reference.md"],
+        "cortex_refs": {
+            "plans": ["context-integrity-production"],
+            "spec": ["§ 4.2", "§ 7"],
+            "journal": ["2026-05-13-release-prep"],
+        },
+        "followups": [],
+    }
+    facts = _write_json(tmp_path / "release-facts.json", payload)
+
+    result = _draft(git_project, "release", "--facts-file", str(facts))
+
+    assert result.exit_code == 0, result.output + (getattr(result, "stderr", "") or "")
+    today = date.today().isoformat()
+    target = git_project / ".cortex" / "journal" / f"{today}-release-1.6.3.md"
+    assert target.exists()
+    body = target.read_text()
+    assert body.startswith("# Release v1.6.3 — facts-file support")
+    assert "**Tag:** v1.6.3" in body
+    assert "- `README.md`" in body
+    assert "- `docs/config-reference.md`" in body
+    followups = body.split("## Follow-ups (deferred to future work)", 1)[1].split("(Per SPEC", 1)[0]
+    assert "_None._" in followups
+
+
+def test_facts_file_missing_required_field_fails_without_write(
+    git_project: Path, tmp_path: Path
+) -> None:
+    payload = {
+        "type": "pr-merged",
+        "title": "Missing required field case",
+        # pr_number intentionally omitted
+        "branch": "feat/missing-field",
+        "commit_range": "aaaa..bbbb",
+        "changed_files": ["src/cortex/commands/journal.py"],
+        "behavior_summary": "Should fail validation.",
+        "tests_run": [],
+        "cortex_refs": {},
+        "followups": [],
+    }
+    facts = _write_json(tmp_path / "missing-field.json", payload)
+
+    before = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+    result = _draft(git_project, "pr-merged", "--facts-file", str(facts), "--slug", "missing-field")
+    after = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+
+    assert result.exit_code == 2, result.output
+    assert before == after
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert '"error": "journal-facts-file-invalid"' in combined
+    assert '"field": "pr_number"' in combined
+    assert "missing required field" in combined
+
+
+def test_facts_file_malformed_json_fails_without_write(git_project: Path, tmp_path: Path) -> None:
+    facts = tmp_path / "malformed.json"
+    facts.write_text('{"type": "decision", "title": "oops"')
+
+    before = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+    result = _draft(git_project, "decision", "--facts-file", str(facts), "--slug", "malformed")
+    after = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+
+    assert result.exit_code == 2, result.output
+    assert before == after
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "malformed-json" in combined
+    assert "Only JSON is supported; YAML is not accepted" in combined
+
+
+def test_facts_file_yaml_rejected_as_malformed_json(
+    git_project: Path, tmp_path: Path
+) -> None:
+    facts = tmp_path / "facts.yaml"
+    facts.write_text(
+        "type: decision\n"
+        "title: yaml should fail\n"
+        "trigger: T2.1\n"
+    )
+
+    before = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+    result = _draft(git_project, "decision", "--facts-file", str(facts), "--slug", "yaml-fails")
+    after = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+
+    assert result.exit_code == 2, result.output
+    assert before == after
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "malformed-json" in combined
+    assert "Only JSON is supported; YAML is not accepted" in combined
+
+
+def test_facts_file_unknown_event_type_fails_without_write(
+    git_project: Path, tmp_path: Path
+) -> None:
+    payload = {
+        "type": "promotion",
+        "title": "Unsupported",
+    }
+    facts = _write_json(tmp_path / "unknown-type.json", payload)
+
+    before = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+    result = _draft(git_project, "decision", "--facts-file", str(facts), "--slug", "unknown-type")
+    after = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+
+    assert result.exit_code == 2, result.output
+    assert before == after
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "unknown event type" in combined
+    assert "pr-merged, decision, incident, release, plan-transition" in combined
+
+
+def test_facts_file_field_type_mismatch_fails_without_write(
+    git_project: Path, tmp_path: Path
+) -> None:
+    payload = {
+        "type": "release",
+        "title": "Bad types",
+        "tag": "v1.2.3",
+        "summary": "x",
+        "artifact": {
+            "kind": "GitHub Release",
+            "location": "https://example.invalid",
+            "version": "1.2.3",
+            "release_notes": "https://example.invalid/notes",
+        },
+        "what_shipped": "should-be-list",
+        "downstream_docs": [],
+        "cortex_refs": {},
+        "followups": [],
+    }
+    facts = _write_json(tmp_path / "bad-types.json", payload)
+
+    before = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+    result = _draft(git_project, "release", "--facts-file", str(facts), "--slug", "bad-types")
+    after = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+
+    assert result.exit_code == 2, result.output
+    assert before == after
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert '"field": "what_shipped"' in combined
+    assert "must be a list of strings" in combined
+
+
+def test_facts_file_unsupported_type_visible_failure(git_project: Path, tmp_path: Path) -> None:
+    payload = {
+        "type": "incident",
+        "title": "Incident summary",
+        "summary": "CI failed after green.",
+        "context": "Triggered by dependency bump.",
+        "impact": "Release blocked for 2h.",
+        "timeline": ["10:10 — fail", "12:10 — resolved"],
+        "root_cause": "Ungated migration script in test setup.",
+        "went_well": ["Alerting fired quickly."],
+        "went_poorly": ["No rollback note in runbook."],
+        "action_items": ["Add rollback section to docs."],
+        "cortex_refs": {"journal": ["2026-05-12-ci-incident"]},
+    }
+    facts = _write_json(tmp_path / "incident-facts.json", payload)
+
+    before = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+    result = _draft(git_project, "incident", "--facts-file", str(facts), "--slug", "incident")
+    after = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+
+    assert result.exit_code == 2, result.output
+    assert before == after
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "unsupported-type" in combined
+    assert "supported types: pr-merged, decision, release" in combined
+
+
+def test_facts_file_rejects_unrelated_history_field(git_project: Path, tmp_path: Path) -> None:
+    payload = {
+        "type": "decision",
+        "title": "Narrow contract",
+        "trigger": "T2.1",
+        "summary": "Ignore unrelated journal history.",
+        "context": "Facts packet should stay compact.",
+        "decision": "Reject extra fields that smuggle broad context.",
+        "action_items": ["Keep schema narrow."],
+        "cortex_refs": {},
+        "journal_history": ["full-transcript", "irrelevant-entry"],
+    }
+    facts = _write_json(tmp_path / "extra-field.json", payload)
+
+    before = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+    result = _draft(git_project, "decision", "--facts-file", str(facts), "--slug", "narrow")
+    after = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+
+    assert result.exit_code == 2, result.output
+    assert before == after
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert '"field": "journal_history"' in combined
+    assert "schema is intentionally narrow" in combined
+
+
+def test_facts_file_rejects_flags_that_conflict_with_packet(
+    git_project: Path, tmp_path: Path
+) -> None:
+    payload = {
+        "type": "decision",
+        "title": "Packet title",
+        "trigger": "T2.1",
+        "summary": "x",
+        "context": "y",
+        "decision": "z",
+        "action_items": ["one"],
+        "cortex_refs": {},
+    }
+    facts = _write_json(tmp_path / "flags-conflict.json", payload)
+
+    before = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+    result = _draft(
+        git_project,
+        "decision",
+        "--facts-file",
+        str(facts),
+        "--title",
+        "override-title",
+    )
+    after = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+
+    assert result.exit_code == 2, result.output
+    assert before == after
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "--facts-file cannot be combined with" in combined
+    assert "--title" in combined
+
+
+def test_facts_file_type_must_match_cli_type(git_project: Path, tmp_path: Path) -> None:
+    payload = {
+        "type": "release",
+        "title": "Mismatch",
+        "tag": "v1.0.0",
+        "summary": "mismatch",
+        "artifact": {
+            "kind": "GitHub Release",
+            "location": "https://example.invalid/v1.0.0",
+            "version": "1.0.0",
+            "release_notes": "https://example.invalid/notes/v1.0.0",
+        },
+        "what_shipped": ["x"],
+        "downstream_docs": [],
+        "cortex_refs": {},
+        "followups": [],
+    }
+    facts = _write_json(tmp_path / "mismatch.json", payload)
+
+    before = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+    result = _draft(git_project, "decision", "--facts-file", str(facts), "--slug", "mismatch")
+    after = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+
+    assert result.exit_code == 2, result.output
+    assert before == after
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "does not match CLI event type" in combined
+
+
+def test_facts_file_schema_exports_tier1_event_types() -> None:
+    properties = JSON_SCHEMA_DRAFT_2020_12["properties"]
+    assert isinstance(properties, dict)
+    type_property = properties["type"]
+    assert isinstance(type_property, dict)
+    enum_values = type_property.get("enum")
+    assert enum_values == ["pr-merged", "decision", "incident", "release", "plan-transition"]
 
 
 def test_project_template_override_wins(git_project: Path) -> None:
