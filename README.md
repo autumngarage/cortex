@@ -6,31 +6,54 @@
  \____\___/|_|   \__\___/_/\_\
 ```
 
-> *Context integrity for AI-assisted work.*
+[![Release](https://img.shields.io/github/v/release/autumngarage/cortex?label=release&color=informational)](https://github.com/autumngarage/cortex/releases)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Homebrew](https://img.shields.io/badge/brew-autumngarage%2Fcortex-orange)](https://github.com/autumngarage/homebrew-cortex)
+
+> **Git-native context build system for AI agents.**
 >
-> by **[Autumn Garage](https://github.com/autumngarage/autumn-garage)** · alongside [Touchstone](https://github.com/autumngarage/touchstone) · [Sentinel](https://github.com/autumngarage/sentinel) · [Conductor](https://github.com/autumngarage/conductor) · [Alchemist](https://github.com/autumngarage/alchemist) — Cortex is a git-native context build system for AI agents.
+> *The spine* of the **[Autumn Garage](https://github.com/autumngarage/autumn-garage)** quartet, alongside [Touchstone](https://github.com/autumngarage/touchstone) · [Sentinel](https://github.com/autumngarage/sentinel) · [Conductor](https://github.com/autumngarage/conductor).
 
 # Cortex
 
-> **Cortex is a git-native context build system for AI agents.** It treats project memory as source code: primary facts live in structured Markdown under `.cortex/`, generated context surfaces declare their inputs, and `cortex doctor` verifies the invariants before stale or uncited context quietly steers an agent. Instead of introducing a new database, daemon, or mandatory vector index, Cortex keeps the memory store grepable, diffable, and auditable with existing tools.
+Cortex treats project memory as source code. Primary facts live in structured Markdown under `.cortex/`, generated context surfaces declare their inputs, and `cortex doctor` verifies the invariants before stale or uncited context quietly steers an agent. No new database, no daemon, no mandatory vector index — the memory store stays grepable, diffable, and auditable with existing tools.
 
-**Status:** v1.6.1 released 2026-05-09. Latest release notes: [GitHub Releases](https://github.com/autumngarage/cortex/releases). [`SPEC.md`](./SPEC.md) v1.1.0; [`.cortex/protocol.md`](./.cortex/protocol.md) v0.3.1.
-
-**For "where are we now" and "what's next" — read [`.cortex/state.md`](./.cortex/state.md) (current state), [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) (launch sequence), and [`.cortex/plans/context-integrity-production.md`](./.cortex/plans/context-integrity-production.md) (context-integrity roadmap).** Those are the canonical sources, kept current by Cortex itself; this README does not restate them. Eating our own dog food: a single canonical owner per fact is [Doctrine 0007](./.cortex/doctrine/0007-canonical-ownership-of-state-and-plans.md), and `cortex doctor` warns when repo-root files duplicate `.cortex/` content.
-
-**New here?** Start with [`docs/PITCH.md`](./docs/PITCH.md) — plain-language one-liner, vision, and day-in-the-life walkthrough.
-
----
+**New here?** Start with [`docs/PITCH.md`](./docs/PITCH.md) — plain-language one-liner, vision, and day-in-the-life walkthrough. For "where are we now" and "what's next," read [`.cortex/state.md`](./.cortex/state.md) and [`.cortex/plans/`](./.cortex/plans/) — those are the canonical sources, kept current by Cortex itself.
 
 ## The problem, in two stories
 
 **The crash.** A multi-hour design session crashes. Every research finding, every decision branch, every piece of iteration: gone. Git is clean. Memory is empty. The next session's honest answer to *"where were we?"* is *"I don't know."*
 
-**The retreat.** On 2025-11-22, Cursor shipped version 2.1 and removed the Memories feature it had introduced six months earlier. Official rationale: *"intentionally removed."* The [feature-request thread](https://forum.cursor.com/t/persistent-intelligent-project-memory/39109) for persistent project memory has been open since January 2025 and is still unresolved. The community has been hand-building the same three-file `.brain/` convention in every repo ([example](https://forum.cursor.com/t/persistent-memory-for-cursor-that-survives-every-session-brain-folder-approach/157488)): *"Cursor in the morning, Claude Code in the afternoon — both read the same `.brain/`."*
+**The retreat.** On 2025-11-22, Cursor shipped version 2.1 and removed the Memories feature it had introduced six months earlier. Official rationale: *"intentionally removed."* The [feature-request thread](https://forum.cursor.com/t/persistent-intelligent-project-memory/39109) for persistent project memory has been open since January 2025 and is still unresolved. The community has been hand-building the same three-file `.brain/` convention in every repo: *"Cursor in the morning, Claude Code in the afternoon — both read the same `.brain/`."*
 
-Projects accumulate reasoning that has nowhere to live. Chat context evaporates. Agent memory is machine-local. Vendors have tried and retreated. The pattern is clear; the spec is missing.
+Projects accumulate reasoning that has nowhere to live. Chat context evaporates. Agent memory is machine-local. Vendors have tried and retreated. The pattern is clear; the spec was missing.
 
----
+## Install
+
+```bash
+brew install autumngarage/cortex/cortex   # fully qualified — homebrew-core has a different `cortex`
+cortex init        # scaffold .cortex/ in any project
+cortex doctor      # verify the scaffold
+```
+
+Or from source with [`uv`](https://docs.astral.sh/uv/):
+
+```bash
+uv tool install git+https://github.com/autumngarage/cortex
+```
+
+## Quickstart
+
+```bash
+cd ~/Repos/my-project
+cortex init                  # scaffolds .cortex/, scans for existing principles/plans/decisions/, offers to absorb each
+git add .cortex/
+git commit -m "chore: initialize cortex memory"
+cortex manifest --budget 8000   # token-budgeted session-start slice for an agent
+cortex doctor                # validate against the spec
+```
+
+After that, agents read the bounded manifest at session start, write Journal entries as work produces durable lessons, and CI/review can reject stale generated context before it steers a follow-up session.
 
 ## What Cortex is
 
@@ -49,46 +72,29 @@ Every layer has a single authoring mode (Diataxis discipline), a single write tr
 
 ### Context build system
 
-The product line is now explicit: Cortex is not just a folder of notes. It is the build, budget, and verification layer for agent context.
-
-**Reusable thesis:** Cortex compiles human-authored project memory in Markdown + git into bounded, auditable context for agents.
+Cortex is not just a folder of notes. It is the build, budget, and verification layer for agent context. **Reusable thesis:** Cortex compiles human-authored project memory in Markdown + git into bounded, auditable context for agents.
 
 **Context integrity** means five narrow things: freshness, provenance, budget-fit, policy compliance, and reviewability. It does not mean Cortex proves every fact true or guarantees the agent's final output is correct.
 
-| Class | Examples | Cortex contract | Consumers |
-|---|---|---|---|
-| Source artifacts | Doctrine, Plans, Journal, Procedures, git history | Human-authoritative or append-only inputs; LLMs may propose edits but do not bypass gates. | Agents, humans, sibling tools. |
-| Derived artifacts | State, Map, manifests, retrieve indexes, reports | Generated from source inputs; declare source files, source hashes, omissions, and incomplete inputs. | Session-start manifests, review gates, Conductor/Sentinel/Touchstone/Alchemist integrations. |
-| Integrity checks | `cortex doctor`, audit checks, budget checks | Fail visibly on stale, malformed, uncited, over-budget, or policy-violating context. | CI, pre-merge review, local agent startup. |
+| Class | Examples | Contract |
+|---|---|---|
+| **Source artifacts** | Doctrine, Plans, Journal, Procedures, git history | Human-authoritative or append-only inputs; LLMs may propose edits but do not bypass gates. |
+| **Derived artifacts** | State, Map, manifests, retrieve indexes, reports | Generated from source inputs; declare source files, source hashes, omissions, and incomplete inputs. |
+| **Integrity checks** | `cortex doctor`, audit checks, budget checks | Fail visibly on stale, malformed, uncited, over-budget, or policy-violating context. |
 
-- **Sources:** Doctrine, Plans, Journal, Procedures, git history, and optional sibling-tool outputs are the inputs.
-- **Build artifacts:** State, Map, manifest slices, retrieve indexes, and future production reports are generated from those inputs.
+- **Build artifacts:** State, Map, manifest slices, retrieve indexes, and future production reports are generated from source inputs.
 - **Invalidation:** generated files carry `Generated`, `Sources`, `Sources-hash`, `Incomplete`, and `Conflicts-preserved` metadata so stale context is visible.
 - **Budgeting:** session-start context is compiled through `cortex manifest --budget <N>`; deeper lookup goes through `cortex grep` and `cortex retrieve` instead of dumping the corpus into the model.
-- **Verification:** `cortex doctor` is the context CI gate. The next production plan extends it into explicit budget, handoff, and source-PR checks so context correctness can be enforced the same way test correctness is enforced.
+- **Verification:** `cortex doctor` is the context CI gate.
 
-The durable product decision is [Doctrine 0008](./.cortex/doctrine/0008-context-integrity-build-system.md). The staged build plan is [`.cortex/plans/context-integrity-production.md`](./.cortex/plans/context-integrity-production.md).
-
-Use Cortex when a project needs durable agent context that survives sessions, tools, and teammates; when generated context must be reviewable in PRs; or when CI should fail before an agent works from stale or over-budget context. Do not use Cortex as a general agent framework, cloud memory service, vector database replacement, personal knowledge-management app, or proof that an agent's output is correct.
-
-Golden path on a normal repo:
-
-```bash
-cortex init
-git add .cortex/
-git commit -m "chore: initialize cortex memory"
-cortex manifest --budget 8000
-cortex doctor
-```
-
-After that, agents read the bounded manifest at session start, write Journal entries as work produces durable lessons, and CI/review can reject stale generated context before it steers a follow-up session.
+The durable product decision is [Doctrine 0008](./.cortex/doctrine/0008-context-integrity-build-system.md).
 
 ### The Protocol
 
 The Protocol ([`.cortex/protocol.md`](./.cortex/protocol.md)) is the rule set any agent follows when working on a Cortex-enabled project. Two tiers:
 
-- **Tier 1 — machine-observable triggers.** Deterministic, auditable, enforceable. *Diff touches `.cortex/doctrine/`. Test failed after passing earlier. Plan status changed. File deleted over N lines. Dependency manifest changed. Sentinel cycle ended. Touchstone pre-merge fired on architecturally significant diff (T1.7). Commit message matches pattern. Pull request merged to default branch (T1.9).* When these fire, the agent writes from the template the Protocol specifies — Journal entries for most triggers, a `doctrine/candidate.md` (a Doctrine draft awaiting promotion) for T1.7. Tooling verifies compliance.
-- **Tier 2 — advisory heuristics.** Judgment-based and explicitly labeled. *Decision phrasing. Failed attempt that taught something. Surprise about existing code. User says "remember this."* The agent is asked to journal on these; non-compliance is not enforced.
+- **Tier 1 — machine-observable triggers.** Deterministic, auditable, enforceable. *Diff touches `.cortex/doctrine/`. Test failed after passing earlier. Plan status changed. File deleted over N lines. Dependency manifest changed. Sentinel cycle ended. Touchstone pre-merge fired on architecturally significant diff. Commit message matches pattern. Pull request merged to default branch.* When these fire, the agent writes from the template the Protocol specifies. Tooling verifies compliance.
+- **Tier 2 — advisory heuristics.** Judgment-based and explicitly labeled. *Decision phrasing. Failed attempt that taught something. Surprise about existing code. User says "remember this."* The agent is asked to journal; non-compliance is not enforced.
 
 Projects import `.cortex/protocol.md` into `AGENTS.md`. Any agent that reads `AGENTS.md` inherits the Protocol.
 
@@ -98,23 +104,14 @@ Projects import `.cortex/protocol.md` into `AGENTS.md`. Any agent that reads `AG
 2. **Doctrine is immutable.** Changes come via new entries with `supersedes:` — the old entry stays.
 3. **Generated layers declare provenance.** Every Map / State / digest carries `Generated`, `Generator`, `Sources`, `Corpus`, `Omitted`, `Incomplete`, `Conflicts-preserved`. `Incomplete: []` means "I looked at everything I could." Missing fields fail `cortex doctor`.
 
----
-
-## UX — one command
-
-> **Status:** v0.3.0 ships status, structural validation, audit, retrieval, an interactive `cortex init` wizard with scan-and-absorb for existing repos, Autumn Garage sibling surfacing in `cortex doctor`, the unscoped-LLM/API-constraint warning, write-side authoring via `cortex journal draft <type>` and `cortex plan spawn <slug>`, release-event audit coverage, and orphan-deferral validation. The fully interactive per-candidate promotion prompts shown below depend on `.cortex/.index.json` being populated, which lands with **v0.6.0** (the lifecycle layer alongside the `cortex promote` real writer) per the 2026-04-24 production-release rerank — v0.4.0 is read-side foundation (`refresh-state` + `cortex next` + `plan status`), v0.5.0 is trust + automation (`--audit-instructions` + Touchstone post-merge), v0.6.0 is lifecycle (.index.json + promote + remaining doctor invariants), v0.9.0 is the external dogfood gate. Track progress in [`.cortex/state.md`](./.cortex/state.md).
-
-What ships today:
+## Commands
 
 ```bash
 cortex                      # status summary — active plans, journal activity, digest age, queue counts
-cortex init                 # scaffold .cortex/ in a project (idempotent); scans for existing
-                            # principles/, plans/, decisions/, ROADMAP.md, etc. and offers to
-                            # absorb each one (Y/n) into Doctrine or Plans, citing the source
-                            # via `Imported-from:` frontmatter — no flag needed
+cortex init                 # scaffold .cortex/ in a project; scans for existing principles/plans/decisions/
+                            # and offers to absorb each into Doctrine or Plans, citing the source
 cortex manifest --budget N  # token-budgeted session-start slice per Protocol § 1
-cortex manifest --show-budget
-                            # per-section estimates; normal coding startup target is 8k tokens
+cortex manifest --show-budget   # per-section estimates; normal coding startup target is 8k tokens
 cortex grep <pattern>       # frontmatter-aware ripgrep wrapper; see docs/grep.md
 cortex retrieve <query>     # ranked lookup over the derived index; --for-agent emits compact citations
 cortex journal draft <type> # scaffold Journal entries; warns above ~1200 estimated tokens unless --allow-large
@@ -124,147 +121,64 @@ cortex refresh-state        # regenerate .cortex/state.md
 cortex refresh-index        # rebuild .cortex/.index.json
 cortex doctor               # validate .cortex/ against SPEC
 cortex doctor --audit       # check Tier-1 Protocol triggers have matching Journal entries
-cortex doctor --audit-digests
-cortex promote <id>         # stub pending v0.6.0 .index.json writer + promote writer
-cortex sync                 # deprecated alias for cortex update
+cortex promote <id>         # promote a Journal entry to Doctrine
 cortex version
 ```
 
-See [`docs/grep.md`](./docs/grep.md) for `cortex grep --frontmatter` filter syntax and examples, and [`docs/retrieve.md`](./docs/retrieve.md) for citation-first `cortex retrieve --for-agent` output.
+See [`docs/grep.md`](./docs/grep.md) for `cortex grep --frontmatter` filter syntax and [`docs/retrieve.md`](./docs/retrieve.md) for citation-first `cortex retrieve --for-agent` output.
 
-External tools can seed their own default Doctrine without making Cortex opinionated: `cortex init --seed-from <dir>` copies one-level Markdown packs into `.cortex/doctrine/`, preserving bytes and frontmatter exactly. Numbered pack files keep their requested `NNNN-` prefix; unnumbered files are assigned from `0100` upward using their H1 slug. By default Cortex aborts before copying if a destination Doctrine entry or requested number already exists; `--merge skip-existing` makes pack installs idempotent for cases like Sentinel's planned baseline Doctrine pack.
-
-What the full interactive flow will look like once v0.6.0 ships the `.cortex/.index.json` writer and the `cortex promote` end-to-end writer (the per-candidate prompt UX itself is deferred from the v1.0 path to v1.x — see [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) `## Follow-ups (deferred)` #6):
-
-```
-$ cortex
-Cortex — your-project   spec v0.5.0   state: fresh (regenerated 2h ago)
-
-▸ 7 Journal entries since last check
-▸ 3 promotion candidates (1 stale, 2 proposed)
-▸ March 2026 digest overdue by 8 days
-
- [1] j-2026-04-17-auth-retry       [trivial]     3 entries on retry backoff
-     → Promote to doctrine/0005?  [y/n/view/defer/skip]:
-
- [2] j-2026-04-16-test-scoping      [editorial]  New pattern; no Doctrine covers
-     → Promote to doctrine/0006?  [y/n/view/defer/skip]:
-
- [3] j-2026-03-22-flaky-ci          [stale, 17d] Re-proposed after 3 new entries
-     → Promote to doctrine/0007?  [y/n/view/defer/skip]:
-
-Generate March 2026 digest now?  [y/n]:
-
-Anything else? (enter to exit, or type a request)
-```
-
-Everything surfaces at every invocation. You can't miss the queue; you can't miss an overdue digest; you can't miss staleness. For scripting use `cortex --status-only` or `cortex status --json`; the full interactive prompts are deferred from the v1.0 path (they depend on `.cortex/.index.json` having months of real promotion candidates — the v0.6.0 writer ships first, the per-candidate UX revisits at v1.x once data exists; see [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) `## Follow-ups (deferred)` #6).
-
----
-
-## Composition with Touchstone and Sentinel
-
-The three tools occupy distinct authority layers:
-
-| Tool | Scope | Authority |
-|---|---|---|
-| **Touchstone** | Universal (distributed via `touchstone sync`) | Originates engineering standards. Prescriptive. |
-| **Sentinel** | Project-local | Executes and reports. Descriptive. |
-| **Cortex** | Project-local | Remembers and reasons. Reflective. |
-
-They compose by file contract, never code import:
-
-- **Solo Cortex.** Any agent reading `AGENTS.md` follows the Protocol. Journal grows continuously; humans promote via the `cortex` interactive flow. Invariants are advisory (enforced only on explicit `cortex doctor` runs).
-- **With Touchstone.** The post-merge hook (auto-drafts `pr-merged` journal entries via `cortex journal draft`) ships in **v0.5.0**. The `cortex doctor --strict` pre-push gate is deferred from the v1.0 path to v1.x. On architecturally-significant pre-merge diffs (Protocol T1.7), Touchstone invokes `cortex doctrine draft` to create a durable Doctrine candidate the author reviews and promotes — this is **deferred from v1.0 to v1.x** along with the SPEC amendment that defines the `.cortex/pending/` staging layer (the durable-write requirement for T1.7's Tier-1 "auditable" contract is real, but a SPEC change for narrow triad-mode audience warrants its own dedicated cycle; see [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) `## Follow-ups (deferred)` #3). Cortex Doctrine `grounds-in:` Touchstone principles where applicable.
-- **With Sentinel.** Sentinel reads `.cortex/` (Doctrine + active Plans + recent Journal + digests) for cycle context. End-of-cycle writes a Journal entry. Next cycle reads the previous cycle's Journal. The loop closes.
-
-Solo Cortex is *good notes with conventions*. Triad Cortex is *enforced institutional memory*. Both are useful; the triad is where the loop closes.
-
----
+External tools can seed their own default Doctrine without making Cortex opinionated: `cortex init --seed-from <dir>` copies one-level Markdown packs into `.cortex/doctrine/`, preserving bytes and frontmatter exactly.
 
 ## Scale — consolidate and archive, never delete
 
 Cortex is append-only at write, **tiered at read**. Nothing is deleted; everything stays in git. The default read surface stays lean regardless of corpus age:
 
-- **Doctrine**: never archived; superseded entries stay with pointer; default session-start loading is `Load-priority: always` pins plus recency (see [`.cortex/protocol.md`](./.cortex/protocol.md) § 1).
-- **Journal**: hot (0–30d) → warm (30–365d) → cold (>365d, `journal/archive/<year>/`). Default load is hot + monthly digests.
-- **Plans**: auto-moved to `plans/archive/` after 30d in `shipped` or `cancelled` status.
-- **Map / State**: always regenerated; old versions are git history.
+- **Doctrine** — never archived; superseded entries stay with pointer.
+- **Journal** — hot (0–30d) → warm (30–365d) → cold (>365d, `journal/archive/<year>/`). Default load is hot + monthly digests.
+- **Plans** — auto-moved to `plans/archive/` after 30d in `shipped` or `cancelled` status.
+- **Map / State** — always regenerated; old versions are git history.
 
-Monthly: `cortex` proposes a Journal digest — a summary of the period's key decisions with citations to originals. Human approves in one keystroke. Digests obey the seven-field contract plus a depth cap (quarterly digests can cite monthly digests at most one level deep) and audit sampling (`cortex doctor --audit-digests` verifies claims trace back to source entries).
-
-The claim: at year 10, the default manifest is still ~7k tokens. Doctrine grew by promotion; Journal grew by Protocol; digests replaced raw entries in the read surface. **Cortex improves with scale because recurring lessons graduate into always-loaded Doctrine, and the corpus becomes richer evidence for future promotion.**
-
----
+Monthly, `cortex` proposes a Journal digest — a summary of the period's key decisions with citations to originals. **Cortex improves with scale because recurring lessons graduate into always-loaded Doctrine, and the corpus becomes richer evidence for future promotion.**
 
 ## What Cortex is not
 
-Cortex is deliberately **not** a database, a knowledge graph, a portfolio tool, an agent framework, a replacement for `AGENTS.md` / `CLAUDE.md`, or cloud-hosted. On vector storage specifically: the canonical store stays markdown + git + grep — no embeddings live inside `.cortex/` content — but Cortex owns an opt-in retrieval interface (`cortex retrieve`) over a gitignored derived index for projects whose corpora outgrow recency-by-grep. See [Doctrine 0006](./.cortex/doctrine/0006-scope-boundaries-v3.md) (supersedes 0005) for the rationale per category and the storage-vs-retrieval split. Adjacent tools compose with Cortex; none are replaced by it.
+Cortex is deliberately **not** a database, a knowledge graph, a portfolio tool, an agent framework, a replacement for `AGENTS.md` / `CLAUDE.md`, or cloud-hosted. On vector storage specifically: the canonical store stays markdown + git + grep — no embeddings live inside `.cortex/` content — but Cortex owns an opt-in retrieval interface (`cortex retrieve`) over a gitignored derived index for projects whose corpora outgrow recency-by-grep. See [Doctrine 0006](./.cortex/doctrine/0006-scope-boundaries-v3.md).
 
----
+## The quartet
 
-## Install
+Cortex is the spine that holds project memory across tools and time:
 
-```bash
-brew tap autumngarage/cortex
-brew install autumngarage/cortex/cortex   # fully qualified — homebrew-core has a different `cortex` (Prometheus storage)
-cortex init        # in any project
-cortex doctor      # verify the scaffold
-```
+- **[Touchstone](https://github.com/autumngarage/touchstone)** — scaffolding + pre-push AI review gate. *The ground.*
+- **Cortex** *(this tool)* — portable file-format protocol for project memory. *The spine.*
+- **[Sentinel](https://github.com/autumngarage/sentinel)** — autonomous assess→plan→delegate→review loop. *The hands.*
+- **[Conductor](https://github.com/autumngarage/conductor)** — capability-aware router across LLM providers. *The voice.*
 
-Or from source with [`uv`](https://docs.astral.sh/uv/):
+Each tool installs independently and composes through **file contracts, never code imports**:
 
-```bash
-uv tool install git+https://github.com/autumngarage/cortex
-```
+- **Solo Cortex.** Any agent reading `AGENTS.md` follows the Protocol. Journal grows continuously; humans promote candidates via `cortex refresh-index` + `cortex promote <id>`.
+- **With Touchstone.** The post-merge hook auto-drafts `pr-merged` journal entries via `cortex journal draft`. Architecturally-significant pre-merge diffs (T1.7) are scoped to drop a `doctrine/candidate.md` draft for the author to review and promote; the `cortex doctrine draft` command and triad-mode enforcement are deferred from v1.0 — see [`plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) `## Follow-ups (deferred)`.
+- **With Sentinel.** Sentinel reads `.cortex/` (Doctrine + active Plans + recent Journal + digests) for cycle context. End-of-cycle writes a Journal entry. Next cycle reads the previous cycle's Journal. The loop closes.
 
-### Installing the full autumngarage trio
+Solo Cortex is *good notes with conventions*. Triad Cortex is *enforced institutional memory*. Both are useful; the triad is where the loop closes. See [autumn-garage](https://github.com/autumngarage/autumn-garage) for the coordination repo.
 
-Cortex stands alone. It also composes with its two siblings — install all three when you want the full loop:
+## Status
 
-```bash
-# Foundation: engineering standards, principles, pre-push Codex review
-brew tap autumngarage/touchstone
-brew install touchstone
+Production-ready and shipped via Homebrew. Three reference installs in the wild: `conductor`, `touchstone`, and `vesper` install Cortex via the Homebrew tap. Latest release: [GitHub Releases](https://github.com/autumngarage/cortex/releases). Run `cortex version` to see the installed build.
 
-# Loop: autonomous multi-provider agent cycles
-brew tap autumngarage/sentinel
-brew install sentinel
-
-# Memory: project-local reasoning (this repo)
-brew tap autumngarage/cortex
-brew install autumngarage/cortex/cortex   # fully qualified; see note above
-```
-
-Each tool writes to its own files and reads the others only as best-effort. Nothing breaks if one is missing — Cortex works without Sentinel and without Touchstone; it just can't enforce invariants at push-time (Touchstone) or receive end-of-cycle journal entries (Sentinel). See the [Composition](#composition-with-touchstone-and-sentinel) section above for the file-contract details.
-
----
+For "where are we now" and "what's next": [`.cortex/state.md`](./.cortex/state.md) is the canonical current state; [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) is the master launch sequence; [`.cortex/plans/context-integrity-production.md`](./.cortex/plans/context-integrity-production.md) owns the context-integrity roadmap. README deliberately keeps only this pointer per [Doctrine 0007](./.cortex/doctrine/0007-canonical-ownership-of-state-and-plans.md) — repo-root files that restate `.cortex/` content are anti-pattern.
 
 ## Documentation
 
-- **[`SPEC.md`](./SPEC.md)** — The normative specification for the `.cortex/` file format and protocol.
-- **[`docs/config-reference.md`](./docs/config-reference.md)** — Per-project `.cortex/config.toml` schema reference (every key, type, default, worked example).
-- **[`docs/spec-conformance.md`](./docs/spec-conformance.md)** — The SPEC-to-test traceability matrix, proving CLI conformance.
-- **[`docs/retrieve.md`](./docs/retrieve.md)** — Citation-first `cortex retrieve --for-agent` output and the recommended agent lookup loop.
-- **[`docs/PITCH.md`](./docs/PITCH.md)** — A plain-language overview of Cortex.
-- **[`docs/CASE-STUDIES.md`](./docs/CASE-STUDIES.md)** — Documented case studies: the conductor incident and the three-target v0.9.0 dogfood gate.
-- **[`docs/install-pr-templates.md`](./docs/install-pr-templates.md)** — Reusable copy and checklist for Cortex install PRs on sibling projects.
-- **[`docs/PRIOR_ART.md`](./docs/PRIOR_ART.md)** — Research and influences.
-- **[Doctrine 0008](./.cortex/doctrine/0008-context-integrity-build-system.md)** — The durable decision that Cortex owns context integrity, not generic memory-bank, RAG, or agent-framework scope.
-- **[Context integrity production plan](./.cortex/plans/context-integrity-production.md)** — The staged roadmap for turning that positioning into production behavior.
-
----
-
-## Status and plan
-
-**Production-ready and installed via Homebrew.** Three reference installs in the wild: `conductor`, `touchstone`, and `vesper` install Cortex via the Homebrew tap. The v0.9.0 dogfood gate surfaced nine real bugs and turned fresh-clone acceptance plus bare-repo degradation into permanent CI fixtures. Current releases continue to tighten context integrity around that baseline; see [`docs/CASE-STUDIES.md`](./docs/CASE-STUDIES.md) for the gate evidence.
-
-For "where are we now" and "what's next": [`.cortex/state.md`](./.cortex/state.md) is the canonical current state; [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) is the master launch sequence, and [`.cortex/plans/context-integrity-production.md`](./.cortex/plans/context-integrity-production.md) owns the new context-integrity roadmap. README deliberately keeps only this pointer per [Doctrine 0007](./.cortex/doctrine/0007-canonical-ownership-of-state-and-plans.md) — repo-root files that restate `.cortex/` content are anti-pattern.
-
-LLM-additive features (`cortex refresh-map`, `cortex refresh-state --enhance`, `cortex next --enhance`) and triad-mode infrastructure (`.cortex/pending/` + `cortex doctrine draft` + T1.7 Touchstone pre-merge hook) are deliberately **deferred from the v1.0 path** to v1.x. See [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) `## Follow-ups (deferred)` for the full deferral list with revisit conditions per item.
-
----
+- [`SPEC.md`](./SPEC.md) — The normative specification for the `.cortex/` file format and protocol.
+- [`docs/PITCH.md`](./docs/PITCH.md) — Plain-language overview of Cortex.
+- [`docs/config-reference.md`](./docs/config-reference.md) — Per-project `.cortex/config.toml` schema reference.
+- [`docs/grep.md`](./docs/grep.md) — `cortex grep --frontmatter` filter syntax and examples.
+- [`docs/retrieve.md`](./docs/retrieve.md) — Citation-first `cortex retrieve --for-agent` output.
+- [`docs/spec-conformance.md`](./docs/spec-conformance.md) — SPEC-to-test traceability matrix.
+- [`docs/CASE-STUDIES.md`](./docs/CASE-STUDIES.md) — The conductor incident and the v0.9.0 dogfood gate.
+- [`docs/PRIOR_ART.md`](./docs/PRIOR_ART.md) — Research and influences.
+- [GitHub Releases](https://github.com/autumngarage/cortex/releases) — release notes for every version.
 
 ## License
 
-MIT.
+MIT
