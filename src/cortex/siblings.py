@@ -144,6 +144,10 @@ def detect_sibling(
 
 def detect_siblings(cwd: Path) -> list[SiblingStatus]:
     """Detect all known Autumn Garage siblings relative to `cwd`."""
+    # TODO(#272): when Phase C synthesis ships in Cortex, add a Conductor peer
+    # check (`conductor` on PATH) gated on an enabled synthesis backend (for
+    # example via `.cortex/config.toml`). Keep it fully dormant for core-only
+    # users who never enable synthesis.
     return [
         detect_sibling("touchstone", project_marker=".touchstone-config", cwd=cwd),
         detect_sibling("sentinel", project_marker=".sentinel/config.toml", cwd=cwd),

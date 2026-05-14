@@ -75,6 +75,8 @@ Early releases established distribution through the Homebrew tap `autumngarage/h
 
 Each release must also declare which spec version it supports (in `SUPPORTED_SPEC_VERSIONS` in `src/cortex/__init__.py`). A minor CLI release cannot change the spec's major version; those travel together.
 
+Homebrew formula dependency rule (Phase C / Doctrine 0009): while Cortex-core remains the default/only shipped surface, the tap formula in `autumngarage/homebrew-cortex` MUST NOT add `depends_on "autumngarage/conductor/conductor"`. Revisit only when Phase C synthesis ships; add that dependency only if synthesis is default-enabled (not merely opt-in). If synthesis remains opt-in, keep the formula dependency-free and document separate Conductor install for synthesis users.
+
 ## Architecture
 
 Python CLI (click + uv-managed venv) organized around layer commands. v0.2.3 ships the non-synthesizing surface; the production-release roadmap ([`.cortex/journal/2026-04-24-production-release-rerank.md`](./.cortex/journal/2026-04-24-production-release-rerank.md), supersedes the 2026-04-23 phase reorder for sequencing decisions) sequences the remaining work as six release-driven sub-sections (v0.3.0 → v1.0.0) under a single forcing function: install Cortex on a real project, work for a week, no surprises.
