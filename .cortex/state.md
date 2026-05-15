@@ -1,15 +1,15 @@
 ---
-Generated: 2026-05-15T02:00:04-04:00
-Generator: cortex refresh-state v1.6.3
+Generated: 2026-05-15T08:00:12-04:00
+Generator: cortex refresh-state v1.6.4
 Sources:
-  - HEAD sha: 0ec6658279285d693ad758415cb078e0968cdd8c
+  - HEAD sha: 87364f7ae03edf1f440930a99e30dde902e6127e
   - .cortex/plans/*.md (11 files)
   - .cortex/journal/*.md (108 entries, 2026-04-17..2026-05-15)
   - .cortex/doctrine/*.md (10 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
   - SPEC version: 0.5.0
-  - pyproject.toml: 1.6.3 + cortex package version: 1.6.3
+  - pyproject.toml: 1.6.4 + cortex package version: 1.6.4
 Sources-hash:
   .cortex/doctrine/0001-why-cortex-exists.md: e20d6d52fac419bf22ad43ddf01762f03504f348ef0b2cc30d3983b4c8bec063
   .cortex/doctrine/0002-compose-by-file-contract-not-code.md: 2063446ef8eaf51db05712759124cb21ce26557179607fe59c4ff126f0e4edf3
