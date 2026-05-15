@@ -245,6 +245,9 @@ def _print_siblings(project_root: Path) -> None:
     Informational only — presence/absence never escalates exit code or
     warn-severity. See `cortex.siblings` for the detection contract.
     """
+    # TODO(phase-c): add a `conductor` PATH peer check when a Phase C synthesis
+    # backend is enabled. Keep this dormant for core-only users with synthesis
+    # fully disabled.
     statuses = detect_siblings(project_root)
     click.echo("")
     click.echo(format_sibling_block(statuses))
