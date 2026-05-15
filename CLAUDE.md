@@ -73,6 +73,8 @@ Fix failing tests before pushing. Phase A has no code to test; test infrastructu
 
 Early releases established distribution through the Homebrew tap `autumngarage/homebrew-cortex`, which now hosts the formula (`brew tap autumngarage/cortex && brew install autumngarage/cortex/cortex` — fully qualified to side-step the unrelated Prometheus `cortex` in homebrew-core); `uv tool install git+...` works for source installs. Release flow: version bump in `__init__.py` + `pyproject.toml`, tag, push tag, `gh release create v0.X.Y --generate-notes`. The release-published event triggers `.github/workflows/release.yml`, which calls the shared `homebrew-bump.yml` reusable workflow in `autumngarage/autumn-garage` (pinned `@v1`) to rewrite the tap formula's `url` + `sha256` and commit directly to the tap's `main` — no hand-editing. Manual escape hatch: `gh workflow run release.yml -f tag_name=v0.X.Y` re-bumps for an existing tag. Required repo secret: `HOMEBREW_TAP_PAT` (classic PAT with `repo` scope on the tap, or fine-grained with `contents:write` on `autumngarage/homebrew-cortex`).
 
+Brew formula dependency rule for future Phase C synthesis: keep the formula dependency-free while Cortex-core is the default/only shipped surface; do **not** add `depends_on "autumngarage/conductor/conductor"` yet. Add that `depends_on` only after Phase C synthesis ships **and** synthesis is default-enabled. If synthesis ships as opt-in only, keep the formula dependency-free and document that users install Conductor separately when they enable synthesis.
+
 Each release must also declare which spec version it supports (in `SUPPORTED_SPEC_VERSIONS` in `src/cortex/__init__.py`). A minor CLI release cannot change the spec's major version; those travel together.
 
 ## Architecture
