@@ -637,8 +637,8 @@ def test_auto_sync_skips_with_config(
     assert _read_marker(project) == "1.0.0"
 
 
-@pytest.mark.parametrize("subcommand", ["init", "update", "sync", "migrate-state", "check-triggers"])
-def test_auto_sync_skips_during_init_update_sync_migrate_state_and_check_triggers(
+@pytest.mark.parametrize("subcommand", ["init", "update", "sync", "migrate-state", "doctor", "check-triggers"])
+def test_auto_sync_skips_during_init_update_sync_migrate_state_doctor_and_check_triggers(
     tmp_path: Path,
     scaffolded_project: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -665,6 +665,7 @@ def test_auto_sync_skips_during_init_update_sync_migrate_state_and_check_trigger
         "update": ["update", "--path", str(project), "--dry-run"],
         "sync": ["sync", "--path", str(project), "--dry-run"],
         "migrate-state": ["migrate-state", "--path", str(project), "--dry-run"],
+        "doctor": ["doctor", "--path", str(project)],
         "check-triggers": ["check-triggers", "--path", str(project), "--since", "HEAD"],
     }
     monkeypatch.chdir(project)
@@ -673,6 +674,29 @@ def test_auto_sync_skips_during_init_update_sync_migrate_state_and_check_trigger
     # The auto-sync banner must not appear under any of these subcommands.
     assert "==> auto-sync:" not in result.output, result.output
     # Marker on the project under test MUST NOT have been touched.
+    assert _read_marker(project) == "1.0.0"
+
+
+def test_doctor_never_runs_auto_sync(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression for cortex#282: validation must not dirty generated layers."""
+
+    project = scaffolded_project
+    _set_marker(project, "1.0.0")
+    _commit_all(project)
+    monkeypatch.setattr(cortex, "__version__", "1.1.0")
+    monkeypatch.setattr("cortex.commands._auto_sync.__version__", "1.1.0")
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+    monkeypatch.chdir(project)
+
+    runner = CliRunner()
+    with patch("cortex.commands.sync.run_sync") as run_sync:
+        result = runner.invoke(cli, ["doctor", "--path", str(project)])
+
+    assert result.exit_code == 0, result.output
+    assert "auto-sync" not in result.output
+    run_sync.assert_not_called()
     assert _read_marker(project) == "1.0.0"
 
 
