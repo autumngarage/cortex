@@ -1,6 +1,6 @@
 {
   "spec": "0.5.0",
-  "generated": "2026-05-09T21:27:29-04:00",
+  "generated": "2026-05-13T08:11:18-04:00",
   "candidates": [
     {
       "id": "2026-04-17-competitive-positioning-and-claude-code-risk",
@@ -232,6 +232,15 @@
       "source": ".cortex/journal/2026-05-09-token-budget-instrumentation.md",
       "type": "decision",
       "last_touched": "2026-05-09",
+      "tags": [],
+      "supersedes": null,
+      "promoted_to": null
+    },
+    {
+      "id": "2026-05-13-source-pr-staging-decision",
+      "source": ".cortex/journal/2026-05-13-source-pr-staging-decision.md",
+      "type": "decision",
+      "last_touched": "2026-05-13",
       "tags": [],
       "supersedes": null,
       "promoted_to": null
