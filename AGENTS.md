@@ -153,7 +153,7 @@ If you find yourself writing "consider" or "you might want to" without a concret
 
 If there are zero blocking issues, the review is just: "LGTM."
 
-<!-- conductor:begin v0.10.2 -->
+<!-- conductor:begin v0.10.26 -->
 ## Conductor delegation
 
 This project has [conductor](https://github.com/autumngarage/conductor)
