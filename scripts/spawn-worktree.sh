@@ -12,6 +12,14 @@
 #
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "$SCRIPT_DIR/../lib/events.sh" ]; then
+  # shellcheck source=../lib/events.sh
+  source "$SCRIPT_DIR/../lib/events.sh"
+else
+  touchstone_emit_event() { :; }
+fi
+
 usage() {
   awk 'NR>2 && !/^#/ { exit } NR>2 { sub(/^# ?/, ""); print }' "$0"
 }
@@ -22,7 +30,7 @@ if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
 fi
 
 case "$1" in
-  -h|--help)
+  -h | --help)
     usage
     exit 0
     ;;
@@ -114,10 +122,11 @@ guard_worktreeinclude_patterns() {
         exit 1
         ;;
     esac
-  done < "$include_file"
+  done <"$include_file"
 }
 
 DEFAULT_REF="$(resolve_default_ref)"
+BASE_BRANCH="${DEFAULT_REF#origin/}"
 
 # Validate .worktreeinclude before any external side effect (branch creation,
 # worktree directory) so a bad pattern doesn't leave behind half-spawned state
@@ -132,6 +141,11 @@ echo "    branch: $BRANCH"
 echo "    path:   $WORKTREE_PATH"
 echo "    base:   $DEFAULT_REF"
 git worktree add "$WORKTREE_PATH" --no-track -b "$BRANCH" "$DEFAULT_REF"
+touchstone_emit_event worktree_created \
+  branch="$BRANCH" \
+  worktree_path="$WORKTREE_PATH" \
+  base_branch="$BASE_BRANCH" \
+  repo_root="$REPO_ROOT"
 # Keep first push ergonomic without wiring the new branch to origin/main.
 git -C "$WORKTREE_PATH" config extensions.worktreeConfig true
 git -C "$WORKTREE_PATH" config --worktree push.default current
@@ -150,9 +164,9 @@ if [ -f "$INCLUDE_FILE" ]; then
   STANDARD_LIST="$(mktemp)"
   trap 'rm -f "$INCLUDE_LIST" "$STANDARD_LIST"' EXIT
   git ls-files --others --ignored --exclude-from="$INCLUDE_FILE" \
-    | LC_ALL=C sort > "$INCLUDE_LIST"
+    | LC_ALL=C sort >"$INCLUDE_LIST"
   git ls-files --others --ignored --exclude-standard \
-    | LC_ALL=C sort > "$STANDARD_LIST"
+    | LC_ALL=C sort >"$STANDARD_LIST"
 
   while IFS= read -r ignored_file; do
     [ -n "$ignored_file" ] || continue
