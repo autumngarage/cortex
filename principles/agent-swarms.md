@@ -113,7 +113,20 @@ Workers own only their slice:
 
 Default to one PR per worker when slices are independently shippable. Use an
 aggregate PR when the feature only makes sense as a unit, when shared files
-must be updated centrally, or when reviewers need one coherent story.
+must be updated centrally, or when the change only makes sense reviewed as
+a whole.
+
+### Pipeline Meta-Fixes Ship First
+
+If a lane changes the review/merge pipeline itself, ship that lane before other
+parallel lanes. Pipeline fixes include `scripts/merge-pr.sh`,
+`scripts/open-pr.sh`, `scripts/conductor-review.sh`, and pre-push hooks. Every
+other lane flows through that path at review/merge time, so leaving known
+pipeline bugs in place can invalidate otherwise-correct slice PRs.
+
+Worked example (Wave 2): land pipeline PR **#214** first, then run content
+lanes **#215** and **#216** through the fixed pipeline. Do not merge #215/#216
+first and "fix the pipeline later."
 
 ## Concurrency Cap
 
@@ -159,6 +172,15 @@ copies explicitly allowlisted ignored local files from `.worktreeinclude`.
 `scripts/cleanup-worktrees.sh` is dry-run by default. It lists worktrees,
 checks dirty status, verifies merged-or-equivalent branches, previews
 `git worktree prune`, and removes only clean candidates when asked to execute.
+
+Deleting a worktree directory is not the same as `git worktree remove <path>`.
+`rm -rf ../app-slice` removes files but can leave stale records under Git's
+shared worktree metadata, so Git may still think a branch is checked out there
+and refuse later checkouts, branch deletes, or merges. For normal cleanup, use
+`git worktree remove <path>` or `bash scripts/cleanup-worktrees.sh --execute`.
+If someone already deleted the directory directly, run `git worktree prune`
+from a remaining checkout to remove metadata for missing paths, then rerun the
+failed checkout, merge, or cleanup command.
 
 Rules:
 

@@ -5,6 +5,8 @@
 # Usage:
 #   bash scripts/cleanup-worktrees.sh              # dry-run (default)
 #   bash scripts/cleanup-worktrees.sh --execute    # remove clean candidates
+#   bash scripts/cleanup-worktrees.sh --unlock-stale --execute
+#                                                     unlock dead-PID locks, then remove safe candidates
 #   bash scripts/cleanup-worktrees.sh --force      # remove candidates even if dirty
 #
 # Safety guarantees:
@@ -14,12 +16,23 @@
 #   - Clean worktrees are removable only when their branch is merged or
 #     tree-equivalent to the default branch, or when the branch is gone.
 #   - Dirty worktrees are refused unless --force is explicit.
+#   - Locked worktrees are refused unless their lock reason contains a dead
+#     `pid <number>` and --unlock-stale is explicit.
 #   - git worktree prune is previewed before any actual prune.
 #
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "$SCRIPT_DIR/../lib/events.sh" ]; then
+  # shellcheck source=../lib/events.sh
+  source "$SCRIPT_DIR/../lib/events.sh"
+else
+  touchstone_emit_event() { :; }
+fi
+
 DRY_RUN=1
 FORCE=0
+UNLOCK_STALE=0
 
 usage() {
   awk 'NR>2 && !/^#/ { exit } NR>2 { sub(/^# ?/, ""); print }' "$0"
@@ -27,7 +40,7 @@ usage() {
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --execute|-x)
+    --execute | -x)
       DRY_RUN=0
       shift
       ;;
@@ -36,11 +49,15 @@ while [ "$#" -gt 0 ]; do
       FORCE=1
       shift
       ;;
+    --unlock-stale)
+      UNLOCK_STALE=1
+      shift
+      ;;
     --dry-run)
       DRY_RUN=1
       shift
       ;;
-    -h|--help)
+    -h | --help)
       usage
       exit 0
       ;;
@@ -109,6 +126,7 @@ MAIN_WORKTREE="$(printf '%s\n' "$WORKTREE_LIST" | awk '/^worktree /{print substr
 
 CANDIDATE_PATHS=()
 FORCE_PATHS=()
+UNLOCK_STALE_PATHS=()
 
 echo "==> Worktrees"
 echo "    default ref: $DEFAULT_REF"
@@ -116,12 +134,70 @@ echo "    default ref: $DEFAULT_REF"
 current_path=""
 current_head=""
 current_branch=""
+current_locked=0
+current_lock_reason=""
+
+pid_is_alive() {
+  local pid="$1"
+
+  [ -n "$pid" ] || return 1
+  case "$pid" in
+    *[!0-9]*) return 1 ;;
+  esac
+
+  if kill -0 "$pid" 2>/dev/null; then
+    return 0
+  fi
+  # If kill(2) is denied but the process exists, treat it as alive.
+  ps -p "$pid" >/dev/null 2>&1
+}
+
+pid_is_current_shell_parent() {
+  local pid="$1"
+
+  [ -n "$pid" ] || return 1
+  [ -n "${PPID:-}" ] || return 1
+  [ "$pid" = "$PPID" ]
+}
+
+classify_lock() {
+  local reason="$1"
+  local pid
+
+  if [[ "$reason" =~ [Pp][Ii][Dd][[:space:]]+([0-9]+) ]]; then
+    pid="${BASH_REMATCH[1]}"
+    if pid_is_current_shell_parent "$pid"; then
+      printf 'stale|%s|stale (pid %s is current shell parent)' "$pid" "$pid"
+    elif pid_is_alive "$pid"; then
+      printf 'alive|%s|alive (pid %s)' "$pid" "$pid"
+    else
+      printf 'stale|%s|stale (pid %s dead)' "$pid" "$pid"
+    fi
+  else
+    printf 'unknown||present, no PID'
+  fi
+}
+
+path_needs_stale_unlock() {
+  local target="$1"
+  local path
+
+  for path in ${UNLOCK_STALE_PATHS[@]+"${UNLOCK_STALE_PATHS[@]}"}; do
+    [ "$path" = "$target" ] && return 0
+  done
+  return 1
+}
 
 flush_worktree() {
   [ -n "$current_path" ] || return 0
 
   local branch_label dirty_status dirty_label reason removable branch_name
+  local lock_state lock_pid lock_label unlock_before_remove
   branch_label="${current_branch:-detached}"
+  lock_state="none"
+  lock_pid=""
+  lock_label=""
+  unlock_before_remove=0
 
   if dirty_status="$(git -C "$current_path" status --porcelain 2>/dev/null)"; then
     if [ -n "$dirty_status" ]; then
@@ -137,6 +213,10 @@ flush_worktree() {
   printf '    branch: %s\n' "$branch_label"
   printf '    head: %s\n' "${current_head:-unknown}"
   printf '    status: %s\n' "$dirty_label"
+  if [ "$current_locked" -eq 1 ]; then
+    IFS='|' read -r lock_state lock_pid lock_label <<<"$(classify_lock "$current_lock_reason")"
+    printf '    lock: %s\n' "$lock_label"
+  fi
 
   removable=0
   reason=""
@@ -149,7 +229,17 @@ flush_worktree() {
     reason="dirty; use --force to remove"
   elif [ "$dirty_label" = "missing" ]; then
     reason="missing; git worktree prune handles this"
+  elif [ "$current_locked" -eq 1 ] && [ "$lock_state" = "alive" ]; then
+    reason="locked by live process (pid $lock_pid); not removing"
+  elif [ "$current_locked" -eq 1 ] && [ "$lock_state" = "unknown" ]; then
+    reason="locked without PID; unlock manually after inspection"
+  elif [ "$current_locked" -eq 1 ] && [ "$lock_state" = "stale" ] && [ "$UNLOCK_STALE" -ne 1 ]; then
+    reason="locked by dead process (pid $lock_pid); pass --unlock-stale --execute to remove"
   else
+    if [ "$current_locked" -eq 1 ] && [ "$lock_state" = "stale" ]; then
+      unlock_before_remove=1
+    fi
+
     if [ -z "$current_branch" ]; then
       if [ -z "$current_head" ] || [ "$current_head" = "unknown" ]; then
         reason="detached HEAD missing; investigate manually"
@@ -185,6 +275,9 @@ flush_worktree() {
     if [ "$dirty_label" = "dirty" ]; then
       FORCE_PATHS+=("$current_path")
     fi
+    if [ "$unlock_before_remove" -eq 1 ]; then
+      UNLOCK_STALE_PATHS+=("$current_path")
+    fi
   fi
 }
 
@@ -195,6 +288,8 @@ while IFS= read -r line || [ -n "$line" ]; do
       current_path="${line#worktree }"
       current_head=""
       current_branch=""
+      current_locked=0
+      current_lock_reason=""
       ;;
     HEAD\ *)
       current_head="${line#HEAD }"
@@ -202,14 +297,24 @@ while IFS= read -r line || [ -n "$line" ]; do
     branch\ *)
       current_branch="${line#branch }"
       ;;
+    locked\ *)
+      current_locked=1
+      current_lock_reason="${line#locked }"
+      ;;
+    locked)
+      current_locked=1
+      current_lock_reason=""
+      ;;
     "")
       flush_worktree
       current_path=""
       current_head=""
       current_branch=""
+      current_locked=0
+      current_lock_reason=""
       ;;
   esac
-done <<< "$WORKTREE_LIST"
+done <<<"$WORKTREE_LIST"
 flush_worktree
 
 echo ""
@@ -237,12 +342,27 @@ fi
 echo ""
 echo "==> Removing worktrees"
 for path in "${CANDIDATE_PATHS[@]}"; do
+  touchstone_emit_event cleanup_started worktree_path="$path"
+  if path_needs_stale_unlock "$path"; then
+    if ! git worktree unlock "$path"; then
+      touchstone_emit_event cleanup_done worktree_path="$path" result=failed
+      exit 1
+    fi
+    echo "    unlocked stale lock: $path"
+  fi
   if [ "$FORCE" -eq 1 ]; then
-    git worktree remove --force "$path"
+    if ! git worktree remove --force "$path"; then
+      touchstone_emit_event cleanup_done worktree_path="$path" result=failed
+      exit 1
+    fi
   else
-    git worktree remove "$path"
+    if ! git worktree remove "$path"; then
+      touchstone_emit_event cleanup_done worktree_path="$path" result=failed
+      exit 1
+    fi
   fi
   echo "    removed: $path"
+  touchstone_emit_event cleanup_done worktree_path="$path" result=removed
 done
 
 echo ""
