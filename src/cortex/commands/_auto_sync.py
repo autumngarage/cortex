@@ -29,8 +29,8 @@ Design notes:
   state — those commands either pre-date the marker (init) or
   already ARE the update code path (update/sync), are explicitly lossy and
   must require operator consent (migrate-state), or are documented as
-  read-only inspection primitives (check-triggers). Init's own marker
-  write at scaffold time is the seed; we never assume init succeeds
+  read-only inspection primitives (`doctor`, `check-triggers`). Init's own
+  marker write at scaffold time is the seed; we never assume init succeeds
   to suppress the auto-sync, the skip list does.
 - **Patch bumps do not trigger.** A patch release should be safe to
   install without rebuilding derived state. Only minor or major
@@ -78,6 +78,7 @@ SKIP_COMMANDS: frozenset[str] = frozenset({
     "sync",
     "migrate-state",
     "version",
+    "doctor",
     "check-triggers",
 })
 
