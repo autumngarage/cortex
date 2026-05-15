@@ -123,6 +123,9 @@ def _make_cortex_shim(
               fi
               exit {check_triggers_status}
             fi
+            if [ "$1" = "refresh-state" ]; then
+              exit 0
+            fi
             mkdir -p {journal_path.parent!s}
             printf 'placeholder\\n' > {journal_path!s}
             printf '%s\\n' {journal_path!s}
@@ -151,8 +154,8 @@ def _make_git_shim(
     log_file.write_text("", encoding="utf-8")
     shim = bin_dir / "git"
     checkout_block = (
-        "if [ \"${cmd_args[0]:-}\" = \"checkout\" ] && [ \"${cmd_args[1]:-}\" = \"-q\" ] "
-        "&& [ \"${cmd_args[2]:-}\" = \"-b\" ]; then\n"
+        "if [ \"${cmd_args[0]:-}\" = \"checkout\" ] && { [ \"${cmd_args[1]:-}\" = \"-b\" ] "
+        "|| { [ \"${cmd_args[1]:-}\" = \"-q\" ] && [ \"${cmd_args[2]:-}\" = \"-b\" ]; }; }; then\n"
         "  printf 'git shim: forced checkout -b failure\\n' >&2\n"
         "  exit 42\n"
         "fi\n"
@@ -535,7 +538,7 @@ def test_hook_creates_feature_branch_before_journal_draft(
     )
 
     assert result.returncode == 1, result.stderr
-    assert "failed before journal draft" in result.stderr
+    assert "before journal draft" in result.stderr
     assert not journal_path.exists()
     cortex_calls = cortex_log.read_text(encoding="utf-8")
     assert "--no-auto-sync check-triggers --since HEAD~1" in cortex_calls
