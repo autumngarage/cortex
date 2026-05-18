@@ -193,6 +193,9 @@ def doctor_command(
 
     if not as_json:
         _print_usage_ratio(target_path)
+        # TODO(phase-c-synthesis): add a Conductor PATH peer check that only
+        # activates when a Phase C synthesis backend is enabled in project
+        # config; keep this completely dormant for core-only users.
         _print_siblings(target_path)
 
     if errors or (strict and (warnings or instruction_warnings)):
