@@ -9,6 +9,10 @@ from pathlib import Path
 
 import click
 
+from cortex.commands._auto_sync import (
+    auto_sync_disabled_from_context,
+    maybe_auto_sync_stale_inputs,
+)
 from cortex.compat import warn_if_incompatible
 from cortex.usage import UsageCounter, increment_usage
 
@@ -109,6 +113,22 @@ def retrieve_command(
     """
 
     project_root = Path(target_path).resolve()
+    # Stale-input auto-update (cortex#261) scoped to THIS command's --path.
+    # Two artifacts must not be conflated: this hook owns the generated state
+    # layers (state.md / .index.json), while `--no-rebuild` below governs the
+    # *retrieve* sqlite index. We pass `rebuild_retrieve_index=not no_rebuild`
+    # so a stale-state refresh never force-rebuilds the retrieve index when the
+    # operator asked for --no-rebuild; retrieve's own staleness handling (the
+    # `no_rebuild` branch further down) still applies to the retrieve index.
+    # The retrieve stdout is pure JSON under --json/--for-agent, so the sync
+    # narrative is routed to stderr in those modes.
+    maybe_auto_sync_stale_inputs(
+        project_root,
+        "retrieve",
+        disabled=auto_sync_disabled_from_context(),
+        json_mode=as_json or for_agent,
+        rebuild_retrieve_index=not no_rebuild,
+    )
     cortex_dir = project_root / ".cortex"
     if not cortex_dir.is_dir():
         click.echo(

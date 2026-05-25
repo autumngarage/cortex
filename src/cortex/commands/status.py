@@ -12,6 +12,10 @@ from pathlib import Path
 
 import click
 
+from cortex.commands._auto_sync import (
+    auto_sync_disabled_from_context,
+    maybe_auto_sync_stale_inputs,
+)
 from cortex.compat import warn_if_incompatible
 from cortex.status import compute_status, format_status
 
@@ -51,4 +55,14 @@ def run_status(project_root: Path, *, as_json: bool) -> None:
 )
 def status_command(*, target_path: Path, as_json: bool) -> None:
     """Print active plans, journal activity, digest age, and promotion-queue counts."""
-    run_status(Path(target_path).resolve(), as_json=as_json)
+    project_root = Path(target_path).resolve()
+    # Stale-input auto-update (cortex#261) scoped to THIS command's --path, so
+    # `cortex status --path OTHER` from an unrelated cwd updates OTHER. In
+    # --json mode the sync narrative is routed to stderr to keep stdout pure.
+    maybe_auto_sync_stale_inputs(
+        project_root,
+        "status",
+        disabled=auto_sync_disabled_from_context(),
+        json_mode=as_json,
+    )
+    run_status(project_root, as_json=as_json)

@@ -8,6 +8,10 @@ from pathlib import Path
 
 import click
 
+from cortex.commands._auto_sync import (
+    auto_sync_disabled_from_context,
+    maybe_auto_sync_stale_inputs,
+)
 from cortex.compat import warn_if_incompatible
 from cortex.ranking import collect_next_items, format_next_human
 
@@ -73,4 +77,13 @@ def next_command(
     since_days: int,
 ) -> None:
     """Print ranked next-work items across all active Plans, grouped by priority."""
-    run_next(Path(target_path).resolve(), as_json=as_json, limit=limit, since_days=since_days)
+    project_root = Path(target_path).resolve()
+    # Stale-input auto-update (cortex#261) scoped to THIS command's --path; the
+    # sync narrative goes to stderr in --json mode to keep stdout pure JSON.
+    maybe_auto_sync_stale_inputs(
+        project_root,
+        "next",
+        disabled=auto_sync_disabled_from_context(),
+        json_mode=as_json,
+    )
+    run_next(project_root, as_json=as_json, limit=limit, since_days=since_days)

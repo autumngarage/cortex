@@ -114,7 +114,9 @@ def test_cli_status_subcommand_json(scaffolded: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["status", "--path", str(scaffolded), "--json"])
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    # stdout must be pure JSON: any auto-sync narrative goes to stderr, so we
+    # parse result.stdout (not result.output, which mixes stderr in Click 8.3).
+    data = json.loads(result.stdout)
     assert data["spec_version"]
     assert data["promotion_queue"]["index_present"] is False
 

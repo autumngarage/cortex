@@ -112,7 +112,7 @@ def test_p0_active_plans_excludes_shipped_and_sends_stale_to_p1(tmp_path: Path) 
     _write_plan(tmp_path, "shipped", status="shipped", work_items="- [ ] shipped open\n")
     _write_plan(tmp_path, "stale", updated_days_ago=15, work_items="- [ ] stale open\n")
 
-    data = json.loads(_next(tmp_path, "--json").output)
+    data = json.loads(_next(tmp_path, "--json").stdout)
 
     assert [item["text"] for item in data["p0"]] == ["fresh open"]
     assert [item["text"] for item in data["p1"]] == ["stale open"]
@@ -123,7 +123,7 @@ def test_p1_open_questions_and_stale_plan_checkboxes(tmp_path: Path) -> None:
     _write_state(tmp_path, open_questions="- Marker convention?\n")
     _write_plan(tmp_path, "stale", updated_days_ago=30, work_items="- [ ] re-scope stale plan\n")
 
-    data = json.loads(_next(tmp_path, "--json").output)
+    data = json.loads(_next(tmp_path, "--json").stdout)
 
     assert [item["text"] for item in data["p1"]] == ["re-scope stale plan", "Marker convention?"]
     assert all(item["text"] != "re-scope stale plan" for item in data["p0"])
@@ -134,7 +134,7 @@ def test_p2_case_studies_respect_since_and_use_first_paragraph(tmp_path: Path) -
     _write_case_study(tmp_path, "new.md", "Recent summary line one\ncontinues here.", days_ago=3)
     _write_case_study(tmp_path, "old.md", "Old summary.", days_ago=40)
 
-    data = json.loads(_next(tmp_path, "--json", "--since", "30").output)
+    data = json.loads(_next(tmp_path, "--json", "--since", "30").stdout)
 
     assert data["p2"] == [
         {
@@ -154,7 +154,7 @@ def test_citation_line_numbers_match_source_files(tmp_path: Path) -> None:
         work_items="- [x] done\n- [ ] fresh open\n- [ ] second open\n",
     )
 
-    data = json.loads(_next(tmp_path, "--json").output)
+    data = json.loads(_next(tmp_path, "--json").stdout)
     first = data["p0"][0]
     source_line = plan.read_text().splitlines()[first["line_start"] - 1]
 
@@ -187,7 +187,7 @@ def test_json_output_is_parseable_and_structural(tmp_path: Path) -> None:
     _write_state(tmp_path, current_work="- current state\n", open_questions="- question\n")
     _write_case_study(tmp_path, "case.md", "Case summary.")
 
-    data = json.loads(_next(tmp_path, "--json").output)
+    data = json.loads(_next(tmp_path, "--json").stdout)
 
     assert set(data) == {"p0", "p1", "p2"}
     assert set(data["p0"][0]) == {"text", "source", "line_start", "line_end"}
@@ -203,7 +203,7 @@ def test_limit_truncates_each_band(tmp_path: Path) -> None:
     _write_case_study(tmp_path, "a.md", "A.")
     _write_case_study(tmp_path, "b.md", "B.")
 
-    data = json.loads(_next(tmp_path, "--json", "--limit", "1").output)
+    data = json.loads(_next(tmp_path, "--json", "--limit", "1").stdout)
 
     assert [len(data[band]) for band in ("p0", "p1", "p2")] == [1, 1, 1]
 
@@ -216,7 +216,7 @@ def test_path_targets_arbitrary_project(tmp_path: Path) -> None:
 
     result = CliRunner().invoke(cli, ["next", "--path", str(project), "--json"])
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data["p0"][0]["text"] == "arbitrary path item"
 
 
@@ -224,7 +224,7 @@ def test_plan_placeholder_items_do_not_enter_p0(tmp_path: Path) -> None:
     _init_cortex(tmp_path)
     _write_plan(tmp_path, "placeholder", work_items="- [ ] {{ task }}\n")
 
-    data = json.loads(_next(tmp_path, "--json").output)
+    data = json.loads(_next(tmp_path, "--json").stdout)
 
     assert "task" not in _band_texts(data, "p0")
     assert all(item["source"] != "plans/placeholder.md" for item in data["p0"])
@@ -238,7 +238,7 @@ def test_plan_mixed_real_and_placeholder_items_only_ranks_real_work(tmp_path: Pa
         work_items="- [ ] Implement retry logic\n- [ ] {{ first concrete task }}\n",
     )
 
-    data = json.loads(_next(tmp_path, "--json").output)
+    data = json.loads(_next(tmp_path, "--json").stdout)
 
     assert _band_texts(data, "p0") == ["Implement retry logic"]
 
@@ -250,7 +250,7 @@ def test_state_open_questions_placeholder_bullets_are_filtered(tmp_path: Path) -
         open_questions="- {{ unresolved question }}\n- Confirm release ordering\n",
     )
 
-    data = json.loads(_next(tmp_path, "--json").output)
+    data = json.loads(_next(tmp_path, "--json").stdout)
 
     assert _band_texts(data, "p1") == ["Confirm release ordering"]
 
@@ -292,7 +292,7 @@ def test_spawned_plan_placeholders_do_not_enter_next_json(tmp_path: Path) -> Non
     )
     assert spawn_result.exit_code == 0, spawn_result.output
 
-    data = json.loads(_next(tmp_path, "--json").output)
+    data = json.loads(_next(tmp_path, "--json").stdout)
 
     assert not any(
         item["source"] == "plans/dogfood-test.md" and "{{" in item["text"]
@@ -310,7 +310,7 @@ def test_next_preserves_double_underscore_file_paths(tmp_path: Path) -> None:
         work_items="- [ ] Verify `src/cortex/__init__.py` matches `pyproject.toml`.\n",
     )
 
-    data = json.loads(_next(tmp_path, "--json").output)
+    data = json.loads(_next(tmp_path, "--json").stdout)
 
     assert data["p0"][0]["text"] == "Verify src/cortex/__init__.py matches pyproject.toml."
 

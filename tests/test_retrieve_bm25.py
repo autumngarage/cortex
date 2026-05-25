@@ -188,7 +188,7 @@ def test_uncommitted_edit_invalidates_and_query_reflects_new_content(tmp_path: P
     result = runner.invoke(cli, ["retrieve", "newterm", "--json", "--path", str(project)])
 
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data[0]["path"].startswith("journal/2026-05-01-edit.md:")
     assert "newterm" in data[0]["excerpt"]
 
@@ -308,7 +308,7 @@ def test_json_output_schema(tmp_path: Path) -> None:
     result = CliRunner().invoke(cli, ["retrieve", "schema", "--json", "--path", str(project)])
 
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert set(data[0]) == {"path", "score", "frontmatter", "excerpt"}
     assert isinstance(data[0]["path"], str)
     assert isinstance(data[0]["score"], float)
@@ -335,7 +335,7 @@ def test_for_agent_output_includes_summary_metadata_and_citation(tmp_path: Path)
     )
 
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     hit = data[0]
     assert hit["path"] == ".cortex/journal/2026-05-09-lookup.md"
     assert hit["citation"].startswith(".cortex/journal/2026-05-09-lookup.md:")
@@ -363,7 +363,7 @@ def test_for_agent_output_handles_entries_without_summary(tmp_path: Path) -> Non
     )
 
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     assert data[0]["path"] == ".cortex/plans/no-summary.md"
     assert data[0]["summary"] is None
     assert data[0]["status"] == "active"
@@ -388,7 +388,7 @@ def test_for_agent_output_caps_long_excerpt(tmp_path: Path) -> None:
     )
 
     assert result.exit_code == 0, result.output
-    data = json.loads(result.output)
+    data = json.loads(result.stdout)
     hit = data[0]
     assert len(hit["excerpt"]) <= 120
     assert hit["excerpt_omitted"] is True
@@ -409,9 +409,9 @@ def test_punctuation_query_is_treated_as_literal_text(tmp_path: Path) -> None:
     assert version.exit_code == 0, version.output
     assert date_result.exit_code == 0, date_result.output
     assert path_result.exit_code == 0, path_result.output
-    assert json.loads(version.output)
-    assert json.loads(date_result.output)
-    assert json.loads(path_result.output)
+    assert json.loads(version.stdout)
+    assert json.loads(date_result.stdout)
+    assert json.loads(path_result.stdout)
 
 
 def test_fts5_missing_falls_back_to_grep(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

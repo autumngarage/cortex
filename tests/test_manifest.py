@@ -36,9 +36,12 @@ def _run_manifest_args(project: Path, *args: str) -> tuple[int, str]:
 
 
 def _run_manifest_json(project: Path, *args: str) -> dict[str, object]:
-    exit_code, output = _run_manifest_args(project, *args, "--json")
-    assert exit_code == 0, output
-    payload = json.loads(output)
+    # Parse stdout, not output: stdout is the pure JSON payload; any auto-sync
+    # narrative goes to stderr (which result.output mixes in under Click 8.3).
+    runner = CliRunner()
+    result = runner.invoke(cli, ["manifest", "--path", str(project), *args, "--json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
     assert isinstance(payload, dict)
     return payload
 

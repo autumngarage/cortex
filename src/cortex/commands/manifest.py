@@ -9,6 +9,10 @@ from typing import cast
 
 import click
 
+from cortex.commands._auto_sync import (
+    auto_sync_disabled_from_context,
+    maybe_auto_sync_stale_inputs,
+)
 from cortex.compat import warn_if_incompatible
 from cortex.manifest import MANIFEST_PROFILES, ManifestProfileName, build_manifest
 from cortex.usage import increment_usage
@@ -66,6 +70,17 @@ def manifest_command(
     compact agent-to-agent handoffs; use ``--show-budget`` to see where tokens go.
     """
     target_path = Path(target_path).resolve()
+    # Stale-input auto-update (cortex#261) scoped to THIS command's --path; the
+    # sync narrative goes to stderr in --json mode so the JSON diagnostics on
+    # stdout stay pure. The manifest's normal (non-JSON) output is markdown on
+    # stdout, but the auto-sync narrative still belongs on stderr there too, so
+    # it never lands inside a piped/redirected manifest body.
+    maybe_auto_sync_stale_inputs(
+        target_path,
+        "manifest",
+        disabled=auto_sync_disabled_from_context(),
+        json_mode=True,
+    )
     cortex_dir = target_path / ".cortex"
     if not cortex_dir.exists():
         click.echo(
