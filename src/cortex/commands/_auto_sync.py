@@ -483,6 +483,151 @@ def maybe_auto_sync(
         )
 
 
+# Commands that consume generated context (state.md / the derived indexes)
+# and therefore benefit from a stale-input auto-update before they read.
+# `grep` is intentionally absent: it shells out to ripgrep over the raw
+# `.cortex/` markdown and never reads `.index.json` or `state.md`, so a
+# stale generated layer cannot affect its output.
+STALE_INPUT_READ_COMMANDS: frozenset[str] = frozenset({
+    "status",
+    "next",
+    "manifest",
+    "retrieve",
+})
+
+
+def maybe_auto_sync_stale_inputs(
+    project_root: Path,
+    invoked_subcommand: str | None,
+    *,
+    disabled: bool,
+    json_mode: bool = False,
+    rebuild_retrieve_index: bool = True,
+) -> None:
+    """Auto-update stale generated layers before a read command consumes them.
+
+    This is the *input-staleness* sibling of :func:`maybe_auto_sync`. Where
+    that function fires on a minor-or-greater CLI version bump, this one fires
+    when ordinary source changes (a new Journal entry, a changed
+    ``pyproject.toml``, generator-version drift) have left ``.cortex/state.md``
+    or ``.cortex/.index.json`` stale relative to their sources.
+
+    It is called from inside each read subcommand body (``status``, ``next``,
+    ``manifest``, ``retrieve``) with the project root *that subcommand* resolved
+    from its own ``--path`` option — not the top-level group's ``--path``. That
+    scoping is the whole point: ``cortex status --path OTHER`` run from an
+    unrelated cwd must auto-update ``OTHER``, not the cwd.
+
+    It reuses, rather than re-implements:
+
+    - The freshness detector behind ``cortex update --check``
+      (:func:`cortex.commands.sync._state_update_needed` and
+      :func:`~cortex.commands.sync._index_update_needed`).
+    - The same safety gate the version-bump path uses
+      (:func:`_auto_sync_preflight_allows`), which refuses to write through a
+      dirty overlap with the planned write set, an unavailable git, or a
+      release commit on a feature branch.
+    - The same single writer (:func:`cortex.commands.sync.run_sync` with
+      ``run_doctor=False``).
+
+    The version-bump marker is deliberately untouched here: the two triggers
+    are orthogonal, and a patch bump must never become a content rewrite.
+
+    ``json_mode`` routes the sync narrative (notice + ``run_sync`` progress) to
+    stderr so a ``--json`` stdout payload stays pure JSON. The skip/failure
+    visibility still goes to stderr — never silent.
+
+    ``rebuild_retrieve_index=False`` (set by ``retrieve --no-rebuild``) keeps a
+    state.md/.index.json refresh from force-rebuilding the gitignored retrieve
+    sqlite index behind a ``--no-rebuild`` operator. The two artifacts are
+    independent; this auto-sync only owns the generated state layers.
+
+    All skip and failure paths are visible on stderr — never silent. When the
+    worktree is unsafe to write, the read command still runs against the
+    current (stale) files so the stale condition stays observable.
+    """
+
+    if disabled:
+        return
+    if invoked_subcommand not in STALE_INPUT_READ_COMMANDS:
+        return
+
+    cortex_dir = project_root / ".cortex"
+    if not cortex_dir.is_dir():
+        # No project-level Cortex — the read command will emit its own
+        # "run cortex init first" error.
+        return
+
+    if _config_disables_auto_sync(cortex_dir):
+        return
+
+    # A non-git project has no safety gate to apply: the preflight uses
+    # `git status` to detect dirty overlap with the planned write set, so
+    # without git we cannot auto-sync safely. Skip QUIETLY here — this is a
+    # routine, expected configuration (a `.cortex/` store not under git), not
+    # a failure. The version-bump path never reaches its preflight for non-git
+    # projects either (the marker can't be written without a gitdir), so this
+    # keeps the two paths consistent. A genuine `git status` failure inside a
+    # real repo is still surfaced loudly by the preflight below.
+    if _git_dir(project_root) is None:
+        return
+
+    try:
+        from cortex.commands.sync import _index_update_needed, _state_update_needed
+
+        needs_state, state_reasons = _state_update_needed(project_root)
+        needs_index, index_reasons = _index_update_needed(project_root)
+    except BaseException as exc:
+        if isinstance(exc, KeyboardInterrupt):
+            raise
+        # A staleness probe must never block the user's read command. Surface
+        # the failure (no silent failures) and continue with current files.
+        click.echo(
+            f"warning: auto-sync stale-input check failed: {exc}; "
+            "continuing with original command.",
+            err=True,
+        )
+        return
+
+    if not (needs_state or needs_index):
+        return
+
+    # The worktree-safety gate is shared with the version-bump path. When it
+    # refuses, it has already printed the specific blocking reason to stderr;
+    # we continue with the stale files so the staleness stays visible.
+    if not _auto_sync_preflight_allows(project_root):
+        return
+
+    reasons = ", ".join(state_reasons + index_reasons) or "stale generated layers"
+    # The notice always goes to stderr (`err=True`); in --json mode the
+    # run_sync progress lines also go to stderr so stdout stays pure JSON.
+    click.echo(
+        f"==> auto-sync: stale Cortex inputs detected ({reasons}); "
+        "updating generated layers",
+        err=True,
+    )
+    try:
+        from cortex.commands.sync import run_sync
+
+        run_sync(
+            project_root,
+            run_doctor=False,
+            output_prefix="==> auto-sync:",
+            progress_to_stderr=json_mode,
+            rebuild_retrieve_index=rebuild_retrieve_index,
+        )
+    except BaseException as exc:
+        # Mirror maybe_auto_sync: a regeneration failure (including SystemExit
+        # from require_compatible) must not take down the read command.
+        # KeyboardInterrupt stays the operator's call.
+        if isinstance(exc, KeyboardInterrupt):
+            raise
+        click.echo(
+            f"warning: auto-sync failed: {exc}; continuing with original command.",
+            err=True,
+        )
+
+
 def project_root_from_path_override(path_override: Path | None) -> Path:
     """Resolve the project root the same way the click group's --path option does."""
 
@@ -508,11 +653,43 @@ def auto_sync_via_env_disabled() -> bool:
     return value == "1"
 
 
+# Key under which the cli group callback stashes the resolved opt-out flag on
+# the root click context object, so subcommands can read it without re-parsing
+# the group-level `--no-auto-sync` option / env var.
+AUTO_SYNC_DISABLED_CTX_KEY = "auto_sync_disabled"
+
+
+def auto_sync_disabled_from_context() -> bool:
+    """Return the opt-out flag the cli group stashed on the root click context.
+
+    The group callback computes ``--no-auto-sync or CORTEX_NO_AUTO_SYNC=1`` once
+    and stores it under :data:`AUTO_SYNC_DISABLED_CTX_KEY` on the root context's
+    ``obj`` dict. Read subcommands call this so the single ``--no-auto-sync``
+    flag declared on the group keeps applying after the refactor moved the
+    stale-input hook into each subcommand body.
+
+    Falls back to re-reading the env var when no click context is active (for
+    example, a subcommand function invoked directly in a unit test) so the
+    ``CORTEX_NO_AUTO_SYNC=1`` opt-out still holds off the click-group path.
+    """
+
+    ctx = click.get_current_context(silent=True)
+    if ctx is not None:
+        root_obj = ctx.find_root().obj
+        if isinstance(root_obj, dict) and AUTO_SYNC_DISABLED_CTX_KEY in root_obj:
+            return bool(root_obj[AUTO_SYNC_DISABLED_CTX_KEY])
+    return auto_sync_via_env_disabled()
+
+
 __all__ = [
+    "AUTO_SYNC_DISABLED_CTX_KEY",
     "MARKER_FILENAME",
     "SENTINEL_AUTO_SYNC_DISABLED",
     "SKIP_COMMANDS",
+    "STALE_INPUT_READ_COMMANDS",
+    "auto_sync_disabled_from_context",
     "auto_sync_via_env_disabled",
     "maybe_auto_sync",
+    "maybe_auto_sync_stale_inputs",
     "project_root_from_path_override",
 ]

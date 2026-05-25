@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -13,6 +14,7 @@ from click.testing import CliRunner
 import cortex
 from cortex.cli import cli
 from cortex.commands import _auto_sync as auto_sync_mod
+from cortex.commands import sync as sync_mod
 from cortex.commands.init import init_command
 
 # ---------------------------------------------------------------------------
@@ -444,7 +446,11 @@ def test_auto_sync_skips_on_patch_bump(
     runner = CliRunner()
     result = runner.invoke(cli, ["status", "--path", str(project)])
     assert result.exit_code == 0, result.output
-    assert "auto-sync" not in result.output, result.output
+    # The version-bump auto-sync banner (old → new) must not appear; a patch
+    # bump never triggers a version-driven sync. (The stale-input hook may
+    # still run — it is orthogonal — so we assert the version-bump banner
+    # specifically rather than the bare "auto-sync" substring.)
+    assert "1.1.0 → 1.1.1" not in result.output, result.output
     # Marker still gets bumped so the next minor diff is detected from the new patch baseline.
     assert _read_marker(project) == "1.1.1"
 
@@ -468,7 +474,10 @@ def test_auto_sync_skips_on_first_run(
     runner = CliRunner()
     result = runner.invoke(cli, ["status", "--path", str(project)])
     assert result.exit_code == 0, result.output
-    assert "auto-sync" not in result.output, result.output
+    # No version-bump sync banner: a first run seeds the marker and returns
+    # without a version-driven sync. (The orthogonal stale-input hook may run
+    # against the fresh scaffold; it never writes or advances the marker.)
+    assert "→" not in result.output, result.output
     # Marker is now seeded in git metadata, not the worktree.
     assert _read_marker(project) == cortex.__version__
     assert not _legacy_marker(project).exists()
@@ -794,3 +803,355 @@ def test_auto_sync_swallows_systemexit_from_require_compatible(
     # auto-sync's warning line appears, proving the SystemExit was
     # caught and converted to a visible warning.
     assert "warning: auto-sync failed" in result.output, result.output
+
+
+# ---------------------------------------------------------------------------
+# Layer 3 — stale-input auto-update before read commands (cortex#261)
+# ---------------------------------------------------------------------------
+
+
+def _make_state_fresh(project: Path) -> None:
+    """Run `cortex update` so state.md/.index.json are current with their sources."""
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["update", "--no-doctor", "--path", str(project)],
+        env={"CORTEX_DETERMINISTIC": "1"},
+    )
+    assert result.exit_code == 0, result.output
+
+
+def _stale_check_now_fires(project: Path) -> bool:
+    """True when the reused freshness detector reports state.md is stale."""
+    from cortex.commands.sync import _state_update_needed
+
+    needs_state, _reasons = _state_update_needed(project)
+    return needs_state
+
+
+def _add_journal_entry(project: Path, name: str = "2026-05-25-stale-trigger.md") -> None:
+    """Append a new Journal source file, which changes the state.md source hash."""
+    journal = project / ".cortex" / "journal"
+    journal.mkdir(parents=True, exist_ok=True)
+    (journal / name).write_text(
+        "---\nType: decision\nDate: 2026-05-25\n---\n\n# A new decision\n\nBody.\n"
+    )
+
+
+def test_stale_state_self_updates_before_status_when_clean(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Acceptance: a stale state.md (new journal source) self-updates before
+    `cortex status` when the planned write set is clean."""
+    project = scaffolded_project
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+    _make_state_fresh(project)
+    _commit_all(project)
+    # Avoid the version-bump path: seed marker at the current version.
+    _set_marker(project, cortex.__version__)
+
+    _add_journal_entry(project)
+    assert _stale_check_now_fires(project), "test setup must produce a stale state.md"
+
+    monkeypatch.chdir(project)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["status"])
+    assert result.exit_code == 0, result.output
+    assert "stale Cortex inputs detected" in result.output, result.output
+    # state.md is now current — the detector no longer reports staleness.
+    assert not _stale_check_now_fires(project), result.output
+
+
+def test_stale_input_skips_on_dirty_overlap_no_write(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Invariant: a read command never writes generated layers when the
+    worktree has dirty overlap with the planned write set, regardless of
+    staleness. The skip is visible on stderr; no write occurs."""
+    project = scaffolded_project
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+    _make_state_fresh(project)
+    _commit_all(project)
+    _set_marker(project, cortex.__version__)
+
+    # Make state.md stale (new journal) AND dirty (uncommitted edit to a
+    # planned-write-set path). The dirty overlap must win: no write.
+    _add_journal_entry(project)
+    state_path = project / ".cortex" / "state.md"
+    sentinel = "<!-- operator-edit-do-not-clobber -->\n"
+    state_path.write_text(state_path.read_text() + sentinel)
+    assert _stale_check_now_fires(project)
+
+    with patch("cortex.commands.sync.run_sync") as run_sync:
+        auto_sync_mod.maybe_auto_sync_stale_inputs(project, "status", disabled=False)
+
+    run_sync.assert_not_called()
+    # The operator's edit survives untouched.
+    assert sentinel in state_path.read_text()
+
+
+def test_stale_input_skip_warning_is_visible(
+    scaffolded_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """No silent failures: the dirty-overlap skip names the blocking path."""
+    project = scaffolded_project
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+    _make_state_fresh(project)
+    _commit_all(project)
+    _set_marker(project, cortex.__version__)
+
+    _add_journal_entry(project)
+    state_path = project / ".cortex" / "state.md"
+    state_path.write_text(state_path.read_text() + "dirty\n")
+
+    auto_sync_mod.maybe_auto_sync_stale_inputs(project, "status", disabled=False)
+    err = capsys.readouterr().err
+    assert "dirty file in planned write set: .cortex/state.md" in err
+
+
+def test_stale_input_respects_no_auto_sync_flag(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Acceptance: `--no-auto-sync` suppresses the stale-input auto-update."""
+    project = scaffolded_project
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+    _make_state_fresh(project)
+    _commit_all(project)
+    _set_marker(project, cortex.__version__)
+    _add_journal_entry(project)
+    assert _stale_check_now_fires(project)
+
+    monkeypatch.chdir(project)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--no-auto-sync", "status"])
+    assert result.exit_code == 0, result.output
+    assert "stale Cortex inputs detected" not in result.output, result.output
+    assert _stale_check_now_fires(project), "no-auto-sync must leave state stale"
+
+
+def test_stale_input_respects_env_opt_out(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Acceptance: CORTEX_NO_AUTO_SYNC=1 suppresses the stale-input update."""
+    project = scaffolded_project
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+    monkeypatch.setenv("CORTEX_NO_AUTO_SYNC", "1")
+    _make_state_fresh(project)
+    _commit_all(project)
+    _set_marker(project, cortex.__version__)
+    _add_journal_entry(project)
+    assert _stale_check_now_fires(project)
+
+    monkeypatch.chdir(project)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["status"])
+    assert result.exit_code == 0, result.output
+    assert "stale Cortex inputs detected" not in result.output, result.output
+    assert _stale_check_now_fires(project)
+
+
+def test_stale_input_respects_config_opt_out(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`[sync] auto = false` in config.toml suppresses the stale-input update."""
+    project = scaffolded_project
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+    _make_state_fresh(project)
+    (project / ".cortex" / "config.toml").write_text("[sync]\nauto = false\n")
+    _commit_all(project)
+    _set_marker(project, cortex.__version__)
+    _add_journal_entry(project)
+    assert _stale_check_now_fires(project)
+
+    with patch("cortex.commands.sync.run_sync") as run_sync:
+        auto_sync_mod.maybe_auto_sync_stale_inputs(project, "status", disabled=False)
+    run_sync.assert_not_called()
+
+
+def test_stale_input_continues_after_update_failure(
+    scaffolded_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Acceptance: the read command continues after an update failure; the
+    failure is visible on stderr and the original command still runs."""
+    project = scaffolded_project
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+    _make_state_fresh(project)
+    _commit_all(project)
+    _set_marker(project, cortex.__version__)
+    _add_journal_entry(project)
+    assert _stale_check_now_fires(project)
+
+    with patch(
+        "cortex.commands.sync.run_sync", side_effect=RuntimeError("boom")
+    ) as run_sync:
+        # Must not raise — failure is caught and surfaced.
+        auto_sync_mod.maybe_auto_sync_stale_inputs(project, "status", disabled=False)
+
+    run_sync.assert_called_once()
+    err = capsys.readouterr().err
+    assert "warning: auto-sync failed: boom" in err
+
+    # End-to-end: the read command itself still completes after the failure.
+    runner = CliRunner()
+    result = runner.invoke(cli, ["status", "--path", str(project)])
+    assert result.exit_code == 0, result.output
+
+
+def test_stale_input_does_not_fire_for_grep(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """grep reads raw markdown, not generated layers, so it is out of scope:
+    the stale-input hook must not run for it even when state.md is stale."""
+    project = scaffolded_project
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+    _make_state_fresh(project)
+    _commit_all(project)
+    _set_marker(project, cortex.__version__)
+    _add_journal_entry(project)
+    assert _stale_check_now_fires(project)
+
+    with patch("cortex.commands.sync.run_sync") as run_sync:
+        auto_sync_mod.maybe_auto_sync_stale_inputs(project, "grep", disabled=False)
+    run_sync.assert_not_called()
+
+
+def test_stale_input_noop_when_layers_current(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When state.md/.index.json are already current, no update fires."""
+    project = scaffolded_project
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+    _make_state_fresh(project)
+    _commit_all(project)
+    _set_marker(project, cortex.__version__)
+    assert not _stale_check_now_fires(project)
+
+    with patch("cortex.commands.sync.run_sync") as run_sync:
+        auto_sync_mod.maybe_auto_sync_stale_inputs(project, "status", disabled=False)
+    run_sync.assert_not_called()
+
+
+def test_stale_input_skipped_quietly_for_non_git_project(
+    scaffolded_project: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A non-git `.cortex/` project has no safety gate to apply, so the
+    stale-input hook skips QUIETLY (no stderr narrative) — it does not spam a
+    'git unavailable' line on every read. Distinct from a real-repo git
+    failure, which the preflight still surfaces loudly."""
+    project = scaffolded_project  # `cortex init` only — no `git init`
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+    _make_state_fresh(project)
+    _add_journal_entry(project)
+    assert _stale_check_now_fires(project)
+    assert not (project / ".git").exists()
+
+    with patch("cortex.commands.sync.run_sync") as run_sync:
+        auto_sync_mod.maybe_auto_sync_stale_inputs(project, "status", disabled=False)
+    run_sync.assert_not_called()
+    assert capsys.readouterr().err == ""
+
+
+def test_stale_input_scopes_to_subcommand_path_not_cwd(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression for the --path scoping bug (cortex#261 review finding):
+    `cortex status --path OTHER` run from an unrelated cwd must auto-update
+    OTHER, even though the group `--path` defaults to cwd.
+
+    Before the fix the stale-input hook fired from the group callback against
+    cwd (which is not OTHER), so OTHER never self-updated.
+    """
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+
+    # `other` is the stale target project (git, clean, marker seeded).
+    other = tmp_path / "other"
+    other.mkdir()
+    assert CliRunner().invoke(init_command, ["--path", str(other)]).exit_code == 0
+    _make_state_fresh(other)
+    _commit_all(other)
+    _set_marker(other, cortex.__version__)
+    _add_journal_entry(other)
+    assert _stale_check_now_fires(other), "test setup must produce a stale OTHER"
+
+    # `cwd_proj` is an UNRELATED directory we run from. It is a different git
+    # repo with no `.cortex/`, so a cwd-scoped hook would no-op (the old bug).
+    cwd_proj = tmp_path / "cwd"
+    cwd_proj.mkdir()
+    _ensure_git_repo(cwd_proj)
+    monkeypatch.chdir(cwd_proj)
+
+    result = CliRunner().invoke(cli, ["status", "--path", str(other)])
+    assert result.exit_code == 0, result.output
+    assert "stale Cortex inputs detected" in result.output, result.output
+    # The fix updated OTHER: the detector no longer reports staleness there.
+    assert not _stale_check_now_fires(other), result.output
+
+
+def test_stale_input_json_stdout_stays_valid_while_update_fires(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression for the JSONDecodeError gotcha: when a stale-input update
+    fires under `--json`, the sync narrative goes to stderr and stdout stays
+    pure JSON. Parses result.stdout (Click 8.3 mixes stderr into .output)."""
+    project = scaffolded_project
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+    _make_state_fresh(project)
+    _commit_all(project)
+    _set_marker(project, cortex.__version__)
+    _add_journal_entry(project)
+    assert _stale_check_now_fires(project)
+
+    result = CliRunner().invoke(cli, ["status", "--path", str(project), "--json"])
+    assert result.exit_code == 0, result.output
+    # The update fired — narrative is on stderr, never stdout.
+    assert "stale Cortex inputs detected" in result.stderr, result.stderr
+    assert "stale Cortex inputs detected" not in result.stdout, result.stdout
+    # stdout is pure, parseable JSON.
+    data = json.loads(result.stdout)
+    assert data["spec_version"]
+    # And the update actually ran: state is now fresh.
+    assert not _stale_check_now_fires(project)
+
+
+def test_stale_input_retrieve_no_rebuild_refreshes_state_but_not_retrieve_index(
+    scaffolded_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`retrieve --no-rebuild` must not let the stale-input state refresh
+    force-rebuild the gitignored retrieve sqlite index — the two artifacts are
+    independent. state.md still refreshes; the retrieve index rebuild is
+    suppressed via rebuild_retrieve_index=False."""
+    project = scaffolded_project
+    monkeypatch.setenv("CORTEX_DETERMINISTIC", "1")
+    _make_state_fresh(project)
+    _commit_all(project)
+    _set_marker(project, cortex.__version__)
+    _add_journal_entry(project)
+    assert _stale_check_now_fires(project)
+
+    # Simulate an opted-in retrieve index so run_sync would otherwise rebuild it.
+    (project / ".cortex" / ".index").mkdir(parents=True, exist_ok=True)
+
+    # Wrap the real writer so the call still refreshes state.md, but we can
+    # inspect exactly which flags the auto-sync threaded through.
+    real_run_sync = sync_mod.run_sync
+    with patch(
+        "cortex.commands.sync.run_sync", side_effect=real_run_sync, autospec=True
+    ) as run_sync:
+        auto_sync_mod.maybe_auto_sync_stale_inputs(
+            project, "retrieve", disabled=False, json_mode=True, rebuild_retrieve_index=False
+        )
+
+    run_sync.assert_called_once()
+    call_kwargs = run_sync.call_args.kwargs
+    # The --no-rebuild contract is threaded through to run_sync.
+    assert call_kwargs["rebuild_retrieve_index"] is False
+    assert call_kwargs["progress_to_stderr"] is True
+    assert call_kwargs["run_doctor"] is False
+    # state.md was still refreshed (the independent artifact).
+    assert not _stale_check_now_fires(project)

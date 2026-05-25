@@ -14,8 +14,10 @@ import click
 
 from cortex import SUPPORTED_PROTOCOL_VERSIONS, SUPPORTED_SPEC_VERSIONS, __version__
 from cortex.commands._auto_sync import (
+    AUTO_SYNC_DISABLED_CTX_KEY,
     auto_sync_via_env_disabled,
     maybe_auto_sync,
+    maybe_auto_sync_stale_inputs,
     project_root_from_path_override,
 )
 from cortex.commands.check_triggers import check_triggers_command
@@ -99,17 +101,36 @@ def cli(
     """
     # Auto-sync hook (Layer 2 of cortex#190). Fires before the dispatched
     # subcommand body runs. Skipped during init/update/sync/migrate-state, when
-    # opt-out is set, or when the marker indicates only a patch bump.
+    # opt-out is set, or when the marker indicates only a patch bump. The
+    # version-bump path is correctly group-scoped: the marker comparison does
+    # not depend on which read command runs.
     project_root = project_root_from_path_override(path_override)
     auto_sync_disabled = no_auto_sync or auto_sync_via_env_disabled()
+    # Stash the resolved opt-out so each read subcommand can honor the single
+    # group-level `--no-auto-sync` flag (and `CORTEX_NO_AUTO_SYNC=1`) when it
+    # runs its own stale-input auto-update against its own `--path`.
+    ctx.ensure_object(dict)
+    ctx.obj[AUTO_SYNC_DISABLED_CTX_KEY] = auto_sync_disabled
     maybe_auto_sync(
         project_root,
         ctx.invoked_subcommand,
         disabled=auto_sync_disabled,
     )
+    # NOTE: stale-input auto-update (cortex#261) is intentionally NOT called
+    # here for dispatched subcommands. The group `--path` defaults to cwd, so a
+    # group-scoped call would update the wrong project for
+    # `cortex status --path OTHER`. Each of status/next/manifest/retrieve calls
+    # maybe_auto_sync_stale_inputs itself with the project root it resolved from
+    # its own `--path`. The bare-`cortex` (no subcommand) path below is the one
+    # case the group still owns, since it dispatches run_status inline.
 
     if ctx.invoked_subcommand is None:
-        target = path_override if path_override is not None else Path.cwd()
+        target = project_root
+        maybe_auto_sync_stale_inputs(
+            target,
+            "status",
+            disabled=auto_sync_disabled,
+        )
         run_status(target, as_json=False)
         _ = status_only  # flag currently redundant since the default is already non-interactive
 

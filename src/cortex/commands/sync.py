@@ -108,7 +108,15 @@ def _do_refresh_state(project_root: Path, *, force: bool = False) -> bool:
 
 
 def _do_refresh_index(project_root: Path, *, include_retrieve: bool) -> bool:
-    """Rebuild `.cortex/.index.json` and (optionally) retrieve sqlite. Returns True on success."""
+    """Rebuild `.cortex/.index.json` and (optionally) retrieve sqlite. Returns True on success.
+
+    ``include_retrieve`` rebuilds the gitignored retrieve sqlite index in
+    addition to ``.index.json``. Callers that must honor a ``--no-rebuild``
+    contract (the ``retrieve`` command's stale-input auto-sync path) pass
+    ``include_retrieve=False`` so a state.md refresh never force-rebuilds the
+    retrieve index behind the operator's back — the two artifacts are
+    independent (state.md/.index.json vs. the retrieve sqlite index).
+    """
 
     cortex_dir = project_root / ".cortex"
     require_compatible(cortex_dir)
@@ -131,8 +139,13 @@ def _do_refresh_index(project_root: Path, *, include_retrieve: bool) -> bool:
     return True
 
 
-def _do_validate_config(project_root: Path) -> int:
-    """Run the existing config.toml schema validator; return count of unknown keys reported."""
+def _do_validate_config(project_root: Path, *, info_to_stderr: bool = False) -> int:
+    """Run the existing config.toml schema validator; return count of unknown keys reported.
+
+    ``info_to_stderr`` forces non-error, non-unknown-key issue lines to stderr
+    so a ``--json`` stdout payload is not corrupted when this runs inside the
+    stale-input auto-sync path. Errors already go to stderr unconditionally.
+    """
 
     cortex_dir = project_root / ".cortex"
     if not (cortex_dir / "config.toml").is_file():
@@ -144,7 +157,8 @@ def _do_validate_config(project_root: Path) -> int:
             unknown_count += 1
             click.echo(f"warning: {issue.path}: {issue.message}", err=True)
         else:
-            stream = sys.stderr if issue.severity is Severity.ERROR else sys.stdout
+            to_stderr = info_to_stderr or issue.severity is Severity.ERROR
+            stream = sys.stderr if to_stderr else sys.stdout
             click.echo(f"{issue.severity.value}: {issue.path}: {issue.message}", file=stream)
     return unknown_count
 
@@ -256,6 +270,8 @@ def run_sync(
     *,
     run_doctor: bool = True,
     output_prefix: str = "==>",
+    progress_to_stderr: bool = False,
+    rebuild_retrieve_index: bool = True,
 ) -> SyncResult:
     """Run the full update sequence; the single code path used by `update`, `sync`, and auto-sync.
 
@@ -271,7 +287,21 @@ def run_sync(
         Leading token for status lines. `cortex update` uses ``==>``;
         auto-sync uses ``==> auto-sync:`` so the action is visibly
         distinguishable.
+    progress_to_stderr
+        Route the progress / "Update complete" lines to stderr instead of
+        stdout. The stale-input auto-sync path sets this so that a read
+        command's ``--json`` stdout payload stays pure JSON — the operator
+        still sees the sync narrative on stderr (no silent failures). The
+        operator-driven ``cortex update`` keeps the default (stdout) so its
+        output is unchanged.
+    rebuild_retrieve_index
+        When False, skip rebuilding the gitignored retrieve sqlite index even
+        if the project maintains one. The ``retrieve --no-rebuild`` auto-sync
+        path sets this so a state.md refresh honors the operator's
+        ``--no-rebuild`` contract; ``.index.json`` and state.md still refresh.
     """
+
+    progress_err = progress_to_stderr
 
     cortex_dir = project_root / ".cortex"
     state_version = _read_state_generator_version(cortex_dir)
@@ -280,7 +310,10 @@ def run_sync(
         if state_version and state_version != __version__
         else ""
     )
-    click.echo(f"{output_prefix} Detected cortex {__version__}.{drift_clause} Updating.")
+    click.echo(
+        f"{output_prefix} Detected cortex {__version__}.{drift_clause} Updating.",
+        err=progress_err,
+    )
 
     # Step 1: refresh-index FIRST so that state.md, which records the
     # promotion-queue file in its provenance, sees the freshly built index.
@@ -290,7 +323,7 @@ def run_sync(
     # idempotency. The user-facing output still leads with refresh-state
     # in the message text since "regenerate state, rebuild index" is what
     # operators read; the internal ordering is what makes it stable.
-    include_retrieve = _retrieve_index_present(cortex_dir)
+    include_retrieve = rebuild_retrieve_index and _retrieve_index_present(cortex_dir)
     refresh_index_ok = _do_refresh_index(project_root, include_retrieve=include_retrieve)
 
     # Step 2: refresh-state
@@ -298,19 +331,22 @@ def run_sync(
     refresh_state_ok = _do_refresh_state(project_root, force=force_state_refresh)
     click.echo(
         f"{output_prefix} cortex refresh-state ............................. "
-        f"{'done' if refresh_state_ok else 'FAILED'}"
+        f"{'done' if refresh_state_ok else 'FAILED'}",
+        err=progress_err,
     )
     click.echo(
         f"{output_prefix} cortex refresh-index"
         f"{' --retrieve' if include_retrieve else ''} "
-        f".................. {'done' if refresh_index_ok else 'FAILED'}"
+        f".................. {'done' if refresh_index_ok else 'FAILED'}",
+        err=progress_err,
     )
 
     # Step 3: config schema validation (warn-only)
-    unknown_keys = _do_validate_config(project_root)
+    unknown_keys = _do_validate_config(project_root, info_to_stderr=progress_err)
     suffix = f"({unknown_keys} unknown key{'s' if unknown_keys != 1 else ''})" if unknown_keys else "(0 unknown keys)"
     click.echo(
-        f"{output_prefix} Validating .cortex/config.toml schema  done {suffix}"
+        f"{output_prefix} Validating .cortex/config.toml schema  done {suffix}",
+        err=progress_err,
     )
 
     # Step 4: doctor (skippable)
@@ -321,7 +357,8 @@ def run_sync(
         click.echo(
             f"{output_prefix} cortex doctor .................................... "
             f"{doctor_errors} error{'s' if doctor_errors != 1 else ''}, "
-            f"{doctor_warnings} warning{'s' if doctor_warnings != 1 else ''}"
+            f"{doctor_warnings} warning{'s' if doctor_warnings != 1 else ''}",
+            err=progress_err,
         )
 
     result = SyncResult(
@@ -341,7 +378,7 @@ def run_sync(
     if unknown_keys == 0:
         summary_bits.append("config validates")
     summary = "; ".join(summary_bits) if summary_bits else "no work performed"
-    click.echo(f"\nUpdate complete. {summary}.")
+    click.echo(f"\nUpdate complete. {summary}.", err=progress_err)
 
     return result
 
