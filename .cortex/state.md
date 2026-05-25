@@ -1,11 +1,11 @@
 ---
-Generated: 2026-05-15T08:00:12-04:00
+Generated: 2026-05-25T18:41:13-04:00
 Generator: cortex refresh-state v1.6.4
 Sources:
-  - HEAD sha: 87364f7ae03edf1f440930a99e30dde902e6127e
+  - HEAD sha: 41f5867abd969ef96cafcb9f604b51c2c3e1182f
   - .cortex/plans/*.md (11 files)
-  - .cortex/journal/*.md (108 entries, 2026-04-17..2026-05-15)
-  - .cortex/doctrine/*.md (10 entries)
+  - .cortex/journal/*.md (110 entries, 2026-04-17..2026-05-25)
+  - .cortex/doctrine/*.md (11 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
   - SPEC version: 0.5.0
@@ -19,6 +19,7 @@ Sources-hash:
   .cortex/doctrine/0006-scope-boundaries-v3.md: 773ff81c5c8a3a1736ad1b640f026b14ace0f6d8198f165534a034906b4e88df
   .cortex/doctrine/0007-canonical-ownership-of-state-and-plans.md: eeb749c99679b6beccb9ddadf56eb5a7f7aabf387df9c80b407811411a826099
   .cortex/doctrine/0008-context-integrity-build-system.md: 094dd806fa57a5198cebb06ba5e5138c529b75e637f2400e5d89a33e04b7caa2
+  .cortex/doctrine/candidate-manifest-semantic-topup.md: 2cbb0157e31816c6a5a5d3d57cfa82d885115fcbaa56ddc15467aacb1582117b
   .cortex/doctrine/candidate-pr-merged-staging.md: df448622732f240ce23279fdab304382da1ab8701a8445fd95b3c06cceecb5f7
   .cortex/doctrine/candidate.md: ec456a795b31b30445b4928e1692ae348ff42dfeaff7925588f8b47b654f78c6
   .cortex/journal/2026-04-17-competitive-positioning-and-claude-code-risk.md: 9f5416382cf595d0718df52135c80f64b442d0f37783a498a06abb56531e5796
@@ -129,6 +130,8 @@ Sources-hash:
   .cortex/journal/2026-05-12-release-1.6.3.md: 2c237671e9236d42218c352d5912b1d33befc3d45b564e09964a64ddb436ffdd
   .cortex/journal/2026-05-13-source-pr-staging-decision.md: ed791c86a80589aa5395d9259fa1fd825426a914073d549c7cd25b2ab208b2e8
   .cortex/journal/2026-05-15-pr-merged-0200.md: 12d4408a91e4f1a4485f15bbf17765eb9c7827fc1c87f6f674cf963881602ed8
+  .cortex/journal/2026-05-25-defer-manifest-semantic-topup-pending-evidence.md: d4b8e44ff5b86157eac0f103461c602996061c1aba923d5c723e0739cbdb201f
+  .cortex/journal/2026-05-25-pr-merged-1841.md: 4a305a17b3cec2c5fd1075b6462809e0334472f69d38defd8fe9ea4ed3f56b9e
   .cortex/plans/context-integrity-production.md: 37d5afc85d78c0d6260e84348df21bbfc1bd1233b8cd24dae21251cae5689daf
   .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
   .cortex/plans/cortex-v0.3.0.md: d78e60537e30ed81d8464575191674253822ed4953a055ca2a14a9626c5f8b6f
@@ -153,7 +156,7 @@ Sources-hash:
   .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476
   .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44
   docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c
-Corpus: 108 Journal entries, 11 Plans, 10 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 110 Journal entries, 11 Plans, 11 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -259,7 +262,9 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 - **2026-05-12** — PR #268 merged — chore(ci): upgrade GitHub Actions to Node 24-compatible versions (`.cortex/journal/2026-05-12-pr-merged-268.md`, Type: pr-merged)
 - **2026-05-12** — Release v1.6.3 (`.cortex/journal/2026-05-12-release-1.6.3.md`, Type: release)
 - **2026-05-15** — PR #280 merged — test(cortex): align pr-merged hook shim (`.cortex/journal/2026-05-15-pr-merged-0200.md`, Type: pr-merged)
+- **2026-05-25** — PR #295 merged — docs(doctrine): stage manifest semantic-top-up candidate; defer pending evidence (#234) (`.cortex/journal/2026-05-25-pr-merged-1841.md`, Type: pr-merged)
 
 ## Stale-now / handle-later
 
+- `context-integrity-production` — active plan stale since 2026-05-09; open checkboxes remain
 - `cortex-v1` — active plan stale since 2026-04-28; open checkboxes remain
