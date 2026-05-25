@@ -70,12 +70,30 @@ def test_draft_decision_writes_file_with_today(git_project: Path) -> None:
     body = files[0].read_text()
     assert f"**Date:** {today}" in body
     assert "**Type:** decision" in body
-    # The auto-context block is present.
-    assert "Context auto-pulled at draft time" in body
+    # The auto-context block is an edit-mode aid ("Remove this block before
+    # saving"). In --no-edit mode there is no human to prune it, so it must
+    # NOT be appended — committing it would pollute the entry (issue #275).
+    assert "Context auto-pulled at draft time" not in body
 
 
-def test_draft_release_uses_release_template(git_project: Path) -> None:
-    result = _draft(git_project, "release")
+def test_draft_release_uses_release_template(
+    git_project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A resolvable tag is required so the --no-edit scrubber can produce a
+    # placeholder-free entry; otherwise the #275 guard correctly refuses to
+    # write (covered by test_release_no_tag_no_edit_guard_refuses_write).
+    _stub_gh_release_in_path(
+        monkeypatch,
+        tmp_path,
+        release_payload={
+            "tagName": "v1.2.3",
+            "name": "v1.2.3",
+            "url": "https://example.com/r/v1.2.3",
+            "publishedAt": "2026-05-06T12:00:00Z",
+        },
+    )
+    _tag_at_head(git_project, "v1.2.3")
+    result = _draft(git_project, "release", "--tag", "v1.2.3")
     assert result.exit_code == 0, result.output
     today = date.today().isoformat()
     files = list((git_project / ".cortex" / "journal").glob(f"{today}-release-*.md"))
@@ -308,14 +326,17 @@ def test_no_edit_race_after_early_check_caught_by_exclusive_create(
 
     pre_existing_body = "# Pre-existing entry — must not be overwritten\n"
 
-    def _racing_gather(_project_root: Path) -> list[str]:
+    def _racing_budget_warning(_body: str, *, limit_tokens: int) -> str | None:
         # Simulate a concurrent writer landing the entry between the early
-        # check and the post-context exclusive-create write.
+        # existence check and the exclusive-create write. The budget check
+        # runs in that window for every draft type, so it is a faithful
+        # injection point now that the auto-context block (and its git lookup)
+        # only runs in --edit mode.
         target.write_text(pre_existing_body)
-        return []
+        return None
 
     import cortex.commands.journal as journal_mod
-    monkeypatch.setattr(journal_mod, "_gather_git_context", _racing_gather)
+    monkeypatch.setattr(journal_mod, "_journal_budget_warning", _racing_budget_warning)
 
     result = _draft(git_project, "decision", "--slug", "race-after-check")
     assert result.exit_code == 2, result.output
@@ -516,6 +537,134 @@ def test_pr_merged_no_edit_strips_all_template_placeholders(
     assert "_None._" in followups
 
 
+def test_pr_merged_no_edit_emits_no_template_markers(
+    git_project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Issue #275 invariant: a pr-merged --no-edit entry contains zero
+    unresolved template markers — no `{{`, no `<!--`/`-->` edit-instruction
+    block, no `fill on edit` sentinel, no unfilled `- [ ]` checklist line."""
+    _stub_gh_in_path(
+        monkeypatch,
+        tmp_path,
+        {
+            "number": 275,
+            "title": "fix(journal): no placeholder leak",
+            "body": "## Summary\n- did the thing",
+            "headRefName": "fix/pr-merged-no-edit-placeholder-leak",
+            "mergeCommit": {"oid": "f" * 40},
+        },
+    )
+    result = _draft(git_project, "pr-merged", "--pr", "275")
+    assert result.exit_code == 0, result.output + (getattr(result, "stderr", "") or "")
+    today = date.today().isoformat()
+    files = list((git_project / ".cortex" / "journal").glob(f"{today}-pr-merged-*.md"))
+    assert files, list((git_project / ".cortex" / "journal").iterdir())
+    body = files[0].read_text()
+
+    assert "{{" not in body and "}}" not in body, body
+    assert "<!--" not in body and "-->" not in body, body
+    assert "fill on edit" not in body.lower(), body
+    # No template checklist placeholder lines survive (`- [ ] {{ ... }}` or
+    # `- [ ] <...>`). A resolved follow-up with prose text would be allowed.
+    assert not re.search(r"^- \[ \] (?:\{\{|<[a-z])", body, re.MULTILINE), body
+
+
+def test_pr_merged_no_edit_guard_rejects_custom_template_placeholder(
+    git_project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The guard works for ANY template, not just the bundled one. A
+    project-custom pr-merged template that leaves an unrecognized placeholder
+    must fail loudly (exit non-zero, file path in stderr) and write nothing —
+    the post-merge hook runs against whatever template the project ships."""
+    custom = git_project / ".cortex" / "templates" / "journal" / "pr-merged.md"
+    custom.write_text(
+        "# PR #{{ nnn }} merged — {{ short title }}\n\n"
+        "**Date:** {{ YYYY-MM-DD }}\n"
+        "**Type:** pr-merged\n"
+        "**Trigger:** T1.9\n"
+        "**Merge-commit:** {{ full sha }}\n"
+        "**Branch:** {{ <type>/<slug> }}\n\n"
+        "> {{ One sentence: what shipped. }}\n\n"
+        "## What shipped\n\n"
+        "{{ Bulleted list of the user-visible or protocol-visible changes in this PR. }}\n\n"
+        # A placeholder the bundled scrubber does not recognize — proves the
+        # guard is template-agnostic.
+        "## Project-specific section\n\n"
+        "{{ PROJECT CUSTOM PROMPT THAT NEVER GETS SCRUBBED }}\n"
+    )
+    _stub_gh_in_path(
+        monkeypatch,
+        tmp_path,
+        {
+            "number": 42,
+            "title": "feat: thing",
+            "body": "## Summary\n- did stuff",
+            "headRefName": "feat/thing",
+            "mergeCommit": {"oid": "a" * 40},
+        },
+    )
+
+    before = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+    result = _draft(git_project, "pr-merged", "--pr", "42", "--slug", "custom-leak")
+    after = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+
+    assert result.exit_code == 2, result.output
+    # No polluted entry written.
+    assert before == after
+    combined = result.output + (getattr(result, "stderr", "") or "")
+    assert "unresolved template markers" in combined
+    assert "refusing to write" in combined
+    # The offending file is named so the failure is debuggable from logs alone.
+    today = date.today().isoformat()
+    assert f"{today}-custom-leak.md" in combined
+
+
+def test_pr_merged_edit_mode_preserves_prompts(
+    git_project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Interactive (--edit) mode must NOT over-scrub: the human-facing prompts
+    and the auto-context block are deliberately preserved for the editor to
+    fill. Only --no-edit promises a marker-free entry."""
+    # A no-op editor that closes immediately, leaving the seeded body intact.
+    monkeypatch.setenv("EDITOR", "true")
+    _stub_gh_in_path(
+        monkeypatch,
+        tmp_path,
+        {
+            "number": 99,
+            "title": "feat: thing",
+            "body": "## Summary\n- did stuff",
+            "headRefName": "feat/thing",
+            "mergeCommit": {"oid": "b" * 40},
+        },
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "journal",
+            "draft",
+            "pr-merged",
+            "--pr",
+            "99",
+            "--path",
+            str(git_project),
+            "--slug",
+            "edit-keeps-prompts",
+        ],
+    )
+    assert result.exit_code == 0, result.output + (getattr(result, "stderr", "") or "")
+    today = date.today().isoformat()
+    body = (
+        git_project / ".cortex" / "journal" / f"{today}-edit-keeps-prompts.md"
+    ).read_text()
+    # The body-scrubber and the no-edit guard are NOT applied in edit mode, so
+    # the template's prompt sections survive for the human to fill.
+    assert "{{ Bulleted list" in body
+    # The auto-context block (edit-mode aid) is present in edit mode.
+    assert "Context auto-pulled at draft time" in body
+
+
 def test_pr_merged_no_edit_with_no_pr_body_uses_title_fallback(
     git_project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -572,31 +721,36 @@ def test_pr_merged_infers_pr_from_merge_commit_subject(
     assert "{{ nnn }}" not in body
 
 
-def test_pr_merged_falls_back_to_template_without_pr_or_merge_subject(
+def test_pr_merged_no_edit_no_pr_context_refuses_write(
     git_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """No `--pr`, no `(#NNN)` merge subject in window → raw template + warning.
+    """No `--pr`, no `(#NNN)` merge subject, no gh → the #275 guard refuses.
 
-    Backwards compat: the prior behavior wrote the raw template. We keep
-    that (no crash) but emit a stderr `warning:` so the silent failure is
-    closed (engineering principle: no silent failures)."""
+    Prior behavior wrote the raw template (with a warning). That *was* the
+    bug issue #275 describes: the post-merge hook runs `--no-edit` and a
+    fully-raw template entry merges cleanly, then pollutes future agent
+    context with authoritative-looking placeholder memory. The guard now
+    fails loudly (exit non-zero, names the file) and writes nothing rather
+    than committing the pollution."""
     # Hide gh entirely so even if a CI runner has it, the path is "no PR".
     bin_dir = git_project / "isolated-bin"
     bin_dir.mkdir()
     monkeypatch.setenv("PATH", str(bin_dir))
 
+    before = sorted((git_project / ".cortex" / "journal").glob("*.md"))
     result = _draft(git_project, "pr-merged")
-    assert result.exit_code == 0, result.output
-    today = date.today().isoformat()
-    files = list((git_project / ".cortex" / "journal").glob(f"{today}-pr-merged-*.md"))
-    body = files[0].read_text()
-    # Raw template placeholders survive — no substitution context available.
-    assert "{{ nnn }}" in body
-    assert "{{ short title }}" in body
-    # Stderr surfaces the missing context so the failure is visible.
+    after = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+
+    assert result.exit_code == 2, result.output
+    # No polluted entry was written.
+    assert before == after
     combined = result.output + (getattr(result, "stderr", "") or "")
-    assert "warning" in combined.lower()
+    # Missing-context warning still surfaces (no silent failure on resolution).
     assert "could not resolve a PR number" in combined
+    # The guard names what failed and where.
+    assert "unresolved template markers" in combined
+    assert "refusing to write" in combined
+    assert ".cortex/journal/" in combined
 
 
 def test_decision_template_substitution_unchanged(
@@ -756,27 +910,30 @@ def test_release_default_tag_uses_latest_semver_tag(
     assert "**Tag:** v0.2.0" in body
 
 
-def test_release_no_tag_warns_and_leaves_placeholders(
+def test_release_no_tag_no_edit_guard_refuses_write(
     git_project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """No tag at all → raw template + stderr warning (no silent failure)."""
+    """No tag at all in --no-edit mode → the #275 guard refuses to write.
+
+    Mirrors the pr-merged no-context case: a release entry that can't resolve
+    a tag would carry raw `{{ git tag }}` placeholders. Committing that is the
+    pollution issue #275 closes, so the guard fails loudly and writes
+    nothing — the missing-tag warning still surfaces (no silent failure)."""
     # Hide gh so we don't accidentally hit a real release lookup.
     bin_dir = git_project / "isolated-bin"
     bin_dir.mkdir()
     monkeypatch.setenv("PATH", str(bin_dir))
+
+    before = sorted((git_project / ".cortex" / "journal").glob("*.md"))
     result = _draft(git_project, "release")
-    assert result.exit_code == 0, result.output
-    today = date.today().isoformat()
-    files = list(
-        (git_project / ".cortex" / "journal").glob(f"{today}-release-*.md")
-    )
-    assert files, list((git_project / ".cortex" / "journal").iterdir())
-    body = files[0].read_text()
-    # Placeholders survive — no substitution context available.
-    assert "{{ git tag, e.g. v0.3.0 }}" in body
+    after = sorted((git_project / ".cortex" / "journal").glob("*.md"))
+
+    assert result.exit_code == 2, result.output
+    assert before == after
     combined = result.output + (getattr(result, "stderr", "") or "")
-    assert "warning" in combined.lower()
     assert "could not resolve a tag" in combined
+    assert "unresolved template markers" in combined
+    assert "refusing to write" in combined
 
 
 def test_release_no_edit_strips_lede_and_seeds_what_shipped(
