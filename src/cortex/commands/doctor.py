@@ -245,6 +245,18 @@ def _print_siblings(project_root: Path) -> None:
     Informational only — presence/absence never escalates exit code or
     warn-severity. See `cortex.siblings` for the detection contract.
     """
+    # TODO(cortex#272 / Phase C synthesis): when Cortex-synthesis ships,
+    # add a conditional peer check here for the `claude` CLI on PATH.
+    # Per Cortex Doctrine 0002 and CLAUDE.md's synthesis runtime rule,
+    # synthesis shells out directly to `claude -p`; Cortex must not add a
+    # Conductor provider layer. A project that has *enabled synthesis*
+    # should be told when `claude` is missing. The check MUST stay dormant
+    # for core-only users (init/doctor/manifest/journal/doctrine I/O carry
+    # no quartet dependency today): gate it on detecting enabled Phase C
+    # synthesis in `.cortex/config.toml`, not on mere `claude` absence.
+    # Until synthesis is default-enabled rather than opt-in, the Homebrew
+    # formula should stay dependency-free — see the brew rule in CLAUDE.md
+    # § "Release & Distribution".
     statuses = detect_siblings(project_root)
     click.echo("")
     click.echo(format_sibling_block(statuses))

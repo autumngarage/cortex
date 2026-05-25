@@ -75,6 +75,8 @@ Early releases established distribution through the Homebrew tap `autumngarage/h
 
 Each release must also declare which spec version it supports (in `SUPPORTED_SPEC_VERSIONS` in `src/cortex/__init__.py`). A minor CLI release cannot change the spec's major version; those travel together.
 
+**Brew `depends_on` rule (Phase C marker, cortex#272).** The `autumngarage/homebrew-cortex` formula must **not** declare `depends_on "autumngarage/conductor/conductor"` for Cortex-core (init, doctor, manifest, journal/doctrine I/O) or for Phase C synthesis. Cortex-core is a leaf in the quartet runtime DAG and carries no quartet runtime dependency; Cortex synthesis follows the direct `claude -p` runtime rule above, with no Conductor provider layer. If synthesis ships but remains opt-in, keep the formula dependency-free and document that synthesis users install/configure the `claude` CLI separately. If synthesis ever becomes default-enabled, decide and document the direct `claude` CLI packaging/check explicitly; do not route through Conductor to satisfy packaging. The matching code marker — a gated `claude`-on-PATH peer check — is staged as a `TODO(cortex#272 / Phase C synthesis)` in `_print_siblings` in `src/cortex/commands/doctor.py`.
+
 ## Architecture
 
 Python CLI (click + uv-managed venv) organized around layer commands. v0.2.3 ships the non-synthesizing surface; the production-release roadmap ([`.cortex/journal/2026-04-24-production-release-rerank.md`](./.cortex/journal/2026-04-24-production-release-rerank.md), supersedes the 2026-04-23 phase reorder for sequencing decisions) sequences the remaining work as six release-driven sub-sections (v0.3.0 → v1.0.0) under a single forcing function: install Cortex on a real project, work for a week, no surprises.
