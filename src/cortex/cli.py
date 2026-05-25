@@ -22,6 +22,7 @@ from cortex.commands._auto_sync import (
 )
 from cortex.commands.check_triggers import check_triggers_command
 from cortex.commands.doctor import doctor_command
+from cortex.commands.fleet import fleet_group
 from cortex.commands.grep import grep_command
 from cortex.commands.init import init_command
 from cortex.commands.install_brief import install_brief_command
@@ -152,6 +153,7 @@ cli.add_command(init_command)
 cli.add_command(install_brief_command)
 cli.add_command(check_triggers_command)
 cli.add_command(doctor_command)
+cli.add_command(fleet_group)
 cli.add_command(manifest_command)
 cli.add_command(migrate_state_command)
 cli.add_command(grep_command)
