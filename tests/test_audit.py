@@ -7,12 +7,21 @@ actual ``git log`` output instead of mocked diffs.
 from __future__ import annotations
 
 import subprocess
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 
-from cortex.audit import Trigger, audit, audit_digests, classify, load_commits, load_tags
+from cortex.audit import (
+    JOURNAL_MATCH_WINDOW_HOURS,
+    Trigger,
+    audit,
+    audit_digests,
+    classify,
+    load_commits,
+    load_tags,
+)
 from cortex.cli import cli
 from cortex.commands.init import init_command
 
@@ -426,6 +435,30 @@ def test_t1_9_matches_abbreviated_merge_commit(git_project: Path) -> None:
         if f.trigger == Trigger.T1_9 and f.commit and f.commit.sha == sha
     ]
     assert named and named[0].matched
+
+
+def test_t1_9_merge_commit_match_must_be_in_window(git_project: Path) -> None:
+    # Exact Merge-commit identity is still bound by the same 72h window as
+    # proximity matching. An old/backdated pr-merged entry with the right SHA
+    # must not satisfy a fresh merge event.
+    _commit(git_project, "feat: stale journal guard (#5)", {"e.py": "5\n"})
+    sha = _head_sha(git_project)
+    commits = load_commits(git_project, since_days=30)
+    commit_date = next(c.date for c in commits if c.sha == sha)
+    old_date = (
+        commit_date - timedelta(hours=JOURNAL_MATCH_WINDOW_HOURS + 48)
+    ).date().isoformat()
+    (git_project / ".cortex" / "journal" / f"{old_date}-pr-5-merged.md").write_text(
+        f"# PR #5\n\n**Date:** {old_date}\n**Type:** pr-merged\n"
+        f"**Trigger:** T1.9\n**Merge-commit:** {sha}\n\nbody\n"
+    )
+    report = audit(git_project, since_days=30)
+    named = [
+        f
+        for f in report.fires
+        if f.trigger == Trigger.T1_9 and f.commit and f.commit.sha == sha
+    ]
+    assert named and not named[0].matched
 
 
 def test_t1_9_recursion_guard_skips_auto_draft_journal_prs(git_project: Path) -> None:

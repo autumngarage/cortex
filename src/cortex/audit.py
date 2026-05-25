@@ -462,6 +462,7 @@ def _shas_identify(commit_sha: str, entry_sha: str) -> bool:
 
 
 def _match_by_merge_commit(
+    source_date: datetime,
     commit_sha: str,
     candidates: Iterable[JournalEntry],
 ) -> JournalEntry | None:
@@ -471,12 +472,17 @@ def _match_by_merge_commit(
     with the entry that explicitly records its merge commit, regardless of
     how many other merges share the same calendar day. This is what makes a
     same-day cluster of merges each resolve to its own entry instead of the
-    nearest-by-date one (issue #288).
+    nearest-by-date one (issue #288). The entry must still be within the
+    normal Journal match window for the fire; identity narrows attribution,
+    not recency.
     """
+    window = timedelta(hours=JOURNAL_MATCH_WINDOW_HOURS)
     for entry in candidates:
         if entry.type_ != EXPECTED_TYPE[Trigger.T1_9]:
             continue
         if entry.trigger is not None and entry.trigger != Trigger.T1_9.value:
+            continue
+        if abs(entry.date - source_date) > window:
             continue
         if entry.merge_commit and _shas_identify(commit_sha, entry.merge_commit):
             return entry
@@ -528,11 +534,11 @@ def audit(
     # otherwise a same-day cluster of merges has its entries consumed against
     # the wrong commit oldest-first, and the later merges look unmatched even
     # though their entries exist (issue #288).
-    for idx, (_source_date, trigger, fire_commit, _fire_tag) in enumerate(ordered_fires):
+    for idx, (source_date, trigger, fire_commit, _fire_tag) in enumerate(ordered_fires):
         if trigger is not Trigger.T1_9 or fire_commit is None:
             continue
         available = [e for e in journal if e.path not in consumed]
-        entry = _match_by_merge_commit(fire_commit.sha, available)
+        entry = _match_by_merge_commit(source_date, fire_commit.sha, available)
         if entry is not None:
             consumed.add(entry.path)
             matched_paths[idx] = entry.path
