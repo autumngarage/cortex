@@ -241,6 +241,116 @@ def test_url_404_warns(tmp_path: Path, monkeypatch: Any) -> None:
     assert "url: https://example.invalid/missing returned 404" in output
 
 
+def test_allowlisted_403_downgraded_to_visible_info(tmp_path: Path, monkeypatch: Any) -> None:
+    _write_config(
+        tmp_path,
+        '[audit-instructions]\n'
+        'urls = ["https://img.shields.io/badge/license-MIT-blue.svg"]\n'
+        'expected_403 = ["https://img.shields.io/*"]\n',
+    )
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda _req, timeout: _Response(403))
+
+    exit_code, output = _run(tmp_path)
+
+    assert exit_code == 0
+    # Suppressed but visible: the operator still sees the URL, status, and why.
+    assert "expected 403, allowlisted" in output
+    assert "https://img.shields.io/badge/license-MIT-blue.svg" in output
+    # Not counted as a warning.
+    assert "1 warning" not in output
+    assert "all verified (1 allowlisted)" in output
+
+
+def test_allowlisted_403_does_not_trip_strict(tmp_path: Path, monkeypatch: Any) -> None:
+    _write_config(
+        tmp_path,
+        '[audit-instructions]\n'
+        'urls = ["https://forum.cursor.com/t/x/39109"]\n'
+        'expected_403 = ["https://forum.cursor.com/*"]\n',
+    )
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda _req, timeout: _Response(403))
+
+    exit_code, output = _run(tmp_path, "--strict")
+
+    assert exit_code == 0
+    assert "expected 403, allowlisted" in output
+
+
+def test_non_allowlisted_403_still_warns(tmp_path: Path, monkeypatch: Any) -> None:
+    _write_config(
+        tmp_path,
+        '[audit-instructions]\n'
+        'urls = ["https://example.invalid/gated"]\n'
+        'expected_403 = ["https://img.shields.io/*"]\n',
+    )
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda _req, timeout: _Response(403))
+
+    exit_code, output = _run(tmp_path)
+
+    assert exit_code == 0
+    assert "url: https://example.invalid/gated returned 403" in output
+    assert "allowlisted" not in output
+
+
+def test_allowlisted_url_other_status_still_warns(tmp_path: Path, monkeypatch: Any) -> None:
+    _write_config(
+        tmp_path,
+        '[audit-instructions]\n'
+        'urls = ["https://img.shields.io/badge/broken"]\n'
+        'expected_403 = ["https://img.shields.io/*"]\n',
+    )
+
+    # Same allowlisted URL, but a 500 (not the documented 403) must still warn.
+    monkeypatch.setattr("urllib.request.urlopen", lambda _req, timeout: _Response(500))
+
+    exit_code, output = _run(tmp_path)
+
+    assert exit_code == 0
+    assert "url: https://img.shields.io/badge/broken returned 500" in output
+    assert "allowlisted" not in output
+
+
+def test_allowlist_glob_matching(tmp_path: Path, monkeypatch: Any) -> None:
+    # A glob that does NOT cover the URL leaves the 403 as a warning.
+    _write_config(
+        tmp_path,
+        '[audit-instructions]\n'
+        'urls = ["https://img.shields.io/badge/x"]\n'
+        'expected_403 = ["https://example.com/*"]\n',
+    )
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda _req, timeout: _Response(403))
+
+    exit_code, output = _run(tmp_path)
+
+    assert exit_code == 0
+    assert "url: https://img.shields.io/badge/x returned 403" in output
+    assert "allowlisted" not in output
+
+
+def test_allowlisted_403_json_shape(tmp_path: Path, monkeypatch: Any) -> None:
+    _write_config(
+        tmp_path,
+        '[audit-instructions]\n'
+        'urls = ["https://img.shields.io/badge/x"]\n'
+        'expected_403 = ["https://img.shields.io/*"]\n',
+    )
+
+    monkeypatch.setattr("urllib.request.urlopen", lambda _req, timeout: _Response(403))
+
+    exit_code, output = _run(tmp_path, "--json")
+
+    assert exit_code == 0
+    payload = json.loads(output)
+    assert payload["warnings"] == 0
+    assert payload["infos"] == 1
+    levels = {finding["level"] for finding in payload["findings"]}
+    assert "info" in levels
+
+
 def test_scan_strips_markdown_backticks_from_url_claims(tmp_path: Path) -> None:
     (tmp_path / "README.md").write_text("Install from `https://github.com/autumngarage/conductor`.\n")
 
