@@ -442,7 +442,11 @@ def test_fts5_missing_falls_back_to_grep(tmp_path: Path, monkeypatch: pytest.Mon
     assert result.exit_code == 0, result.output
     assert "FTS5 extension not available" in (result.output + (getattr(result, "stderr", "") or ""))
     assert "grep fallback output" in result.output
-    assert calls and "grep" in calls[0]
+    # The grep fallback is invoked as a subprocess. It need not be the very
+    # first subprocess call — the group-level stale-input hook (cortex#261)
+    # may probe git freshness before the retrieve body runs — so assert the
+    # grep fallback appears among the recorded calls rather than at index 0.
+    assert any("grep" in cmd for cmd in calls)
 
 
 def test_fts5_missing_json_fallback_preserves_json_schema(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
