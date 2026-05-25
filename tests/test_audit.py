@@ -371,3 +371,86 @@ def test_cli_audit_digests_flag(git_project: Path) -> None:
     result = runner.invoke(cli, ["doctor", "--audit-digests", "--path", str(git_project)])
     assert result.exit_code == 0, result.output
     assert "--audit-digests" in result.output
+
+
+def _head_sha(path: Path) -> str:
+    return _run(path, "rev-parse", "HEAD").stdout.strip()
+
+
+def test_t1_9_matches_by_merge_commit_over_proximity(git_project: Path) -> None:
+    # Two same-day mainline commits. Only the second has a pr-merged entry,
+    # and that entry names the second commit's SHA. Without merge-commit
+    # identity matching, the entry-less first commit consumes the entry by
+    # date proximity and the named commit is flagged unmatched (issue #288).
+    _commit(git_project, "feat: first thing (#1)", {"a.py": "1\n"})
+    _commit(git_project, "feat: second thing (#2)", {"b.py": "2\n"})
+    second_sha = _head_sha(git_project)
+    commits = load_commits(git_project, since_days=30)
+    date = commits[0].date.date().isoformat()
+    (git_project / ".cortex" / "journal" / f"{date}-pr-2-merged.md").write_text(
+        f"# PR #2 merged\n\n**Date:** {date}\n**Type:** pr-merged\n"
+        f"**Trigger:** T1.9\n**Merge-commit:** {second_sha}\n\nbody\n"
+    )
+    report = audit(git_project, since_days=30)
+    named = [
+        f
+        for f in report.fires
+        if f.trigger == Trigger.T1_9 and f.commit and f.commit.sha == second_sha
+    ]
+    assert named and named[0].matched, "named merge commit must match its own entry"
+    # The entry-less commit stays unmatched — it must NOT steal #2's entry.
+    first = [
+        f
+        for f in report.fires
+        if f.trigger == Trigger.T1_9 and f.commit and "first thing" in f.commit.subject
+    ]
+    assert first and not first[0].matched
+
+
+def test_t1_9_matches_abbreviated_merge_commit(git_project: Path) -> None:
+    # The pr-merged template records the full HEAD sha, but older or
+    # hand-authored entries may carry an abbreviated one. Either side being a
+    # prefix of the other is an identity match.
+    _commit(git_project, "feat: thing (#3)", {"c.py": "3\n"})
+    sha = _head_sha(git_project)
+    commits = load_commits(git_project, since_days=30)
+    date = commits[0].date.date().isoformat()
+    (git_project / ".cortex" / "journal" / f"{date}-pr-3-merged.md").write_text(
+        f"# PR #3\n\n**Date:** {date}\n**Type:** pr-merged\n"
+        f"**Merge-commit:** {sha[:8]}\n\nbody\n"
+    )
+    report = audit(git_project, since_days=30)
+    named = [
+        f
+        for f in report.fires
+        if f.trigger == Trigger.T1_9 and f.commit and f.commit.sha == sha
+    ]
+    assert named and named[0].matched
+
+
+def test_t1_9_recursion_guard_skips_auto_draft_journal_prs(git_project: Path) -> None:
+    # The Touchstone post-merge hook skips auto-draft pr-merged journal PRs
+    # via a recursion guard; the audit must not demand a (self-referential)
+    # journal entry for them either (issue #288).
+    _commit(
+        git_project,
+        "docs(journal): auto-draft pr-merged entry for #551 (#552)",
+        {".cortex/journal/2026-05-23-pr-merged-1458.md": "x\n"},
+    )
+    commits = load_commits(git_project, since_days=30)
+    hit = next(c for c in commits if "auto-draft" in c.subject)
+    assert Trigger.T1_9 not in classify(hit)
+
+
+def test_t1_9_legacy_entry_without_merge_commit_still_matches(git_project: Path) -> None:
+    # A pr-merged entry that omits Merge-commit: (human-authored, or pre-dating
+    # the field) still matches by date proximity — the fix must not regress it.
+    _commit(git_project, "feat: legacy merge (#4)", {"d.py": "4\n"})
+    commits = load_commits(git_project, since_days=30)
+    date = commits[0].date.date().isoformat()
+    (git_project / ".cortex" / "journal" / f"{date}-pr-4-merged.md").write_text(
+        f"# PR #4\n\n**Date:** {date}\n**Type:** pr-merged\n\nbody\n"
+    )
+    report = audit(git_project, since_days=30)
+    t1_9 = [f for f in report.fires if f.trigger == Trigger.T1_9 and f.matched]
+    assert t1_9, "legacy pr-merged entry without Merge-commit must still match"
