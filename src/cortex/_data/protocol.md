@@ -2,7 +2,7 @@
 
 > The set of rules an agent follows to read and write `.cortex/`. Projects import this file into `AGENTS.md` (or `CLAUDE.md`) so every agent working on the project follows the same contract.
 
-**Protocol version:** 0.3.1 (ships with SPEC.md v1.1.0; § 1 clarifies hot/cold context and grep-vs-retrieve lookup policy — clarification patch per SPEC § 6)
+**Protocol version:** 0.3.2 (ships with SPEC.md v1.1.0; § 2 exempts auto-drafted pr-merged journal PRs from T1.9 to match the post-merge hook recursion guard — clarification patch per SPEC § 7, since no conforming setup could satisfy a self-referential entry. 0.3.1 clarified § 1 hot/cold context and grep-vs-retrieve lookup policy.)
 **Status:** Active
 **Imports:** this file is imported into `AGENTS.md` via `@.cortex/protocol.md`
 
