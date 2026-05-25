@@ -248,7 +248,7 @@ def _print_siblings(project_root: Path) -> None:
     # TODO(cortex#272 / Phase C synthesis): when Cortex-synthesis ships,
     # add a conditional peer check here for the `conductor` CLI on PATH.
     # Per autumn-garage Doctrine 0009 (quartet-runtime-dependency-dag),
-    # Cortex-synthesis becomes a hard runtime dependency of Conductor, so a
+    # Conductor becomes a hard runtime dependency of enabled Cortex synthesis, so a
     # project that has *enabled a synthesis backend* should be told when
     # `conductor` is missing. The check MUST stay dormant for core-only
     # users (init/doctor/manifest/journal/doctrine I/O carry no quartet
