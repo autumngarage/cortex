@@ -3,7 +3,6 @@
 .touchstone-version
 TOUCHSTONE.md
 .github/workflows/issue-claim-check.yml
-principles/README.md
 principles/agent-swarms.md
 principles/ai-delivery-architecture.md
 principles/audit-weak-points.md
@@ -12,6 +11,7 @@ principles/engineering-principles.md
 principles/file-upstream-bugs.md
 principles/git-workflow.md
 principles/pre-implementation-checklist.md
+principles/README.md
 scripts/conductor-review.sh
 scripts/codex-review.sh
 scripts/branch-guard.sh
