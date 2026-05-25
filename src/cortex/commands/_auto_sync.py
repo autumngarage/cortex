@@ -483,6 +483,115 @@ def maybe_auto_sync(
         )
 
 
+# Commands that consume generated context (state.md / the derived indexes)
+# and therefore benefit from a stale-input auto-update before they read.
+# `grep` is intentionally absent: it shells out to ripgrep over the raw
+# `.cortex/` markdown and never reads `.index.json` or `state.md`, so a
+# stale generated layer cannot affect its output.
+STALE_INPUT_READ_COMMANDS: frozenset[str] = frozenset({
+    "status",
+    "next",
+    "manifest",
+    "retrieve",
+})
+
+
+def maybe_auto_sync_stale_inputs(
+    project_root: Path,
+    invoked_subcommand: str | None,
+    *,
+    disabled: bool,
+) -> None:
+    """Auto-update stale generated layers before a read command consumes them.
+
+    This is the *input-staleness* sibling of :func:`maybe_auto_sync`. Where
+    that function fires on a minor-or-greater CLI version bump, this one fires
+    when ordinary source changes (a new Journal entry, a changed
+    ``pyproject.toml``, generator-version drift) have left ``.cortex/state.md``
+    or ``.cortex/.index.json`` stale relative to their sources.
+
+    It reuses, rather than re-implements:
+
+    - The freshness detector behind ``cortex update --check``
+      (:func:`cortex.commands.sync._state_update_needed` and
+      :func:`~cortex.commands.sync._index_update_needed`).
+    - The same safety gate the version-bump path uses
+      (:func:`_auto_sync_preflight_allows`), which refuses to write through a
+      dirty overlap with the planned write set, an unavailable git, or a
+      release commit on a feature branch.
+    - The same single writer (:func:`cortex.commands.sync.run_sync` with
+      ``run_doctor=False``).
+
+    The version-bump marker is deliberately untouched here: the two triggers
+    are orthogonal, and a patch bump must never become a content rewrite.
+
+    All skip and failure paths are visible on stderr — never silent. When the
+    worktree is unsafe to write, the read command still runs against the
+    current (stale) files so the stale condition stays observable.
+    """
+
+    if disabled:
+        return
+    if invoked_subcommand not in STALE_INPUT_READ_COMMANDS:
+        return
+
+    cortex_dir = project_root / ".cortex"
+    if not cortex_dir.is_dir():
+        # No project-level Cortex — the read command will emit its own
+        # "run cortex init first" error.
+        return
+
+    if _config_disables_auto_sync(cortex_dir):
+        return
+
+    try:
+        from cortex.commands.sync import _index_update_needed, _state_update_needed
+
+        needs_state, state_reasons = _state_update_needed(project_root)
+        needs_index, index_reasons = _index_update_needed(project_root)
+    except BaseException as exc:
+        if isinstance(exc, KeyboardInterrupt):
+            raise
+        # A staleness probe must never block the user's read command. Surface
+        # the failure (no silent failures) and continue with current files.
+        click.echo(
+            f"warning: auto-sync stale-input check failed: {exc}; "
+            "continuing with original command.",
+            err=True,
+        )
+        return
+
+    if not (needs_state or needs_index):
+        return
+
+    # The worktree-safety gate is shared with the version-bump path. When it
+    # refuses, it has already printed the specific blocking reason to stderr;
+    # we continue with the stale files so the staleness stays visible.
+    if not _auto_sync_preflight_allows(project_root):
+        return
+
+    reasons = ", ".join(state_reasons + index_reasons) or "stale generated layers"
+    click.echo(
+        f"==> auto-sync: stale Cortex inputs detected ({reasons}); "
+        "updating generated layers",
+        err=True,
+    )
+    try:
+        from cortex.commands.sync import run_sync
+
+        run_sync(project_root, run_doctor=False, output_prefix="==> auto-sync:")
+    except BaseException as exc:
+        # Mirror maybe_auto_sync: a regeneration failure (including SystemExit
+        # from require_compatible) must not take down the read command.
+        # KeyboardInterrupt stays the operator's call.
+        if isinstance(exc, KeyboardInterrupt):
+            raise
+        click.echo(
+            f"warning: auto-sync failed: {exc}; continuing with original command.",
+            err=True,
+        )
+
+
 def project_root_from_path_override(path_override: Path | None) -> Path:
     """Resolve the project root the same way the click group's --path option does."""
 
@@ -514,5 +623,6 @@ __all__ = [
     "SKIP_COMMANDS",
     "auto_sync_via_env_disabled",
     "maybe_auto_sync",
+    "maybe_auto_sync_stale_inputs",
     "project_root_from_path_override",
 ]

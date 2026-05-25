@@ -16,6 +16,7 @@ from cortex import SUPPORTED_PROTOCOL_VERSIONS, SUPPORTED_SPEC_VERSIONS, __versi
 from cortex.commands._auto_sync import (
     auto_sync_via_env_disabled,
     maybe_auto_sync,
+    maybe_auto_sync_stale_inputs,
     project_root_from_path_override,
 )
 from cortex.commands.check_triggers import check_triggers_command
@@ -103,6 +104,15 @@ def cli(
     project_root = project_root_from_path_override(path_override)
     auto_sync_disabled = no_auto_sync or auto_sync_via_env_disabled()
     maybe_auto_sync(
+        project_root,
+        ctx.invoked_subcommand,
+        disabled=auto_sync_disabled,
+    )
+    # Stale-input auto-update (cortex#261). Independent of the version-bump
+    # marker above: fires when ordinary source edits leave the generated
+    # layers (state.md / .index.json) stale before a read command consumes
+    # them. Scoped to STALE_INPUT_READ_COMMANDS; honors the same opt-outs.
+    maybe_auto_sync_stale_inputs(
         project_root,
         ctx.invoked_subcommand,
         disabled=auto_sync_disabled,
