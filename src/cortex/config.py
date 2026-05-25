@@ -25,6 +25,13 @@ class AuditInstructionsConfig:
     discovery_mode: bool = True
     warnings: tuple[str, ...] = ()
     self_repo: str | None = None
+    # fnmatch glob patterns for URLs known to return 403 to a bare HEAD/GET but
+    # which render fine for real clients (image-Accept-gated badges, anonymous-
+    # gated forums). A matching URL's 403 is downgraded to a visible "expected
+    # 403 (allowlisted)" info line instead of a warning. Only 403 is suppressed;
+    # any other non-2xx on an allowlisted URL still warns. Absent = today's
+    # behavior (every non-2xx warns).
+    expected_403: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -70,6 +77,7 @@ def load_audit_instructions_config(project_root: Path) -> AuditInstructionsConfi
         scan_files=scan_files,
         discovery_mode=False,
         self_repo=_optional_string(raw.get("self_repo")),
+        expected_403=_string_tuple(raw.get("expected_403")),
     )
 
 
