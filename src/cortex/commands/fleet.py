@@ -582,6 +582,18 @@ def _worktree_dirty(repo_root: Path) -> bool:
     return bool(res.stdout.strip())
 
 
+def _planned_generated_layers_dirty(repo_root: Path) -> bool:
+    res = _git(
+        repo_root,
+        "status",
+        "--porcelain",
+        "--",
+        ".cortex/state.md",
+        ".cortex/.index.json",
+    )
+    return bool(res.stdout.strip())
+
+
 @dataclass
 class UpdateOutcome:
     path: Path
@@ -607,7 +619,7 @@ def _eligible_for_update(record: RepoRecord) -> tuple[bool, str]:
 def _do_pr_update(repo_root: Path, repo_name: str) -> UpdateOutcome:
     """Create a scoped per-repo branch, run run_sync, commit, push, open PR.
 
-    NEVER commits to main/master: switches to a fresh `cortex/fleet-update`
+    NEVER commits to main/master: switches to a scoped `cortex/fleet-update`
     branch first and refuses if it cannot leave the default branch. The
     operation is recoverable — on any failure the branch is left in place
     for inspection and nothing is force-pushed.
@@ -620,13 +632,31 @@ def _do_pr_update(repo_root: Path, repo_name: str) -> UpdateOutcome:
     if starting is None:
         return UpdateOutcome(repo_root, repo_name, "skipped", "not a git repo or detached HEAD")
 
-    # Create/switch to the scoped branch. `checkout -B` resets the branch to
-    # current HEAD — safe because we only ever commit fleet-generated layers.
-    co = _git(repo_root, "checkout", "-B", branch)
-    if co.returncode != 0:
+    if _planned_generated_layers_dirty(repo_root):
         return UpdateOutcome(
-            repo_root, repo_name, "skipped", f"could not create branch {branch}: {co.stderr.strip()}"
+            repo_root,
+            repo_name,
+            "skipped",
+            "generated layer paths are dirty; refusing PR update",
         )
+
+    branch_exists = (
+        _git(repo_root, "show-ref", "--verify", "--quiet", f"refs/heads/{branch}").returncode == 0
+    )
+    if branch_exists and starting != branch:
+        return UpdateOutcome(
+            repo_root,
+            repo_name,
+            "skipped",
+            f"branch {branch} already exists; inspect or remove it before retrying",
+        )
+
+    if not branch_exists:
+        co = _git(repo_root, "checkout", "-b", branch)
+        if co.returncode != 0:
+            return UpdateOutcome(
+                repo_root, repo_name, "skipped", f"could not create branch {branch}: {co.stderr.strip()}"
+            )
 
     # Hard invariant: we must NOT be on main/master before writing.
     on = _current_branch(repo_root)

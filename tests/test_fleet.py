@@ -390,3 +390,47 @@ def test_fleet_update_pr_never_commits_to_main(tmp_path: Path) -> None:
         # The scoped branch has the new commit, main does not.
         scoped_head = _git(repo, "rev-parse", "cortex/fleet-update").stdout.strip()
         assert scoped_head != main_head_before
+
+
+def test_fleet_update_pr_refuses_existing_scoped_branch(tmp_path: Path) -> None:
+    repo = _make_full_repo(tmp_path, "stale")
+    _git(repo, "checkout", "-b", "cortex/fleet-update")
+    (repo / "branch-note.txt").write_text("inspection state\n")
+    _git(repo, "add", "branch-note.txt")
+    _git(repo, "commit", "-m", "inspection state")
+    scoped_head_before = _git(repo, "rev-parse", "cortex/fleet-update").stdout.strip()
+    _git(repo, "checkout", "main")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["fleet", "update", "--pr", "--path", str(repo)],
+        env={"CORTEX_DETERMINISTIC": "1"},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "skipped" in result.output
+    assert "already exists" in result.output
+    assert _git(repo, "rev-parse", "cortex/fleet-update").stdout.strip() == scoped_head_before
+    assert _git(repo, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip() == "main"
+
+
+def test_fleet_update_pr_skips_dirty_generated_layers(tmp_path: Path) -> None:
+    repo = _make_full_repo(tmp_path, "stale")
+    state_path = repo / ".cortex" / "state.md"
+    state_before = state_path.read_text()
+    state_path.write_text(f"{state_before}\nlocal edit\n")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["fleet", "update", "--pr", "--path", str(repo)],
+        env={"CORTEX_DETERMINISTIC": "1"},
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "skipped" in result.output
+    assert "generated layer paths are dirty" in result.output
+    assert state_path.read_text() == f"{state_before}\nlocal edit\n"
+    assert not (repo / ".cortex" / ".index.json").exists()
+    assert "cortex/fleet-update" not in _git(repo, "branch", "--list").stdout
