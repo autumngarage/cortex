@@ -5,6 +5,15 @@ verified_threshold_days = 90
 homebrew_tap = "autumngarage/cortex"
 github_releases = ["autumngarage/cortex"]
 scan_files = ["CLAUDE.md", "AGENTS.md", "README.md"]
+# URLs that return 403 to a bare HEAD/GET but render fine for real clients.
+# shields.io badge endpoints need an image Accept header; forum.cursor.com is
+# anonymous-gated. These are documented citations, not broken links — their
+# 403 is downgraded to a visible "expected 403 (allowlisted)" info line rather
+# than a warning. fnmatch globs; only a 403 is suppressed (other codes warn).
+expected_403 = [
+  "https://img.shields.io/*",
+  "https://forum.cursor.com/*",
+]
 
 [refresh-index]
 candidate_patterns = [
