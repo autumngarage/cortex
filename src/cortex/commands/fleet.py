@@ -55,7 +55,6 @@ dump internal dataclasses. Fields, per repo:
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -373,7 +372,7 @@ def classify_repo(repo_root: Path, *, audit: bool) -> RepoRecord:
             record.audit_warnings = _audit_warnings_in_process(repo_root)
 
         record.classification, record.next_command = _classify_overall(record)
-    except Exception as exc:  # noqa: BLE001 — surface, never drop the repo
+    except Exception as exc:  # surface, never drop the repo (No silent failures)
         record.error = f"{type(exc).__name__}: {exc}"
         record.classification = CLASS_RED
         record.next_command = f"cortex doctor --path {repo_root}"
@@ -662,7 +661,6 @@ def _do_pr_update(repo_root: Path, repo_name: str) -> UpdateOutcome:
             f"committed on {branch} but push failed: {push.stderr.strip()}",
         )
 
-    pr = _git(repo_root, "log", "-1", "--format=%H")  # placeholder; gh below
     gh = subprocess.run(
         ["gh", "pr", "create", "--fill", "--head", branch],
         cwd=str(repo_root),
@@ -675,7 +673,6 @@ def _do_pr_update(repo_root: Path, repo_name: str) -> UpdateOutcome:
             repo_root, repo_name, "pr",
             f"pushed {branch} but `gh pr create` failed ({gh.stderr.strip()}); open the PR manually",
         )
-    _ = pr
     return UpdateOutcome(repo_root, repo_name, "pr", gh.stdout.strip())
 
 
