@@ -2,7 +2,7 @@
 
 > The set of rules an agent follows to read and write `.cortex/`. Projects import this file into `AGENTS.md` (or `CLAUDE.md`) so every agent working on the project follows the same contract.
 
-**Protocol version:** 0.3.1 (ships with SPEC.md v1.1.0; § 1 clarifies hot/cold context and grep-vs-retrieve lookup policy — clarification patch per SPEC § 6)
+**Protocol version:** 0.3.2 (ships with SPEC.md v1.1.0; § 2 exempts auto-drafted pr-merged journal PRs from T1.9 to match the post-merge hook recursion guard — clarification patch per SPEC § 7, since no conforming setup could satisfy a self-referential entry. 0.3.1 clarified § 1 hot/cold context and grep-vs-retrieve lookup policy.)
 **Status:** Active
 **Imports:** this file is imported into `AGENTS.md` via `@.cortex/protocol.md`
 
@@ -102,10 +102,12 @@ These triggers are **deterministic, auditable, and enforceable**. When any of th
 | T1.6 | Sentinel cycle ended (`.sentinel/runs/<timestamp>.md` written) | `journal/sentinel-cycle.md` |
 | T1.7 | Touchstone pre-merge ran on architecturally significant diff (touches `principles/`, `.cortex/doctrine/`, `SPEC.md`, or matches configured patterns) | `doctrine/candidate.md` (draft, awaits promotion) |
 | T1.8 | Commit message matches patterns: `fix: ... regression`, `refactor: ... (removes|introduces)`, `feat: ... (breaking|replaces)` | `journal/decision.md` |
-| T1.9 | Pull request merged to the default branch (main/master) | `journal/pr-merged.md` |
+| T1.9 | Pull request merged to the default branch (main/master), except auto-drafted `pr-merged` journal PRs that match the recursion guard | `journal/pr-merged.md` |
 | T1.10 | A tagged release / distribution artifact shipped (`git tag` matching a release pattern, GitHub Release published, Homebrew tap / PyPI / Docker image updated) | `journal/release.md` |
 
 **Why T1.9 matters.** The merge is the canonical "this shipped" event for team-shared memory. T1.3 (plan transition) and T1.8 (commit-message pattern) are near-misses: a PR can merge without a plan-status change, and commit-pattern matching is fuzzy. A post-merge summary closes the loop — it is the durable record that ties Plans, Journal entries written during the branch, and the final diff together at the moment ratification happened. Authored by whichever agent/human runs the merge command (or by a post-merge hook when present).
+
+**T1.9 recursion guard.** Auto-drafted `pr-merged` Journal PRs are exempt from T1.9 when their merge subject matches the post-merge hook recursion guard (for example, `docs(journal): auto-draft pr-merged entry ...`). Those PRs exist only to record a prior merge; requiring another `pr-merged` entry for their own merge would create an endless self-referential chain. All other default-branch PR merges still fire T1.9.
 
 **Why T1.10 matters.** The merge is when work *enters the trunk*; the release is when it *enters the world*. Downstream documentation (CLAUDE.md install commands, README quickstart, PITCH version mentions, sibling-repo formula references) refers to *released* artifacts, not merged commits. A release event without a Journal entry is the failure mode the conductor case study documented: the Homebrew tap shipped, no Journal entry recorded that reality changed, and `CLAUDE.md` kept claiming "tap planned for v0.1.0; not yet wired" for eight further releases. The `release.md` template captures `Downstream docs this changes` as the seed list for the v0.5.0 `cortex doctor --audit-instructions` check; T1.10's audit walks `git tag --list` and matches each tag against a `Type: release` Journal entry within 72h whose **`Tag:`** scalar equals the tag name (so one release entry resolves exactly one tag — preventing a single entry from accidentally satisfying every nearby release tag).
 

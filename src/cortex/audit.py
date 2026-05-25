@@ -18,7 +18,12 @@ First-slice coverage:
   ``feat: ... (breaking|replaces)``. Expects ``Type: decision``.
 - **T1.9** — commit landed on the default branch (every commit in the
   audited range, since this repo uses squash-merge to main). Expects
-  ``Type: pr-merged``.
+  ``Type: pr-merged``. A pr-merged entry that records a ``Merge-commit:``
+  is matched by exact SHA identity (so a same-day cluster of merges each
+  resolves to its own entry, not the nearest-by-date one); entries without
+  the field fall back to date-proximity matching. Auto-drafted pr-merged
+  journal PRs are exempt — they mirror the post-merge hook's recursion guard
+  and never demand a self-referential entry.
 - **T1.10** — a tag matching the release pattern (default
   ``^v\\d+\\.\\d+\\.\\d+``) was created in the audit window. Walks
   ``git tag --list`` rather than ``git log``; the tag's commit date
@@ -58,6 +63,17 @@ T1_8_RE = re.compile(
 
 T1_1_PATH_PREFIXES = (".cortex/doctrine/", ".cortex/plans/", "principles/")
 T1_1_EXACT_PATHS = ("SPEC.md",)
+
+# T1.9 recursion guard. The Touchstone post-merge hook
+# (``scripts/cortex-pr-merged-hook.sh``) intentionally exits without writing a
+# journal entry when the merge it just observed is itself an auto-drafted
+# pr-merged journal PR — otherwise every journal-entry PR would demand its own
+# journal entry, forever. The audit must honor the same exemption or it flags
+# those merges as missing a T1.9 entry that can never legitimately exist.
+T1_9_RECURSION_GUARD_RE = re.compile(
+    r"^docs\(journal\):\s*auto-draft pr-merged entry",
+    re.IGNORECASE,
+)
 
 # Default release-tag pattern per Protocol § 2 ("T1.10 ... default `^v\d+\.\d+\.\d+`").
 # Projects using calendar versioning or non-`v`-prefix tags override via .cortex/protocol.md.
@@ -103,6 +119,7 @@ class JournalEntry:
     type_: str | None
     trigger: str | None
     tag: str | None = None
+    merge_commit: str | None = None
 
 
 @dataclass(frozen=True)
@@ -306,7 +323,11 @@ def classify(commit: Commit) -> list[Trigger]:
     # T1.9: every commit in the audited range has landed on the default
     # branch (git log runs against the current HEAD). The audit is run
     # against main in practice, so every commit is a merge by convention.
-    fired.append(Trigger.T1_9)
+    # The one exception is an auto-drafted pr-merged journal PR — the
+    # post-merge hook skips those via its recursion guard, so the audit
+    # must not expect a (self-referential) journal entry for them either.
+    if not T1_9_RECURSION_GUARD_RE.match(commit.subject):
+        fired.append(Trigger.T1_9)
     return fired
 
 
@@ -320,7 +341,7 @@ def load_journal_entries(project_root: Path) -> list[JournalEntry]:
         if not match:
             continue
         entry_date = datetime.fromisoformat(match.group(1)).replace(tzinfo=UTC)
-        type_, trigger, tag = _journal_header_fields(path)
+        type_, trigger, tag, merge_commit = _journal_header_fields(path)
         entries.append(
             JournalEntry(
                 path=path,
@@ -328,23 +349,28 @@ def load_journal_entries(project_root: Path) -> list[JournalEntry]:
                 type_=type_,
                 trigger=trigger,
                 tag=tag,
+                merge_commit=merge_commit,
             )
         )
     return entries
 
 
-def _journal_header_fields(path: Path) -> tuple[str | None, str | None, str | None]:
-    """Return ``(Type, Trigger, Tag)`` for a Journal entry.
+def _journal_header_fields(
+    path: Path,
+) -> tuple[str | None, str | None, str | None, str | None]:
+    """Return ``(Type, Trigger, Tag, Merge-commit)`` for a Journal entry.
 
-    All three fields accept YAML frontmatter or bold-inline (SPEC § 6).
+    All four fields accept YAML frontmatter or bold-inline (SPEC § 6).
     Missing fields return None. ``Trigger`` only appears on Protocol-
     triggered entries; ``Tag`` only appears on ``Type: release`` entries
-    naming the specific git tag the release record describes.
+    naming the specific git tag the release record describes;
+    ``Merge-commit`` only appears on ``Type: pr-merged`` entries and names
+    the squash-merge commit the entry records (T1.9 matches against it).
     """
     try:
         text = path.read_text()
     except OSError:
-        return None, None, None
+        return None, None, None, None
     frontmatter, _body = parse_frontmatter(text)
     header = "\n".join(text.splitlines()[:40])
 
@@ -365,7 +391,15 @@ def _journal_header_fields(path: Path) -> tuple[str | None, str | None, str | No
         t_match = re.match(r"(T\d+\.\d+)", raw_trigger)
         trigger = t_match.group(1) if t_match else raw_trigger
     tag = _from_either("Tag")
-    return type_, trigger, tag
+    raw_merge = _from_either("Merge-commit")
+    merge_commit: str | None = None
+    if raw_merge:
+        # Keep only the leading hex token — entries sometimes append a note
+        # like "abc1234 (squash)". A bare hex SHA (full or abbreviated) is
+        # all the audit needs for identity matching.
+        m_match = re.match(r"([0-9a-fA-F]{4,40})", raw_merge)
+        merge_commit = m_match.group(1).lower() if m_match else None
+    return type_, trigger, tag, merge_commit
 
 
 def _best_matching_entry(
@@ -403,11 +437,56 @@ def _best_matching_entry(
             continue
         if trigger is Trigger.T1_10 and tag_name is not None and entry.tag != tag_name:
             continue
+        # A pr-merged entry that names a specific Merge-commit is claimed by
+        # that commit (resolved by exact identity in phase 1 when it's in
+        # range). Don't let date proximity hand it to a different commit's
+        # fire. Legacy entries without the field stay eligible for proximity.
+        if trigger is Trigger.T1_9 and entry.merge_commit:
+            continue
         delta = abs(entry.date - source_date)
         if delta <= best_delta:
             best = entry
             best_delta = delta
     return best
+
+
+def _shas_identify(commit_sha: str, entry_sha: str) -> bool:
+    """True when two git SHAs name the same commit.
+
+    Either side may be abbreviated (the pr-merged template records the full
+    HEAD sha, but human-authored entries and older repos may carry a short
+    sha), so one must be a case-insensitive prefix of the other.
+    """
+    a, b = commit_sha.lower(), entry_sha.lower()
+    return a.startswith(b) or b.startswith(a)
+
+
+def _match_by_merge_commit(
+    source_date: datetime,
+    commit_sha: str,
+    candidates: Iterable[JournalEntry],
+) -> JournalEntry | None:
+    """Return a ``pr-merged`` entry whose ``Merge-commit:`` names this commit.
+
+    Identity matching is exact and order-independent: it pairs a T1.9 fire
+    with the entry that explicitly records its merge commit, regardless of
+    how many other merges share the same calendar day. This is what makes a
+    same-day cluster of merges each resolve to its own entry instead of the
+    nearest-by-date one (issue #288). The entry must still be within the
+    normal Journal match window for the fire; identity narrows attribution,
+    not recency.
+    """
+    window = timedelta(hours=JOURNAL_MATCH_WINDOW_HOURS)
+    for entry in candidates:
+        if entry.type_ != EXPECTED_TYPE[Trigger.T1_9]:
+            continue
+        if entry.trigger is not None and entry.trigger != Trigger.T1_9.value:
+            continue
+        if abs(entry.date - source_date) > window:
+            continue
+        if entry.merge_commit and _shas_identify(commit_sha, entry.merge_commit):
+            return entry
+    return None
 
 
 def audit(
@@ -449,7 +528,26 @@ def audit(
     for tag_item in tags:
         ordered_fires.append((tag_item.date, Trigger.T1_10, None, tag_item))
     ordered_fires.sort(key=lambda f: f[0])
-    for source_date, trigger, fire_commit, fire_tag in ordered_fires:
+    matched_paths: dict[int, Path | None] = {}
+    # Phase 1: exact ``Merge-commit:`` identity for T1.9 fires. Pairing a
+    # merge commit with the entry that names it must win over date proximity,
+    # otherwise a same-day cluster of merges has its entries consumed against
+    # the wrong commit oldest-first, and the later merges look unmatched even
+    # though their entries exist (issue #288).
+    for idx, (source_date, trigger, fire_commit, _fire_tag) in enumerate(ordered_fires):
+        if trigger is not Trigger.T1_9 or fire_commit is None:
+            continue
+        available = [e for e in journal if e.path not in consumed]
+        entry = _match_by_merge_commit(source_date, fire_commit.sha, available)
+        if entry is not None:
+            consumed.add(entry.path)
+            matched_paths[idx] = entry.path
+    # Phase 2: date-proximity matching for every fire not already resolved by
+    # an exact merge-commit identity. Oldest-first so the earliest fire wins a
+    # contested entry (the one-entry-per-fire rule, SPEC § 3.5).
+    for idx, (source_date, trigger, _fire_commit, fire_tag) in enumerate(ordered_fires):
+        if idx in matched_paths:
+            continue
         available = [e for e in journal if e.path not in consumed]
         entry = _best_matching_entry(
             source_date,
@@ -460,11 +558,14 @@ def audit(
         )
         if entry is not None:
             consumed.add(entry.path)
+        matched_paths[idx] = entry.path if entry else None
+    for idx, (_source_date, trigger, fire_commit, fire_tag) in enumerate(ordered_fires):
+        matched_path = matched_paths.get(idx)
         report.fires.append(
             TriggerFire(
                 trigger=trigger,
-                matched=entry is not None,
-                matched_entry=entry.path if entry else None,
+                matched=matched_path is not None,
+                matched_entry=matched_path,
                 commit=fire_commit,
                 tag=fire_tag,
             )
