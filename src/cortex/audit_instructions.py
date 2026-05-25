@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import re
@@ -86,10 +87,15 @@ class AuditInstructionsReport:
     def warnings(self) -> tuple[Finding, ...]:
         return tuple(f for f in self.findings if f.level == "warning")
 
+    @property
+    def infos(self) -> tuple[Finding, ...]:
+        return tuple(f for f in self.findings if f.level == "info")
+
     def to_json(self, project_root: Path) -> dict[str, Any]:
         return {
             "checked": self.checked,
             "warnings": len(self.warnings),
+            "infos": len(self.infos),
             "findings": [finding.to_json(project_root) for finding in self.findings],
         }
 
@@ -121,7 +127,7 @@ def audit_instructions(project_root: Path) -> AuditInstructionsReport:
         network_tasks.append(("pypi", pypi_url, ()))
         checked += 1
 
-    findings.extend(_run_network_checks(network_tasks, config.pypi_package))
+    findings.extend(_run_network_checks(network_tasks, config.pypi_package, config.expected_403))
 
     if config.homebrew_tap:
         checked += 1
@@ -340,9 +346,17 @@ def audit_github_paas_repos(repos: tuple[str, ...]) -> list[Finding]:
     return findings
 
 
+# Status code an allowlist entry documents and is permitted to suppress. A
+# URL on the allowlist returning any other non-2xx still warns; broadening this
+# to a per-code mapping is an intentional non-goal (issue cortex#269) — bare
+# HEAD/GET 403 is the single well-understood "renders fine in a browser" case.
+EXPECTED_ALLOWLIST_STATUS = 403
+
+
 def _run_network_checks(
     tasks: list[tuple[str, str, tuple[TextLocation, ...]]],
     pypi_package: str | None,
+    expected_403: tuple[str, ...] = (),
 ) -> list[Finding]:
     if not tasks:
         return []
@@ -360,11 +374,34 @@ def _run_network_checks(
                 findings.append(Finding("ok", f"{label} ({status})"))
                 continue
             location = locations[0] if locations else None
+            if (
+                kind == "url"
+                and status == EXPECTED_ALLOWLIST_STATUS
+                and _matches_allowlist(url, expected_403)
+            ):
+                # Downgrade to a visible info line, not a silent skip: the
+                # operator still sees the URL, the status, and why it was
+                # allowed (no-silent-failures). Only the documented 403 is
+                # suppressed; other codes fall through to the warning below.
+                findings.append(
+                    Finding(
+                        "info",
+                        f"{label} returned {status} (expected 403, allowlisted)",
+                        source_file=location.path if location else None,
+                        line_number=location.line_number if location else None,
+                    )
+                )
+                continue
             if status is not None:
                 findings.append(_warning(f"{label} returned {status}", location))
             else:
                 findings.append(_warning(f"{label} check failed: {error}", location))
     return findings
+
+
+def _matches_allowlist(url: str, patterns: tuple[str, ...]) -> bool:
+    """True when `url` matches any fnmatch glob in `patterns`."""
+    return any(fnmatch.fnmatch(url, pattern) for pattern in patterns)
 
 
 def _head_status(url: str) -> tuple[int | None, str | None]:
@@ -500,14 +537,19 @@ def format_audit_instructions_human(
     """
 
     warnings = report.warnings
-    if not warnings and not include_ok:
+    infos = report.infos
+    # info findings (e.g. allowlisted "expected 403") are always rendered so a
+    # suppressed warning never vanishes silently — the operator must be able to
+    # see what was skipped and why.
+    if not warnings and not infos and not include_ok:
         return _summary_line(report)
 
+    glyphs = {"ok": "✓", "warning": "⚠", "info": "ℹ"}  # noqa: RUF001 (intentional info glyph)
     lines = ["audit-instructions:"]
     for finding in report.findings:
-        if finding.level == "ok" and not include_ok and warnings:
+        if finding.level == "ok" and not include_ok and (warnings or infos):
             continue
-        glyph = "✓" if finding.level == "ok" else "⚠"
+        glyph = glyphs.get(finding.level, "⚠")
         suffix = ""
         if finding.source_file is not None and finding.line_number is not None:
             suffix = f" ({TextLocation(finding.source_file, finding.line_number).render(project_root)})"
@@ -518,7 +560,12 @@ def format_audit_instructions_human(
 
 def _summary_line(report: AuditInstructionsReport) -> str:
     warning_count = len(report.warnings)
+    info_count = len(report.infos)
+    info_suffix = f" ({info_count} allowlisted)" if info_count else ""
     if warning_count == 0:
-        return f"audit-instructions: checked {report.checked} claims, all verified"
+        return f"audit-instructions: checked {report.checked} claims, all verified{info_suffix}"
     noun = "warning" if warning_count == 1 else "warnings"
-    return f"audit-instructions: checked {report.checked} claims, {warning_count} {noun}"
+    return (
+        f"audit-instructions: checked {report.checked} claims, "
+        f"{warning_count} {noun}{info_suffix}"
+    )

@@ -79,6 +79,31 @@ _RELEASE_TAG_RE = re.compile(r"^v\d+\.\d+\.\d+$")
 # filename, so any ``..`` / ``/`` / leading-dash input would resolve outside
 # ``.cortex/templates/journal/`` or write outside ``.cortex/journal/``.
 _TYPE_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+# Journal types whose `--no-edit` path runs a body scrubber that promises a
+# placeholder-free entry (pr-merged via the post-merge hook, release via the
+# release event). Only these types are guarded by
+# `_assert_no_unresolved_markers`: other types (decision, incident,
+# plan-transition) have no `--no-edit` scrubber and would legitimately fail the
+# guard until a scrubber is written for them — see issue #275 follow-up note.
+_NO_EDIT_SCRUBBED_TYPES = frozenset({"pr-merged", "release"})
+# Unresolved-marker classes the `--no-edit` guard rejects. Each entry is
+# (human-readable label, compiled regex). The invariant these enforce: a
+# pr-merged/release entry written in `--no-edit` mode contains zero unresolved
+# template markers — no mustache prompts, no HTML edit-instruction comments, no
+# "fill on edit" sentinels, no template checklist placeholder lines.
+_UNRESOLVED_MARKER_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("mustache placeholder `{{ ... }}`", re.compile(r"\{\{.*?\}\}", re.DOTALL)),
+    ("HTML comment `<!-- ... -->`", re.compile(r"<!--.*?-->", re.DOTALL)),
+    ("`fill on edit` sentinel", re.compile(r"(?i)fill on edit")),
+    # A template checklist line that was never filled: `- [ ]` immediately
+    # followed by a placeholder/prompt token. A real, resolved follow-up looks
+    # like `- [ ] Wire the hook to emit facts` and is allowed; an unfilled
+    # template line looks like `- [ ] {{ item ... }}` or `- [ ] <slug>`.
+    (
+        "unfilled checklist placeholder `- [ ] {{ ... }}`",
+        re.compile(r"^- \[ \] (?:\{\{|<[a-z]).*$", re.MULTILINE),
+    ),
+)
 
 
 def _normalize_slug(text: str) -> str:
@@ -615,7 +640,7 @@ def _substitute_release_body_no_edit(
     )
     body = re.sub(
         r"\{\{ e\.g\. `autumngarage/cortex` tap formula.*?\}\}",
-        "_(fill on edit — tap formula / PyPI / Docker / etc.)_",
+        "_Not recorded (tap formula / PyPI / Docker / etc.)._",
         body,
         count=1,
         flags=re.DOTALL,
@@ -672,7 +697,7 @@ def _substitute_release_body_no_edit(
             if "{{" not in part and part.strip()
         ]
         if not resolved:
-            return "**Cites:** _(none — fill on edit)_"
+            return "**Cites:** _None recorded._"
         return f"**Cites:** {', '.join(resolved)}"
 
     return re.sub(
@@ -773,7 +798,7 @@ def _substitute_pr_merged_body_no_edit(
 
     body = re.sub(
         r"^(- \*\*(?:Plans|Doctrine|Journal linkage):\*\*) \{\{.*\}\}$",
-        r"\1 _(none recorded — fill on edit)_",
+        r"\1 _None recorded._",
         body,
         flags=re.MULTILINE,
     )
@@ -785,7 +810,7 @@ def _substitute_pr_merged_body_no_edit(
             if "{{" not in part and part.strip()
         ]
         if not resolved:
-            return "**Cites:** _(none — fill on edit)_"
+            return "**Cites:** _None recorded._"
         return f"**Cites:** {', '.join(resolved)}"
 
     body = re.sub(r"^\*\*Cites:\*\* (.+)$", _rewrite_cites, body, count=1, flags=re.MULTILINE)
@@ -805,6 +830,48 @@ def _substitute_pr_merged_body_no_edit(
         count=1,
         flags=re.DOTALL,
     )
+
+
+def _assert_no_unresolved_markers(
+    body: str, *, journal_type: str, target: Path
+) -> None:
+    """Fail loudly if a ``--no-edit`` draft still carries template markers.
+
+    Defense-in-depth backstop for the scrubbing in
+    :func:`_substitute_pr_merged_body_no_edit` /
+    :func:`_substitute_release_body_no_edit`. The scrubbers are the root-cause
+    fix (produce clean output); this guard guarantees the invariant holds even
+    when a project ships a *custom* template the scrubbers don't fully cover —
+    the post-merge hook runs against whatever template the project ships, not
+    just the bundled one (issue #275).
+
+    On any leftover marker the command exits non-zero **before** the entry is
+    written or its path printed, naming the file and the offending markers
+    (engineering principle: no silent failures). The append-only Journal
+    invariant is preserved because the write never happens.
+    """
+    found: list[str] = []
+    for label, pattern in _UNRESOLVED_MARKER_PATTERNS:
+        matches = pattern.findall(body)
+        if matches:
+            sample = matches[0]
+            sample = sample if isinstance(sample, str) else sample[0]
+            sample = " ".join(sample.split())
+            if len(sample) > 80:
+                sample = sample[:77] + "..."
+            found.append(f"{label} (e.g. {sample!r})")
+    if not found:
+        return
+    click.echo(
+        f"error: {target} would contain unresolved template markers after "
+        f"`{journal_type}` --no-edit generation; refusing to write a polluted "
+        f"Journal entry. Offending markers: " + "; ".join(found) + ". "
+        "This usually means a project-custom template has prompt content the "
+        "no-edit scrubber does not recognize; resolve those values in the "
+        "template or run without --no-edit to fill them by hand.",
+        err=True,
+    )
+    sys.exit(2)
 
 
 def _render_context_block(
@@ -1282,9 +1349,16 @@ def draft_command(
         )
         sys.exit(2)
 
-    commits = _gather_git_context(project_root)
-    pr_text, gh_reason = _gather_gh_pr_context(project_root)
-    body += _render_context_block(commits, pr_text, gh_reason)
+    # The auto-context block is an HTML comment whose own instructions say
+    # "Remove this block before saving." In interactive (--edit) mode the
+    # human removes it. In --no-edit mode there is no human in the loop — the
+    # block would be committed verbatim, polluting the entry (and future
+    # `cortex manifest` context) with an unresolved edit instruction. Only
+    # append it when a human will see and prune it.
+    if not no_edit:
+        commits = _gather_git_context(project_root)
+        pr_text, gh_reason = _gather_gh_pr_context(project_root)
+        body += _render_context_block(commits, pr_text, gh_reason)
     if not allow_large:
         budget_warning = _journal_budget_warning(
             body,
@@ -1294,6 +1368,10 @@ def draft_command(
             click.echo(budget_warning, err=True)
 
     if no_edit:
+        if journal_type in _NO_EDIT_SCRUBBED_TYPES:
+            _assert_no_unresolved_markers(
+                body, journal_type=journal_type, target=target
+            )
         target.parent.mkdir(parents=True, exist_ok=True)
         try:
             # Exclusive-create closes the TOCTOU race between the early

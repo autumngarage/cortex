@@ -56,6 +56,7 @@ declarations.
 | `urls` | list of strings \| null | `[]` | Free-form URLs to check for liveness or version drift. |
 | `scan_files` | list of strings \| null | `["CLAUDE.md", "AGENTS.md", "README.md"]` (`DEFAULT_AUDIT_SCAN_FILES`) | Repo-root files to scan for external claims. Setting this overrides the default — pass the full list, not a delta. |
 | `self_repo` | string \| null | `null` | Default `owner/repo` used to resolve bare `#N` references when running `cortex doctor --audit-issue-refs`. Without this, bare `#N` references in `.cortex/` content are silently skipped. Set to the GitHub `owner/repo` for this project (e.g. `"autumngarage/cortex"`). |
+| `expected_403` | list of strings \| null | `[]` | [fnmatch](https://docs.python.org/3/library/fnmatch.html) glob patterns for URLs known to return **403** to the auditor's bare `HEAD`/`GET` but which render fine for real clients (e.g. shields.io badge endpoints that need an image `Accept` header; anonymous-gated forums). A matching URL's 403 is downgraded from a warning to a visible `ℹ` "expected 403 (allowlisted)" info line; the summary reports the count as `(N allowlisted)`. **Only the documented 403 is suppressed** — a URL on this list returning any other non-2xx (404, 500, …) still warns. Absent key = today's behavior (every non-2xx warns). |
 
 **Template URL skip.** URLs containing placeholder text (`YOUR_USERNAME`, `YOUR_ORG`,
 `YOUR_REPO`, `YOUR_NAME`, `EXAMPLE`, `your-name`, `your-username`, `your-org`,
@@ -164,6 +165,10 @@ github_releases = ["autumngarage/example-macos-app"]
 # where the deploy IS the release and no GitHub Release tags are published.
 # Verifies the repo is reachable without checking for release tags:
 paas_repos = ["outriderintel/vanguard"]
+# Allowlist URLs that return 403 to a bare HEAD/GET but render fine in browsers
+# (image-Accept-gated badges, anonymous-gated forums). fnmatch globs; only a
+# 403 is downgraded to a visible info line, every other code still warns:
+expected_403 = ["https://img.shields.io/*", "https://forum.cursor.com/*"]
 
 [doctrine.0007]
 allowed_root_files = ["ROADMAP.md"]
