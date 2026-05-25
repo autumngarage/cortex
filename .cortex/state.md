@@ -1,8 +1,8 @@
 ---
-Generated: 2026-05-25T18:41:13-04:00
+Generated: 2026-05-25T18:44:18-04:00
 Generator: cortex refresh-state v1.6.4
 Sources:
-  - HEAD sha: 41f5867abd969ef96cafcb9f604b51c2c3e1182f
+  - HEAD sha: f2a19da266f7e7fbbd1a29f0041e5d0d4ccf77fc
   - .cortex/plans/*.md (11 files)
   - .cortex/journal/*.md (110 entries, 2026-04-17..2026-05-25)
   - .cortex/doctrine/*.md (11 entries)
@@ -131,7 +131,7 @@ Sources-hash:
   .cortex/journal/2026-05-13-source-pr-staging-decision.md: ed791c86a80589aa5395d9259fa1fd825426a914073d549c7cd25b2ab208b2e8
   .cortex/journal/2026-05-15-pr-merged-0200.md: 12d4408a91e4f1a4485f15bbf17765eb9c7827fc1c87f6f674cf963881602ed8
   .cortex/journal/2026-05-25-defer-manifest-semantic-topup-pending-evidence.md: d4b8e44ff5b86157eac0f103461c602996061c1aba923d5c723e0739cbdb201f
-  .cortex/journal/2026-05-25-pr-merged-1841.md: 4a305a17b3cec2c5fd1075b6462809e0334472f69d38defd8fe9ea4ed3f56b9e
+  .cortex/journal/2026-05-25-pr-merged-1841.md: 1d272cebb469f13d2a715dec6e3f22662e9344e86c8b7eb656cd0da1f518c5bc
   .cortex/plans/context-integrity-production.md: 37d5afc85d78c0d6260e84348df21bbfc1bd1233b8cd24dae21251cae5689daf
   .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
   .cortex/plans/cortex-v0.3.0.md: d78e60537e30ed81d8464575191674253822ed4953a055ca2a14a9626c5f8b6f
