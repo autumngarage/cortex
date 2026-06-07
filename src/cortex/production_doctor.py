@@ -13,8 +13,11 @@ from pathlib import Path
 from typing import Literal, TypedDict, cast
 
 from cortex.doctor_checks import run_plain_checks
+from cortex.manifest import build_manifest
 from cortex.usage import read_usage
 from cortex.validation import Issue, Severity, run_all_checks
+
+PRODUCTION_MANIFEST_BUDGETS: tuple[int, ...] = (4000, 8000, 32000)
 
 DiagnosticSeverity = Literal["error", "warning", "info"]
 
@@ -34,6 +37,10 @@ _REPAIR_HINTS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"run `cortex journal stage"), "cortex journal stage --type pr-merged --pr <N>"),
     (re.compile(r"run `cortex update`"), "cortex update"),
     (re.compile(r"run `cortex refresh-index`"), "cortex refresh-index"),
+    (
+        re.compile(r"manifest --budget"),
+        "cortex manifest --budget <N> --show-budget",
+    ),
 )
 
 _MISSING_SOURCE_PATTERNS = (
@@ -198,11 +205,51 @@ def usage_summary(project_root: Path) -> dict[str, object] | None:
     }
 
 
+def manifest_budget_checks(project_root: Path) -> list[Issue]:
+    """Probe canonical manifest budgets for over-limit or omitted context."""
+
+    if not (project_root / ".cortex").is_dir():
+        return []
+
+    issues: list[Issue] = []
+    for budget_tokens in PRODUCTION_MANIFEST_BUDGETS:
+        manifest = build_manifest(project_root, budget_tokens)
+        diagnostics = manifest.diagnostics()
+        omitted_count = int(diagnostics["omitted_count"])
+        over_budget = bool(diagnostics["over_budget"])
+        over_by = int(diagnostics["over_budget_tokens"])
+        if over_budget:
+            issues.append(
+                Issue(
+                    Severity.WARNING,
+                    "",
+                    (
+                        f"manifest --budget {budget_tokens} exceeds the token budget "
+                        f"by ~{over_by} tokens"
+                    ),
+                )
+            )
+        elif omitted_count > 0:
+            issues.append(
+                Issue(
+                    Severity.WARNING,
+                    "",
+                    (
+                        f"manifest --budget {budget_tokens} omitted {omitted_count} "
+                        f"entr{'y' if omitted_count == 1 else 'ies'} "
+                        "by the manifest budget"
+                    ),
+                )
+            )
+    return issues
+
+
 def run_production_checks(project_root: Path) -> list[ProductionDiagnostic]:
     """Run the production doctor profile checks."""
 
     issues = run_all_checks(project_root)
     issues.extend(run_plain_checks(project_root))
+    issues.extend(manifest_budget_checks(project_root))
     return [issue_to_diagnostic(issue) for issue in sorted(issues, key=lambda i: (i.severity.value, i.path, i.message))]
 
 

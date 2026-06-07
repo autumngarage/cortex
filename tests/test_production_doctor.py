@@ -87,6 +87,28 @@ def test_production_doctor_maps_promised_diagnostic_classes() -> None:
         assert issue_to_diagnostic(issue).code == expected_code
 
 
+def test_production_doctor_reports_manifest_budget_exceeded(tmp_path: Path) -> None:
+    project = _init_project(tmp_path)
+    path = project / ".cortex" / "doctrine" / "0001-large.md"
+    path.write_text(
+        "# 0001 — Large\n\n"
+        "**Status:** Accepted\n"
+        "**Date:** 2026-04-01\n"
+        "**Load-priority:** default\n\n"
+        + ("doctrine body " * 1000)
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["doctor", "--production", "--json", "--path", str(project)],
+    )
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    codes = {item["code"] for item in payload["diagnostics"]}
+    assert "budget-exceeded" in codes
+
+
 def test_production_doctor_exits_nonzero_on_warning(tmp_path: Path) -> None:
     project = _init_project(tmp_path)
     map_path = project / ".cortex" / "map.md"
