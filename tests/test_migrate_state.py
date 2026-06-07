@@ -28,7 +28,7 @@ def _write_project(project: Path) -> None:
         "Author: human\n"
         "Goal-hash: activehash\n"
         "Updated-by:\n"
-        "  - 2026-04-27T00:00 human\n"
+        "  - 2099-01-01T00:00 human\n"
         "Cites: doctrine/0001\n"
         "---\n\n"
         "# Active Plan\n\n"

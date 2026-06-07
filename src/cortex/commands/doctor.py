@@ -32,9 +32,53 @@ from cortex.doctor_checks import (
     run_plain_checks,
     run_pr_trailer_checks,
 )
+from cortex.production_doctor import production_report
 from cortex.siblings import detect_siblings, format_sibling_block
 from cortex.usage import read_usage
 from cortex.validation import Issue, Severity, run_all_checks
+
+
+def _run_production_doctor(project_root: Path, *, as_json: bool) -> None:
+    report = production_report(project_root)
+    if as_json:
+        click.echo(json.dumps(report, sort_keys=True))
+    else:
+        errors = int(report["errors"])
+        warnings = int(report["warnings"])
+        click.echo(
+            f"cortex doctor --production: {errors} error{'s' if errors != 1 else ''}, "
+            f"{warnings} warning{'s' if warnings != 1 else ''} ({project_root})"
+        )
+        diagnostics = report.get("diagnostics")
+        if isinstance(diagnostics, list):
+            for item in diagnostics:
+                if not isinstance(item, dict):
+                    continue
+                severity = str(item.get("severity", "info"))
+                path = str(item.get("path", ""))
+                message = str(item.get("message", ""))
+                code = str(item.get("code", ""))
+                repair = item.get("repair_command")
+                prefix = f"{severity.upper():<7}"
+                location = f"{path}: " if path else ""
+                line = f"{prefix} [{code}] {location}{message}"
+                stream = sys.stderr if severity == "error" else sys.stdout
+                click.echo(line, file=stream)
+                if isinstance(repair, str) and repair:
+                    click.echo(f"         repair: {repair}", file=stream)
+        usage = report.get("usage")
+        if isinstance(usage, dict) and usage.get("grep_to_retrieve_ratio") is not None:
+            click.echo(
+                "info: lookup usage "
+                f"grep={usage.get('grep')} retrieve_total={usage.get('retrieve_total')} "
+                f"ratio={usage.get('grep_to_retrieve_ratio')}"
+            )
+
+    errors = int(report["errors"])
+    warnings = int(report["warnings"])
+    exit_class = str(report.get("exit_class", "fail" if errors or warnings else "pass"))
+    if exit_class == "fail":
+        sys.exit(1)
 
 
 def _format_issue(issue: Issue) -> str:
@@ -108,11 +152,17 @@ def _format_issue(issue: Issue) -> str:
     ),
 )
 @click.option(
+    "--production",
+    is_flag=True,
+    default=False,
+    help="Run the production Context CI profile with stable diagnostic codes.",
+)
+@click.option(
     "--json",
     "as_json",
     is_flag=True,
     default=False,
-    help="Emit machine-readable JSON (only supported with --audit-instructions).",
+    help="Emit machine-readable JSON (supported with --production or --audit-instructions).",
 )
 @click.option(
     "--since-days",
@@ -129,6 +179,7 @@ def doctor_command(
     run_audit_instructions: bool,
     run_audit_pr_trailers: bool,
     run_audit_issue_refs: bool,
+    production: bool,
     strict: bool,
     as_json: bool,
     since_days: int,
@@ -142,8 +193,11 @@ def doctor_command(
     checks on top of the structural pass. Run them independently or together.
     """
     target_path = Path(target_path).resolve()
+    if production:
+        _run_production_doctor(target_path, as_json=as_json)
+        return
     if as_json and not run_audit_instructions:
-        raise click.UsageError("--json is currently supported with --audit-instructions")
+        raise click.UsageError("--json is currently supported with --audit-instructions or --production")
     if as_json:
         instruction_warnings = _print_audit_instructions(target_path, as_json=True)
         if strict and instruction_warnings:

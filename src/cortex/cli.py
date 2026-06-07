@@ -1,9 +1,4 @@
-"""Cortex CLI entrypoint.
-
-Phase B scaffold: only `cortex version` is implemented here. Subsequent
-commands (`init`, `doctor`, `manifest`, `grep`, the interactive flow) arrive
-in follow-up PRs per .cortex/plans/phase-b-walking-skeleton.md.
-"""
+"""Cortex CLI entrypoint — registers the full command surface."""
 
 from __future__ import annotations
 
@@ -37,6 +32,7 @@ from cortex.commands.refresh_state import refresh_state_command
 from cortex.commands.retrieve import retrieve_command
 from cortex.commands.status import run_status, status_command
 from cortex.commands.sync import sync_command, update_command
+from cortex.commands.usage import usage_command
 
 
 def _detect_install_method() -> str:
@@ -167,6 +163,7 @@ cli.add_command(journal_group)
 cli.add_command(plan_group)
 cli.add_command(update_command)
 cli.add_command(sync_command)
+cli.add_command(usage_command)
 
 
 if __name__ == "__main__":

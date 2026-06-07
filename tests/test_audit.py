@@ -437,10 +437,9 @@ def test_t1_9_matches_abbreviated_merge_commit(git_project: Path) -> None:
     assert named and named[0].matched
 
 
-def test_t1_9_merge_commit_match_must_be_in_window(git_project: Path) -> None:
-    # Exact Merge-commit identity is still bound by the same 72h window as
-    # proximity matching. An old/backdated pr-merged entry with the right SHA
-    # must not satisfy a fresh merge event.
+def test_t1_9_merge_commit_identity_ignores_filename_date_window(git_project: Path) -> None:
+    # When Merge-commit names the merge SHA, identity is authoritative even if
+    # the journal filename date is outside the 72h proximity window (issue #302).
     _commit(git_project, "feat: stale journal guard (#5)", {"e.py": "5\n"})
     sha = _head_sha(git_project)
     commits = load_commits(git_project, since_days=30)
@@ -449,7 +448,7 @@ def test_t1_9_merge_commit_match_must_be_in_window(git_project: Path) -> None:
         commit_date - timedelta(hours=JOURNAL_MATCH_WINDOW_HOURS + 48)
     ).date().isoformat()
     (git_project / ".cortex" / "journal" / f"{old_date}-pr-5-merged.md").write_text(
-        f"# PR #5\n\n**Date:** {old_date}\n**Type:** pr-merged\n"
+        f"# PR #5 merged — stale journal guard\n\n**Date:** {old_date}\n**Type:** pr-merged\n"
         f"**Trigger:** T1.9\n**Merge-commit:** {sha}\n\nbody\n"
     )
     report = audit(git_project, since_days=30)
@@ -458,7 +457,24 @@ def test_t1_9_merge_commit_match_must_be_in_window(git_project: Path) -> None:
         for f in report.fires
         if f.trigger == Trigger.T1_9 and f.commit and f.commit.sha == sha
     ]
-    assert named and not named[0].matched
+    assert named and named[0].matched
+
+
+def test_t1_9_matches_by_pr_number_when_merge_commit_missing(git_project: Path) -> None:
+    _commit(git_project, "feat: numbered merge (#6)", {"f.py": "6\n"})
+    commits = load_commits(git_project, since_days=30)
+    date = commits[0].date.date().isoformat()
+    (git_project / ".cortex" / "journal" / f"{date}-pr-6-merged.md").write_text(
+        f"# PR #6 merged — numbered merge\n\n**Date:** {date}\n**Type:** pr-merged\n"
+        f"**Trigger:** T1.9\n\nbody\n"
+    )
+    report = audit(git_project, since_days=30)
+    numbered = [
+        f
+        for f in report.fires
+        if f.trigger == Trigger.T1_9 and f.commit and "(#6)" in f.commit.subject
+    ]
+    assert numbered and numbered[0].matched
 
 
 def test_t1_9_recursion_guard_skips_auto_draft_journal_prs(git_project: Path) -> None:

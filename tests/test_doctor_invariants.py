@@ -805,6 +805,24 @@ def test_config_toml_schema_validates_refresh_index_section(tmp_path: Path) -> N
     )
 
 
+def test_config_toml_schema_validates_journal_t19_section(tmp_path: Path) -> None:
+    _scaffold(tmp_path)
+    (tmp_path / ".cortex" / "config.toml").write_text('[journal.t1_9]\nmode = "stage"\n')
+    assert check_config_toml_schema(tmp_path) == []
+
+    (tmp_path / ".cortex" / "config.toml").write_text(
+        '[journal.t1_9]\nmdoe = "stage"\n'
+    )
+    issues = check_config_toml_schema(tmp_path)
+    assert any(issue.severity == "warning" and "mdoe" in issue.message for issue in issues)
+
+    (tmp_path / ".cortex" / "config.toml").write_text(
+        '[journal.t1_9]\nmode = "stgae"\n'
+    )
+    issues = check_config_toml_schema(tmp_path)
+    assert any(issue.severity == "error" and "mode" in issue.message for issue in issues)
+
+
 def test_retention_visibility_plan_and_warm_journal(tmp_path: Path) -> None:
     _scaffold(tmp_path)
     plan = tmp_path / ".cortex" / "plans" / "old.md"

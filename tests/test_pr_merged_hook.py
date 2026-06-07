@@ -91,8 +91,8 @@ def _make_cortex_shim(
       ``check_triggers_status``. Default is one fired T1.1 hit so the
       gate trips green and the hook proceeds; pass ``""`` to
       simulate "no triggers fired" (silent-skip path).
-    * ``cortex journal draft pr-merged --no-edit`` — creates the
-      journal file at ``journal_path`` and prints the absolute path on
+    * ``cortex journal post-merge --type pr-merged --no-edit`` — creates
+      the journal file at ``journal_path`` and prints the absolute path on
       stdout, matching the real CLI contract.
 
     Records every invocation to a sidecar log so tests can assert the
@@ -124,6 +124,22 @@ def _make_cortex_shim(
               exit {check_triggers_status}
             fi
             if [ "$1" = "refresh-state" ]; then
+              exit 0
+            fi
+            if [ "$1" = "journal" ] && [ "$2" = "post-merge" ]; then
+              if [ -f {journal_path!s} ]; then
+                printf '%s\\n' {journal_path!s}
+                exit 0
+              fi
+              mkdir -p {journal_path.parent!s}
+              printf 'placeholder\\n' > {journal_path!s}
+              printf '%s\\n' {journal_path!s}
+              exit 0
+            fi
+            if [ "$1" = "journal" ] && [ "$2" = "draft" ]; then
+              mkdir -p {journal_path.parent!s}
+              printf 'placeholder\\n' > {journal_path!s}
+              printf '%s\\n' {journal_path!s}
               exit 0
             fi
             mkdir -p {journal_path.parent!s}
@@ -382,7 +398,7 @@ def test_recursion_guard_uses_real_git_log(
 
     assert result.returncode == 0, result.stderr
     # cortex WAS invoked: the guard lets non-auto-draft heads through.
-    assert "journal draft pr-merged --no-edit" in log_file.read_text(
+    assert "journal post-merge --type pr-merged --no-edit" in log_file.read_text(
         encoding="utf-8"
     )
 
@@ -438,7 +454,7 @@ def test_hook_proceeds_when_spec_version_present(
     result = _run_hook(project, bin_dir)
 
     assert result.returncode == 0, result.stderr
-    assert "journal draft pr-merged --no-edit" in log_file.read_text(
+    assert "journal post-merge --type pr-merged --no-edit" in log_file.read_text(
         encoding="utf-8"
     )
 
@@ -518,6 +534,39 @@ def test_hook_does_not_commit_to_default_branch(
     assert head_after == head_before
 
 
+def test_hook_stage_mode_skips_follow_up_journal_pr(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """When journal.t1_9 mode is stage, the hook verifies only and must not
+    append trigger metadata or create a follow-up journal branch."""
+    project, bin_dir = project_repo
+    journal_path = project / ".cortex" / "journal" / "staged.md"
+    journal_path.parent.mkdir(parents=True, exist_ok=True)
+    journal_body = "# PR #55 merged\n\n**Type:** pr-merged\n\nAlready staged body.\n"
+    journal_path.write_text(journal_body, encoding="utf-8")
+    (project / ".cortex" / "config.toml").write_text(
+        '[journal.t1_9]\nmode = "stage"\n',
+        encoding="utf-8",
+    )
+    _git("add", ".cortex/journal/staged.md", ".cortex/config.toml", cwd=project)
+    _git("commit", "-q", "-m", "seed staged pr-merged entry", cwd=project)
+    log_file = _make_cortex_shim(bin_dir, journal_path)
+
+    result = _run_hook(
+        project,
+        bin_dir,
+        extra_env={"TOUCHSTONE_MERGED_PR": "55"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert journal_path.read_text(encoding="utf-8") == journal_body
+    branches = _git("branch", "--list", "docs/journal-pr-55", cwd=project).stdout
+    assert "docs/journal-pr-55" not in branches
+    assert "journal post-merge --type pr-merged --no-edit --pr 55" in log_file.read_text(
+        encoding="utf-8"
+    )
+
+
 def test_hook_creates_feature_branch_before_journal_draft(
     project_repo: tuple[Path, Path],
 ) -> None:
@@ -542,7 +591,7 @@ def test_hook_creates_feature_branch_before_journal_draft(
     assert not journal_path.exists()
     cortex_calls = cortex_log.read_text(encoding="utf-8")
     assert "--no-auto-sync check-triggers --since HEAD~1" in cortex_calls
-    assert "journal draft pr-merged --no-edit" not in cortex_calls
+    assert "journal post-merge --type pr-merged --no-edit" not in cortex_calls
     assert _git("rev-parse", "main", cwd=project).stdout.strip() == main_head_before
     assert _git("branch", "--show-current", cwd=project).stdout.strip() == "main"
     assert _git("status", "--porcelain", cwd=project).stdout.strip() == ""
@@ -891,7 +940,7 @@ def test_hook_force_flag_bypasses_gate_via_env(
     # bypass, no point in evaluating). The shim log shows only the
     # journal-draft invocation.
     calls = log_file.read_text(encoding="utf-8")
-    assert "journal draft pr-merged --no-edit" in calls
+    assert "journal post-merge --type pr-merged --no-edit" in calls
     assert "check-triggers" not in calls
 
 

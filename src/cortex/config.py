@@ -5,7 +5,9 @@ from __future__ import annotations
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+JournalT19Mode = Literal["stage", "post-merge-writer"]
 
 DEFAULT_AUDIT_SCAN_FILES = ["CLAUDE.md", "AGENTS.md", "README.md"]
 
@@ -32,6 +34,14 @@ class AuditInstructionsConfig:
     # any other non-2xx on an allowlisted URL still warns. Absent = today's
     # behavior (every non-2xx warns).
     expected_403: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class JournalT19Config:
+    """Configuration for T1.9 (`pr-merged`) journal automation."""
+
+    mode: JournalT19Mode = "post-merge-writer"
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -78,6 +88,44 @@ def load_audit_instructions_config(project_root: Path) -> AuditInstructionsConfi
         discovery_mode=False,
         self_repo=_optional_string(raw.get("self_repo")),
         expected_403=_string_tuple(raw.get("expected_403")),
+    )
+
+
+def load_journal_t19_config(project_root: Path) -> JournalT19Config:
+    """Load ``[journal.t1_9]`` from ``.cortex/config.toml``.
+
+    Absent config preserves the legacy post-merge writer hook so existing
+    projects keep today's behavior until they opt into source-PR staging.
+    """
+
+    path = project_root / ".cortex" / "config.toml"
+    if not path.is_file():
+        return JournalT19Config()
+
+    try:
+        data = tomllib.loads(path.read_text())
+    except OSError as exc:
+        return JournalT19Config(warnings=(f"could not read .cortex/config.toml: {exc}",))
+    except tomllib.TOMLDecodeError as exc:
+        return JournalT19Config(warnings=(f"could not parse .cortex/config.toml: {exc}",))
+
+    journal_raw = data.get("journal")
+    if not isinstance(journal_raw, dict):
+        return JournalT19Config()
+
+    raw = journal_raw.get("t1_9")
+    if not isinstance(raw, dict):
+        return JournalT19Config()
+
+    mode_raw = raw.get("mode")
+    if mode_raw is None:
+        return JournalT19Config()
+    if mode_raw == "stage":
+        return JournalT19Config(mode="stage")
+    if mode_raw == "post-merge-writer":
+        return JournalT19Config(mode="post-merge-writer")
+    return JournalT19Config(
+        warnings=(f"unknown journal.t1_9.mode {mode_raw!r}; using post-merge-writer",),
     )
 
 

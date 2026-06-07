@@ -243,19 +243,79 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TOUCHSTONE_ROOT="${TOUCHSTONE_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 
-resolve_review_config_file() {
-  local repo_root="$1"
-  if [ -f "$repo_root/.touchstone-review.toml" ]; then
-    printf '%s\n' "$repo_root/.touchstone-review.toml"
-  elif [ -f "$repo_root/.codex-review.toml" ]; then
-    printf '%s\n' "$repo_root/.codex-review.toml"
-  else
-    printf '%s\n' "$repo_root/.touchstone-review.toml"
+# Files materialized from the trusted base ref by resolve_trusted_review_file;
+# removed by cleanup_review_process on exit.
+TRUSTED_REVIEW_TMP_FILES=()
+# Canonical (display) name of the file most recently resolved.
+RESOLVED_REVIEW_FILE_LABEL=""
+
+# Resolve a review control file (config or prompt-context) to a path whose
+# CONTENT is trusted, given an ordered list of candidate repo-relative paths.
+#
+# In the merge gate the working tree is the *attacker-controlled PR head*
+# (scripts/merge-pr.sh checks it out before invoking this hook), so reading the
+# review config or prompt-context file from the working tree would let a PR
+# weaken or disable the very guardrails reviewing it (unsafe_paths,
+# safe_by_default, mode, enabled) or inject "trusted project context" straight
+# into the fix-loop prompt. When CODEX_REVIEW_PR_NUMBER is set we therefore read
+# these files from the trusted base ref (CODEX_REVIEW_BASE) — the committed,
+# already-reviewed policy. A PR that adds or edits one of these files only takes
+# effect once it has merged through the gate under the previous policy.
+#
+# Outside the merge gate (local pre-push review) there is no separate trusted
+# base, so the working tree is the source of truth.
+#
+# Echoes a readable path for the first candidate present in the trusted source
+# and sets RESOLVED_REVIEW_FILE_LABEL to its canonical relative path; echoes
+# nothing if no candidate exists (callers fall back to built-in safe defaults).
+resolve_trusted_review_file() {
+  RESOLVED_REVIEW_FILE_LABEL=""
+  local rel tmp
+  if [ -n "${CODEX_REVIEW_PR_NUMBER:-}" ] && [ -n "${CODEX_REVIEW_BASE:-}" ]; then
+    for rel in "$@"; do
+      if git cat-file -e "${CODEX_REVIEW_BASE}:${rel}" 2>/dev/null; then
+        tmp="$(mktemp -t touchstone-trusted-review.XXXXXX)" || return 0
+        if git show "${CODEX_REVIEW_BASE}:${rel}" >"$tmp" 2>/dev/null; then
+          TRUSTED_REVIEW_TMP_FILES+=("$tmp")
+          RESOLVED_REVIEW_FILE_LABEL="$rel"
+          printf '%s\n' "$tmp"
+          return 0
+        fi
+        rm -f "$tmp"
+      fi
+    done
+    return 0
   fi
+  for rel in "$@"; do
+    if [ -f "$REPO_ROOT/$rel" ]; then
+      RESOLVED_REVIEW_FILE_LABEL="$rel"
+      printf '%s\n' "$REPO_ROOT/$rel"
+      return 0
+    fi
+  done
 }
 
-CONFIG_FILE="$(resolve_review_config_file "$REPO_ROOT")"
-CONFIG_DISPLAY_NAME="$(basename "$CONFIG_FILE")"
+CONFIG_FILE="$(resolve_trusted_review_file .touchstone-review.toml .codex-review.toml)"
+CONFIG_DISPLAY_NAME="$(basename "${RESOLVED_REVIEW_FILE_LABEL:-.touchstone-review.toml}")"
+# No config in the trusted source. Outside the merge gate the working tree IS the
+# source of truth, so fall back to it (an absent file then leaves CONFIG_FILE
+# pointing at a non-existent path, and the `[ -f "$CONFIG_FILE" ]` guard below
+# falls through to built-in safe defaults). Under the merge gate the working tree
+# is the attacker PR head, which may ADD a config that is absent on the base ref;
+# do NOT fall back to it — leave CONFIG_FILE empty so parsing is skipped and the
+# built-in safe defaults apply. (The working-tree fallback here was a bypass: a
+# PR that introduced a brand-new weakened config would have had it honored.)
+if [ -z "$CONFIG_FILE" ] && [ -z "${CODEX_REVIEW_PR_NUMBER:-}" ]; then
+  CONFIG_FILE="$REPO_ROOT/.touchstone-review.toml"
+fi
+
+# Test hook: print the resolved config path/name and exit, so regression tests
+# can assert the gate never resolves config from the attacker PR head.
+if [ "${CODEX_REVIEW_TEST_PRINT_CONFIG:-0}" = "1" ]; then
+  printf 'CONFIG_FILE=%s\n' "$CONFIG_FILE"
+  printf 'CONFIG_DISPLAY_NAME=%s\n' "$CONFIG_DISPLAY_NAME"
+  exit 0
+fi
 cd "$REPO_ROOT"
 
 PREFLIGHT_SCRIPT="$TOUCHSTONE_ROOT/lib/preflight.sh"
@@ -1178,13 +1238,11 @@ should_skip_pre_push_review() {
 # Repo-provided review context
 # --------------------------------------------------------------------------
 
-REVIEW_CONTEXT_FILE=""
-for _candidate in "$REPO_ROOT/.codex-review-context.md" "$REPO_ROOT/.github/codex-review-context.md"; do
-  if [ -f "$_candidate" ]; then
-    REVIEW_CONTEXT_FILE="$_candidate"
-    break
-  fi
-done
+# Read the prompt-context file from the trusted base ref under the merge gate
+# (see resolve_trusted_review_file). This file is injected into the review/fix
+# prompt as trusted project guidance, so a PR must not be able to supply it.
+REVIEW_CONTEXT_FILE="$(resolve_trusted_review_file .codex-review-context.md .github/codex-review-context.md)"
+REVIEW_CONTEXT_FILE_LABEL="${RESOLVED_REVIEW_FILE_LABEL:-}"
 
 path_matches_context_pattern() {
   local path="$1"
@@ -1891,15 +1949,36 @@ conductor_subcommand_for_mode() {
 
 conductor_tools_for_mode() {
   local phase="${1:-review}"
+  local tools
 
   case "$phase:$REVIEW_MODE" in
-    review:diff-only) printf '' ;;
-    review:no-tests) printf 'Read,Grep,Glob' ;;
-    review:*) printf 'Read,Grep,Glob,Bash' ;;
-    fix:no-tests) printf 'Read,Grep,Glob,Edit,Write' ;;
-    fix:*) printf 'Read,Grep,Glob,Bash,Edit,Write' ;;
-    *) printf 'Read,Grep,Glob,Bash' ;;
+    review:diff-only) tools='' ;;
+    review:no-tests) tools='Read,Grep,Glob' ;;
+    review:*) tools='Read,Grep,Glob,Bash' ;;
+    fix:no-tests) tools='Read,Grep,Glob,Edit,Write' ;;
+    fix:*) tools='Read,Grep,Glob,Bash,Edit,Write' ;;
+    *) tools='Read,Grep,Glob,Bash' ;;
   esac
+
+  # Merge-gate hardening: under the merge gate the diff and file contents under
+  # review are attacker-controlled and are a prompt-injection vector into this
+  # tool-enabled loop. Granting Bash there lets injected instructions run
+  # arbitrary commands (exfiltrate secrets, write outside the repo) — side
+  # effects the post-fix unsafe_paths check (a git-diff filter) cannot see. Drop
+  # Bash for PR-gate runs unless explicitly opted in; the deterministic test
+  # gate that runs after Conductor edits still validates behavior.
+  if [ -n "${CODEX_REVIEW_PR_NUMBER:-}" ] \
+    && ! is_truthy "${TOUCHSTONE_REVIEW_ALLOW_GATE_BASH:-false}"; then
+    local filtered="" _t
+    local IFS=','
+    for _t in $tools; do
+      [ "$_t" = "Bash" ] && continue
+      filtered="${filtered:+$filtered,}$_t"
+    done
+    tools="$filtered"
+  fi
+
+  printf '%s' "$tools"
 }
 
 conductor_route_json_string_field() {
@@ -2279,6 +2358,9 @@ REVIEW_LOCK_TOKEN=""
 
 cleanup_review_process() {
   rm -f "$REVIEW_OUTPUT_FILE" "$ASSIST_OUTPUT_FILE" "$REVIEW_STDERR_FILE" "$REVIEW_CONDUCTOR_LOG_FILE"
+  if [ "${#TRUSTED_REVIEW_TMP_FILES[@]}" -gt 0 ]; then
+    rm -f "${TRUSTED_REVIEW_TMP_FILES[@]}" 2>/dev/null || true
+  fi
   rm -f \
     "${SCOPED_LARGE_DIFF_FILE:-}" \
     "${SCOPED_LARGE_DIFF_INCLUDED_PATHS_FILE:-}" \
@@ -2698,7 +2780,7 @@ else
   echo "==> Prompt context: $PROMPT_CONTEXT_DECISION ($PROMPT_CONTEXT_REASON)"
 fi
 if [ -n "$REVIEW_CONTEXT_FILE" ]; then
-  echo "==> Review context: $(basename "$REVIEW_CONTEXT_FILE")"
+  echo "==> Review context: $(basename "${REVIEW_CONTEXT_FILE_LABEL:-$REVIEW_CONTEXT_FILE}")"
 fi
 
 # --------------------------------------------------------------------------
@@ -4619,6 +4701,9 @@ for iter in $(seq 1 "$MAX_ITERATIONS"); do
       if [ -z "$AUTOFIX_CHANGED_PATHS" ]; then
         echo "==> $REVIEWER_LABEL emitted FIXED but no working-tree changes detected."
         echo "    Treating as ambiguous — not blocking push."
+        REVIEW_EXIT_REASON="ambiguous-fixed-no-changes"
+        print_summary
+        append_findings_history_event "CODEX_REVIEW_FIXED" "$iter" "$OUTPUT" 0
         log_skip_event other "ambiguous-fixed-no-changes:iter=${iter}"
         exit 0
       fi
