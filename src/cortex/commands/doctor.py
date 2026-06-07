@@ -76,7 +76,8 @@ def _run_production_doctor(project_root: Path, *, strict: bool, as_json: bool) -
 
     errors = int(report["errors"])
     warnings = int(report["warnings"])
-    if errors or (strict and warnings):
+    exit_class = str(report.get("exit_class", "fail" if errors or warnings else "pass"))
+    if exit_class == "fail":
         sys.exit(1)
 
 

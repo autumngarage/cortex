@@ -57,7 +57,6 @@ from cortex.journal_facts import FactsFileError, load_and_validate_facts_file, r
 from cortex.journal_markers import UNRESOLVED_MARKER_PATTERNS
 from cortex.journal_staging import (
     annotate_staged_for_pr,
-    find_pr_merged_entry,
     verify_pr_merged_staged,
 )
 from cortex.manifest import estimate_tokens, estimate_words
@@ -968,10 +967,13 @@ def _facts_file_draft(
     facts_file: Path,
     allow_large: bool,
     slug_override: str | None,
+    staged_for_pr: int | None = None,
 ) -> _DraftWriteOutcome:
     packet = load_and_validate_facts_file(facts_file, expected_type=journal_type)
     today = date.today().isoformat()
     body = render_facts_draft(template=template, packet=packet, today=today)
+    if staged_for_pr is not None:
+        body = annotate_staged_for_pr(body, staged_for_pr)
 
     # Keep filename behavior aligned with the existing draft flow:
     # without CLI `--title`, default slugging is type+HHMM (or release-tag
@@ -1082,6 +1084,13 @@ def _facts_file_draft(
     ),
 )
 @click.option(
+    "--staged-for-pr",
+    "staged_for_pr",
+    type=int,
+    default=None,
+    hidden=True,
+)
+@click.option(
     "--path",
     "target_path",
     type=click.Path(file_okay=False, dir_okay=True, exists=True, path_type=Path),
@@ -1100,6 +1109,7 @@ def draft_command(
     release_tag: str | None,
     plan_slug: str | None,
     facts_file: Path | None,
+    staged_for_pr: int | None,
     target_path: Path,
 ) -> None:
     """Create a new Journal entry of TYPE from a template and open it in $EDITOR.
@@ -1171,6 +1181,7 @@ def draft_command(
                 facts_file=facts_file,
                 allow_large=allow_large,
                 slug_override=slug_override,
+                staged_for_pr=staged_for_pr,
             )
         except FactsFileError as exc:
             click.echo(
@@ -1242,6 +1253,15 @@ def draft_command(
                     f"{', '.join(remaining_placeholders)}.",
                     err=True,
                 )
+
+    if staged_for_pr is not None:
+        if journal_type != "pr-merged":
+            click.echo(
+                "error: staged Journal annotation is only supported for pr-merged",
+                err=True,
+            )
+            sys.exit(2)
+        body = annotate_staged_for_pr(body, staged_for_pr)
 
     # T1.10 (release): mirror the pr-merged path. Resolve the tag (explicit
     # `--tag` or latest matching `^v\d+\.\d+\.\d+$`), pull `gh release view`
@@ -1544,18 +1564,9 @@ def stage_command(
         release_tag=None,
         plan_slug=None,
         facts_file=facts_file,
+        staged_for_pr=pr_number,
         target_path=target_path,
     )
-
-    project_root = Path(target_path).resolve()
-    path = find_pr_merged_entry(project_root, pr_number)
-    if path is None:
-        click.echo(
-            f"error: draft completed but no pr-merged entry found for PR #{pr_number}",
-            err=True,
-        )
-        raise SystemExit(1)
-    path.write_text(annotate_staged_for_pr(path.read_text(), pr_number))
 
 
 @click.command("verify")

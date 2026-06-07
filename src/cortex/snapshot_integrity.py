@@ -35,6 +35,7 @@ class GitCheckoutSnapshot:
 class StateSnapshotRecord:
     recorded_head_sha: str | None
     generated_at: str | None
+    error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -78,8 +79,12 @@ def read_state_snapshot(state_path: Path) -> StateSnapshotRecord:
         return StateSnapshotRecord(recorded_head_sha=None, generated_at=None)
     try:
         text = state_path.read_text()
-    except OSError:
-        return StateSnapshotRecord(recorded_head_sha=None, generated_at=None)
+    except OSError as exc:
+        return StateSnapshotRecord(
+            recorded_head_sha=None,
+            generated_at=None,
+            error=f"could not read state.md: {exc}",
+        )
     frontmatter, _body = parse_frontmatter(text)
     generated = frontmatter.get("Generated")
     generated_at = generated if isinstance(generated, str) else None
@@ -174,6 +179,8 @@ def assess_snapshot_integrity(project_root: Path) -> SnapshotIntegrityReport:
     if checkout.error:
         warnings.append(f"snapshot check skipped: {checkout.error}")
         return SnapshotIntegrityReport(checkout=checkout, state=state, warnings=tuple(warnings))
+    if state.error:
+        warnings.append(state.error)
 
     recorded = state.recorded_head_sha
     current = checkout.head_sha
