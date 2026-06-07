@@ -31,7 +31,7 @@ class ProductionReport(TypedDict):
 _REPAIR_HINTS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"rerun `cortex refresh-state`"), "cortex refresh-state"),
     (re.compile(r"hand-maintain.*map\.md"), "hand-maintain .cortex/map.md"),
-    (re.compile(r"run `cortex journal stage"), "cortex journal stage pr-merged --pr <N>"),
+    (re.compile(r"run `cortex journal stage"), "cortex journal stage --type pr-merged --pr <N>"),
     (re.compile(r"run `cortex update`"), "cortex update"),
     (re.compile(r"run `cortex refresh-index`"), "cortex refresh-index"),
 )
