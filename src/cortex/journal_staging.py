@@ -69,7 +69,7 @@ def verify_pr_merged_staged(project_root: Path, pr_number: int) -> StagingVerifi
             path=None,
             messages=(
                 f"no staged pr-merged journal entry for PR #{pr_number}; "
-                f"run `cortex journal stage pr-merged --pr {pr_number}`",
+                f"run `cortex journal stage --type pr-merged --pr {pr_number}`",
             ),
         )
     try:
