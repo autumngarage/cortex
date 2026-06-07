@@ -36,6 +36,44 @@ _REPAIR_HINTS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"run `cortex refresh-index`"), "cortex refresh-index"),
 )
 
+_MISSING_SOURCE_PATTERNS = (
+    ".cortex/` directory does not exist",
+    "missing source directory",
+    "derived layer `",
+    " does not exist",
+    "not found",
+)
+
+_UNRESOLVED_PROVENANCE_PATTERNS = (
+    "provenance",
+    "sources-hash",
+    "generated against head",
+    "head snapshot",
+    "generator was",
+)
+
+_BUDGET_EXCEEDED_PATTERNS = (
+    "budget",
+    "over budget",
+    "token",
+    "tokens",
+    "omitted by the manifest budget",
+    "truncated by budget",
+)
+
+_POLICY_VIOLATION_PATTERNS = (
+    "spec §",
+    "invariant",
+    "invalid",
+    "malformed",
+    "must ",
+    "lacks ",
+    "does not cite",
+    "unsupported",
+    "unknown key",
+    "constraint statement",
+)
+
 
 @dataclass(frozen=True)
 class ProductionDiagnostic:
@@ -60,14 +98,29 @@ class ProductionDiagnostic:
 def _code_for_issue(issue: Issue) -> str:
     message = issue.message.lower()
     path = (issue.path or "").lower()
-    if "snapshot" in message or "generated against head" in message:
-        return "stale-snapshot"
+    if "generated layer has no yaml frontmatter" in message:
+        return "manual-edit-to-generated"
+    if "generated layer missing" in message and "provenance field" in message:
+        return "manual-edit-to-generated"
+    if path.endswith(("state.md", "map.md")) and (
+        "derived layer has no yaml frontmatter" in message
+        or "missing required metadata field" in message
+    ):
+        return "manual-edit-to-generated"
     if "sources-hash" in message or "generated before source changed" in message:
         return "stale-derived"
+    if "source content changed" in message or "layer is stale" in message:
+        return "stale-derived"
+    if any(pattern in message for pattern in _MISSING_SOURCE_PATTERNS):
+        return "missing-source"
+    if " missing" in message and path.startswith(".cortex/"):
+        return "missing-source"
+    if any(pattern in message for pattern in _BUDGET_EXCEEDED_PATTERNS):
+        return "budget-exceeded"
+    if any(pattern in message for pattern in _UNRESOLVED_PROVENANCE_PATTERNS):
+        return "unresolved-provenance"
     if "map.md" in path and "hand-maintain" in message:
         return "map-hand-maintain"
-    if "layer is stale" in message:
-        return "stale-derived"
     if "append-only" in message:
         return "append-only-violation"
     if "immutable" in message or ("doctrine" in message and "mutation" in message):
@@ -76,6 +129,8 @@ def _code_for_issue(issue: Issue) -> str:
         return "orphan-deferral"
     if "placeholder" in message or "template" in message:
         return "journal-template-pollution"
+    if any(pattern in message for pattern in _POLICY_VIOLATION_PATTERNS):
+        return "policy-violation"
     if issue.severity is Severity.ERROR:
         return "structural-error"
     return "policy-warning"
