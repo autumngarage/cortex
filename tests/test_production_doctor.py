@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -43,6 +44,27 @@ def test_production_doctor_json_has_stable_codes(tmp_path: Path) -> None:
     assert diagnostics
     assert "code" in diagnostics[0]
     assert "severity" in diagnostics[0]
+
+
+def test_production_doctor_exits_nonzero_on_warning(tmp_path: Path) -> None:
+    project = _init_project(tmp_path)
+    map_path = project / ".cortex" / "map.md"
+    map_path.write_text(
+        re.sub(
+            r"^Generated: .+$",
+            "Generated: 2000-01-01T00:00:00+00:00",
+            map_path.read_text(),
+            count=1,
+            flags=re.MULTILINE,
+        )
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["doctor", "--production", "--path", str(project)])
+
+    assert result.exit_code == 1, result.output
+    assert "0 errors" in result.output
+    assert "warning" in result.output
 
 
 def test_usage_command_reports_empty_counters(tmp_path: Path) -> None:

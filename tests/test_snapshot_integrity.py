@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -143,6 +144,17 @@ def test_doctor_snapshot_integrity_check(git_project: Path) -> None:
     issues = check_snapshot_integrity(git_project)
     assert issues
     assert "generated against HEAD" in issues[0].message
+
+
+def test_snapshot_integrity_warns_when_state_unreadable(git_project: Path) -> None:
+    state_path = git_project / ".cortex" / "state.md"
+    os.chmod(state_path, 0)
+    try:
+        report = assess_snapshot_integrity(git_project)
+    finally:
+        os.chmod(state_path, 0o600)
+
+    assert any("could not read state.md" in warning for warning in report.warnings)
 
 
 def test_map_staleness_points_to_hand_maintenance(git_project: Path) -> None:

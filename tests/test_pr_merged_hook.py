@@ -127,6 +127,10 @@ def _make_cortex_shim(
               exit 0
             fi
             if [ "$1" = "journal" ] && [ "$2" = "post-merge" ]; then
+              if [ -f {journal_path!s} ]; then
+                printf '%s\\n' {journal_path!s}
+                exit 0
+              fi
               mkdir -p {journal_path.parent!s}
               printf 'placeholder\\n' > {journal_path!s}
               printf '%s\\n' {journal_path!s}
@@ -528,6 +532,39 @@ def test_hook_does_not_commit_to_default_branch(
     assert result.returncode == 0, result.stderr
     head_after = _git("rev-parse", "main", cwd=project).stdout.strip()
     assert head_after == head_before
+
+
+def test_hook_stage_mode_skips_follow_up_journal_pr(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """When journal.t1_9 mode is stage, the hook verifies only and must not
+    append trigger metadata or create a follow-up journal branch."""
+    project, bin_dir = project_repo
+    journal_path = project / ".cortex" / "journal" / "staged.md"
+    journal_path.parent.mkdir(parents=True, exist_ok=True)
+    journal_body = "# PR #55 merged\n\n**Type:** pr-merged\n\nAlready staged body.\n"
+    journal_path.write_text(journal_body, encoding="utf-8")
+    (project / ".cortex" / "config.toml").write_text(
+        '[journal.t1_9]\nmode = "stage"\n',
+        encoding="utf-8",
+    )
+    _git("add", ".cortex/journal/staged.md", ".cortex/config.toml", cwd=project)
+    _git("commit", "-q", "-m", "seed staged pr-merged entry", cwd=project)
+    log_file = _make_cortex_shim(bin_dir, journal_path)
+
+    result = _run_hook(
+        project,
+        bin_dir,
+        extra_env={"TOUCHSTONE_MERGED_PR": "55"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert journal_path.read_text(encoding="utf-8") == journal_body
+    branches = _git("branch", "--list", "docs/journal-pr-55", cwd=project).stdout
+    assert "docs/journal-pr-55" not in branches
+    assert "journal post-merge --type pr-merged --no-edit --pr 55" in log_file.read_text(
+        encoding="utf-8"
+    )
 
 
 def test_hook_creates_feature_branch_before_journal_draft(

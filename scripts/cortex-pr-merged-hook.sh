@@ -84,6 +84,32 @@ truthy() {
   esac
 }
 
+# Resolve `[journal.t1_9].mode` from `.cortex/config.toml`. Absent or
+# invalid config keeps the legacy post-merge writer behavior.
+resolve_journal_t1_mode() {
+  local config_file="$1"
+  if [ ! -f "$config_file" ]; then
+    printf '%s' "post-merge-writer"
+    return 0
+  fi
+  python3 - "$config_file" <<'PY' 2>/dev/null || printf '%s' "post-merge-writer"
+import sys
+import tomllib
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    data = tomllib.loads(path.read_text())
+except Exception:
+    print("post-merge-writer")
+    raise SystemExit
+journal = data.get("journal")
+t1_9 = journal.get("t1_9") if isinstance(journal, dict) else None
+mode = t1_9.get("mode", "post-merge-writer") if isinstance(t1_9, dict) else "post-merge-writer"
+print(mode if mode in {"stage", "post-merge-writer"} else "post-merge-writer")
+PY
+}
+
 # Read a flat key=value from .touchstone-config. Echoes the trimmed value
 # on stdout. Empty output means "key absent or no value". Comment lines
 # (starting with `#`) and blank lines are ignored. The final occurrence
@@ -326,6 +352,17 @@ if [ ! -f "$candidate" ]; then
     log "  The hook is on recovery branch ${journal_branch}; default branch remains unchanged."
   fi
   exit 1
+fi
+
+journal_t1_mode="$(resolve_journal_t1_mode "$PROJECT_DIR/.cortex/config.toml")"
+if [ "$journal_t1_mode" = "stage" ]; then
+  # Verifier path: the pr-merged entry arrived via the source PR squash.
+  # Do not append trigger metadata or open a follow-up journal PR.
+  if [ -n "$journal_branch" ]; then
+    git -C "$PROJECT_DIR" checkout "$default_branch" >/dev/null 2>&1 || true
+    git -C "$PROJECT_DIR" branch -D "$journal_branch" >/dev/null 2>&1 || true
+  fi
+  exit 0
 fi
 
 if [ -n "$fired_triggers_ndjson" ]; then

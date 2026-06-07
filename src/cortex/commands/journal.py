@@ -57,6 +57,8 @@ from cortex.journal_facts import FactsFileError, load_and_validate_facts_file, r
 from cortex.journal_markers import UNRESOLVED_MARKER_PATTERNS
 from cortex.journal_staging import (
     annotate_staged_for_pr,
+    entry_has_unresolved_markers,
+    find_pr_merged_entry,
     verify_pr_merged_staged,
 )
 from cortex.manifest import estimate_tokens, estimate_words
@@ -1552,6 +1554,47 @@ def stage_command(
     if journal_type != "pr-merged":
         click.echo("error: stage currently supports only --type pr-merged", err=True)
         raise SystemExit(2)
+
+    project_root = Path(target_path).resolve()
+    if facts_file is not None:
+        try:
+            packet = load_and_validate_facts_file(facts_file, expected_type="pr-merged")
+        except FactsFileError as exc:
+            click.echo(
+                json.dumps(
+                    exc.as_structured_error(facts_file=facts_file, journal_type="pr-merged"),
+                    sort_keys=True,
+                ),
+                err=True,
+            )
+            raise SystemExit(2) from exc
+        facts_pr = packet.get("pr_number")
+        if facts_pr != pr_number:
+            click.echo(
+                "error: --pr "
+                f"{pr_number} does not match facts file pr_number {facts_pr!r}; "
+                "refusing to write a partial Journal entry.",
+                err=True,
+            )
+            raise SystemExit(2)
+
+    existing = find_pr_merged_entry(project_root, pr_number)
+    if existing is not None:
+        try:
+            body = existing.read_text()
+        except OSError as exc:
+            click.echo(f"error: could not read {existing}: {exc}", err=True)
+            raise SystemExit(1) from exc
+        markers = entry_has_unresolved_markers(body)
+        if markers:
+            click.echo(
+                f"error: {existing} still contains unresolved template markers: "
+                + "; ".join(markers),
+                err=True,
+            )
+            raise SystemExit(1)
+        click.echo(str(existing.resolve()))
+        return
 
     ctx.invoke(
         draft_command,

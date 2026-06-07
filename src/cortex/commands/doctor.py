@@ -38,7 +38,7 @@ from cortex.usage import read_usage
 from cortex.validation import Issue, Severity, run_all_checks
 
 
-def _run_production_doctor(project_root: Path, *, strict: bool, as_json: bool) -> None:
+def _run_production_doctor(project_root: Path, *, as_json: bool) -> None:
     report = production_report(project_root)
     if as_json:
         click.echo(json.dumps(report, sort_keys=True))
@@ -194,7 +194,7 @@ def doctor_command(
     """
     target_path = Path(target_path).resolve()
     if production:
-        _run_production_doctor(target_path, strict=strict, as_json=as_json)
+        _run_production_doctor(target_path, as_json=as_json)
         return
     if as_json and not run_audit_instructions:
         raise click.UsageError("--json is currently supported with --audit-instructions or --production")

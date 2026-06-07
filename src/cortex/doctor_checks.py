@@ -749,6 +749,17 @@ def check_config_toml_schema(project_root: Path) -> list[Issue]:
                 {"candidate_patterns": "optional-string-list"},
             )
         )
+    journal = data.get("journal")
+    journal_t19 = journal.get("t1_9") if isinstance(journal, dict) else None
+    if isinstance(journal_t19, dict):
+        issues.extend(
+            _validate_table(
+                rel,
+                "journal.t1_9",
+                journal_t19,
+                {"mode": "journal-t19-mode"},
+            )
+        )
     doctrine = data.get(DOCTRINE_0007_SECTION[0])
     doctrine_0007 = doctrine.get(DOCTRINE_0007_SECTION[1]) if isinstance(doctrine, dict) else None
     if isinstance(doctrine_0007, dict):
@@ -1686,6 +1697,8 @@ def _matches_schema(value: Any, expected: str) -> bool:
         # bool is a subclass of int in Python; reject it explicitly so
         # `window_days = true` doesn't pass as an integer.
         return isinstance(value, int) and not isinstance(value, bool) and value > 0
+    if expected == "journal-t19-mode":
+        return value in {"stage", "post-merge-writer"}
     raise AssertionError(f"unknown config schema kind: {expected}")
 
 
@@ -1695,6 +1708,7 @@ def _schema_label(expected: str) -> str:
         "string-list": "a list of strings",
         "optional-string-list": "a list of strings or null",
         "positive-int": "a positive integer",
+        "journal-t19-mode": "`stage` or `post-merge-writer`",
     }[expected]
 
 

@@ -10,7 +10,7 @@
 
 `<project-root>/.cortex/config.toml`. Loaded by the in-tree readers in
 `src/cortex/config.py` (`load_audit_instructions_config`,
-`load_refresh_index_config`) and validated by
+`load_refresh_index_config`, `load_journal_t19_config`) and validated by
 `check_config_toml_schema` in `src/cortex/doctor_checks.py`.
 
 ## Compatibility
@@ -24,10 +24,7 @@ behaviour:
 - **Type mismatches** for known keys surface as a `cortex doctor` error
   (`[<section>] \`<name>\` must be <type>`).
 - **Unknown top-level sections** are silently ignored — only the sections
-  named below are validated. (Notable consequence today: the
-  `[refresh-index]` section described below is consumed by
-  `cortex refresh-index` but is not part of the schema check, so it
-  won't trigger unknown-key warnings.)
+  named below are validated.
 - **Missing file**, **unreadable file**, and **un-parseable TOML** all
   degrade gracefully — readers fall back to defaults; doctor surfaces a
   parse error.
@@ -96,11 +93,7 @@ Source pointers:
 
 Configuration for `cortex refresh-index` (the promotion-queue index
 writer). Parsed by `load_refresh_index_config` in `src/cortex/config.py`.
-
-> **Schema-validation gap.** This section is consumed by the CLI but is
-> **not** included in `check_config_toml_schema`'s known-section list as
-> of v0.7.0, so its keys do not produce schema warnings/errors.
-> Documented here for completeness; declare with care.
+Schema-validated by `check_config_toml_schema`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
@@ -110,6 +103,26 @@ Source pointers:
 - Dataclass: `RefreshIndexConfig` in `src/cortex/config.py`.
 - Parser: `load_refresh_index_config` in `src/cortex/config.py`.
 - Matcher: `_is_candidate` in `src/cortex/index.py`.
+- Schema: `check_config_toml_schema` (same file).
+
+### `[journal.t1_9]`
+
+Configuration for T1.9 (`pr-merged`) Journal automation. Parsed by
+`load_journal_t19_config` in `src/cortex/config.py`. Schema-validated by
+`check_config_toml_schema`.
+
+When absent, Cortex keeps the legacy post-merge writer behavior.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `mode` | `"stage"` or `"post-merge-writer"` | `"post-merge-writer"` | `stage` makes `cortex journal post-merge` verify that a source-branch `pr-merged` entry was staged with `cortex journal stage --type pr-merged --pr <N>`. `post-merge-writer` keeps writing the entry after merge. |
+
+Source pointers:
+- Dataclass: `JournalT19Config` in `src/cortex/config.py`.
+- Parser: `load_journal_t19_config` in `src/cortex/config.py`.
+- Commands: `journal stage`, `journal verify`, and `journal post-merge` in
+  `src/cortex/commands/journal.py`.
+- Schema: `check_config_toml_schema` in `src/cortex/doctor_checks.py`.
 
 ### `[doctor.stale-checkbox]`
 

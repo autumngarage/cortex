@@ -84,6 +84,90 @@ def test_stage_annotates_staged_for_pr(project: Path, tmp_path: Path) -> None:
     assert f"**{STAGED_FOR_PR_FIELD}:** 42" in path.read_text()
 
 
+def test_stage_does_not_rewrite_existing_pr_entry(project: Path, tmp_path: Path) -> None:
+    existing = _write_clean_pr_merged(project, 42)
+    before = existing.read_text()
+    facts = tmp_path / "facts.json"
+    facts.write_text(
+        json.dumps(
+            {
+                "type": "pr-merged",
+                "title": "feat(staging): source-PR journal staging",
+                "pr_number": 42,
+                "branch": "feat/staging",
+                "commit_range": "aaaaaaa..bbbbbbb",
+                "changed_files": ["src/cortex/journal_staging.py"],
+                "diffstat": "1 file changed, 40 insertions(+)",
+                "behavior_summary": "Stages pr-merged entries before merge.",
+                "tests_run": ["uv run pytest tests/test_journal_staging.py"],
+                "cortex_refs": {"plans": ["context-integrity-production"]},
+                "followups": [],
+            }
+        )
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "journal",
+            "stage",
+            "--type",
+            "pr-merged",
+            "--pr",
+            "42",
+            "--facts-file",
+            str(facts),
+            "--path",
+            str(project),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert existing.read_text() == before
+    assert str(existing.resolve()) in result.output
+
+
+def test_stage_rejects_facts_pr_mismatch(project: Path, tmp_path: Path) -> None:
+    facts = tmp_path / "facts.json"
+    facts.write_text(
+        json.dumps(
+            {
+                "type": "pr-merged",
+                "title": "feat(staging): mismatch guard",
+                "pr_number": 99,
+                "branch": "feat/staging",
+                "commit_range": "aaaaaaa..bbbbbbb",
+                "changed_files": ["src/cortex/journal_staging.py"],
+                "diffstat": "1 file changed, 1 insertion(+)",
+                "behavior_summary": "Guard against mismatched PR numbers.",
+                "tests_run": ["uv run pytest tests/test_journal_staging.py"],
+                "cortex_refs": {"plans": ["context-integrity-production"]},
+                "followups": [],
+            }
+        )
+    )
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        [
+            "journal",
+            "stage",
+            "--type",
+            "pr-merged",
+            "--pr",
+            "42",
+            "--facts-file",
+            str(facts),
+            "--path",
+            str(project),
+        ],
+    )
+    assert result.exit_code == 2
+    assert "does not match facts file pr_number" in result.output
+    assert not list((project / ".cortex" / "journal").glob("*mismatch*"))
+
+
 def test_verify_passes_for_clean_staged_entry(project: Path) -> None:
     path = _write_clean_pr_merged(project, 7)
     runner = CliRunner()
