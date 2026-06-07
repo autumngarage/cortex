@@ -16,7 +16,7 @@
 #   bash scripts/open-pr.sh "Custom title"           # explicit title
 #
 # Exit contract (--auto-merge):
-#   exit 0 ⇔ `gh pr view <n> --json mergedAt --jq .mergedAt` is non-empty.
+#   exit 0 ⇔ GitHub reports the PR state as MERGED or has a populated mergedAt.
 #   Any other terminal state exits nonzero AND prints the PR URL with recovery
 #   commands as the last lines of output. This prevents the "swarm-agent orphan
 #   PR" failure mode where an agent's session ends mid-merge and leaves a
@@ -42,6 +42,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CORTEX_JOURNAL_WIRE="$SCRIPT_DIR/cortex-journal-wire.sh"
+if [ -f "$CORTEX_JOURNAL_WIRE" ]; then
+  # shellcheck source=cortex-journal-wire.sh
+  source "$CORTEX_JOURNAL_WIRE"
+fi
 SCRIPT_SYNC_GUARD="$SCRIPT_DIR/../lib/script-sync-guard.sh"
 if [ -f "$SCRIPT_SYNC_GUARD" ]; then
   # shellcheck source=../lib/script-sync-guard.sh
@@ -100,7 +105,7 @@ print_orphan_warning() {
   # the misleading orphan banner.
   if [ -n "$ORPHAN_PR_NUMBER" ] \
     && command -v gh >/dev/null 2>&1 \
-    && [ -n "$(gh_pr_view "$ORPHAN_PR_NUMBER" --json mergedAt --jq '.mergedAt // empty' 2>/dev/null || true)" ]; then
+    && verify_pr_merged "$ORPHAN_PR_NUMBER" quiet >/dev/null 2>&1; then
     return 0
   fi
   touchstone_emit_event failed phase=open-pr reason=orphan-risk pr_number="$ORPHAN_PR_NUMBER"
@@ -126,17 +131,45 @@ gh_pr_view() {
   fi
 }
 
-# Verify the PR actually merged. Returns 0 if mergedAt is non-empty, 1 otherwise.
-# Used as the post-merge sanity check that turns the script's exit contract from
-# "merge-pr.sh exited 0" (proxy) into "GitHub says it's merged" (truth).
+# Verify the PR actually merged. Returns 0 if the PR is MERGED on GitHub,
+# 1 otherwise. Used as the post-merge sanity check that turns the script's
+# exit contract from "merge-pr.sh exited 0" (proxy) into "GitHub says it's
+# merged" (truth).
+#
+# GitHub can briefly report an empty mergedAt immediately after gh pr merge
+# returns, while state is already MERGED. Prefer state as authoritative, still
+# accept a populated mergedAt for compatibility, and retry once before declaring
+# failure. Keep this function self-contained; downstream regression tests source
+# it by itself.
 verify_pr_merged() {
   local pr_number="$1"
-  local merged_at
-  merged_at="$(gh_pr_view "$pr_number" --json mergedAt --jq '.mergedAt // empty' 2>/dev/null || echo "")"
-  if [ -n "$merged_at" ]; then
-    echo "==> Verified: PR #$pr_number merged at $merged_at"
-    return 0
-  fi
+  local quiet="${2:-}"
+  local attempt payload state merged_at
+
+  for attempt in 1 2; do
+    if [ -n "${REPO_FULL_NAME:-}" ]; then
+      payload="$(gh pr view "$pr_number" --repo "$REPO_FULL_NAME" --json state,mergedAt 2>/dev/null || echo '{}')"
+    else
+      payload="$(gh pr view "$pr_number" --json state,mergedAt 2>/dev/null || echo '{}')"
+    fi
+    state="$(printf '%s\n' "$payload" | sed -nE 's/.*"state"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' | head -1)"
+    merged_at="$(printf '%s\n' "$payload" | sed -nE 's/.*"mergedAt"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p' | head -1)"
+    if [ "$state" = "MERGED" ]; then
+      if [ "$quiet" != "quiet" ]; then
+        if [ -n "$merged_at" ]; then
+          echo "==> Verified: PR #$pr_number merged at $merged_at"
+        else
+          echo "==> Verified: PR #$pr_number state=MERGED (mergedAt not yet populated by API)"
+        fi
+      fi
+      return 0
+    fi
+    if [ -n "$merged_at" ]; then
+      [ "$quiet" = "quiet" ] || echo "==> Verified: PR #$pr_number merged at $merged_at"
+      return 0
+    fi
+    [ "$attempt" -eq 1 ] && sleep "${VERIFY_PR_MERGED_BACKOFF_SEC:-2}"
+  done
   return 1
 }
 
@@ -447,6 +480,29 @@ find_issue_closing_refs() {
   '
 }
 
+usage() {
+  cat <<'EOF'
+Usage: bash scripts/open-pr.sh [--auto-merge] [--cleanup-worktree] [--draft] [--base <branch>] [title]
+
+Push the current feature branch, create or reuse its GitHub PR, and optionally
+run the local merge gate.
+
+Options:
+  --auto-merge        Run merge-pr.sh after opening or finding the PR.
+  --cleanup-worktree  Remove this worktree after a verified auto-merge.
+  --draft             Open the PR as a draft.
+  --base <branch>     Target a non-default base branch.
+  -h, --help          Show this help.
+EOF
+}
+
+case "${1:-}" in
+  -h | --help | help)
+    usage
+    exit 0
+    ;;
+esac
+
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 TEMPLATE_PATH="$REPO_ROOT/.github/pull_request_template.md"
 load_open_pr_review_config
@@ -500,6 +556,7 @@ fi
 DRAFT_FLAG=""
 AUTO_MERGE=false
 CLEANUP_WORKTREE=false
+NO_STAGE_JOURNAL=false
 BASE_OVERRIDE=""
 POSITIONAL=()
 
@@ -515,6 +572,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --cleanup-worktree)
       CLEANUP_WORKTREE=true
+      shift
+      ;;
+    --no-stage-journal)
+      NO_STAGE_JOURNAL=true
       shift
       ;;
     --base)
@@ -588,8 +649,14 @@ trap on_exit EXIT
 EXISTING_PR_URL="$(gh pr list --head "$CURRENT_BRANCH" --author "@me" --state open --json url --jq '.[0].url // empty' 2>/dev/null || echo "")"
 if [ -n "$EXISTING_PR_URL" ]; then
   echo "==> PR already open for $CURRENT_BRANCH: $EXISTING_PR_URL"
+  PR_NUMBER="$(basename "$EXISTING_PR_URL")"
+  if declare -F cortex_journal_wire_should_stage >/dev/null 2>&1 \
+    && cortex_journal_wire_should_stage "$REPO_ROOT" "$BASE_BRANCH" "$DEFAULT_BRANCH" "$(
+      [ "$NO_STAGE_JOURNAL" = true ] && printf '1' || printf '0'
+    )"; then
+    cortex_journal_wire_stage_for_pr "$REPO_ROOT" "$PR_NUMBER"
+  fi
   if [ "$AUTO_MERGE" = true ]; then
-    PR_NUMBER="$(basename "$EXISTING_PR_URL")"
     ORPHAN_PR_URL="$EXISTING_PR_URL"
     ORPHAN_PR_NUMBER="$PR_NUMBER"
     run_issue_claim_preflight "existing PR #$PR_NUMBER" --pr-number "$PR_NUMBER"
@@ -716,6 +783,12 @@ echo "$PR_URL"
 # from here on is a stuck-PR risk.
 ORPHAN_PR_URL="$PR_URL"
 ORPHAN_PR_NUMBER="$(basename "$PR_URL")"
+if declare -F cortex_journal_wire_should_stage >/dev/null 2>&1 \
+  && cortex_journal_wire_should_stage "$REPO_ROOT" "$BASE_BRANCH" "$DEFAULT_BRANCH" "$(
+    [ "$NO_STAGE_JOURNAL" = true ] && printf '1' || printf '0'
+  )"; then
+  cortex_journal_wire_stage_for_pr "$REPO_ROOT" "$ORPHAN_PR_NUMBER"
+fi
 HEAD_SHA="$(git rev-parse HEAD)"
 touchstone_emit_event pr_opened \
   pr_url="$PR_URL" \

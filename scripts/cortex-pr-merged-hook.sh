@@ -242,6 +242,14 @@ if ! command -v cortex >/dev/null 2>&1; then
   exit 0
 fi
 
+if ! cortex journal post-merge --help >/dev/null 2>&1; then
+  # Stale PATH cortex (pre-#303) lacks `journal post-merge`. Degrade
+  # gracefully so the merge itself still succeeds; the operator upgrades
+  # cortex and re-runs verification manually if needed.
+  log "cortex-pr-merged-hook: installed cortex lacks 'journal post-merge'; upgrade cortex and re-run if T1.9 verification is required."
+  exit 0
+fi
+
 # 2. Substantive-merge gate (cortex#206). Only draft a pr-merged
 # journal entry when Cortex reports at least one trigger fired. If the
 # gate is unavailable, log the degradation and fall back to the prior

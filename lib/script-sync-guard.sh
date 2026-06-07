@@ -81,6 +81,32 @@ touchstone_script_sync_guard_already_done() {
   [ "${TOUCHSTONE_SCRIPT_SYNC_GUARD_STAMP:-}" = "$expected_stamp" ]
 }
 
+touchstone_script_sync_guard_read_only_invocation() {
+  case "${1:-}" in
+    -h | --help | help) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+touchstone_script_sync_guard_load_no_sync_from_config() {
+  local script_path="$1"
+  local resolved_script script_dir project_dir value
+  resolved_script="$(touchstone_script_sync_guard_resolve_script "$script_path")" || return 0
+  script_dir="$(cd "$(dirname "$resolved_script")" 2>/dev/null && pwd -P)" || return 0
+  project_dir="$(cd "$script_dir/.." 2>/dev/null && pwd -P)" || return 0
+  [ -f "$project_dir/.touchstone-config" ] || return 0
+  value="$(
+    grep -E '^[[:space:]]*TOUCHSTONE_NO_SCRIPT_SYNC=' "$project_dir/.touchstone-config" 2>/dev/null \
+      | tail -1 \
+      | cut -d= -f2- \
+      | tr -d '[:space:]' \
+      || true
+  )"
+  if touchstone_script_sync_guard_truthy "$value"; then
+    export TOUCHSTONE_NO_SCRIPT_SYNC=1
+  fi
+}
+
 touchstone_script_sync_guard() {
   local script_path="${1:-}"
   shift || true
@@ -88,6 +114,10 @@ touchstone_script_sync_guard() {
   if [ -z "$script_path" ]; then
     return 0
   fi
+  if touchstone_script_sync_guard_read_only_invocation "${1:-}"; then
+    return 0
+  fi
+  touchstone_script_sync_guard_load_no_sync_from_config "$script_path"
   if touchstone_script_sync_guard_truthy "${TOUCHSTONE_NO_SCRIPT_SYNC:-}" \
     || touchstone_script_sync_guard_truthy "${TOUCHSTONE_SCRIPT_SYNC_GUARD_DISABLE:-}" \
     || touchstone_script_sync_guard_truthy "${TOUCHSTONE_NO_AUTO_UPDATE:-}" \

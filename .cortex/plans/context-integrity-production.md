@@ -57,7 +57,7 @@ Artifact policy for this plan:
 - [x] #207 — design decided in doctrine/candidate (see PR: https://github.com/autumngarage/cortex/compare/main...docs/source-pr-staging-adr?expand=1).
 - [ ] Define context artifact contracts: source vs derived classes, schema/version fields, generated edit policy, and source-to-derived invalidation rules.
 - [x] Add the production doctor profile with human-readable and JSON diagnostics, stable diagnostic codes, and nonzero exit codes for stale-derived, missing-source, unresolved-provenance, budget-exceeded, policy-violation, and manual-edit-to-generated cases.
-- [ ] Wire the production doctor profile into this repo's review/release path.
+- [x] Wire the production doctor profile into this repo's review/release path.
 - [x] #235 — record local grep:retrieve/manifest usage ratio with privacy-preserving metadata.
 - [ ] Use #235 telemetry to decide #234 with a journaled product decision.
 - [ ] Add end-to-end fixtures for fresh repo, stale generated state, budget exceeded, invalid facts file, source-PR journal staging, and optional Autumn Garage integrations.

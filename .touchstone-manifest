@@ -16,7 +16,6 @@ scripts/conductor-review.sh
 scripts/codex-review.sh
 scripts/branch-guard.sh
 scripts/emergency-disclosure.sh
-scripts/cortex-pr-merged-hook.sh
 scripts/touchstone-run.sh
 scripts/open-pr.sh
 scripts/merge-pr.sh

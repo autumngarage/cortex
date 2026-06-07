@@ -1,0 +1,39 @@
+# .touchstone-review.toml — per-project configuration for the AI review hook.
+#
+# Place this file at the repo root. The hook reads it automatically.
+# Legacy .codex-review.toml is still supported as a fallback name.
+
+[codex_review]
+max_iterations = 3
+max_diff_lines = 5000
+cache_clean_reviews = true
+
+# Allow Conductor auto-fix on merge gate for paths not listed in unsafe_paths.
+# merge-pr.sh overrides mode to fix for the merge review; safe_by_default=true
+# lets good fixes land without a manual commit treadmill.
+safe_by_default = true
+
+# Feature-branch pushes stay review-only; merge gate sets CODEX_REVIEW_MODE=fix.
+mode = "review-only"
+
+unsafe_paths = [
+  ".cortex/journal/",
+  ".cortex/doctrine/",
+  "SPEC.md",
+  "scripts/merge-pr.sh",
+  "scripts/open-pr.sh",
+  "scripts/codex-review.sh",
+  "scripts/conductor-review.sh",
+  ".touchstone-review.toml",
+  ".codex-review.toml",
+]
+
+[review]
+enabled = true
+reviewer = "conductor"
+
+[review.conductor]
+prefer = "best"
+effort = "high"
+tags = "code-review"
+with = "codex"
