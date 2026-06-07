@@ -51,9 +51,15 @@ from pathlib import Path
 import click
 
 from cortex.compat import require_compatible
-from cortex.config import load_refresh_index_config
+from cortex.config import load_journal_t19_config, load_refresh_index_config
 from cortex.index import refresh_index
 from cortex.journal_facts import FactsFileError, load_and_validate_facts_file, render_facts_draft
+from cortex.journal_markers import UNRESOLVED_MARKER_PATTERNS
+from cortex.journal_staging import (
+    annotate_staged_for_pr,
+    find_pr_merged_entry,
+    verify_pr_merged_staged,
+)
 from cortex.manifest import estimate_tokens, estimate_words
 
 _DATE_PLACEHOLDER = "{{ YYYY-MM-DD }}"
@@ -91,21 +97,6 @@ _NO_EDIT_SCRUBBED_TYPES = frozenset({"pr-merged", "release"})
 # pr-merged/release entry written in `--no-edit` mode contains zero unresolved
 # template markers — no mustache prompts, no HTML edit-instruction comments, no
 # "fill on edit" sentinels, no template checklist placeholder lines.
-_UNRESOLVED_MARKER_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("mustache placeholder `{{ ... }}`", re.compile(r"\{\{.*?\}\}", re.DOTALL)),
-    ("HTML comment `<!-- ... -->`", re.compile(r"<!--.*?-->", re.DOTALL)),
-    ("`fill on edit` sentinel", re.compile(r"(?i)fill on edit")),
-    # A template checklist line that was never filled: `- [ ]` immediately
-    # followed by a placeholder/prompt token. A real, resolved follow-up looks
-    # like `- [ ] Wire the hook to emit facts` and is allowed; an unfilled
-    # template line looks like `- [ ] {{ item ... }}` or `- [ ] <slug>`.
-    (
-        "unfilled checklist placeholder `- [ ] {{ ... }}`",
-        re.compile(r"^- \[ \] (?:\{\{|<[a-z]).*$", re.MULTILINE),
-    ),
-)
-
-
 def _normalize_slug(text: str) -> str:
     """Lowercase, strip non-[a-z0-9 -], collapse spaces to dashes, cap at 50 chars."""
     s = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii").lower()
@@ -802,6 +793,12 @@ def _substitute_pr_merged_body_no_edit(
         body,
         flags=re.MULTILINE,
     )
+    body = re.sub(
+        r"_?\(none recorded — fill on edit\)_?",
+        "_None recorded._",
+        body,
+        flags=re.IGNORECASE,
+    )
 
     def _rewrite_cites(match: re.Match[str]) -> str:
         resolved = [
@@ -851,7 +848,7 @@ def _assert_no_unresolved_markers(
     invariant is preserved because the write never happens.
     """
     found: list[str] = []
-    for label, pattern in _UNRESOLVED_MARKER_PATTERNS:
+    for label, pattern in UNRESOLVED_MARKER_PATTERNS:
         matches = pattern.findall(body)
         if matches:
             sample = matches[0]
@@ -1147,11 +1144,13 @@ def draft_command(
         sys.exit(2)
 
     if facts_file is not None:
+        # Facts packets own PR identity; ignore a forwarded --pr from parent
+        # commands such as `cortex journal stage` (Click propagates matching
+        # option names through ctx.invoke).
+        pr_number = None
         disallowed_flags: list[str] = []
         if title is not None:
             disallowed_flags.append("--title")
-        if pr_number is not None:
-            disallowed_flags.append("--pr")
         if release_tag is not None:
             disallowed_flags.append("--tag")
         if plan_slug is not None:
@@ -1486,6 +1485,237 @@ def _refresh_retrieve_index_if_present(project_root: Path) -> None:
         click.echo(f"warning: could not refresh .cortex/.index/chunks.sqlite: {exc}", err=True)
 
 
+@click.command("stage")
+@click.option(
+    "--type",
+    "journal_type",
+    required=True,
+    help="Journal template type. Currently only `pr-merged` is supported.",
+)
+@click.option(
+    "--pr",
+    "pr_number",
+    type=int,
+    required=True,
+    help="PR number for `--type pr-merged`.",
+)
+@click.option(
+    "--facts-file",
+    "facts_file",
+    type=click.Path(file_okay=True, dir_okay=False, exists=True, path_type=Path),
+    default=None,
+    help="Optional JSON facts packet for deterministic draft rendering.",
+)
+@click.option(
+    "--path",
+    "target_path",
+    type=click.Path(file_okay=False, dir_okay=True, exists=True, path_type=Path),
+    default=Path.cwd,
+    show_default="current directory",
+    help="Project root containing `.cortex/`.",
+)
+@click.pass_context
+def stage_command(
+    ctx: click.Context,
+    *,
+    journal_type: str,
+    pr_number: int,
+    facts_file: Path | None,
+    target_path: Path,
+) -> None:
+    """Stage a Journal entry on the source branch before merge.
+
+    For ``pr-merged``, writes a ``--no-edit`` draft and annotates it with
+    ``**Staged-for-pr:**`` so post-merge automation can verify instead of
+    rewrite.
+    """
+    if journal_type != "pr-merged":
+        click.echo("error: stage currently supports only --type pr-merged", err=True)
+        raise SystemExit(2)
+
+    ctx.invoke(
+        draft_command,
+        journal_type="pr-merged",
+        title=None,
+        slug_override=None,
+        no_edit=True,
+        allow_large=False,
+        pr_number=None if facts_file is not None else pr_number,
+        release_tag=None,
+        plan_slug=None,
+        facts_file=facts_file,
+        target_path=target_path,
+    )
+
+    project_root = Path(target_path).resolve()
+    path = find_pr_merged_entry(project_root, pr_number)
+    if path is None:
+        click.echo(
+            f"error: draft completed but no pr-merged entry found for PR #{pr_number}",
+            err=True,
+        )
+        raise SystemExit(1)
+    path.write_text(annotate_staged_for_pr(path.read_text(), pr_number))
+
+
+@click.command("verify")
+@click.option(
+    "--type",
+    "journal_type",
+    required=True,
+    help="Journal template type. Currently only `pr-merged` is supported.",
+)
+@click.option(
+    "--pr",
+    "pr_number",
+    type=int,
+    required=True,
+    help="PR number for `--type pr-merged`.",
+)
+@click.option(
+    "--path",
+    "target_path",
+    type=click.Path(file_okay=False, dir_okay=True, exists=True, path_type=Path),
+    default=Path.cwd,
+    show_default="current directory",
+    help="Project root containing `.cortex/`.",
+)
+def verify_command(
+    *,
+    journal_type: str,
+    pr_number: int,
+    target_path: Path,
+) -> None:
+    """Verify a staged Journal entry exists and is free of template pollution."""
+    if journal_type != "pr-merged":
+        click.echo("error: verify currently supports only --type pr-merged", err=True)
+        raise SystemExit(2)
+
+    result = verify_pr_merged_staged(Path(target_path).resolve(), pr_number)
+    if not result.ok:
+        for message in result.messages:
+            click.echo(f"error: {message}", err=True)
+        raise SystemExit(1)
+    assert result.path is not None
+    click.echo(str(result.path.resolve()))
+
+
+@click.command("post-merge")
+@click.option(
+    "--type",
+    "journal_type",
+    default="pr-merged",
+    show_default=True,
+    help="Journal template type handled by post-merge automation.",
+)
+@click.option(
+    "--pr",
+    "pr_number",
+    type=int,
+    default=None,
+    help="PR number. Required when `[journal.t1_9].mode = \"stage\"`.",
+)
+@click.option(
+    "--no-edit",
+    "no_edit",
+    is_flag=True,
+    default=False,
+    help="Write directly in post-merge-writer mode without opening $EDITOR.",
+)
+@click.option(
+    "--path",
+    "target_path",
+    type=click.Path(file_okay=False, dir_okay=True, exists=True, path_type=Path),
+    default=Path.cwd,
+    show_default="current directory",
+    help="Project root containing `.cortex/`.",
+)
+@click.pass_context
+def post_merge_command(
+    ctx: click.Context,
+    *,
+    journal_type: str,
+    pr_number: int | None,
+    no_edit: bool,
+    target_path: Path,
+) -> None:
+    """Post-merge T1.9 handler used by ``cortex-pr-merged-hook.sh``.
+
+    In ``stage`` mode, verifies a staged entry exists. In ``post-merge-writer``
+    mode, delegates to ``cortex journal draft``.
+    """
+    project_root = Path(target_path).resolve()
+    if journal_type != "pr-merged":
+        click.echo("error: post-merge currently supports only --type pr-merged", err=True)
+        raise SystemExit(2)
+
+    config = load_journal_t19_config(project_root)
+    for warning in config.warnings:
+        click.echo(f"warning: {warning}", err=True)
+
+    if config.mode == "stage":
+        if pr_number is None:
+            click.echo(
+                "error: --pr is required when journal.t1_9 mode is stage",
+                err=True,
+            )
+            raise SystemExit(2)
+        result = verify_pr_merged_staged(project_root, pr_number)
+        if not result.ok:
+            for message in result.messages:
+                click.echo(f"error: {message}", err=True)
+            raise SystemExit(1)
+        assert result.path is not None
+        click.echo(str(result.path.resolve()))
+        return
+
+    ctx.invoke(
+        draft_command,
+        journal_type="pr-merged",
+        title=None,
+        slug_override=None,
+        no_edit=no_edit,
+        allow_large=False,
+        pr_number=pr_number,
+        release_tag=None,
+        plan_slug=None,
+        facts_file=None,
+        target_path=project_root,
+    )
+
+
+@click.group("facts")
+def facts_group() -> None:
+    """Validate journal facts packets without writing files."""
+
+
+@click.command("validate")
+@click.argument("journal_type")
+@click.option(
+    "--facts-file",
+    "facts_file",
+    type=click.Path(file_okay=True, dir_okay=False, exists=True, path_type=Path),
+    required=True,
+    help="Path to the JSON facts packet to validate.",
+)
+def facts_validate_command(*, journal_type: str, facts_file: Path) -> None:
+    """Validate a facts packet against the journal draft handoff schema."""
+    try:
+        load_and_validate_facts_file(facts_file, expected_type=journal_type)
+    except FactsFileError as exc:
+        click.echo(
+            json.dumps(
+                exc.as_structured_error(facts_file=facts_file, journal_type=journal_type),
+                sort_keys=True,
+            )
+        )
+        raise SystemExit(2) from exc
+    click.echo("ok")
+
+
+facts_group.add_command(facts_validate_command)
+
+
 @click.group("journal")
 def journal_group() -> None:
     """Create and manage Journal entries.
@@ -1496,3 +1726,7 @@ def journal_group() -> None:
 
 
 journal_group.add_command(draft_command)
+journal_group.add_command(stage_command)
+journal_group.add_command(verify_command)
+journal_group.add_command(post_merge_command)
+journal_group.add_command(facts_group)

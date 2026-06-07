@@ -31,8 +31,14 @@ from cortex.frontmatter import FrontmatterValue, parse_frontmatter
 from cortex.index import read_index
 from cortex.plans import iter_plan_files
 from cortex.retrieve.index import retrieve_index_path
+from cortex.snapshot_integrity import assess_snapshot_integrity
 from cortex.state_migration import is_legacy_hand_authored_state
 from cortex.validation import SEVEN_FIELDS, Issue, Severity
+
+MAP_LAYER_REMEDIATION = (
+    "hand-maintain `.cortex/map.md`; `cortex refresh-map` is deferred to v1.x "
+    "(see `.cortex/plans/cortex-v1.md` `## Follow-ups (deferred)`)"
+)
 
 CANONICAL_OWNERSHIP_RE = re.compile(
     r"^(ROADMAP|STATUS|PLAN|PLANS|NEXT|TODO)\.md$",
@@ -122,6 +128,7 @@ def run_plain_checks(project_root: Path) -> list[Issue]:
         check_stale_pickup_pointers,
         check_stale_state_current_work,
         check_legacy_state_migration_needed,
+        check_snapshot_integrity,
         check_state_journal_staleness,
     )
     issues: list[Issue] = []
@@ -594,16 +601,31 @@ def check_generated_layers(project_root: Path) -> list[Issue]:
         if generated is not None:
             age = datetime.now(UTC) - generated.astimezone(UTC)
             if age > timedelta(days=DEFAULT_GENERATED_FRESHNESS_DAYS):
+                if path.name == "map.md":
+                    message = f"layer is stale; {MAP_LAYER_REMEDIATION}"
+                else:
+                    message = "layer is stale; rerun `cortex refresh-state`"
                 issues.append(
                     Issue(
                         Severity.WARNING,
                         rel,
-                        "layer is stale; rerun `cortex refresh-state`",
+                        message,
                     )
                 )
             if path.name == "state.md":
                 issues.extend(_check_state_source_freshness(project_root, rel, text, generated))
     return issues
+
+
+def check_snapshot_integrity(project_root: Path) -> list[Issue]:
+    """Warn when the checkout HEAD diverges from state.md's recorded snapshot."""
+
+    report = assess_snapshot_integrity(project_root)
+    return [
+        Issue(Severity.WARNING, ".cortex/state.md", warning)
+        for warning in report.warnings
+        if not warning.startswith("snapshot check skipped")
+    ]
 
 
 def _check_state_source_freshness(
@@ -1178,19 +1200,18 @@ def check_generator_version_drift(project_root: Path) -> list[Issue]:
             continue
         if gen_ver.major != current.major or gen_ver.minor != current.minor:
             # Determine the refresh command from the layer name.
-            if layer_path.name == "state.md":
-                refresh_cmd = "cortex refresh-state"
-            elif layer_path.name == "map.md":
-                refresh_cmd = "cortex refresh-map"
+            if layer_path.name == "map.md":
+                remediation = MAP_LAYER_REMEDIATION
+            elif layer_path.name == "state.md":
+                remediation = "run `cortex refresh-state` to regenerate with current-version provenance and any new layer fields (e.g. Sources-hash: in v1.1.0)"
             else:
-                refresh_cmd = "cortex refresh-state"
+                remediation = "run `cortex refresh-state` to regenerate with current-version provenance"
             issues.append(
                 Issue(
                     Severity.WARNING,
                     rel,
                     f"Generator was {generator_field}, current CLI is {cortex.__version__}. "
-                    f"Run `{refresh_cmd}` to regenerate with current-version provenance and any "
-                    f"new layer fields (e.g. Sources-hash: in v1.1.0).",
+                    f"{remediation.capitalize()}.",
                 )
             )
     return issues

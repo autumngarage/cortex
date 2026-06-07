@@ -35,6 +35,7 @@ from typing import Any, Literal
 from cortex.frontmatter import parse_frontmatter
 from cortex.index import read_index
 from cortex.plans import iter_plan_files
+from cortex.snapshot_integrity import assess_snapshot_integrity
 from cortex.verified import VERIFIED_RE, bullet_age_days, format_warning, parse_verified
 
 CHARS_PER_TOKEN = 4
@@ -165,6 +166,7 @@ class Manifest:
     journal_hours: int
     sections: list[ManifestSection] = field(default_factory=list)
     promotion_summary: str = ""
+    snapshot_warnings: list[str] = field(default_factory=list)
 
     def render(self, *, show_budget: bool = False) -> str:
         used_tokens, used_words = self.rendered_usage(show_budget=show_budget)
@@ -210,6 +212,9 @@ class Manifest:
             if budget_delta > 0
             else f"within budget (~{-budget_delta} tokens remaining)"
         )
+        warning_lines: list[str] = []
+        for warning in self.snapshot_warnings:
+            warning_lines.extend(["", f"> **Snapshot warning:** {warning}"])
         header = [
             "# Cortex Session Manifest",
             "",
@@ -225,6 +230,7 @@ class Manifest:
             f"Omitted entries: {omitted_count}",
             f"Mode: {'degraded (state-only)' if self.degraded else 'full'}",
             f"Journal window: last {self.journal_hours}h",
+            *warning_lines,
             "",
             "---",
             "",
@@ -292,6 +298,7 @@ class Manifest:
             "degraded": self.degraded,
             "journal_hours": self.journal_hours,
             "promotion_summary": self.promotion_summary,
+            "snapshot_warnings": list(self.snapshot_warnings),
             "sections": sections,
             "omissions": [
                 section.omission_diagnostic()
@@ -808,4 +815,5 @@ def build_manifest(
     )
 
     manifest.promotion_summary = _promotion_summary(cortex_dir)
+    manifest.snapshot_warnings = list(assess_snapshot_integrity(project_root).warnings)
     return manifest

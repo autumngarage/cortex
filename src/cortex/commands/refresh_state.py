@@ -18,6 +18,7 @@ import click
 from cortex.compat import require_compatible
 from cortex.config import load_refresh_index_config
 from cortex.index import refresh_index
+from cortex.snapshot_integrity import read_recorded_head_sha
 from cortex.state_render import build_state_inputs, render_state
 
 SKIP_REWRITE_NOTICE = (
@@ -136,8 +137,15 @@ def write_state_if_changed(
         if warning is not None:
             click.echo(f"warning: {state_path}: {warning}; rewriting state.md", err=True)
         elif existing_hash is not None and existing_hash == sources_hash:
-            click.echo(SKIP_REWRITE_NOTICE, err=True)
-            return RefreshStateResult(ok=True, path=state_path, wrote=False)
+            try:
+                existing_text = state_path.read_text()
+            except OSError:
+                existing_text = ""
+            existing_head = read_recorded_head_sha(existing_text)
+            new_head = read_recorded_head_sha(rendered)
+            if existing_head == new_head:
+                click.echo(SKIP_REWRITE_NOTICE, err=True)
+                return RefreshStateResult(ok=True, path=state_path, wrote=False)
 
     try:
         state_path.write_text(rendered)

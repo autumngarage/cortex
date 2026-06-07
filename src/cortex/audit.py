@@ -74,6 +74,9 @@ T1_9_RECURSION_GUARD_RE = re.compile(
     r"^docs\(journal\):\s*auto-draft pr-merged entry",
     re.IGNORECASE,
 )
+# Squash-merge subjects conventionally end with ``(#NNN)``.
+_PR_NUMBER_IN_SUBJECT_RE = re.compile(r"\(#(\d+)\)\s*$")
+_PR_NUMBER_IN_TITLE_RE = re.compile(r"PR\s*#\s*(\d+)", re.IGNORECASE)
 
 # Default release-tag pattern per Protocol § 2 ("T1.10 ... default `^v\d+\.\d+\.\d+`").
 # Projects using calendar versioning or non-`v`-prefix tags override via .cortex/protocol.md.
@@ -120,6 +123,7 @@ class JournalEntry:
     trigger: str | None
     tag: str | None = None
     merge_commit: str | None = None
+    pr_number: int | None = None
 
 
 @dataclass(frozen=True)
@@ -341,7 +345,7 @@ def load_journal_entries(project_root: Path) -> list[JournalEntry]:
         if not match:
             continue
         entry_date = datetime.fromisoformat(match.group(1)).replace(tzinfo=UTC)
-        type_, trigger, tag, merge_commit = _journal_header_fields(path)
+        type_, trigger, tag, merge_commit, pr_number = _journal_header_fields(path)
         entries.append(
             JournalEntry(
                 path=path,
@@ -350,6 +354,7 @@ def load_journal_entries(project_root: Path) -> list[JournalEntry]:
                 trigger=trigger,
                 tag=tag,
                 merge_commit=merge_commit,
+                pr_number=pr_number,
             )
         )
     return entries
@@ -357,20 +362,16 @@ def load_journal_entries(project_root: Path) -> list[JournalEntry]:
 
 def _journal_header_fields(
     path: Path,
-) -> tuple[str | None, str | None, str | None, str | None]:
-    """Return ``(Type, Trigger, Tag, Merge-commit)`` for a Journal entry.
+) -> tuple[str | None, str | None, str | None, str | None, int | None]:
+    """Return ``(Type, Trigger, Tag, Merge-commit, PR-number)`` for a Journal entry.
 
-    All four fields accept YAML frontmatter or bold-inline (SPEC § 6).
-    Missing fields return None. ``Trigger`` only appears on Protocol-
-    triggered entries; ``Tag`` only appears on ``Type: release`` entries
-    naming the specific git tag the release record describes;
-    ``Merge-commit`` only appears on ``Type: pr-merged`` entries and names
-    the squash-merge commit the entry records (T1.9 matches against it).
+    Metadata fields accept YAML frontmatter or bold-inline (SPEC § 6).
+    Missing fields return None. ``PR-number`` is parsed from the H1 title.
     """
     try:
         text = path.read_text()
     except OSError:
-        return None, None, None, None
+        return None, None, None, None, None
     frontmatter, _body = parse_frontmatter(text)
     header = "\n".join(text.splitlines()[:40])
 
@@ -399,7 +400,14 @@ def _journal_header_fields(
         # all the audit needs for identity matching.
         m_match = re.match(r"([0-9a-fA-F]{4,40})", raw_merge)
         merge_commit = m_match.group(1).lower() if m_match else None
-    return type_, trigger, tag, merge_commit
+    pr_number: int | None = None
+    for line in text.splitlines()[:8]:
+        if line.startswith("# "):
+            title_match = _PR_NUMBER_IN_TITLE_RE.search(line)
+            if title_match:
+                pr_number = int(title_match.group(1))
+            break
+    return type_, trigger, tag, merge_commit, pr_number
 
 
 def _best_matching_entry(
@@ -461,8 +469,12 @@ def _shas_identify(commit_sha: str, entry_sha: str) -> bool:
     return a.startswith(b) or b.startswith(a)
 
 
+def _pr_number_from_commit_subject(subject: str) -> int | None:
+    match = _PR_NUMBER_IN_SUBJECT_RE.search(subject)
+    return int(match.group(1)) if match else None
+
+
 def _match_by_merge_commit(
-    source_date: datetime,
     commit_sha: str,
     candidates: Iterable[JournalEntry],
 ) -> JournalEntry | None:
@@ -470,21 +482,33 @@ def _match_by_merge_commit(
 
     Identity matching is exact and order-independent: it pairs a T1.9 fire
     with the entry that explicitly records its merge commit, regardless of
-    how many other merges share the same calendar day. This is what makes a
-    same-day cluster of merges each resolve to its own entry instead of the
-    nearest-by-date one (issue #288). The entry must still be within the
-    normal Journal match window for the fire; identity narrows attribution,
-    not recency.
+    how many other merges share the same calendar day (issue #288) or how the
+    journal filename date relates to the merge timestamp (issue #302). When
+    the SHA matches, the filename date window is not applied — a recorded
+    merge commit cannot legitimately name a different event.
     """
-    window = timedelta(hours=JOURNAL_MATCH_WINDOW_HOURS)
     for entry in candidates:
         if entry.type_ != EXPECTED_TYPE[Trigger.T1_9]:
             continue
         if entry.trigger is not None and entry.trigger != Trigger.T1_9.value:
             continue
-        if abs(entry.date - source_date) > window:
-            continue
         if entry.merge_commit and _shas_identify(commit_sha, entry.merge_commit):
+            return entry
+    return None
+
+
+def _match_by_pr_number(
+    pr_number: int,
+    candidates: Iterable[JournalEntry],
+) -> JournalEntry | None:
+    """Return a ``pr-merged`` entry whose title records this PR number."""
+
+    for entry in candidates:
+        if entry.type_ != EXPECTED_TYPE[Trigger.T1_9]:
+            continue
+        if entry.trigger is not None and entry.trigger != Trigger.T1_9.value:
+            continue
+        if entry.pr_number == pr_number:
             return entry
     return None
 
@@ -533,12 +557,25 @@ def audit(
     # merge commit with the entry that names it must win over date proximity,
     # otherwise a same-day cluster of merges has its entries consumed against
     # the wrong commit oldest-first, and the later merges look unmatched even
-    # though their entries exist (issue #288).
-    for idx, (source_date, trigger, fire_commit, _fire_tag) in enumerate(ordered_fires):
+    # though their entries exist (issue #288 / #302).
+    for idx, (_source_date, trigger, fire_commit, _fire_tag) in enumerate(ordered_fires):
         if trigger is not Trigger.T1_9 or fire_commit is None:
             continue
         available = [e for e in journal if e.path not in consumed]
-        entry = _match_by_merge_commit(source_date, fire_commit.sha, available)
+        entry = _match_by_merge_commit(fire_commit.sha, available)
+        if entry is not None:
+            consumed.add(entry.path)
+            matched_paths[idx] = entry.path
+    # Phase 1b: PR-number identity from squash-merge subjects such as
+    # ``feat: foo (#550)`` paired with journal titles ``PR #550 merged``.
+    for idx, (_source_date, trigger, fire_commit, _fire_tag) in enumerate(ordered_fires):
+        if idx in matched_paths or trigger is not Trigger.T1_9 or fire_commit is None:
+            continue
+        pr_number = _pr_number_from_commit_subject(fire_commit.subject)
+        if pr_number is None:
+            continue
+        available = [e for e in journal if e.path not in consumed]
+        entry = _match_by_pr_number(pr_number, available)
         if entry is not None:
             consumed.add(entry.path)
             matched_paths[idx] = entry.path

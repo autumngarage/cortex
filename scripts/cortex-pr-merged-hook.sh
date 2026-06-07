@@ -7,7 +7,7 @@
 # to the default branch"). When a project has both Touchstone and Cortex
 # installed, this hook fires from `merge-pr.sh` immediately after the
 # remote merge succeeds and the local default branch is synced. It shells
-# out to `cortex journal draft pr-merged --no-edit`, captures the new
+# out to `cortex journal post-merge --type pr-merged --no-edit`, captures the
 # entry's path on stdout, refreshes `.cortex/state.md`, stages both files
 # when present, commits with `--no-verify` on a follow-up branch, pushes
 # that branch, and opens a normal PR for the journal commit. The direct
@@ -34,7 +34,7 @@
 #   - cortex missing mid-flow (between detection and exec): log to stderr
 #     and exit 0 (degrade gracefully — don't fail the merge because the
 #     CLI was uninstalled in a tiny race window).
-#   - `cortex journal draft` exits non-zero: stderr surfaced, exit 1.
+#   - `cortex journal post-merge` exits non-zero: stderr surfaced, exit 1.
 #   - Empty stdout (no path returned): stderr message, exit 1.
 #   - Returned path doesn't exist after the call: stderr message, exit 1.
 #   - `cortex refresh-state` exits non-zero: stderr surfaced, explicit
@@ -281,18 +281,26 @@ else
   fi
 fi
 
-# `cortex journal draft pr-merged --no-edit` writes the entry and prints
-# the absolute path on stdout. We capture stdout to grab that path; we
-# leave stderr untouched so any cortex-side warnings (gh not auth'd, etc)
-# surface to the operator running the merge.
-draft_stdout=""
-draft_status=0
-draft_stdout="$(cd "$PROJECT_DIR" \
-  && CORTEX_PR_MERGED_FIRED_TRIGGERS="$fired_triggers_ndjson" \
-    cortex journal draft pr-merged --no-edit)" \
-  || draft_status=$?
-if [ "$draft_status" -ne 0 ]; then
-  log "cortex-pr-merged-hook: cortex journal draft pr-merged exited $draft_status."
+# `cortex journal post-merge --type pr-merged --no-edit` verifies a staged
+# entry when `[journal.t1_9].mode = "stage"`, or writes a fallback draft in
+# post-merge-writer mode. It prints the absolute path on stdout. We capture
+# stdout to grab that path; we leave stderr untouched so any cortex-side
+# warnings (gh not auth'd, etc) surface to the operator running the merge.
+post_merge_stdout=""
+post_merge_status=0
+if [ -n "${TOUCHSTONE_MERGED_PR:-}" ]; then
+  post_merge_stdout="$(cd "$PROJECT_DIR" \
+    && CORTEX_PR_MERGED_FIRED_TRIGGERS="$fired_triggers_ndjson" \
+      cortex journal post-merge --type pr-merged --no-edit --pr "${TOUCHSTONE_MERGED_PR}")" \
+    || post_merge_status=$?
+else
+  post_merge_stdout="$(cd "$PROJECT_DIR" \
+    && CORTEX_PR_MERGED_FIRED_TRIGGERS="$fired_triggers_ndjson" \
+      cortex journal post-merge --type pr-merged --no-edit)" \
+    || post_merge_status=$?
+fi
+if [ "$post_merge_status" -ne 0 ]; then
+  log "cortex-pr-merged-hook: cortex journal post-merge exited $post_merge_status."
   if [ -n "$journal_branch" ]; then
     log "  The hook is on recovery branch ${journal_branch}; inspect the worktree there before returning to ${default_branch}."
   fi
@@ -303,9 +311,9 @@ fi
 # emits exactly one line (the absolute path) but a trailing newline or a
 # warning printed by an upstream Python wrapper could appear; the most-
 # recent line is the path.
-candidate="$(printf '%s\n' "$draft_stdout" | awk 'NF{p=$0} END{print p}')"
+candidate="$(printf '%s\n' "$post_merge_stdout" | awk 'NF{p=$0} END{print p}')"
 if [ -z "$candidate" ]; then
-  log "cortex-pr-merged-hook: cortex journal draft returned no path on stdout."
+  log "cortex-pr-merged-hook: cortex journal post-merge returned no path on stdout."
   if [ -n "$journal_branch" ]; then
     log "  The hook is on recovery branch ${journal_branch}; default branch remains unchanged."
   fi

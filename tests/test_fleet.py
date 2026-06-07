@@ -73,6 +73,12 @@ def _make_current_full_repo(root: Path, name: str) -> Path:
     assert result.exit_code == 0, result.output
     _git(repo, "add", "-A")
     _git(repo, "commit", "-m", "cortex update")
+    # Committing regenerated layers advances HEAD; refresh once more so the
+    # recorded snapshot matches the checkout (snapshot-integrity green path).
+    result = runner.invoke(
+        cli, ["update", "--path", str(repo)], env={"CORTEX_DETERMINISTIC": "1"}
+    )
+    assert result.exit_code == 0, result.output
     return repo
 
 

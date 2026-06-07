@@ -37,6 +37,7 @@ from cortex.compat import require_compatible
 from cortex.config import load_refresh_index_config
 from cortex.doctor_checks import check_config_toml_schema
 from cortex.index import _same_index_inputs, compute_index, read_index, refresh_index
+from cortex.snapshot_integrity import assess_snapshot_integrity
 from cortex.state_render import build_state_inputs
 from cortex.validation import Severity, run_all_checks
 
@@ -206,6 +207,9 @@ def _state_update_needed(project_root: Path) -> tuple[bool, list[str]]:
         return True, [f".cortex/state.md Generator was v{state_version}; current CLI is {__version__}"]
     if existing_hash != inputs.source_hashes:
         return True, [".cortex/state.md is stale"]
+    report = assess_snapshot_integrity(project_root)
+    if report.head_mismatch:
+        return True, ["state.md HEAD snapshot does not match checkout"]
     return False, []
 
 
@@ -245,9 +249,16 @@ def _run_update_check(project_root: Path, *, run_doctor: bool) -> bool:
             f"{doctor_warnings} warning{'s' if doctor_warnings != 1 else ''}"
         )
 
+    snapshot_warnings = [
+        warning
+        for warning in assess_snapshot_integrity(project_root).warnings
+        if not warning.startswith("snapshot check skipped")
+    ]
     for reason in [*state_reasons, *index_reasons]:
         stream = sys.stderr if needs_state or needs_index else sys.stdout
         click.echo(f"update check: {reason}", file=stream)
+    for warning in snapshot_warnings:
+        click.echo(f"update check: snapshot warning: {warning}", file=sys.stderr)
 
     if needs_state or needs_index:
         click.echo("Update check failed: run `cortex update`.", err=True)

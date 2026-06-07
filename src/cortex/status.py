@@ -28,6 +28,7 @@ from cortex.audit import _journal_header_fields, load_journal_entries
 from cortex.frontmatter import parse_frontmatter
 from cortex.index import read_index
 from cortex.plans import iter_plan_files
+from cortex.snapshot_integrity import assess_snapshot_integrity
 
 OVERDUE_DIGEST_DAYS = 45
 RECENT_JOURNAL_DAYS = 7
@@ -55,6 +56,7 @@ class Status:
     promotion_stale: int | None = None
     promotion_index_present: bool = False
     promotion_index_error: str | None = None
+    snapshot_warnings: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         queue: dict[str, object]
@@ -88,6 +90,7 @@ class Status:
                 else None
             ),
             "promotion_queue": queue,
+            "snapshot_warnings": list(self.snapshot_warnings),
         }
 
 
@@ -150,7 +153,7 @@ def _latest_digest(project_root: Path, now: datetime) -> tuple[Path, int] | None
     entries = load_journal_entries(project_root)
     digests: list[tuple[Path, datetime]] = []
     for entry in entries:
-        type_, _trigger, _tag, _merge = _journal_header_fields(entry.path)
+        type_, _trigger, _tag, _merge, _pr = _journal_header_fields(entry.path)
         if type_ == "digest":
             digests.append((entry.path, entry.date))
     if not digests:
@@ -254,6 +257,7 @@ def compute_status(project_root: Path, *, now: datetime | None = None) -> Status
         status.latest_digest_path = digest[0]
         status.latest_digest_age_days = digest[1]
         status.digest_overdue = digest[1] > OVERDUE_DIGEST_DAYS
+    status.snapshot_warnings = list(assess_snapshot_integrity(project_root).warnings)
     return status
 
 
@@ -306,4 +310,7 @@ def format_status(status: Status) -> str:
             f"Promotion queue: {status.promotion_proposed} proposed, "
             f"{status.promotion_stale} stale"
         )
+
+    for warning in status.snapshot_warnings:
+        lines.append(f"Snapshot: {warning}")
     return "\n".join(lines) + "\n"
