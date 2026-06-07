@@ -27,11 +27,6 @@ BYPASS_REASON=""
 BYPASS_MARKER_SOURCE=""
 BYPASS_MARKER_EVIDENCE=""
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-CORTEX_JOURNAL_WIRE="$SCRIPT_DIR/cortex-journal-wire.sh"
-if [ -f "$CORTEX_JOURNAL_WIRE" ]; then
-  # shellcheck source=cortex-journal-wire.sh
-  source "$CORTEX_JOURNAL_WIRE"
-fi
 SCRIPT_SYNC_GUARD="$SCRIPT_DIR/../lib/script-sync-guard.sh"
 if [ -f "$SCRIPT_SYNC_GUARD" ]; then
   # shellcheck source=../lib/script-sync-guard.sh
@@ -489,6 +484,11 @@ preflight_tool_fingerprint() {
 }
 
 preflight_env_fingerprint() {
+  local dogfood_resolved_command=""
+
+  if declare -F touchstone_preflight_dogfood_command >/dev/null 2>&1; then
+    dogfood_resolved_command="$(touchstone_preflight_dogfood_command || true)"
+  fi
   {
     printf 'TOUCHSTONE_PREFLIGHT_VALIDATE_SCRIPT=%s\n' "${TOUCHSTONE_PREFLIGHT_VALIDATE_SCRIPT:-}"
     printf 'TOUCHSTONE_PREFLIGHT_VALIDATE_COMMAND=%s\n' "${TOUCHSTONE_PREFLIGHT_VALIDATE_COMMAND:-}"
@@ -496,6 +496,9 @@ preflight_env_fingerprint() {
     printf 'TOUCHSTONE_PREFLIGHT_VALIDATE_AFFECTED_COMMAND=%s\n' "${TOUCHSTONE_PREFLIGHT_VALIDATE_AFFECTED_COMMAND:-}"
     printf 'TOUCHSTONE_PREFLIGHT_VALIDATE_SMOKE_COMMAND=%s\n' "${TOUCHSTONE_PREFLIGHT_VALIDATE_SMOKE_COMMAND:-}"
     printf 'TOUCHSTONE_PREFLIGHT_VALIDATE_FULL_COMMAND=%s\n' "${TOUCHSTONE_PREFLIGHT_VALIDATE_FULL_COMMAND:-}"
+    printf 'TOUCHSTONE_PREFLIGHT_DOGFOOD_COMMAND=%s\n' "${TOUCHSTONE_PREFLIGHT_DOGFOOD_COMMAND:-}"
+    printf 'TOUCHSTONE_PREFLIGHT_DOGFOOD_RESOLVED_COMMAND=%s\n' "$dogfood_resolved_command"
+    printf 'TOUCHSTONE_PREFLIGHT_SKIP_DOGFOOD=%s\n' "${TOUCHSTONE_PREFLIGHT_SKIP_DOGFOOD:-}"
   } | preflight_hash_stream
 }
 
@@ -513,7 +516,8 @@ preflight_cache_inputs() {
   checker_hash="$(preflight_hash_file_list \
     "lib/preflight.sh" "$PREFLIGHT_SCRIPT" \
     "lib/preflight-scope.sh" "$(dirname "$PREFLIGHT_SCRIPT")/preflight-scope.sh" \
-    "scripts/touchstone-run.sh" "$SCRIPT_DIR/touchstone-run.sh")"
+    "scripts/touchstone-run.sh" "$SCRIPT_DIR/touchstone-run.sh" \
+    "scripts/conductor-dogfood-smoke.py" "$SCRIPT_DIR/conductor-dogfood-smoke.py")"
   config_hash="$(preflight_hash_paths "$repo_root" \
     ".touchstone-review.toml" \
     ".codex-review.toml" \
@@ -1598,20 +1602,6 @@ wait_for_clean_merge_state
 
 # 3. Run AI review as the merge gate.
 run_merge_review
-
-# 3b. Cortex T1.9 staging verifier (stage mode only).
-if declare -F cortex_journal_wire_verify_before_merge >/dev/null 2>&1; then
-  merge_project_root="$(git rev-parse --show-toplevel 2>/dev/null || echo "")"
-  merge_pr_base="$(gh pr view "$PR_NUMBER" --json baseRefName --jq '.baseRefName' 2>/dev/null || echo "")"
-  if [ -n "$merge_project_root" ] && [ -n "$merge_pr_base" ]; then
-    cortex_journal_wire_verify_before_merge \
-      "$merge_project_root" \
-      "$PR_NUMBER" \
-      "$merge_pr_base" \
-      "$DEFAULT_BRANCH" \
-      || exit 1
-  fi
-fi
 
 # 4. Squash-merge and delete the branch.
 echo "==> Squash-merging PR #$PR_NUMBER ..."
