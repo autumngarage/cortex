@@ -918,7 +918,7 @@ cleanup_local_pr_branch_after_merge() {
   fi
 
   echo "==> Deleting local branch '$branch' after verified squash merge of $reviewed_head ..."
-  if git branch -D "$branch"; then
+  if git branch -D -- "$branch"; then
     echo "==> Local branch '$branch' deleted."
   else
     echo "WARNING: Could not delete local branch '$branch' after verified merge." >&2
