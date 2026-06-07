@@ -105,6 +105,8 @@ class ProductionDiagnostic:
 def _code_for_issue(issue: Issue) -> str:
     message = issue.message.lower()
     path = (issue.path or "").lower()
+    if "manifest build failed while probing production budget" in message:
+        return "manifest-build-failed"
     if "generated layer has no yaml frontmatter" in message:
         return "manual-edit-to-generated"
     if "generated layer missing" in message and "provenance field" in message:
@@ -213,7 +215,20 @@ def manifest_budget_checks(project_root: Path) -> list[Issue]:
 
     issues: list[Issue] = []
     for budget_tokens in PRODUCTION_MANIFEST_BUDGETS:
-        manifest = build_manifest(project_root, budget_tokens)
+        try:
+            manifest = build_manifest(project_root, budget_tokens)
+        except Exception as exc:
+            issues.append(
+                Issue(
+                    Severity.ERROR,
+                    ".cortex",
+                    (
+                        "manifest build failed while probing production budget "
+                        f"{budget_tokens}: {exc.__class__.__name__}: {exc}"
+                    ),
+                )
+            )
+            continue
         diagnostics = manifest.diagnostics()
         omitted_count = int(diagnostics["omitted_count"])
         over_budget = bool(diagnostics["over_budget"])

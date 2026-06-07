@@ -109,6 +109,23 @@ def test_production_doctor_reports_manifest_budget_exceeded(tmp_path: Path) -> N
     assert "budget-exceeded" in codes
 
 
+def test_production_doctor_json_reports_manifest_build_failures(tmp_path: Path) -> None:
+    project = _init_project(tmp_path)
+    (project / ".cortex" / "config.toml").write_text("[manifest\n")
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["doctor", "--production", "--json", "--path", str(project)],
+    )
+
+    assert result.exit_code == 1, result.output
+    payload = json.loads(result.output)
+    diagnostics = payload["diagnostics"]
+    assert any(item["code"] == "manifest-build-failed" for item in diagnostics)
+    assert any(item["path"] == ".cortex" for item in diagnostics)
+
+
 def test_production_doctor_exits_nonzero_on_warning(tmp_path: Path) -> None:
     project = _init_project(tmp_path)
     map_path = project / ".cortex" / "map.md"
