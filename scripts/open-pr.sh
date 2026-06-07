@@ -42,6 +42,11 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CORTEX_JOURNAL_WIRE="$SCRIPT_DIR/cortex-journal-wire.sh"
+if [ -f "$CORTEX_JOURNAL_WIRE" ]; then
+  # shellcheck source=cortex-journal-wire.sh
+  source "$CORTEX_JOURNAL_WIRE"
+fi
 SCRIPT_SYNC_GUARD="$SCRIPT_DIR/../lib/script-sync-guard.sh"
 if [ -f "$SCRIPT_SYNC_GUARD" ]; then
   # shellcheck source=../lib/script-sync-guard.sh
@@ -551,6 +556,7 @@ fi
 DRAFT_FLAG=""
 AUTO_MERGE=false
 CLEANUP_WORKTREE=false
+NO_STAGE_JOURNAL=false
 BASE_OVERRIDE=""
 POSITIONAL=()
 
@@ -566,6 +572,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --cleanup-worktree)
       CLEANUP_WORKTREE=true
+      shift
+      ;;
+    --no-stage-journal)
+      NO_STAGE_JOURNAL=true
       shift
       ;;
     --base)
@@ -639,8 +649,14 @@ trap on_exit EXIT
 EXISTING_PR_URL="$(gh pr list --head "$CURRENT_BRANCH" --author "@me" --state open --json url --jq '.[0].url // empty' 2>/dev/null || echo "")"
 if [ -n "$EXISTING_PR_URL" ]; then
   echo "==> PR already open for $CURRENT_BRANCH: $EXISTING_PR_URL"
+  PR_NUMBER="$(basename "$EXISTING_PR_URL")"
+  if declare -F cortex_journal_wire_should_stage >/dev/null 2>&1 \
+    && cortex_journal_wire_should_stage "$REPO_ROOT" "$BASE_BRANCH" "$DEFAULT_BRANCH" "$(
+      [ "$NO_STAGE_JOURNAL" = true ] && printf '1' || printf '0'
+    )"; then
+    cortex_journal_wire_stage_for_pr "$REPO_ROOT" "$PR_NUMBER"
+  fi
   if [ "$AUTO_MERGE" = true ]; then
-    PR_NUMBER="$(basename "$EXISTING_PR_URL")"
     ORPHAN_PR_URL="$EXISTING_PR_URL"
     ORPHAN_PR_NUMBER="$PR_NUMBER"
     run_issue_claim_preflight "existing PR #$PR_NUMBER" --pr-number "$PR_NUMBER"
@@ -767,6 +783,12 @@ echo "$PR_URL"
 # from here on is a stuck-PR risk.
 ORPHAN_PR_URL="$PR_URL"
 ORPHAN_PR_NUMBER="$(basename "$PR_URL")"
+if declare -F cortex_journal_wire_should_stage >/dev/null 2>&1 \
+  && cortex_journal_wire_should_stage "$REPO_ROOT" "$BASE_BRANCH" "$DEFAULT_BRANCH" "$(
+    [ "$NO_STAGE_JOURNAL" = true ] && printf '1' || printf '0'
+  )"; then
+  cortex_journal_wire_stage_for_pr "$REPO_ROOT" "$ORPHAN_PR_NUMBER"
+fi
 HEAD_SHA="$(git rev-parse HEAD)"
 touchstone_emit_event pr_opened \
   pr_url="$PR_URL" \
