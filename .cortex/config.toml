@@ -15,6 +15,9 @@ expected_403 = [
   "https://forum.cursor.com/*",
 ]
 
+[journal.t1_9]
+mode = "stage"
+
 [refresh-index]
 candidate_patterns = [
   "we decided",

@@ -126,6 +126,9 @@ def _make_cortex_shim(
             if [ "$1" = "refresh-state" ]; then
               exit 0
             fi
+            if [ "$1" = "journal" ] && [ "$2" = "post-merge" ] && [ "${{3:-}}" = "--help" ]; then
+              exit 0
+            fi
             if [ "$1" = "journal" ] && [ "$2" = "post-merge" ]; then
               if [ -f {journal_path!s} ]; then
                 printf '%s\\n' {journal_path!s}
@@ -565,6 +568,49 @@ def test_hook_stage_mode_skips_follow_up_journal_pr(
     assert "journal post-merge --type pr-merged --no-edit --pr 55" in log_file.read_text(
         encoding="utf-8"
     )
+
+
+def test_hook_exits_clean_when_post_merge_subcommand_missing(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """Stale PATH cortex (pre-#303) lacks journal post-merge; hook must not
+    fail the merge path."""
+    project, bin_dir = project_repo
+    journal_path = project / ".cortex" / "journal" / "auto.md"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    log_file = bin_dir / "cortex.calls.log"
+    log_file.write_text("", encoding="utf-8")
+    stale_shim = bin_dir / "cortex"
+    ndjson_escaped = _DEFAULT_CHECK_TRIGGERS_NDJSON.replace("'", "'\\''")
+    stale_shim.write_text(
+        textwrap.dedent(
+            f"""\
+            #!/usr/bin/env bash
+            printf '%s\\n' "$*" >> {log_file!s}
+            if [ "${{1:-}}" = "--no-auto-sync" ]; then shift; fi
+            if [ "$1" = "check-triggers" ]; then
+              printf '%s\\n' '{ndjson_escaped}'
+              exit 0
+            fi
+            if [ "$1" = "journal" ] && [ "$2" = "post-merge" ] && [ "${{3:-}}" = "--help" ]; then
+              echo "unknown command" >&2
+              exit 2
+            fi
+            exit 1
+            """
+        ),
+        encoding="utf-8",
+    )
+    stale_shim.chmod(0o755)
+    head_before = _git("rev-parse", "main", cwd=project).stdout.strip()
+
+    result = _run_hook(project, bin_dir, extra_env={"TOUCHSTONE_MERGED_PR": "99"})
+
+    assert result.returncode == 0, result.stderr
+    assert "lacks 'journal post-merge'" in result.stderr
+    assert not journal_path.exists()
+    assert _git("rev-parse", "main", cwd=project).stdout.strip() == head_before
+    assert "journal post-merge --type pr-merged" not in log_file.read_text(encoding="utf-8")
 
 
 def test_hook_creates_feature_branch_before_journal_draft(
