@@ -46,7 +46,7 @@ It also defines a **protocol** — rules any AI agent follows: when to write to 
 - **Auditable.** Every summary cites its sources. Staleness is surfaced, not hidden.
 - **Budgeted.** Session-start context is compiled through `cortex manifest --budget <N>`; deeper lookup uses grep/retrieve rather than bloating every prompt.
 - **Humans stay in the loop.** AI proposes; humans promote. The memory improves by deliberate review, not drift.
-- **It's a protocol, not a product.** Any tool can implement it. If one vendor ships multi-layer memory natively, the spec is what they converge on.
+- **It's protocol-first, not a proprietary memory store.** Any tool can implement it. If one vendor ships multi-layer memory natively, the spec is what they converge on.
 
 **Status.** v1.6.1 is installable today — `brew tap autumngarage/cortex && brew install autumngarage/cortex/cortex && cortex init` (fully-qualified name side-steps an unrelated `cortex` in homebrew-core). The v0.9.0 three-target dogfood gate is closed: `conductor`, `touchstone`, and `vesper` all install Cortex via the Homebrew tap; nine real bugs surfaced and fixed in v0.9.0; the fresh-clone and bare-repo-degradation install flows are now CI fixtures. The design test case was real: the conductor incident (a stale `CLAUDE.md` claim steered an agent to recommend the wrong install path eight releases after the Homebrew tap had shipped) shaped both the `cortex doctor --audit-instructions` check and the release-event trigger (T1.10). The pattern held in the wild — the vesper install caught the same class of stale external claim (`YOUR_USERNAME/vesper.git` template URL still in the README). See [`docs/CASE-STUDIES.md`](./CASE-STUDIES.md) for both incidents documented. For composition with adjacent tools: a project running both Cortex and [codesight](https://github.com/autumngarage/codesight) gets `read .codesight/CODESIGHT.md → what the code does today` and `read .cortex/state.md → what's in flight, why, by when`. They compose by file contract — neither imports the other. LLM synthesis (`refresh-map`, `refresh-state --enhance`, `cortex next --enhance`) is deferred to v1.x. Any project can adopt the pattern by running the CLI or by hand-authoring the files and telling its AI to follow the protocol.
 
@@ -60,6 +60,16 @@ How to compare it:
 | RAG / retrieval | Fast lookup over a corpus | Cortex keeps retrieval subordinate to provenance, source hashes, and reviewable context artifacts. |
 | Agent framework | Planning and executing work | Cortex does not run the agent; it packages and checks the context the agent receives. |
 | Context integrity layer | Fresh, cited, bounded context | This is Cortex's home category: Markdown + git sources, generated manifests, budget checks, and doctor gates. |
+
+**Hosted product implication.** Cortex core is useful without an LLM: the local
+CLI can validate, compile, budget, and retrieve context deterministically. The
+commercial GitHub/Slack surface is where LLMs become central. A smart PR review
+needs a model to judge whether a diff disagrees with cited Cortex memory and to
+write the inline explanation. A useful Slack assistant needs a model to
+understand the question, choose evidence, and synthesize an answer. The planned
+pricing shape is therefore platform entitlement plus usage credits for
+LLM-backed invocations, with deterministic Context CI included. See
+[`HOSTED-PRICING.md`](./HOSTED-PRICING.md) for the canonical model.
 
 ---
 

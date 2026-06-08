@@ -89,6 +89,20 @@ Cortex is not just a folder of notes. It is the build, budget, and verification 
 
 The durable product decision is [Doctrine 0008](./.cortex/doctrine/0008-context-integrity-build-system.md).
 
+### Hosted GitHub and Slack surface
+
+The reference CLI does not need an LLM for deterministic Context CI: it can
+validate the file contract, build manifests, run exact lookup, and surface stale
+generated context locally. A future hosted Cortex product is different. GitHub
+PR review and Slack conversations need model-backed semantic judgment to feel
+smart: finding a real disagreement between a diff and Doctrine, verifying the
+evidence, or answering a natural-language project question.
+
+The canonical hosted pricing and cost model lives in
+[`docs/HOSTED-PRICING.md`](./docs/HOSTED-PRICING.md). In short: deterministic
+checks are part of the platform entitlement; LLM-backed GitHub and Slack actions
+consume credits based on actual provider usage.
+
 ### The Protocol
 
 The Protocol ([`.cortex/protocol.md`](./.cortex/protocol.md)) is the rule set any agent follows when working on a Cortex-enabled project. Two tiers:
