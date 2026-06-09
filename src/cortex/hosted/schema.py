@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS {schema}.source_documents (
     visibility jsonb NOT NULL DEFAULT '{{}}'::jsonb,
     metadata jsonb NOT NULL DEFAULT '{{}}'::jsonb,
     UNIQUE (tenant_id, document_hash),
+    UNIQUE (tenant_id, source_document_id, document_hash),
     UNIQUE (tenant_id, source_id, external_id, content_hash),
     CHECK (document_type <> ''),
     CHECK (external_id <> ''),
@@ -104,7 +105,7 @@ CREATE TABLE IF NOT EXISTS {schema}.source_documents (
 CREATE TABLE IF NOT EXISTS {schema}.source_spans (
     source_span_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id uuid NOT NULL REFERENCES {schema}.tenants (tenant_id),
-    source_document_id uuid NOT NULL REFERENCES {schema}.source_documents (source_document_id),
+    source_document_id uuid NOT NULL,
     source_document_hash text NOT NULL,
     span_hash text NOT NULL,
     start_offset integer NOT NULL,
@@ -119,8 +120,12 @@ CREATE TABLE IF NOT EXISTS {schema}.source_spans (
     CHECK (end_offset > start_offset),
     CHECK (excerpt <> ''),
     CHECK (permalink <> ''),
-    FOREIGN KEY (tenant_id, source_document_hash)
-        REFERENCES {schema}.source_documents (tenant_id, document_hash)
+    FOREIGN KEY (tenant_id, source_document_id, source_document_hash)
+        REFERENCES {schema}.source_documents (
+            tenant_id,
+            source_document_id,
+            document_hash
+        )
 );
 
 CREATE TABLE IF NOT EXISTS {schema}.ledger_events (

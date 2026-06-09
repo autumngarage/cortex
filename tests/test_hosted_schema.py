@@ -58,6 +58,7 @@ def test_schema_models_source_documents_as_immutable_snapshots() -> None:
     assert "document_hash text NOT NULL" in sql
     assert "source_revision text" in sql
     assert "UNIQUE (tenant_id, document_hash)" in sql
+    assert "UNIQUE (tenant_id, source_document_id, document_hash)" in sql
     assert "UNIQUE (tenant_id, source_id, external_id, content_hash)" in sql
     assert "BEFORE UPDATE ON cortex_hosted.source_documents" in sql
     assert "BEFORE DELETE ON cortex_hosted.source_documents" in sql
@@ -68,14 +69,15 @@ def test_schema_models_citable_source_spans() -> None:
     sql = create_schema_sql()
 
     assert "CREATE TABLE IF NOT EXISTS cortex_hosted.source_spans" in sql
-    assert (
-        "source_document_id uuid NOT NULL REFERENCES "
-        "cortex_hosted.source_documents (source_document_id)"
-    ) in sql
+    assert "source_document_id uuid NOT NULL" in sql
     assert "source_document_hash text NOT NULL" in sql
     assert (
-        "FOREIGN KEY (tenant_id, source_document_hash)\n"
-        "        REFERENCES cortex_hosted.source_documents (tenant_id, document_hash)"
+        "FOREIGN KEY (tenant_id, source_document_id, source_document_hash)\n"
+        "        REFERENCES cortex_hosted.source_documents (\n"
+        "            tenant_id,\n"
+        "            source_document_id,\n"
+        "            document_hash\n"
+        "        )"
     ) in sql
     assert "UNIQUE (tenant_id, span_hash)" in sql
     assert "BEFORE UPDATE ON cortex_hosted.source_spans" in sql
