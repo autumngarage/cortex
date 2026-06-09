@@ -67,13 +67,16 @@ def test_visible_source_document_ctes_enforce_source_and_visibility_boundaries()
     assert "doc.document_hash" in sql
 
 
-def test_visible_decision_guard_requires_a_visible_cited_span() -> None:
+def test_visible_decision_guard_requires_every_cited_span_to_be_visible() -> None:
     sql = visible_decision_version_exists_sql()
 
-    assert "EXISTS (" in sql
+    assert "cardinality(version.source_span_hashes) > 0" in sql
+    assert "FROM unnest(version.source_span_hashes) AS cited_span(span_hash)" in sql
+    assert "WHERE NOT EXISTS (" in sql
     assert "JOIN visible_docs AS visible_doc" in sql
     assert "visible_span.tenant_id = node.tenant_id" in sql
-    assert "visible_span.span_hash = ANY(version.source_span_hashes)" in sql
+    assert "visible_span.span_hash = cited_span.span_hash" in sql
+    assert "visible_span.span_hash = ANY(version.source_span_hashes)" not in sql
 
 
 def test_visibility_sql_rejects_unsafe_schema_identifier() -> None:

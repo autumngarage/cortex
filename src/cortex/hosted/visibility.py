@@ -134,18 +134,25 @@ def visible_decision_version_exists_sql(
     version_alias: str = "version",
     tenant_alias: str = "node",
 ) -> str:
-    """Return an EXISTS guard proving a decision cites at least one visible span."""
+    """Return a guard proving every decision citation resolves to visible source."""
 
     _validate_sql_identifier(schema)
     _validate_sql_identifier(version_alias)
     _validate_sql_identifier(tenant_alias)
-    return f"""EXISTS (
-        SELECT 1
-        FROM {schema}.source_spans AS visible_span
-        JOIN visible_docs AS visible_doc
-          ON visible_doc.source_document_id = visible_span.source_document_id
-        WHERE visible_span.tenant_id = {tenant_alias}.tenant_id
-          AND visible_span.span_hash = ANY({version_alias}.source_span_hashes)
+    return f"""(
+        cardinality({version_alias}.source_span_hashes) > 0
+        AND NOT EXISTS (
+            SELECT 1
+            FROM unnest({version_alias}.source_span_hashes) AS cited_span(span_hash)
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM {schema}.source_spans AS visible_span
+                JOIN visible_docs AS visible_doc
+                  ON visible_doc.source_document_id = visible_span.source_document_id
+                WHERE visible_span.tenant_id = {tenant_alias}.tenant_id
+                  AND visible_span.span_hash = cited_span.span_hash
+            )
+        )
     )"""
 
 
