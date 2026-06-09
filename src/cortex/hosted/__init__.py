@@ -13,6 +13,14 @@ from cortex.hosted.ledger_events import (
     derive_idempotency_key,
     ledger_event_insert_sql,
 )
+from cortex.hosted.provenance import (
+    ProvenanceValidationError,
+    SourceDocument,
+    SourceSpan,
+    content_hash,
+    source_document_insert_sql,
+    source_span_insert_sql,
+)
 from cortex.hosted.schema import HOSTED_SCHEMA_VERSION, create_schema_sql
 from cortex.hosted.storage import (
     CANONICAL_HOSTED_STORE,
@@ -30,10 +38,16 @@ __all__ = [
     "LedgerEvent",
     "LedgerEventType",
     "LedgerEventValidationError",
+    "ProvenanceValidationError",
+    "SourceDocument",
+    "SourceSpan",
     "StoreBoundaryError",
+    "content_hash",
     "create_schema_sql",
     "derive_idempotency_key",
     "ledger_event_insert_sql",
+    "source_document_insert_sql",
+    "source_span_insert_sql",
     "validate_canonical_store",
     "validate_rebuildable_cache_store",
 ]

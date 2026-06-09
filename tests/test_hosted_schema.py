@@ -51,6 +51,38 @@ def test_schema_tracks_rebuildable_projections_and_traces() -> None:
     assert "candidate sets, scores, reasons, omitted counts" in sql
 
 
+def test_schema_models_source_documents_as_immutable_snapshots() -> None:
+    sql = create_schema_sql()
+
+    assert "CREATE TABLE IF NOT EXISTS cortex_hosted.source_documents" in sql
+    assert "document_hash text NOT NULL" in sql
+    assert "source_revision text" in sql
+    assert "UNIQUE (tenant_id, document_hash)" in sql
+    assert "UNIQUE (tenant_id, source_id, external_id, content_hash)" in sql
+    assert "BEFORE UPDATE ON cortex_hosted.source_documents" in sql
+    assert "BEFORE DELETE ON cortex_hosted.source_documents" in sql
+    assert "Immutable source snapshots keyed by content hash" in sql
+
+
+def test_schema_models_citable_source_spans() -> None:
+    sql = create_schema_sql()
+
+    assert "CREATE TABLE IF NOT EXISTS cortex_hosted.source_spans" in sql
+    assert (
+        "source_document_id uuid NOT NULL REFERENCES "
+        "cortex_hosted.source_documents (source_document_id)"
+    ) in sql
+    assert "source_document_hash text NOT NULL" in sql
+    assert (
+        "FOREIGN KEY (tenant_id, source_document_hash)\n"
+        "        REFERENCES cortex_hosted.source_documents (tenant_id, document_hash)"
+    ) in sql
+    assert "UNIQUE (tenant_id, span_hash)" in sql
+    assert "BEFORE UPDATE ON cortex_hosted.source_spans" in sql
+    assert "BEFORE DELETE ON cortex_hosted.source_spans" in sql
+    assert "Citable source excerpts derived from immutable source document snapshots" in sql
+
+
 def test_schema_records_version() -> None:
     sql = create_schema_sql()
 

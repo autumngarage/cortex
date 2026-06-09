@@ -85,14 +85,18 @@ CREATE TABLE IF NOT EXISTS {schema}.source_documents (
     source_timestamp timestamptz NOT NULL,
     ingested_at timestamptz NOT NULL DEFAULT now(),
     content_hash text NOT NULL,
+    document_hash text NOT NULL,
+    source_revision text,
     visibility jsonb NOT NULL DEFAULT '{{}}'::jsonb,
     metadata jsonb NOT NULL DEFAULT '{{}}'::jsonb,
-    UNIQUE (tenant_id, source_id, external_id),
+    UNIQUE (tenant_id, document_hash),
+    UNIQUE (tenant_id, source_id, external_id, content_hash),
     CHECK (document_type <> ''),
     CHECK (external_id <> ''),
     CHECK (permalink <> ''),
     CHECK (author_ref <> ''),
     CHECK (content_hash ~ '^[a-f0-9]{{64}}$'),
+    CHECK (document_hash ~ '^[a-f0-9]{{64}}$'),
     CHECK (jsonb_typeof(visibility) = 'object'),
     CHECK (jsonb_typeof(metadata) = 'object')
 );
@@ -101,6 +105,7 @@ CREATE TABLE IF NOT EXISTS {schema}.source_spans (
     source_span_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id uuid NOT NULL REFERENCES {schema}.tenants (tenant_id),
     source_document_id uuid NOT NULL REFERENCES {schema}.source_documents (source_document_id),
+    source_document_hash text NOT NULL,
     span_hash text NOT NULL,
     start_offset integer NOT NULL,
     end_offset integer NOT NULL,
@@ -108,11 +113,14 @@ CREATE TABLE IF NOT EXISTS {schema}.source_spans (
     permalink text NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (tenant_id, span_hash),
+    CHECK (source_document_hash ~ '^[a-f0-9]{{64}}$'),
     CHECK (span_hash ~ '^[a-f0-9]{{64}}$'),
     CHECK (start_offset >= 0),
     CHECK (end_offset > start_offset),
     CHECK (excerpt <> ''),
-    CHECK (permalink <> '')
+    CHECK (permalink <> ''),
+    FOREIGN KEY (tenant_id, source_document_hash)
+        REFERENCES {schema}.source_documents (tenant_id, document_hash)
 );
 
 CREATE TABLE IF NOT EXISTS {schema}.ledger_events (
@@ -299,6 +307,16 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION {schema}.prevent_provenance_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION 'source provenance is immutable; attempted %', TG_OP
+        USING ERRCODE = '55000';
+END;
+$$;
+
 DROP TRIGGER IF EXISTS ledger_events_no_update ON {schema}.ledger_events;
 CREATE TRIGGER ledger_events_no_update
     BEFORE UPDATE ON {schema}.ledger_events
@@ -309,6 +327,26 @@ CREATE TRIGGER ledger_events_no_delete
     BEFORE DELETE ON {schema}.ledger_events
     FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_ledger_event_mutation();
 
+DROP TRIGGER IF EXISTS source_documents_no_update ON {schema}.source_documents;
+CREATE TRIGGER source_documents_no_update
+    BEFORE UPDATE ON {schema}.source_documents
+    FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_provenance_mutation();
+
+DROP TRIGGER IF EXISTS source_documents_no_delete ON {schema}.source_documents;
+CREATE TRIGGER source_documents_no_delete
+    BEFORE DELETE ON {schema}.source_documents
+    FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_provenance_mutation();
+
+DROP TRIGGER IF EXISTS source_spans_no_update ON {schema}.source_spans;
+CREATE TRIGGER source_spans_no_update
+    BEFORE UPDATE ON {schema}.source_spans
+    FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_provenance_mutation();
+
+DROP TRIGGER IF EXISTS source_spans_no_delete ON {schema}.source_spans;
+CREATE TRIGGER source_spans_no_delete
+    BEFORE DELETE ON {schema}.source_spans
+    FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_provenance_mutation();
+
 COMMENT ON TABLE {schema}.ledger_events IS
     'Canonical append-only hosted Cortex ledger. Mutations are forbidden; corrections append new events.';
 
@@ -317,6 +355,12 @@ COMMENT ON TABLE {schema}.decision_nodes IS
 
 COMMENT ON TABLE {schema}.decision_versions IS
     'Immutable decision projection snapshots rebuilt from ledger_events and source spans.';
+
+COMMENT ON TABLE {schema}.source_documents IS
+    'Immutable source snapshots keyed by content hash so source drift does not overwrite citations.';
+
+COMMENT ON TABLE {schema}.source_spans IS
+    'Citable source excerpts derived from immutable source document snapshots.';
 
 COMMENT ON TABLE {schema}.decision_scopes IS
     'Structural search projection rebuilt from decision_versions and ledger_events.';

@@ -37,6 +37,14 @@ Every user-visible answer or PR finding must trace back to:
 Missing provenance fails closed. The system should say it does not know rather
 than produce an uncited answer.
 
+## Provenance snapshots
+
+Source documents are immutable snapshots keyed by content hash. Re-ingesting the
+same external document with changed content creates a new document snapshot
+instead of overwriting the old one. Source spans are derived from a document
+content hash plus offsets and excerpt hash, so existing citations survive
+re-derivation and source drift can be detected explicitly.
+
 ## Stage 0 issue map
 
 - `#460` fixes the canonical storage boundary.
