@@ -97,6 +97,14 @@ from cortex.hosted.storage import (
     validate_canonical_store,
     validate_rebuildable_cache_store,
 )
+from cortex.hosted.visibility import (
+    SourceVisibilityScope,
+    VisibilityBoundaryValidationError,
+    normalize_visible_source_ids,
+    visibility_sql_parameters,
+    visible_decision_version_exists_sql,
+    visible_source_documents_ctes,
+)
 
 __all__ = [
     "ASK_LEDGER_RETRIEVAL_CONFIG_VERSION",
@@ -145,11 +153,13 @@ __all__ = [
     "SourceDocument",
     "SourceRank",
     "SourceSpan",
+    "SourceVisibilityScope",
     "StoreBoundaryError",
     "VectorIndexConfig",
     "VectorMetric",
     "VectorRecallReport",
     "VectorRecallSample",
+    "VisibilityBoundaryValidationError",
     "approximate_vector_search_sql",
     "ask_ledger_retrieval_sql",
     "build_ask_ledger_context_pack",
@@ -170,6 +180,7 @@ __all__ = [
     "exact_vector_search_sql",
     "ledger_event_insert_sql",
     "normalize_scope_value",
+    "normalize_visible_source_ids",
     "query_scope_parameters",
     "reciprocal_rank_fusion",
     "retrieval_trace_insert_sql",
@@ -178,4 +189,7 @@ __all__ = [
     "source_span_insert_sql",
     "validate_canonical_store",
     "validate_rebuildable_cache_store",
+    "visibility_sql_parameters",
+    "visible_decision_version_exists_sql",
+    "visible_source_documents_ctes",
 ]

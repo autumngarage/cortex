@@ -84,9 +84,18 @@ def test_embedding_projection_row_rejects_non_rebuildable_inputs() -> None:
 def test_embedding_projection_source_sql_rebuilds_from_versions_and_source_spans() -> None:
     sql = embedding_projection_source_sql()
 
+    assert "visible_sources AS" in sql
+    assert "visible_docs AS" in sql
+    assert "source.source_id = ANY(%(visible_source_ids)s::uuid[])" in sql
+    assert "%(visible_source_ids)s::uuid[] IS NULL" not in sql
+    assert "%(repo_installation_id)s::text" in sql
+    assert "slack_channel_excluded" in sql
+    assert "revoked" in sql
+    assert "deleted" in sql
     assert "projection_sources AS" in sql
     assert "'decision_version'::text AS item_type" in sql
     assert "version.decision_text AS text" in sql
+    assert "JOIN visible_docs AS visible_doc" in sql
     assert "'source_span'::text AS item_type" in sql
     assert "span.excerpt AS text" in sql
     assert "source.repo_id" in sql
@@ -104,9 +113,11 @@ def test_embedding_projection_counts_and_orphan_delete_sql_are_source_of_truth_b
     assert "orphan_count" in counts_sql
     assert "filtered_sources" in counts_sql
     assert "target_embeddings" in counts_sql
+    assert "visible_sources AS" not in counts_sql
     assert "DELETE FROM cortex_hosted.embeddings AS embedding" in delete_sql
     assert "NOT EXISTS (" in delete_sql
     assert "projection_sources AS" in delete_sql
+    assert "visible_sources AS" not in delete_sql
 
 
 def test_embedding_upsert_sql_keys_projection_by_dimension() -> None:

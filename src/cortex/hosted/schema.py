@@ -7,7 +7,7 @@ import re
 from cortex.hosted.ledger_events import LedgerEventType
 from cortex.hosted.scopes import ScopeType
 
-HOSTED_SCHEMA_VERSION = 5
+HOSTED_SCHEMA_VERSION = 6
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -598,6 +598,18 @@ CREATE INDEX IF NOT EXISTS decision_scopes_config_key_idx
 CREATE INDEX IF NOT EXISTS source_spans_hash_idx
     ON {schema}.source_spans (tenant_id, span_hash);
 
+CREATE INDEX IF NOT EXISTS sources_tenant_repo_visibility_idx
+    ON {schema}.sources (tenant_id, repo_id, source_id);
+
+CREATE INDEX IF NOT EXISTS sources_visibility_gin_idx
+    ON {schema}.sources USING gin (visibility);
+
+CREATE INDEX IF NOT EXISTS source_documents_tenant_source_visibility_idx
+    ON {schema}.source_documents (tenant_id, source_id, source_document_id);
+
+CREATE INDEX IF NOT EXISTS source_documents_visibility_gin_idx
+    ON {schema}.source_documents USING gin (visibility);
+
 CREATE INDEX IF NOT EXISTS decision_versions_text_fts_idx
     ON {schema}.decision_versions
     USING gin (to_tsvector('english', decision_text));
@@ -698,8 +710,17 @@ COMMENT ON TABLE {schema}.decision_nodes IS
 COMMENT ON TABLE {schema}.decision_versions IS
     'Immutable decision projection snapshots rebuilt from ledger_events and source spans.';
 
+COMMENT ON TABLE {schema}.sources IS
+    'External source authorization boundary. Retrieval must filter by tenant, explicit source IDs, repo/install scope, and deny visibility flags before scoring.';
+
+COMMENT ON COLUMN {schema}.sources.visibility IS
+    'JSON visibility flags for source authorization, including deleted, revoked, slack_channel_excluded, and repo_installation_revoked.';
+
 COMMENT ON TABLE {schema}.source_documents IS
     'Immutable source snapshots keyed by content hash so source drift does not overwrite citations.';
+
+COMMENT ON COLUMN {schema}.source_documents.visibility IS
+    'JSON visibility flags for source-document authorization, including deleted, revoked, slack_channel_excluded, and repo_installation_revoked.';
 
 COMMENT ON TABLE {schema}.source_spans IS
     'Citable source excerpts derived from immutable source document snapshots.';

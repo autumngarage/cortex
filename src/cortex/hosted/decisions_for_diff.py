@@ -20,6 +20,12 @@ from cortex.hosted.ask_ledger import (
 )
 from cortex.hosted.embeddings import HOSTED_VECTOR_INDEX_CONFIG_VERSION
 from cortex.hosted.scopes import ChangedSurface, QueryScope, query_scope_parameters
+from cortex.hosted.visibility import (
+    SourceVisibilityScope,
+    VisibilityBoundaryValidationError,
+    visible_decision_version_exists_sql,
+    visible_source_documents_ctes,
+)
 
 DECISIONS_FOR_DIFF_RETRIEVAL_CONFIG_VERSION = (
     f"decisions-for-diff-v2+{HOSTED_VECTOR_INDEX_CONFIG_VERSION}"
@@ -44,7 +50,8 @@ class DecisionsForDiffQuery:
     changed_surface: ChangedSurface = field(default_factory=ChangedSurface)
     repo_id: str | None = None
     diff_text: str = ""
-    visible_source_ids: tuple[str, ...] | None = None
+    visible_source_ids: tuple[str, ...] = ()
+    repo_installation_id: str | None = None
     limit: int = DEFAULT_DECISIONS_FOR_DIFF_LIMIT
     retrieval_config_version: str = DECISIONS_FOR_DIFF_RETRIEVAL_CONFIG_VERSION
     embedding_model_id: str | None = None
@@ -67,7 +74,8 @@ class DecisionsForDiffQuery:
         owners: Sequence[str] = (),
         services: Sequence[str] = (),
         diff_text: str = "",
-        visible_source_ids: Sequence[str] | None = None,
+        visible_source_ids: Sequence[str] = (),
+        repo_installation_id: str | None = None,
         limit: int = DEFAULT_DECISIONS_FOR_DIFF_LIMIT,
         embedding_model_id: str | None = None,
         embedding_epoch: str | None = None,
@@ -87,9 +95,8 @@ class DecisionsForDiffQuery:
                 issue_refs=tuple(issue_refs),
             ),
             diff_text=diff_text,
-            visible_source_ids=None
-            if visible_source_ids is None
-            else tuple(visible_source_ids),
+            visible_source_ids=tuple(visible_source_ids),
+            repo_installation_id=repo_installation_id,
             limit=limit,
             embedding_model_id=embedding_model_id,
             embedding_epoch=embedding_epoch,
@@ -102,9 +109,15 @@ class DecisionsForDiffQuery:
         _require_uuid("tenant_id", self.tenant_id)
         if self.repo_id is not None:
             _require_uuid("repo_id", self.repo_id)
-        if self.visible_source_ids is not None:
-            for source_id in self.visible_source_ids:
-                _require_uuid("visible_source_ids", source_id)
+        try:
+            visibility_scope = SourceVisibilityScope(
+                visible_source_ids=self.visible_source_ids,
+                repo_installation_id=self.repo_installation_id,
+            )
+        except VisibilityBoundaryValidationError as exc:
+            raise DecisionsForDiffValidationError(str(exc)) from exc
+        object.__setattr__(self, "visible_source_ids", visibility_scope.visible_source_ids)
+        object.__setattr__(self, "repo_installation_id", visibility_scope.repo_installation_id)
         if not 1 <= self.limit <= MAX_DECISIONS_FOR_DIFF_LIMIT:
             raise DecisionsForDiffValidationError(
                 f"limit must be between 1 and {MAX_DECISIONS_FOR_DIFF_LIMIT}"
@@ -154,13 +167,12 @@ class DecisionsForDiffQuery:
                 else list(self.embedding_vector),
                 "limit": self.limit,
                 "query_text": self.query_text,
+                "repo_installation_id": self.repo_installation_id,
                 "repo_id": self.repo_id,
                 "retrieval_config_version": self.retrieval_config_version,
                 "statuses": _status_values(self.statuses),
                 "tenant_id": self.tenant_id,
-                "visible_source_ids": None
-                if self.visible_source_ids is None
-                else list(self.visible_source_ids),
+                "visible_source_ids": list(self.visible_source_ids),
             }
         )
 
@@ -169,9 +181,8 @@ class DecisionsForDiffQuery:
             "tenant_id": self.tenant_id,
             "repo_id": self.repo_id,
             "query": self.query_text,
-            "visible_source_ids": (
-                None if self.visible_source_ids is None else list(self.visible_source_ids)
-            ),
+            "repo_installation_id": self.repo_installation_id,
+            "visible_source_ids": list(self.visible_source_ids),
             "limit": self.limit,
             "statuses": _status_values(self.statuses),
             "embedding_model_id": self.embedding_model_id,
@@ -331,6 +342,12 @@ def decisions_for_diff_retrieval_sql(schema: str = "cortex_hosted") -> str:
     trigram_weight = SOURCE_WEIGHTS[CandidateSource.TRIGRAM]
     vector_weight = SOURCE_WEIGHTS[CandidateSource.VECTOR]
     graph_weight = SOURCE_WEIGHTS[CandidateSource.GRAPH]
+    visible_ctes = visible_source_documents_ctes(schema)
+    visible_version_guard = visible_decision_version_exists_sql(
+        schema=schema,
+        version_alias="version",
+        tenant_alias="node",
+    )
     return f"""
 WITH query_scopes AS (
     SELECT *
@@ -344,15 +361,7 @@ WITH query_scopes AS (
 lexical_query AS (
     SELECT NULLIF(%(query)s, '') AS query_text
 ),
-visible_docs AS (
-    SELECT source_document_id, source_id
-    FROM {schema}.source_documents
-    WHERE tenant_id = %(tenant_id)s
-      AND (
-          %(visible_source_ids)s::uuid[] IS NULL
-          OR source_id = ANY(%(visible_source_ids)s::uuid[])
-      )
-),
+{visible_ctes},
 base_versions AS (
     SELECT
         node.decision_node_id,
@@ -369,13 +378,11 @@ base_versions AS (
     WHERE node.tenant_id = %(tenant_id)s
       AND (%(repo_id)s::uuid IS NULL OR node.repo_id IS NULL OR node.repo_id = %(repo_id)s::uuid)
       AND node.status = ANY(%(statuses)s::text[])
+      AND {visible_version_guard}
 ),
 graph_size AS (
     SELECT count(*)::integer AS graph_node_count
-    FROM {schema}.decision_nodes AS node
-    WHERE node.tenant_id = %(tenant_id)s
-      AND (%(repo_id)s::uuid IS NULL OR node.repo_id IS NULL OR node.repo_id = %(repo_id)s::uuid)
-      AND node.status = ANY(%(statuses)s::text[])
+    FROM base_versions
 ),
 scope_candidates AS (
     SELECT DISTINCT ON (version.decision_node_id)

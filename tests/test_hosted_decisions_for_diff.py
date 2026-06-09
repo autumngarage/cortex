@@ -71,6 +71,7 @@ def test_query_from_diff_metadata_parses_surface_and_sql_parameters() -> None:
         owners=("@Platform-Team",),
         services=("Hosted_API",),
         visible_source_ids=(SOURCE_ID,),
+        repo_installation_id="install-123",
         embedding_model_id="text-embedding-3-small",
         embedding_epoch="2026-06-09",
         embedding_vector=(0.1, 0.2, 0.3),
@@ -81,6 +82,7 @@ def test_query_from_diff_metadata_parses_surface_and_sql_parameters() -> None:
     assert params["tenant_id"] == TENANT_ID
     assert params["repo_id"] == REPO_ID
     assert params["visible_source_ids"] == [SOURCE_ID]
+    assert params["repo_installation_id"] == "install-123"
     assert params["statuses"] == ["candidate", "confirmed"]
     assert params["scope_types"] == [
         "path",
@@ -107,12 +109,16 @@ def test_query_from_diff_metadata_parses_surface_and_sql_parameters() -> None:
 
 def test_query_requires_surface_or_diff_text_and_caps_evaluator_budget() -> None:
     with pytest.raises(DecisionsForDiffValidationError, match="changed surface or diff_text"):
-        DecisionsForDiffQuery(tenant_id=TENANT_ID)
+        DecisionsForDiffQuery(tenant_id=TENANT_ID, visible_source_ids=(SOURCE_ID,))
+
+    with pytest.raises(DecisionsForDiffValidationError, match="authorized source"):
+        DecisionsForDiffQuery(tenant_id=TENANT_ID, diff_text="touch hosted retrieval")
 
     with pytest.raises(DecisionsForDiffValidationError, match="between 1 and"):
         DecisionsForDiffQuery(
             tenant_id=TENANT_ID,
             diff_text="touch hosted retrieval",
+            visible_source_ids=(SOURCE_ID,),
             limit=MAX_DECISIONS_FOR_DIFF_LIMIT + 1,
         )
 
@@ -150,14 +156,29 @@ def test_query_hash_changes_for_diff_text_visibility_and_embeddings() -> None:
         embedding_epoch="2026-06-09",
         embedding_vector=(0.1, 0.2, 0.4),
     )
+    changed_installation = DecisionsForDiffQuery(
+        tenant_id=TENANT_ID,
+        diff_text="touch hosted retrieval",
+        visible_source_ids=(SOURCE_ID,),
+        repo_installation_id="install-456",
+        embedding_model_id="text-embedding-3-small",
+        embedding_epoch="2026-06-09",
+        embedding_vector=(0.1, 0.2, 0.3),
+    )
 
     assert base.query_hash != changed_text.query_hash
     assert base.query_hash != changed_visibility.query_hash
     assert base.query_hash != changed_embedding.query_hash
+    assert base.query_hash != changed_installation.query_hash
 
 
 def test_candidate_pack_from_rows_caps_candidates_and_records_growth_metrics() -> None:
-    query = DecisionsForDiffQuery(tenant_id=TENANT_ID, diff_text="hosted retrieval", limit=2)
+    query = DecisionsForDiffQuery(
+        tenant_id=TENANT_ID,
+        diff_text="hosted retrieval",
+        visible_source_ids=(SOURCE_ID,),
+        limit=2,
+    )
     pack = build_decisions_for_diff_candidate_pack(
         query=query,
         graph_snapshot_hash=GRAPH_HASH,
@@ -177,7 +198,11 @@ def test_candidate_pack_from_rows_caps_candidates_and_records_growth_metrics() -
 
 
 def test_candidate_pack_rejects_uncited_or_malformed_rows() -> None:
-    query = DecisionsForDiffQuery(tenant_id=TENANT_ID, diff_text="hosted retrieval")
+    query = DecisionsForDiffQuery(
+        tenant_id=TENANT_ID,
+        diff_text="hosted retrieval",
+        visible_source_ids=(SOURCE_ID,),
+    )
 
     with pytest.raises(DecisionsForDiffValidationError, match="must include citations"):
         build_decisions_for_diff_candidate_pack(
@@ -205,7 +230,12 @@ def test_candidate_pack_rejects_uncited_or_malformed_rows() -> None:
 
 
 def test_candidate_trace_records_replay_fields_and_metrics() -> None:
-    query = DecisionsForDiffQuery(tenant_id=TENANT_ID, diff_text="hosted retrieval", limit=1)
+    query = DecisionsForDiffQuery(
+        tenant_id=TENANT_ID,
+        diff_text="hosted retrieval",
+        visible_source_ids=(SOURCE_ID,),
+        limit=1,
+    )
     pack = build_decisions_for_diff_candidate_pack(
         query=query,
         graph_snapshot_hash=GRAPH_HASH,
@@ -234,8 +264,15 @@ def test_decisions_for_diff_retrieval_sql_includes_hybrid_sources_and_metrics() 
     assert "lexical_query AS" in sql
     assert "visible_docs AS" in sql
     assert "%(visible_source_ids)s::uuid[]" in sql
+    assert "%(visible_source_ids)s::uuid[] IS NULL" not in sql
+    assert "%(repo_installation_id)s::text" in sql
+    assert "slack_channel_excluded" in sql
+    assert "revoked" in sql
+    assert "deleted" in sql
     assert "version.decision_version_id = node.current_version_id" in sql
+    assert "JOIN visible_docs AS visible_doc" in sql
     assert "node.status = ANY(%(statuses)s::text[])" in sql
+    assert "FROM base_versions" in sql
     assert "scope_candidates AS" in sql
     assert "fts_candidates AS" in sql
     assert "trigram_candidates AS" in sql
@@ -266,7 +303,11 @@ def test_candidate_payload_preserves_status_citations_and_text() -> None:
         score=1.0,
         reason_codes=("scope:path:src/cortex/hosted/schema.py",),
         cited_spans=build_decisions_for_diff_candidate_pack(
-            query=DecisionsForDiffQuery(tenant_id=TENANT_ID, diff_text="hosted retrieval"),
+            query=DecisionsForDiffQuery(
+                tenant_id=TENANT_ID,
+                diff_text="hosted retrieval",
+                visible_source_ids=(SOURCE_ID,),
+            ),
             graph_snapshot_hash=GRAPH_HASH,
             rows=(_row(status="candidate"),),
         ).candidates[0].cited_spans,

@@ -37,6 +37,31 @@ Every user-visible answer or PR finding must trace back to:
 Missing provenance fails closed. The system should say it does not know rather
 than produce an uncited answer.
 
+## Visibility boundary
+
+Hosted retrieval is deny-by-default. `ask_ledger`, `decisions_for_diff`, and raw
+embedding projection source queries must receive a non-empty list of source IDs
+already authorized for the request. Missing authorization raises a visible
+validation error; it must never fall back to a broader tenant or repo search.
+
+Every retrieval query starts from `tenant_id`, `visible_source_ids`, repo scope,
+optional repo-install scope, and source/document visibility flags before ranking
+or assembling LLM context. The shared visibility CTE excludes sources and
+documents marked `deleted`, `revoked`, `slack_channel_excluded`, or
+`repo_installation_revoked`. GitHub-backed sources also have to match the
+provided repo-installation ID when one is supplied.
+
+The service-layer permission adapter owns translating provider permissions into
+`visible_source_ids`: Slack channel membership/exclusions, GitHub repo install
+scope, and source revocation all have to be resolved before retrieval. Prompt
+packs, retrieval traces, and user-facing logs may contain only cited text that
+survived this boundary.
+
+Postgres row-level security is not required for the local Stage 0 proof while a
+single trusted service account owns all access. It is required before any
+external design-partner or production multi-tenant traffic, because app-layer
+authorization is a necessary boundary but not the last line of defense.
+
 ## Provenance snapshots
 
 Source documents are immutable snapshots keyed by content hash. Re-ingesting the
@@ -52,3 +77,5 @@ re-derivation and source drift can be detected explicitly.
 - `#462` will deepen source document/span ingestion and stale-source checks.
 - `#463` will build the structural scope index.
 - `#464` and `#465` will add `ask_ledger` and `decisions_for_diff` retrieval.
+- `#468` adds fail-closed tenant/source visibility boundaries before retrieval
+  ranking and raw projection text.

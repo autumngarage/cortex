@@ -68,6 +68,7 @@ def test_ask_ledger_query_parameters_include_scope_visibility_and_vector_inputs(
         query="what did we decide about hosted storage?",
         query_scopes=scopes,
         visible_source_ids=(SOURCE_ID,),
+        repo_installation_id="install-123",
         exact_refs=("docs/hosted-ledger.md",),
         embedding_model_id="text-embedding-3-small",
         embedding_epoch="2026-06-09",
@@ -79,6 +80,7 @@ def test_ask_ledger_query_parameters_include_scope_visibility_and_vector_inputs(
     assert params["tenant_id"] == TENANT_ID
     assert params["repo_id"] == REPO_ID
     assert params["visible_source_ids"] == [SOURCE_ID]
+    assert params["repo_installation_id"] == "install-123"
     assert params["exact_refs"] == ["docs/hosted-ledger.md"]
     assert params["scope_types"] == ["config_key"]
     assert params["normalized_values"] == ["cortex.hosted.url"]
@@ -92,8 +94,14 @@ def test_ask_ledger_embedding_inputs_are_atomic() -> None:
         AskLedgerQuery(
             tenant_id=TENANT_ID,
             query="hosted storage",
+            visible_source_ids=(SOURCE_ID,),
             embedding_model_id="text-embedding-3-small",
         )
+
+
+def test_ask_ledger_query_requires_explicit_visible_sources() -> None:
+    with pytest.raises(AskLedgerValidationError, match="authorized source"):
+        AskLedgerQuery(tenant_id=TENANT_ID, query="hosted storage")
 
 
 def test_query_hash_includes_visibility_limit_config_and_embedding_inputs() -> None:
@@ -158,7 +166,11 @@ def test_rank_fusion_keeps_reason_codes_and_weights_exact_above_vector() -> None
 
 
 def test_context_pack_returns_cited_candidates_and_omitted_counts() -> None:
-    query = AskLedgerQuery(tenant_id=TENANT_ID, query="hosted storage")
+    query = AskLedgerQuery(
+        tenant_id=TENANT_ID,
+        query="hosted storage",
+        visible_source_ids=(SOURCE_ID,),
+    )
     pack = build_cited_context_pack(
         query_hash=query.query_hash,
         retrieval_config_version=ASK_LEDGER_RETRIEVAL_CONFIG_VERSION,
@@ -178,7 +190,12 @@ def test_context_pack_returns_cited_candidates_and_omitted_counts() -> None:
 
 
 def test_ask_ledger_context_pack_from_rows_returns_bounded_cited_context() -> None:
-    query = AskLedgerQuery(tenant_id=TENANT_ID, query="hosted storage", limit=1)
+    query = AskLedgerQuery(
+        tenant_id=TENANT_ID,
+        query="hosted storage",
+        visible_source_ids=(SOURCE_ID,),
+        limit=1,
+    )
     pack = build_ask_ledger_context_pack(
         query=query,
         graph_snapshot_hash=GRAPH_HASH,
@@ -208,7 +225,11 @@ def test_ask_ledger_context_pack_from_rows_returns_bounded_cited_context() -> No
 
 
 def test_ask_ledger_context_pack_from_rows_rejects_malformed_payloads() -> None:
-    query = AskLedgerQuery(tenant_id=TENANT_ID, query="hosted storage")
+    query = AskLedgerQuery(
+        tenant_id=TENANT_ID,
+        query="hosted storage",
+        visible_source_ids=(SOURCE_ID,),
+    )
 
     with pytest.raises(AskLedgerValidationError, match="reason_codes must be a string array"):
         build_ask_ledger_context_pack(
@@ -228,7 +249,11 @@ def test_ask_ledger_context_pack_from_rows_rejects_malformed_payloads() -> None:
 
 
 def test_context_pack_fails_closed_when_no_cited_support_exists() -> None:
-    query = AskLedgerQuery(tenant_id=TENANT_ID, query="hosted storage")
+    query = AskLedgerQuery(
+        tenant_id=TENANT_ID,
+        query="hosted storage",
+        visible_source_ids=(SOURCE_ID,),
+    )
     pack = build_cited_context_pack(
         query_hash=query.query_hash,
         retrieval_config_version=ASK_LEDGER_RETRIEVAL_CONFIG_VERSION,
@@ -244,7 +269,11 @@ def test_context_pack_fails_closed_when_no_cited_support_exists() -> None:
 
 
 def test_ready_context_pack_rejects_uncited_candidates() -> None:
-    query = AskLedgerQuery(tenant_id=TENANT_ID, query="hosted storage")
+    query = AskLedgerQuery(
+        tenant_id=TENANT_ID,
+        query="hosted storage",
+        visible_source_ids=(SOURCE_ID,),
+    )
 
     with pytest.raises(AskLedgerValidationError, match="must include citations"):
         CitedContextPack(
@@ -256,7 +285,11 @@ def test_ready_context_pack_rejects_uncited_candidates() -> None:
 
 
 def test_retrieval_trace_records_candidates_scores_reasons_and_versions() -> None:
-    query = AskLedgerQuery(tenant_id=TENANT_ID, query="hosted storage")
+    query = AskLedgerQuery(
+        tenant_id=TENANT_ID,
+        query="hosted storage",
+        visible_source_ids=(SOURCE_ID,),
+    )
     pack = build_cited_context_pack(
         query_hash=query.query_hash,
         retrieval_config_version=ASK_LEDGER_RETRIEVAL_CONFIG_VERSION,
@@ -282,7 +315,14 @@ def test_ask_ledger_retrieval_sql_includes_hybrid_sources_visibility_and_citatio
     assert "WITH query_scopes AS" in sql
     assert "visible_docs AS" in sql
     assert "%(visible_source_ids)s::uuid[]" in sql
+    assert "%(visible_source_ids)s::uuid[] IS NULL" not in sql
+    assert "%(repo_installation_id)s::text" in sql
+    assert "slack_channel_excluded" in sql
+    assert "revoked" in sql
+    assert "deleted" in sql
     assert "version.decision_version_id = node.current_version_id" in sql
+    assert "base_versions AS" in sql
+    assert "JOIN visible_docs AS visible_doc" in sql
     assert "exact_candidates AS" in sql
     assert "scope_candidates AS" in sql
     assert "fts_candidates AS" in sql
