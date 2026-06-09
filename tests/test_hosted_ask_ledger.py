@@ -296,6 +296,8 @@ def test_ask_ledger_retrieval_sql_includes_hybrid_sources_visibility_and_citatio
     assert "jsonb_agg(" in sql
     assert "source_document_id" in sql
     assert "source_id" in sql
+    assert "bounded.decision_node_id::text AS decision_node_id" in sql
+    assert "bounded.decision_version_id::text AS decision_version_id" in sql
 
 
 def test_retrieval_trace_insert_sql_persists_replay_fields() -> None:

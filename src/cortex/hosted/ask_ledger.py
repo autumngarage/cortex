@@ -615,8 +615,8 @@ span_rows AS (
     GROUP BY bounded.decision_node_id
 )
 SELECT
-    bounded.decision_node_id,
-    bounded.decision_version_id,
+    bounded.decision_node_id::text AS decision_node_id,
+    bounded.decision_version_id::text AS decision_version_id,
     bounded.decision_text,
     bounded.fused_score,
     bounded.reason_codes,
