@@ -1,15 +1,23 @@
 ---
-Status: active
+Status: superseded
 Written: 2026-05-09
 Author: human
 Goal-hash: 5372e371
+Superseded-by: plans/hosted-decision-reviewer.md
 Updated-by:
   - 2026-05-09T20:55 codex (created from context-build-system vision)
   - 2026-05-09T21:27 codex (shipped #244 token-budget instrumentation slice)
+  - 2026-06-09T00:00 codex (Status: active → superseded by plans/hosted-decision-reviewer.md; retained as context-integrity history)
 Cites: doctrine/0008-context-integrity-build-system, journal/2026-05-09-context-build-system-vision, state.md § Current work
 ---
 
 # Build production context integrity
+
+> **Superseded 2026-06-09:** the active product sequence moved to
+> [`plans/hosted-decision-reviewer.md`](./hosted-decision-reviewer.md), which is
+> guided by the Obsidian Cortex master plan. This file remains useful context
+> for the CLI/context-integrity substrate, but it is no longer the active master
+> plan.
 
 > **Cortex becomes production-ready when it can build, budget, and verify agent context across real projects, and fail visibly when that context is stale, incomplete, uncited, or too expensive.**
 
