@@ -135,7 +135,8 @@ the sequence and the gates.
   #372, #377. `contradicts-prior-decision` and `reverses-superseded-pattern`
   ship first per the master plan.
 - **Wave 6 — replay machinery + write path + shadow finding types:** #336,
-  #323, #314, #313, #376, #373, #374, #346.
+  #323, #314, #313, #376, #373, #374, #346, #487 (merge-event schema
+  decision; blocks Stage 3 curation #491).
 - **Wave 7 — read-value surfaces + metrics:** #381, #382, #359, #341, #342,
   #331, #369.
 - **Wave 8 — hardening, rebuild, CI gates:** #320, #319, #318, #326, #322,
