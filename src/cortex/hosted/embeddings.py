@@ -499,15 +499,13 @@ def _vector_search_sql(
     embedding_dimension: int,
     config: VectorIndexConfig = DEFAULT_VECTOR_INDEX_CONFIG,
 ) -> str:
-    setup = (
-        f"SET LOCAL hnsw.ef_search = {config.hnsw_ef_search};"
-        if approximate
-        else "SET LOCAL enable_indexscan = off;\nSET LOCAL enable_bitmapscan = off;"
-    )
+    setup = _vector_search_settings_cte(approximate=approximate, config=config)
     embedding_expr = f"embedding.embedding::vector({embedding_dimension})"
     query_expr = f"%(embedding_vector)s::vector({embedding_dimension})"
     return f"""
+WITH search_settings AS (
 {setup}
+)
 SELECT
     embedding.item_type,
     embedding.item_id::text AS item_id,
@@ -515,7 +513,8 @@ SELECT
         ORDER BY {embedding_expr} <=> {query_expr}
     ) AS rank,
     ({embedding_expr} <=> {query_expr}) AS distance
-FROM {schema}.embeddings AS embedding
+FROM search_settings
+CROSS JOIN {schema}.embeddings AS embedding
 WHERE embedding.tenant_id = %(tenant_id)s
   AND (%(repo_id)s::uuid IS NULL OR embedding.repo_id IS NULL OR embedding.repo_id = %(repo_id)s::uuid)
   AND embedding.embedding_model_id = %(embedding_model_id)s
@@ -525,6 +524,18 @@ WHERE embedding.tenant_id = %(tenant_id)s
 ORDER BY distance ASC
 LIMIT %(limit)s;
 """.strip()
+
+
+def _vector_search_settings_cte(
+    *,
+    approximate: bool,
+    config: VectorIndexConfig,
+) -> str:
+    if approximate:
+        return f"    SELECT set_config('hnsw.ef_search', '{config.hnsw_ef_search}', true)"
+    return """    SELECT
+        set_config('enable_indexscan', 'off', true),
+        set_config('enable_bitmapscan', 'off', true)"""
 
 
 def _projection_sources_sql(schema: str) -> str:

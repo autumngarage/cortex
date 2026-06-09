@@ -142,10 +142,15 @@ def test_vector_search_sql_separates_exact_baseline_from_approximate_search() ->
     exact = exact_vector_search_sql(embedding_dimension=3)
     approximate = approximate_vector_search_sql(embedding_dimension=3)
 
-    assert "SET LOCAL enable_indexscan = off;" in exact
-    assert "SET LOCAL enable_bitmapscan = off;" in exact
-    assert "SET LOCAL hnsw.ef_search" not in exact
-    assert f"SET LOCAL hnsw.ef_search = {DEFAULT_HNSW_EF_SEARCH};" in approximate
+    assert "set_config('enable_indexscan', 'off', true)" in exact
+    assert "set_config('enable_bitmapscan', 'off', true)" in exact
+    assert "hnsw.ef_search" not in exact
+    assert f"set_config('hnsw.ef_search', '{DEFAULT_HNSW_EF_SEARCH}', true)" in approximate
+    assert "SET LOCAL" not in exact
+    assert "SET LOCAL" not in approximate
+    assert exact.count(";") == 1
+    assert approximate.count(";") == 1
+    assert "CROSS JOIN cortex_hosted.embeddings AS embedding" in approximate
     assert "embedding.embedding::vector(3) <=> %(embedding_vector)s::vector(3)" in approximate
     assert "embedding.embedding_dimension = 3" in approximate
     assert "ORDER BY distance ASC" in approximate
