@@ -85,16 +85,25 @@ def test_schema_adds_ask_ledger_search_indexes_and_embeddings_projection() -> No
     sql = create_schema_sql()
 
     assert "CREATE TABLE IF NOT EXISTS cortex_hosted.embeddings" in sql
-    assert "item_id uuid NOT NULL REFERENCES cortex_hosted.decision_versions" in sql
+    assert "item_id uuid NOT NULL" in sql
     assert "embedding vector NOT NULL" in sql
-    assert "UNIQUE (tenant_id, item_type, item_id, embedding_model_id, embedding_epoch)" in sql
-    assert "CHECK (item_type = 'decision_version')" in sql
+    assert "embedding_dimension integer NOT NULL" in sql
+    assert "embeddings_projection_unique" in sql
+    assert (
+        "UNIQUE (tenant_id, item_type, item_id, embedding_model_id, embedding_dimension, embedding_epoch)"
+        in sql
+    )
+    assert "CHECK (item_type IN ('decision_version', 'source_span'))" in sql
+    assert "DROP CONSTRAINT embeddings_item_id_fkey" in sql
+    assert "DROP CONSTRAINT embeddings_item_type_check" in sql
+    assert "vector_dims(embedding)" in sql
     assert "decision_versions_text_fts_idx" in sql
     assert "decision_versions_text_trgm_idx" in sql
     assert "source_spans_excerpt_fts_idx" in sql
     assert "source_spans_excerpt_trgm_idx" in sql
-    assert "embeddings_lookup_idx" in sql
-    assert "Rebuildable vector-search projection keyed by model and epoch" in sql
+    assert "embeddings_projection_lookup_idx" in sql
+    assert "embeddings_model_epoch_dim_idx" in sql
+    assert "keyed by item, model, dimension, and epoch" in sql
 
 
 def test_schema_models_source_documents_as_immutable_snapshots() -> None:
@@ -135,7 +144,7 @@ def test_schema_models_citable_source_spans() -> None:
 def test_schema_records_version() -> None:
     sql = create_schema_sql()
 
-    assert HOSTED_SCHEMA_VERSION == 4
+    assert HOSTED_SCHEMA_VERSION == 5
     assert f"VALUES ({HOSTED_SCHEMA_VERSION})" in sql
 
 

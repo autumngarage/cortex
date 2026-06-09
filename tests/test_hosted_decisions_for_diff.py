@@ -219,6 +219,7 @@ def test_candidate_trace_records_replay_fields_and_metrics() -> None:
 
     assert params["query_kind"] == "decisions_for_diff"
     assert params["retrieval_config_version"] == DECISIONS_FOR_DIFF_RETRIEVAL_CONFIG_VERSION
+    assert "pgvector-hnsw-v1" in str(params["retrieval_config_version"])
     assert params["query_input_hash"] == query.query_hash
     assert params["candidate_set_hash"] == pack.candidate_set_hash
     assert '"candidate_pool_size":12' in str(params["omitted_counts"])
@@ -242,6 +243,7 @@ def test_decisions_for_diff_retrieval_sql_includes_hybrid_sources_and_metrics() 
     assert "graph_candidates AS" in sql
     assert "mentioned_with" in sql
     assert "embedding.embedding <=> %(embedding_vector)s::vector" in sql
+    assert "embedding.embedding_dimension = vector_dims(%(embedding_vector)s::vector)" in sql
     assert "websearch_to_tsquery('english', query.query_text)" in sql
     assert "candidate_pool_size" in sql
     assert "graph_node_count" in sql

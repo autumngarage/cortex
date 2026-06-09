@@ -7,7 +7,7 @@ import re
 from cortex.hosted.ledger_events import LedgerEventType
 from cortex.hosted.scopes import ScopeType
 
-HOSTED_SCHEMA_VERSION = 4
+HOSTED_SCHEMA_VERSION = 5
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -454,20 +454,113 @@ CREATE TABLE IF NOT EXISTS {schema}.embeddings (
     tenant_id uuid NOT NULL REFERENCES {schema}.tenants (tenant_id),
     repo_id uuid REFERENCES {schema}.repos (repo_id),
     item_type text NOT NULL,
-    item_id uuid NOT NULL REFERENCES {schema}.decision_versions (decision_version_id),
+    item_id uuid NOT NULL,
     item_hash text NOT NULL,
     embedding_model_id text NOT NULL,
+    embedding_dimension integer NOT NULL,
     embedding_epoch text NOT NULL,
     embedding vector NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
     metadata jsonb NOT NULL DEFAULT '{{}}'::jsonb,
-    UNIQUE (tenant_id, item_type, item_id, embedding_model_id, embedding_epoch),
-    CHECK (item_type = 'decision_version'),
-    CHECK (item_hash ~ '^[a-f0-9]{{64}}$'),
+    CONSTRAINT embeddings_projection_unique
+        UNIQUE (tenant_id, item_type, item_id, embedding_model_id, embedding_dimension, embedding_epoch),
+    CONSTRAINT embeddings_item_type_supported_check
+        CHECK (item_type IN ('decision_version', 'source_span')),
+    CONSTRAINT embeddings_item_hash_check CHECK (item_hash ~ '^[a-f0-9]{{64}}$'),
+    CONSTRAINT embeddings_dimension_check CHECK (embedding_dimension > 0),
     CHECK (embedding_model_id <> ''),
     CHECK (embedding_epoch <> ''),
     CHECK (jsonb_typeof(metadata) = 'object')
 );
+
+DO $$
+DECLARE
+    old_unique record;
+BEGIN
+    ALTER TABLE {schema}.embeddings
+        ADD COLUMN IF NOT EXISTS embedding_dimension integer;
+
+    UPDATE {schema}.embeddings
+    SET embedding_dimension = vector_dims(embedding)
+    WHERE embedding_dimension IS NULL;
+
+    ALTER TABLE {schema}.embeddings
+        ALTER COLUMN embedding_dimension SET NOT NULL;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'embeddings_item_id_fkey'
+          AND conrelid = '{schema}.embeddings'::regclass
+    ) THEN
+        ALTER TABLE {schema}.embeddings
+            DROP CONSTRAINT embeddings_item_id_fkey;
+    END IF;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'embeddings_item_type_check'
+          AND conrelid = '{schema}.embeddings'::regclass
+    ) THEN
+        ALTER TABLE {schema}.embeddings
+            DROP CONSTRAINT embeddings_item_type_check;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'embeddings_item_type_supported_check'
+          AND conrelid = '{schema}.embeddings'::regclass
+    ) THEN
+        ALTER TABLE {schema}.embeddings
+            ADD CONSTRAINT embeddings_item_type_supported_check
+            CHECK (item_type IN ('decision_version', 'source_span'));
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'embeddings_dimension_check'
+          AND conrelid = '{schema}.embeddings'::regclass
+    ) THEN
+        ALTER TABLE {schema}.embeddings
+            ADD CONSTRAINT embeddings_dimension_check
+            CHECK (embedding_dimension > 0);
+    END IF;
+
+    FOR old_unique IN
+        SELECT conname
+        FROM pg_constraint
+        WHERE conrelid = '{schema}.embeddings'::regclass
+          AND contype = 'u'
+          AND pg_get_constraintdef(oid) = 'UNIQUE (tenant_id, item_type, item_id, embedding_model_id, embedding_epoch)'
+    LOOP
+        EXECUTE format(
+            'ALTER TABLE {schema}.embeddings DROP CONSTRAINT %I',
+            old_unique.conname
+        );
+    END LOOP;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'embeddings_projection_unique'
+          AND conrelid = '{schema}.embeddings'::regclass
+    ) THEN
+        ALTER TABLE {schema}.embeddings
+            ADD CONSTRAINT embeddings_projection_unique
+            UNIQUE (
+                tenant_id,
+                item_type,
+                item_id,
+                embedding_model_id,
+                embedding_dimension,
+                embedding_epoch
+            );
+    END IF;
+END;
+$$;
 
 CREATE INDEX IF NOT EXISTS ledger_events_tenant_time_idx
     ON {schema}.ledger_events (tenant_id, occurred_at, event_id);
@@ -530,8 +623,24 @@ CREATE INDEX IF NOT EXISTS source_documents_metadata_gin_idx
 CREATE INDEX IF NOT EXISTS retrieval_traces_tenant_kind_idx
     ON {schema}.retrieval_traces (tenant_id, query_kind, created_at);
 
-CREATE INDEX IF NOT EXISTS embeddings_lookup_idx
-    ON {schema}.embeddings (tenant_id, item_type, item_id, embedding_model_id, embedding_epoch);
+CREATE INDEX IF NOT EXISTS embeddings_projection_lookup_idx
+    ON {schema}.embeddings (
+        tenant_id,
+        item_type,
+        item_id,
+        embedding_model_id,
+        embedding_dimension,
+        embedding_epoch
+    );
+
+CREATE INDEX IF NOT EXISTS embeddings_model_epoch_dim_idx
+    ON {schema}.embeddings (
+        tenant_id,
+        embedding_model_id,
+        embedding_epoch,
+        embedding_dimension,
+        item_type
+    );
 
 CREATE OR REPLACE FUNCTION {schema}.prevent_ledger_event_mutation()
 RETURNS trigger
@@ -605,7 +714,7 @@ COMMENT ON TABLE {schema}.retrieval_traces IS
     'Replay/debug projection recording candidate sets, scores, reasons, omitted counts, and config versions.';
 
 COMMENT ON TABLE {schema}.embeddings IS
-    'Rebuildable vector-search projection keyed by model and epoch; ledger_events remains source of truth.';
+    'Rebuildable vector-search projection keyed by item, model, dimension, and epoch; ledger_events remains source of truth.';
 
 INSERT INTO {schema}.schema_migrations (version)
 VALUES ({HOSTED_SCHEMA_VERSION})
