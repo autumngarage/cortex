@@ -94,9 +94,14 @@ def test_schema_adds_ask_ledger_search_indexes_and_embeddings_projection() -> No
         in sql
     )
     assert "CHECK (item_type IN ('decision_version', 'source_span'))" in sql
+    assert (
+        "CHECK (embedding_dimension > 0 AND embedding_dimension = vector_dims(embedding))"
+        in sql
+    )
     assert "DROP CONSTRAINT embeddings_item_id_fkey" in sql
     assert "DROP CONSTRAINT embeddings_item_type_check" in sql
-    assert "vector_dims(embedding)" in sql
+    assert "DROP CONSTRAINT IF EXISTS embeddings_dimension_check" in sql
+    assert "WHERE embedding_dimension IS DISTINCT FROM vector_dims(embedding)" in sql
     assert "decision_versions_text_fts_idx" in sql
     assert "decision_versions_text_trgm_idx" in sql
     assert "source_spans_excerpt_fts_idx" in sql

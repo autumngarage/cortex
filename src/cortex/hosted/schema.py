@@ -467,7 +467,8 @@ CREATE TABLE IF NOT EXISTS {schema}.embeddings (
     CONSTRAINT embeddings_item_type_supported_check
         CHECK (item_type IN ('decision_version', 'source_span')),
     CONSTRAINT embeddings_item_hash_check CHECK (item_hash ~ '^[a-f0-9]{{64}}$'),
-    CONSTRAINT embeddings_dimension_check CHECK (embedding_dimension > 0),
+    CONSTRAINT embeddings_dimension_check
+        CHECK (embedding_dimension > 0 AND embedding_dimension = vector_dims(embedding)),
     CHECK (embedding_model_id <> ''),
     CHECK (embedding_epoch <> ''),
     CHECK (jsonb_typeof(metadata) = 'object')
@@ -482,7 +483,7 @@ BEGIN
 
     UPDATE {schema}.embeddings
     SET embedding_dimension = vector_dims(embedding)
-    WHERE embedding_dimension IS NULL;
+    WHERE embedding_dimension IS DISTINCT FROM vector_dims(embedding);
 
     ALTER TABLE {schema}.embeddings
         ALTER COLUMN embedding_dimension SET NOT NULL;
@@ -518,16 +519,12 @@ BEGIN
             CHECK (item_type IN ('decision_version', 'source_span'));
     END IF;
 
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_constraint
-        WHERE conname = 'embeddings_dimension_check'
-          AND conrelid = '{schema}.embeddings'::regclass
-    ) THEN
-        ALTER TABLE {schema}.embeddings
-            ADD CONSTRAINT embeddings_dimension_check
-            CHECK (embedding_dimension > 0);
-    END IF;
+    ALTER TABLE {schema}.embeddings
+        DROP CONSTRAINT IF EXISTS embeddings_dimension_check;
+
+    ALTER TABLE {schema}.embeddings
+        ADD CONSTRAINT embeddings_dimension_check
+        CHECK (embedding_dimension > 0 AND embedding_dimension = vector_dims(embedding));
 
     FOR old_unique IN
         SELECT conname
