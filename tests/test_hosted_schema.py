@@ -72,7 +72,8 @@ def test_schema_models_citable_source_spans() -> None:
     assert "source_document_id uuid NOT NULL" in sql
     assert "source_document_hash text NOT NULL" in sql
     assert (
-        "FOREIGN KEY (tenant_id, source_document_id, source_document_hash)\n"
+        "CONSTRAINT source_spans_source_document_snapshot_fk\n"
+        "    FOREIGN KEY (tenant_id, source_document_id, source_document_hash)\n"
         "        REFERENCES cortex_hosted.source_documents (\n"
         "            tenant_id,\n"
         "            source_document_id,\n"
@@ -88,8 +89,26 @@ def test_schema_models_citable_source_spans() -> None:
 def test_schema_records_version() -> None:
     sql = create_schema_sql()
 
-    assert HOSTED_SCHEMA_VERSION == 1
+    assert HOSTED_SCHEMA_VERSION == 2
     assert f"VALUES ({HOSTED_SCHEMA_VERSION})" in sql
+
+
+def test_schema_migrates_v1_source_provenance_tables() -> None:
+    sql = create_schema_sql()
+
+    assert "ADD COLUMN IF NOT EXISTS document_hash text" in sql
+    assert "ADD COLUMN IF NOT EXISTS source_revision text" in sql
+    assert "WHERE document_hash IS NULL" in sql
+    assert "ALTER COLUMN document_hash SET NOT NULL" in sql
+    assert "DROP CONSTRAINT source_documents_tenant_id_source_id_external_id_key" in sql
+    assert "ADD COLUMN IF NOT EXISTS source_document_hash text" in sql
+    assert "WHERE span.source_document_hash IS NULL" in sql
+    assert "ALTER COLUMN source_document_hash SET NOT NULL" in sql
+    assert "DROP CONSTRAINT source_spans_source_document_id_fkey" in sql
+    assert "ADD CONSTRAINT source_spans_source_document_snapshot_fk" in sql
+    assert sql.rfind(f"VALUES ({HOSTED_SCHEMA_VERSION})") > sql.rfind(
+        "ADD CONSTRAINT source_spans_source_document_snapshot_fk"
+    )
 
 
 def test_schema_constraint_addition_is_idempotent() -> None:

@@ -6,7 +6,7 @@ import re
 
 from cortex.hosted.ledger_events import LedgerEventType
 
-HOSTED_SCHEMA_VERSION = 1
+HOSTED_SCHEMA_VERSION = 2
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -30,10 +30,6 @@ CREATE TABLE IF NOT EXISTS {schema}.schema_migrations (
     version integer PRIMARY KEY,
     applied_at timestamptz NOT NULL DEFAULT now()
 );
-
-INSERT INTO {schema}.schema_migrations (version)
-VALUES ({HOSTED_SCHEMA_VERSION})
-ON CONFLICT (version) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS {schema}.tenants (
     tenant_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -89,15 +85,15 @@ CREATE TABLE IF NOT EXISTS {schema}.source_documents (
     source_revision text,
     visibility jsonb NOT NULL DEFAULT '{{}}'::jsonb,
     metadata jsonb NOT NULL DEFAULT '{{}}'::jsonb,
-    UNIQUE (tenant_id, document_hash),
-    UNIQUE (tenant_id, source_document_id, document_hash),
-    UNIQUE (tenant_id, source_id, external_id, content_hash),
+    CONSTRAINT source_documents_snapshot_unique UNIQUE (tenant_id, document_hash),
+    CONSTRAINT source_documents_id_hash_unique UNIQUE (tenant_id, source_document_id, document_hash),
+    CONSTRAINT source_documents_external_content_unique UNIQUE (tenant_id, source_id, external_id, content_hash),
     CHECK (document_type <> ''),
     CHECK (external_id <> ''),
     CHECK (permalink <> ''),
     CHECK (author_ref <> ''),
     CHECK (content_hash ~ '^[a-f0-9]{{64}}$'),
-    CHECK (document_hash ~ '^[a-f0-9]{{64}}$'),
+    CONSTRAINT source_documents_document_hash_check CHECK (document_hash ~ '^[a-f0-9]{{64}}$'),
     CHECK (jsonb_typeof(visibility) = 'object'),
     CHECK (jsonb_typeof(metadata) = 'object')
 );
@@ -114,12 +110,13 @@ CREATE TABLE IF NOT EXISTS {schema}.source_spans (
     permalink text NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (tenant_id, span_hash),
-    CHECK (source_document_hash ~ '^[a-f0-9]{{64}}$'),
+    CONSTRAINT source_spans_source_document_hash_check CHECK (source_document_hash ~ '^[a-f0-9]{{64}}$'),
     CHECK (span_hash ~ '^[a-f0-9]{{64}}$'),
     CHECK (start_offset >= 0),
     CHECK (end_offset > start_offset),
     CHECK (excerpt <> ''),
     CHECK (permalink <> ''),
+    CONSTRAINT source_spans_source_document_snapshot_fk
     FOREIGN KEY (tenant_id, source_document_id, source_document_hash)
         REFERENCES {schema}.source_documents (
             tenant_id,
@@ -127,6 +124,137 @@ CREATE TABLE IF NOT EXISTS {schema}.source_spans (
             document_hash
         )
 );
+
+DO $$
+BEGIN
+    ALTER TABLE {schema}.source_documents
+        ADD COLUMN IF NOT EXISTS document_hash text;
+
+    ALTER TABLE {schema}.source_documents
+        ADD COLUMN IF NOT EXISTS source_revision text;
+
+    UPDATE {schema}.source_documents
+    SET document_hash = encode(
+        digest(
+            '{{"content_hash":' || to_json(content_hash)::text ||
+            ',"external_id":' || to_json(external_id)::text ||
+            ',"source_id":' || to_json(source_id::text)::text ||
+            ',"tenant_id":' || to_json(tenant_id::text)::text ||
+            '}}',
+            'sha256'
+        ),
+        'hex'
+    )
+    WHERE document_hash IS NULL;
+
+    ALTER TABLE {schema}.source_documents
+        ALTER COLUMN document_hash SET NOT NULL;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'source_documents_tenant_id_source_id_external_id_key'
+          AND conrelid = '{schema}.source_documents'::regclass
+    ) THEN
+        ALTER TABLE {schema}.source_documents
+            DROP CONSTRAINT source_documents_tenant_id_source_id_external_id_key;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'source_documents_snapshot_unique'
+          AND conrelid = '{schema}.source_documents'::regclass
+    ) THEN
+        ALTER TABLE {schema}.source_documents
+            ADD CONSTRAINT source_documents_snapshot_unique
+            UNIQUE (tenant_id, document_hash);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'source_documents_id_hash_unique'
+          AND conrelid = '{schema}.source_documents'::regclass
+    ) THEN
+        ALTER TABLE {schema}.source_documents
+            ADD CONSTRAINT source_documents_id_hash_unique
+            UNIQUE (tenant_id, source_document_id, document_hash);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'source_documents_external_content_unique'
+          AND conrelid = '{schema}.source_documents'::regclass
+    ) THEN
+        ALTER TABLE {schema}.source_documents
+            ADD CONSTRAINT source_documents_external_content_unique
+            UNIQUE (tenant_id, source_id, external_id, content_hash);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'source_documents_document_hash_check'
+          AND conrelid = '{schema}.source_documents'::regclass
+    ) THEN
+        ALTER TABLE {schema}.source_documents
+            ADD CONSTRAINT source_documents_document_hash_check
+            CHECK (document_hash ~ '^[a-f0-9]{{64}}$');
+    END IF;
+
+    ALTER TABLE {schema}.source_spans
+        ADD COLUMN IF NOT EXISTS source_document_hash text;
+
+    UPDATE {schema}.source_spans AS span
+    SET source_document_hash = doc.document_hash
+    FROM {schema}.source_documents AS doc
+    WHERE span.source_document_hash IS NULL
+      AND span.tenant_id = doc.tenant_id
+      AND span.source_document_id = doc.source_document_id;
+
+    ALTER TABLE {schema}.source_spans
+        ALTER COLUMN source_document_hash SET NOT NULL;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'source_spans_source_document_id_fkey'
+          AND conrelid = '{schema}.source_spans'::regclass
+    ) THEN
+        ALTER TABLE {schema}.source_spans
+            DROP CONSTRAINT source_spans_source_document_id_fkey;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'source_spans_source_document_hash_check'
+          AND conrelid = '{schema}.source_spans'::regclass
+    ) THEN
+        ALTER TABLE {schema}.source_spans
+            ADD CONSTRAINT source_spans_source_document_hash_check
+            CHECK (source_document_hash ~ '^[a-f0-9]{{64}}$');
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'source_spans_source_document_snapshot_fk'
+          AND conrelid = '{schema}.source_spans'::regclass
+    ) THEN
+        ALTER TABLE {schema}.source_spans
+            ADD CONSTRAINT source_spans_source_document_snapshot_fk
+            FOREIGN KEY (tenant_id, source_document_id, source_document_hash)
+            REFERENCES {schema}.source_documents (
+                tenant_id,
+                source_document_id,
+                document_hash
+            );
+    END IF;
+END;
+$$;
 
 CREATE TABLE IF NOT EXISTS {schema}.ledger_events (
     event_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -372,6 +500,10 @@ COMMENT ON TABLE {schema}.decision_scopes IS
 
 COMMENT ON TABLE {schema}.retrieval_traces IS
     'Replay/debug projection recording candidate sets, scores, reasons, omitted counts, and config versions.';
+
+INSERT INTO {schema}.schema_migrations (version)
+VALUES ({HOSTED_SCHEMA_VERSION})
+ON CONFLICT (version) DO NOTHING;
 """.strip()
 
 
