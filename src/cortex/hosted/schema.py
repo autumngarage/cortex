@@ -5,8 +5,9 @@ from __future__ import annotations
 import re
 
 from cortex.hosted.ledger_events import LedgerEventType
+from cortex.hosted.scopes import ScopeType
 
-HOSTED_SCHEMA_VERSION = 2
+HOSTED_SCHEMA_VERSION = 3
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -19,6 +20,7 @@ def create_schema_sql(schema: str = "cortex_hosted") -> str:
 
     _validate_sql_identifier(schema)
     event_values = ", ".join(f"'{event.value}'" for event in LedgerEventType)
+    scope_values = ", ".join(f"'{scope.value}'" for scope in ScopeType)
     return f"""
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
@@ -311,6 +313,7 @@ CREATE TABLE IF NOT EXISTS {schema}.graph_snapshots (
 CREATE TABLE IF NOT EXISTS {schema}.decision_nodes (
     decision_node_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id uuid NOT NULL REFERENCES {schema}.tenants (tenant_id),
+    repo_id uuid,
     current_version_id uuid,
     status text NOT NULL,
     confidence text NOT NULL,
@@ -369,6 +372,7 @@ CREATE TABLE IF NOT EXISTS {schema}.decision_edges (
 CREATE TABLE IF NOT EXISTS {schema}.decision_scopes (
     decision_scope_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id uuid NOT NULL REFERENCES {schema}.tenants (tenant_id),
+    repo_id uuid,
     decision_node_id uuid NOT NULL REFERENCES {schema}.decision_nodes (decision_node_id),
     scope_type text NOT NULL,
     scope_value text NOT NULL,
@@ -376,10 +380,52 @@ CREATE TABLE IF NOT EXISTS {schema}.decision_scopes (
     source_event_id uuid NOT NULL REFERENCES {schema}.ledger_events (event_id),
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (tenant_id, decision_node_id, scope_type, normalized_value),
-    CHECK (scope_type IN ('path', 'glob', 'symbol', 'package', 'config_key', 'owner', 'service', 'issue_ref', 'channel_ref')),
+    CHECK (scope_type IN ({scope_values})),
     CHECK (scope_value <> ''),
     CHECK (normalized_value <> '')
 );
+
+DO $$
+BEGIN
+    ALTER TABLE {schema}.decision_nodes
+        ADD COLUMN IF NOT EXISTS repo_id uuid;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'decision_nodes_repo_fk'
+          AND conrelid = '{schema}.decision_nodes'::regclass
+    ) THEN
+        ALTER TABLE {schema}.decision_nodes
+            ADD CONSTRAINT decision_nodes_repo_fk
+            FOREIGN KEY (repo_id)
+            REFERENCES {schema}.repos (repo_id);
+    END IF;
+
+    ALTER TABLE {schema}.decision_scopes
+        ADD COLUMN IF NOT EXISTS repo_id uuid;
+
+    UPDATE {schema}.decision_scopes AS scope
+    SET repo_id = node.repo_id
+    FROM {schema}.decision_nodes AS node
+    WHERE scope.repo_id IS NULL
+      AND scope.tenant_id = node.tenant_id
+      AND scope.decision_node_id = node.decision_node_id
+      AND node.repo_id IS NOT NULL;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'decision_scopes_repo_fk'
+          AND conrelid = '{schema}.decision_scopes'::regclass
+    ) THEN
+        ALTER TABLE {schema}.decision_scopes
+            ADD CONSTRAINT decision_scopes_repo_fk
+            FOREIGN KEY (repo_id)
+            REFERENCES {schema}.repos (repo_id);
+    END IF;
+END;
+$$;
 
 CREATE TABLE IF NOT EXISTS {schema}.retrieval_traces (
     retrieval_trace_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -412,6 +458,9 @@ CREATE INDEX IF NOT EXISTS ledger_events_source_idx
 CREATE INDEX IF NOT EXISTS decision_nodes_status_idx
     ON {schema}.decision_nodes (tenant_id, status, updated_at);
 
+CREATE INDEX IF NOT EXISTS decision_nodes_tenant_repo_status_idx
+    ON {schema}.decision_nodes (tenant_id, repo_id, status, updated_at);
+
 CREATE INDEX IF NOT EXISTS decision_edges_from_idx
     ON {schema}.decision_edges (tenant_id, from_node_id, edge_type);
 
@@ -420,6 +469,21 @@ CREATE INDEX IF NOT EXISTS decision_edges_to_idx
 
 CREATE INDEX IF NOT EXISTS decision_scopes_lookup_idx
     ON {schema}.decision_scopes (tenant_id, scope_type, normalized_value);
+
+CREATE INDEX IF NOT EXISTS decision_scopes_tenant_repo_type_value_idx
+    ON {schema}.decision_scopes (tenant_id, repo_id, scope_type, normalized_value);
+
+CREATE INDEX IF NOT EXISTS decision_scopes_path_idx
+    ON {schema}.decision_scopes (tenant_id, repo_id, normalized_value)
+    WHERE scope_type = 'path';
+
+CREATE INDEX IF NOT EXISTS decision_scopes_symbol_idx
+    ON {schema}.decision_scopes (tenant_id, repo_id, normalized_value)
+    WHERE scope_type = 'symbol';
+
+CREATE INDEX IF NOT EXISTS decision_scopes_config_key_idx
+    ON {schema}.decision_scopes (tenant_id, repo_id, normalized_value)
+    WHERE scope_type = 'config_key';
 
 CREATE INDEX IF NOT EXISTS source_spans_hash_idx
     ON {schema}.source_spans (tenant_id, span_hash);
