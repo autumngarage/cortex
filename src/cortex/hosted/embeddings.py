@@ -12,6 +12,11 @@ from types import MappingProxyType
 from typing import Any
 from uuid import UUID
 
+from cortex.hosted.visibility import (
+    visible_decision_version_exists_sql,
+    visible_source_documents_ctes,
+)
+
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 
@@ -275,9 +280,11 @@ def embedding_projection_source_sql(schema: str = "cortex_hosted") -> str:
     """Return rows that need embedding for a model/epoch/dimension projection."""
 
     _validate_sql_identifier(schema)
+    visible_ctes = visible_source_documents_ctes(schema)
     return f"""
-WITH projection_sources AS (
-{_projection_sources_sql(schema)}
+WITH {visible_ctes},
+projection_sources AS (
+{_projection_sources_sql(schema, visible_only=True)}
 ),
 existing_embeddings AS (
     SELECT tenant_id, item_type, item_id, item_hash
@@ -538,7 +545,33 @@ def _vector_search_settings_cte(
         set_config('enable_bitmapscan', 'off', true)"""
 
 
-def _projection_sources_sql(schema: str) -> str:
+def _projection_sources_sql(schema: str, *, visible_only: bool = False) -> str:
+    decision_visibility_filter = ""
+    if visible_only:
+        decision_visibility_filter = (
+            "\n    WHERE "
+            + visible_decision_version_exists_sql(
+                schema=schema,
+                version_alias="version",
+                tenant_alias="node",
+            )
+        )
+    if visible_only:
+        source_repo_expression = "visible_doc.repo_id"
+        source_document_join = """
+    JOIN visible_docs AS visible_doc
+      ON visible_doc.source_document_id = span.source_document_id
+     AND visible_doc.document_hash = span.source_document_hash"""
+    else:
+        source_repo_expression = "source.repo_id"
+        source_document_join = f"""
+    JOIN {schema}.source_documents AS doc
+      ON doc.tenant_id = span.tenant_id
+     AND doc.source_document_id = span.source_document_id
+     AND doc.document_hash = span.source_document_hash
+    JOIN {schema}.sources AS source
+      ON source.tenant_id = doc.tenant_id
+     AND source.source_id = doc.source_id"""
     return f"""
     SELECT
         version.tenant_id,
@@ -561,22 +594,17 @@ def _projection_sources_sql(schema: str) -> str:
     JOIN {schema}.decision_nodes AS node
       ON node.tenant_id = version.tenant_id
      AND node.decision_node_id = version.decision_node_id
+{decision_visibility_filter}
     UNION ALL
     SELECT
         span.tenant_id,
-        source.repo_id,
+        {source_repo_expression},
         'source_span'::text AS item_type,
         span.source_span_id AS item_id,
         span.span_hash AS item_hash,
         span.excerpt AS text
     FROM {schema}.source_spans AS span
-    JOIN {schema}.source_documents AS doc
-      ON doc.tenant_id = span.tenant_id
-     AND doc.source_document_id = span.source_document_id
-     AND doc.document_hash = span.source_document_hash
-    JOIN {schema}.sources AS source
-      ON source.tenant_id = doc.tenant_id
-     AND source.source_id = doc.source_id
+{source_document_join}
 """.rstrip()
 
 

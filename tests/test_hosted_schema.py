@@ -149,7 +149,7 @@ def test_schema_models_citable_source_spans() -> None:
 def test_schema_records_version() -> None:
     sql = create_schema_sql()
 
-    assert HOSTED_SCHEMA_VERSION == 5
+    assert HOSTED_SCHEMA_VERSION == 6
     assert f"VALUES ({HOSTED_SCHEMA_VERSION})" in sql
 
 
@@ -177,6 +177,18 @@ def test_schema_constraint_addition_is_idempotent() -> None:
     assert "IF NOT EXISTS (" in sql
     assert "decision_nodes_current_version_fk" in sql
     assert "ALTER TABLE cortex_hosted.decision_nodes" in sql
+
+
+def test_schema_indexes_source_visibility_boundary() -> None:
+    sql = create_schema_sql()
+
+    assert "sources_tenant_repo_visibility_idx" in sql
+    assert "sources_visibility_gin_idx" in sql
+    assert "source_documents_tenant_source_visibility_idx" in sql
+    assert "source_documents_visibility_gin_idx" in sql
+    assert "External source authorization boundary" in sql
+    assert "slack_channel_excluded" in sql
+    assert "repo_installation_revoked" in sql
 
 
 def test_schema_rejects_unsafe_schema_identifier() -> None:
