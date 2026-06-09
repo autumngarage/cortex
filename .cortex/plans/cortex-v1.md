@@ -32,9 +32,12 @@ Cites: ../../SPEC.md, ../../.cortex/protocol.md, ../doctrine/0001-why-cortex-exi
 
 > The one plan from here to v1.0. Sequenced as **feature-readiness tiers**, not calendar releases. Each tier names a capability bar a real project can rely on. The forcing function: install Cortex on three real projects (conductor + touchstone + vesper), do real work, no surprises.
 
-## Pickup pointer (read this first on session start)
+## Pickup pointer (historical — superseded 2026-06-09)
 
-The next concrete action is **v0.9.0 install-gate prep**:
+> This pointer is retained as release-track history only. The active pickup
+> pointer lives in [`hosted-decision-reviewer.md`](./hosted-decision-reviewer.md).
+> At the time this plan was active, the next concrete action was **v0.9.0
+> install-gate prep**:
 
 1. **Draft the outward-facing positioning paragraph.** Use the markdownfs council wording as the starting point, but frame Cortex against the absence of repo-memory conventions rather than against named competitors.
 
@@ -174,8 +177,8 @@ Goal: ceremonial freeze plus the compatibility + schema-publication + spec-confo
 - [x] **PRIOR_ART.md adds codesight + Karpathy wiki gist as related work** — shipped in PR #155 (bundled with documentation refresh because PITCH.md was touched by both items). New `docs/PRIOR_ART.md` § 7 "Adjacent tools and composition" covers codesight (one paragraph) and Karpathy's wiki gist (one paragraph) with the composition framing: `read .codesight/CODESIGHT.md → what the code does today` + `read .cortex/state.md → what's currently in flight, why, by when`. PITCH.md got the one-sentence version.
 - [x] **CLI help-text + error-message polish pass** — shipped in PR #158. Help text + error messages polished across the CLI (13 files, +115/-84). Includes a doc-string fix in `refresh-state` correcting the marker-convention reference from `cortex:keep` to the actual `cortex:hand` shipped in v0.4. 523 tests pass post-polish.
 - [x] **Doctrine review.** Walk all 5 active Doctrine entries; if dogfood evidence supports promoting any of them to a stronger formulation, write the supersede entry. **Only supersede if dogfood produced real conflicting evidence** — do not superscede for the sake of a v1.0 milestone. Walked all 7 (including 2 already-superseded); all 5 active entries hold; 0 supersedes written. See `journal/2026-05-06-v10-doctrine-review-all-7-hold-no-supersedes`.
-- [ ] **Homebrew formula update + GitHub Release.** Tag v1.0.0; verify `release.yml` auto-bumps the homebrew-cortex formula `url` + `sha256`; GitHub Release notes covering the full Tier-1 → v1.0 arc with grounding in the case study + three-target dogfood + (if measured) token-cost evidence.
-- [ ] **Announce.** Wherever the autumngarage tetrad gets discussed (Sentinel + Touchstone + Cortex + Conductor composition story).
+- [x] **Homebrew formula update + GitHub Release.** Shipped 2026-05-06: v1.0.0 tagged and released, formula auto-bumped (see `journal/2026-05-06-cortex-v100-released-production-freeze-5-target-do`). Box back-ticked 2026-06-09 during the roadmap review — it had been left unchecked at release time.
+- [ ] **Announce.** Not pursued; overtaken 2026-06-09 by the hosted decision-reviewer pivot (`plans/hosted-decision-reviewer.md`). Public positioning is now owned by cortex#308 on the hosted track.
 
 ## Follow-ups (deferred)
 

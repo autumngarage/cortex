@@ -1,6 +1,6 @@
 ---
-Generated: 2026-05-09T20:59:12-04:00
-Generator: hand-authored (`cortex refresh-map` LLM regeneration was in original Phase E but is **deferred from the v1.0 path** to v1.x per the 2026-04-24 production-release rerank — solo author already knows the map; real value lands when a contributor lands on the dogfood target's repo or a fresh agent on a clone gets visibly confused by this stub. See plans/cortex-v1 ## Follow-ups (deferred).)
+Generated: 2026-06-09T17:50:00-04:00
+Generator: hand-authored (`cortex refresh-map` LLM regeneration was in original Phase E but is **deferred from the v1.0 path** to v1.x per the 2026-04-24 production-release rerank — solo author already knows the map; real value lands when a contributor lands on the dogfood target's repo or a fresh agent on a clone gets visibly confused by this stub. See plans/cortex-v1 ## Follow-ups (deferred). Stub reviewed and re-dated 2026-06-09 during the roadmap refinement: the active track is now the hosted decision reviewer — see plans/hosted-decision-reviewer.md — and `src/cortex/hosted/` holds the Postgres-shaped substrate.)
 Sources:
   - .cortex/plans/cortex-v1.md `## Follow-ups (deferred)` #1 (the deferral target)
   - .cortex/journal/2026-04-24-production-release-rerank.md (the deferral decision)
@@ -23,6 +23,6 @@ When `cortex refresh-map` ships, it will produce sections covering:
 - **Top-level artifacts.** `SPEC.md`, `README.md`, `docs/PRIOR_ART.md`, `.cortex/` (active plans listed in `.cortex/state.md` `## Current work`) — each with a one-sentence purpose.
 - **`.cortex/` layout.** Doctrine (scope and why), Plans (active work), Journal (append-only decision trail), Templates (write scaffolds), Protocol (agent contract), State (priorities).
 - **Touchstone integration.** `principles/`, `scripts/`, `.pre-commit-config.yaml`, `.touchstone-config` — all project-owned but synced from the upstream Touchstone package.
-- **Future CLI source layout.** `src/cortex/` (when Phase B scaffolds it), `tests/`, `pyproject.toml`.
+- **CLI source layout.** `src/cortex/` (commands, retrieve, `_data` templates), `src/cortex/hosted/` (Postgres-shaped decision-ledger substrate for the hosted track), `tests/`, `pyproject.toml`.
 
 No structural narrative is synthesized at this stage; consumers should read the root-level documents directly.

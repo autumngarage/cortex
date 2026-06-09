@@ -1,14 +1,14 @@
 ---
-Generated: 2026-06-08T22:06:17-04:00
+Generated: 2026-06-09T16:56:08-04:00
 Generator: cortex refresh-state v1.6.4
 Sources:
-  - HEAD sha: 2bb6e0f229bd799276c51e282c220f8dc575f9fd
+  - HEAD sha: 17f23e3b55dd2f8eead711c962a905c1422f365a
   - .cortex/plans/*.md (12 files)
-  - .cortex/journal/*.md (114 entries, 2026-04-17..2026-06-09)
+  - .cortex/journal/*.md (117 entries, 2026-04-17..2026-06-09)
   - .cortex/doctrine/*.md (11 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
-  - SPEC version: 0.5.0
+  - SPEC version: 1.1.0
   - pyproject.toml: 1.6.4 + cortex package version: 1.6.4
 Sources-hash:
   .cortex/doctrine/0001-why-cortex-exists.md: e20d6d52fac419bf22ad43ddf01762f03504f348ef0b2cc30d3983b4c8bec063
@@ -136,13 +136,16 @@ Sources-hash:
   .cortex/journal/2026-06-09-context-integrity-plan-superseded.md: b69cbf51f89b2e35c0f2a56582dc81656428be2224d0015c2d5aa2e63c5b3a17
   .cortex/journal/2026-06-09-cortex-v1-plan-superseded.md: ed867ed340ccbe050465fbb191e2837f8f7a7e44926f7816f5b9bea98db6b6b8
   .cortex/journal/2026-06-09-hosted-decision-reviewer-plan-adopted.md: 04dc3d7c20f09a39b22fc864fab247895858a25a68b02a105bb52e1530c8bde4
-  .cortex/plans/context-integrity-production.md: 5a1f58bd904f05205dfc1566ce39c8ced474f28bbfd457469dc10133d4c6a1c9
+  .cortex/journal/2026-06-09-pr-merged-backfill-may26-jun08.md: 4a3335b3fdddf182dc20112e24c9f700991c82222dc9dc47e3550688b66e25e6
+  .cortex/journal/2026-06-09-pr-merged-hosted-substrate-wave.md: 557ef1c4dd7d8dfd907172047de80cad6e1dbf2bc4e7b4709731238843dcadf2
+  .cortex/journal/2026-06-09-roadmap-refinement-and-issue-hygiene.md: 243f9d9954bceca4e8ebcf7fa0db8b1f28445411900a1c62c031334fe070ba31
+  .cortex/plans/context-integrity-production.md: 131441fcd1a50d92e82f4ba8f64c3d667412bf23dc91efc501502f42f70a5197
   .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
   .cortex/plans/cortex-v0.3.0.md: d78e60537e30ed81d8464575191674253822ed4953a055ca2a14a9626c5f8b6f
-  .cortex/plans/cortex-v1.md: dd8b3e937f49dc44ec3104439c556f9a6b99bd0c68ef286986a98ff6f2d411f6
-  .cortex/plans/hosted-decision-reviewer.md: c90a6671a3c6f018f9a1a89a0f334a5509d11bf02e79f5ca39bafbd3aac67a98
+  .cortex/plans/cortex-v1.md: 35b18afacd917c6345d450d7f272a8ac37f52efe3af867ffa3f41e4b485f978b
+  .cortex/plans/hosted-decision-reviewer.md: c20fc65cec6f6f5c1aa3ebc11efe98879c0f9a76bad04a8860e0f3eb5b6fccd6
   .cortex/plans/init-ux-fixes-from-touchstone.md: fdf183f562d2dcde26101ea6b44163bfccf8377affc712cf1318ec16be4ecaee
-  .cortex/plans/phase-b-walking-skeleton.md: 3f52bfc07c327cfc88e26dccdf13b91e1d23cf02ff4dbea2426cd75d088c0e04
+  .cortex/plans/phase-b-walking-skeleton.md: 4c890ebe0a166b6cf07a0ca150e468614d3130109509e44641cfad216066b0d2
   .cortex/plans/phase-c-authoring-and-state.md: 8ab9a5ac4e593102e16ccab03a8b13248ec68f1afd05cd974c19c0c0e361c3c1
   .cortex/plans/phase-c-first-synthesis.md: 6f665b8f0667478e00b4fee88744d2054ed6ee1157bd1f250a6f918bdec17bee
   .cortex/plans/phase-d-integration.md: 4e7a3e708eb7b60e5ac7fd9b080bc41363043875c9984e6141d579e119fc843d
@@ -161,7 +164,7 @@ Sources-hash:
   .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476
   .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44
   docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c
-Corpus: 114 Journal entries, 12 Plans, 11 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 117 Journal entries, 12 Plans, 11 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -169,7 +172,7 @@ Incomplete:
   - .cortex/journal/2026-05-03-pr-merged-2057.md — shipped journal title contains unresolved template placeholder
   - .cortex/journal/2026-05-03-pr-merged-2119.md — shipped journal title contains unresolved template placeholder
 Conflicts-preserved: []
-Spec: 0.5.0
+Spec: 1.1.0
 ---
 
 # Project State
@@ -178,7 +181,7 @@ Spec: 0.5.0
 ## Current work
 
 **Active roadmaps:**
-- [`plans/hosted-decision-reviewer.md`](./plans/hosted-decision-reviewer.md) — the active repo-operational plan. It is guided by the Obsidian Cortex master plan and maps the work to GitHub issues #444-#475.
+- [`plans/hosted-decision-reviewer.md`](./plans/hosted-decision-reviewer.md) — the active repo-operational plan. It is guided by the Obsidian Cortex master plan and maps the work to GitHub issues #306-#475 (plus post-plan additions; milestones are the stage authority, per-stage trackers #445/#485/#446/#455, master tracker #444).
 - [`plans/cortex-v1.md`](./plans/cortex-v1.md) — superseded as an active plan; retained as CLI/protocol release-track history.
 - [`plans/context-integrity-production.md`](./plans/context-integrity-production.md) — superseded as an active plan; retained as context-integrity substrate history.
 - [`plans/cortex-retrieve.md`](./plans/cortex-retrieve.md) — shipped retrieval sub-plan retained for design history.
@@ -186,7 +189,7 @@ Spec: 0.5.0
 This file (`.cortex/state.md`) and [`plans/hosted-decision-reviewer.md`](./plans/hosted-decision-reviewer.md) are the repo-internal answers to "where are we" and "what's next" per [Doctrine 0007](./doctrine/0007-canonical-ownership-of-state-and-plans.md). The external Obsidian `cortex_master_plan.md` owns product strategy; `.cortex` points agents to it and records the repo-operational plan.
 
 **Status by stage:**
-- **Stage 0 — local proof:** prove ledger/search/evaluator locally with cited answers and historical PR replay.
+- **Stage 0 — local proof:** the Postgres-shaped substrate layer is done (see `journal/2026-06-09-pr-merged-hosted-substrate-wave`; SQL-as-strings until the first executable path lands with #472). Remaining: derive, eval harness, evaluator, replay, and the dogfood gate (#337 report) — wave order lives in the active plan.
 - **Stage 1 — hosted core:** Railway API service, worker service, Postgres, healthchecks, logs, backups, restore drill, and environment separation.
 - **Stage 2 — GitHub reviewer:** PR webhook, diff-scoped retrieval, advisory comments, and feedback capture.
 - **Stage 3 — Slack ledger console:** `@cortex what did we decide about X?`, `@cortex here is what we decided...`, confirm/reject/merge/supersede/stale.
@@ -200,7 +203,7 @@ This file (`.cortex/state.md`) and [`plans/hosted-decision-reviewer.md`](./plans
 
 ## Active plans
 
-- `hosted-decision-reviewer` — Build hosted decision reviewer; Goal-hash `ec1bc286`; 0% complete (0/6 checkboxes)
+- `hosted-decision-reviewer` — Build hosted decision reviewer; Goal-hash `ec1bc286`; 29% complete (2/7 checkboxes)
 
 ## Shipped recently
 
@@ -266,6 +269,8 @@ This file (`.cortex/state.md`) and [`plans/hosted-decision-reviewer.md`](./plans
 - **2026-05-12** — Release v1.6.3 (`.cortex/journal/2026-05-12-release-1.6.3.md`, Type: release)
 - **2026-05-15** — PR #280 merged — test(cortex): align pr-merged hook shim (`.cortex/journal/2026-05-15-pr-merged-0200.md`, Type: pr-merged)
 - **2026-05-25** — PR #295 merged — docs(doctrine): stage manifest semantic-top-up candidate; defer pending evidence (#234) (`.cortex/journal/2026-05-25-pr-merged-1841.md`, Type: pr-merged)
+- **2026-06-09** — PRs #296-#305, #476 merged — maintenance window backfill (2026-05-25 → 2026-06-09) (`.cortex/journal/2026-06-09-pr-merged-backfill-may26-jun08.md`, Type: pr-merged)
+- **2026-06-09** — PRs #477-#483 merged — hosted decision-ledger substrate wave (backfill) (`.cortex/journal/2026-06-09-pr-merged-hosted-substrate-wave.md`, Type: pr-merged)
 
 ## Stale-now / handle-later
 
