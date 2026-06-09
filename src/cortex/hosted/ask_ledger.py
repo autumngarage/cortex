@@ -13,9 +13,10 @@ from types import MappingProxyType
 from typing import Any, cast
 from uuid import UUID
 
+from cortex.hosted.embeddings import HOSTED_VECTOR_INDEX_CONFIG_VERSION
 from cortex.hosted.scopes import QueryScope, query_scope_parameters
 
-ASK_LEDGER_RETRIEVAL_CONFIG_VERSION = "ask-ledger-v1"
+ASK_LEDGER_RETRIEVAL_CONFIG_VERSION = f"ask-ledger-v2+{HOSTED_VECTOR_INDEX_CONFIG_VERSION}"
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 
@@ -412,8 +413,8 @@ def ask_ledger_retrieval_sql(schema: str = "cortex_hosted") -> str:
 
     The query produces cited candidates only. It includes exact/link, scope,
     full-text, trigram, optional vector, and one-hop graph expansion sources.
-    Embeddings are a rebuildable projection; callers pass NULL embedding
-    parameters until #466 wires projection generation and recall checks.
+    Embeddings are a rebuildable projection keyed by model, dimension, and
+    epoch; callers pass NULL embedding parameters when vector search is absent.
     """
 
     _validate_sql_identifier(schema)
@@ -517,6 +518,7 @@ vector_candidates AS (
      AND embedding.item_type = 'decision_version'
      AND embedding.item_id = version.decision_version_id
      AND embedding.embedding_model_id = %(embedding_model_id)s
+     AND embedding.embedding_dimension = vector_dims(%(embedding_vector)s::vector)
      AND embedding.embedding_epoch = %(embedding_epoch)s
     WHERE %(embedding_vector)s::vector IS NOT NULL
 ),

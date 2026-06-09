@@ -18,9 +18,12 @@ from cortex.hosted.ask_ledger import (
     CitedSourceSpan,
     RetrievalTrace,
 )
+from cortex.hosted.embeddings import HOSTED_VECTOR_INDEX_CONFIG_VERSION
 from cortex.hosted.scopes import ChangedSurface, QueryScope, query_scope_parameters
 
-DECISIONS_FOR_DIFF_RETRIEVAL_CONFIG_VERSION = "decisions-for-diff-v1"
+DECISIONS_FOR_DIFF_RETRIEVAL_CONFIG_VERSION = (
+    f"decisions-for-diff-v2+{HOSTED_VECTOR_INDEX_CONFIG_VERSION}"
+)
 DEFAULT_DECISIONS_FOR_DIFF_LIMIT = 30
 MAX_DECISIONS_FOR_DIFF_LIMIT = 30
 
@@ -426,6 +429,7 @@ vector_candidates AS (
      AND embedding.item_type = 'decision_version'
      AND embedding.item_id = version.decision_version_id
      AND embedding.embedding_model_id = %(embedding_model_id)s
+     AND embedding.embedding_dimension = vector_dims(%(embedding_vector)s::vector)
      AND embedding.embedding_epoch = %(embedding_epoch)s
     WHERE %(embedding_vector)s::vector IS NOT NULL
 ),

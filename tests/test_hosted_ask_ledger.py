@@ -268,6 +268,7 @@ def test_retrieval_trace_records_candidates_scores_reasons_and_versions() -> Non
     params = trace.as_insert_parameters(tenant_id=TENANT_ID)
 
     assert params["retrieval_config_version"] == ASK_LEDGER_RETRIEVAL_CONFIG_VERSION
+    assert "pgvector-hnsw-v1" in str(params["retrieval_config_version"])
     assert params["query_kind"] == "ask_ledger"
     assert params["query_input_hash"] == query.query_hash
     assert params["candidate_set_hash"] == pack.candidate_set_hash
@@ -291,6 +292,7 @@ def test_ask_ledger_retrieval_sql_includes_hybrid_sources_visibility_and_citatio
     assert "cited_fused AS" in sql
     assert "WHERE EXISTS (" in sql
     assert "embedding.embedding <=> %(embedding_vector)s::vector" in sql
+    assert "embedding.embedding_dimension = vector_dims(%(embedding_vector)s::vector)" in sql
     assert "websearch_to_tsquery('english', %(query)s)" in sql
     assert "similarity(version.decision_text, %(query)s)" in sql
     assert "jsonb_agg(" in sql
