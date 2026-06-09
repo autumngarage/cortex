@@ -81,6 +81,22 @@ def test_schema_adds_repo_aware_scope_indexes() -> None:
     assert "decision_scopes_config_key_idx" in sql
 
 
+def test_schema_adds_ask_ledger_search_indexes_and_embeddings_projection() -> None:
+    sql = create_schema_sql()
+
+    assert "CREATE TABLE IF NOT EXISTS cortex_hosted.embeddings" in sql
+    assert "item_id uuid NOT NULL REFERENCES cortex_hosted.decision_versions" in sql
+    assert "embedding vector NOT NULL" in sql
+    assert "UNIQUE (tenant_id, item_type, item_id, embedding_model_id, embedding_epoch)" in sql
+    assert "CHECK (item_type = 'decision_version')" in sql
+    assert "decision_versions_text_fts_idx" in sql
+    assert "decision_versions_text_trgm_idx" in sql
+    assert "source_spans_excerpt_fts_idx" in sql
+    assert "source_spans_excerpt_trgm_idx" in sql
+    assert "embeddings_lookup_idx" in sql
+    assert "Rebuildable vector-search projection keyed by model and epoch" in sql
+
+
 def test_schema_models_source_documents_as_immutable_snapshots() -> None:
     sql = create_schema_sql()
 
@@ -119,7 +135,7 @@ def test_schema_models_citable_source_spans() -> None:
 def test_schema_records_version() -> None:
     sql = create_schema_sql()
 
-    assert HOSTED_SCHEMA_VERSION == 3
+    assert HOSTED_SCHEMA_VERSION == 4
     assert f"VALUES ({HOSTED_SCHEMA_VERSION})" in sql
 
 

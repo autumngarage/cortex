@@ -7,7 +7,7 @@ import re
 from cortex.hosted.ledger_events import LedgerEventType
 from cortex.hosted.scopes import ScopeType
 
-HOSTED_SCHEMA_VERSION = 3
+HOSTED_SCHEMA_VERSION = 4
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -449,6 +449,26 @@ CREATE TABLE IF NOT EXISTS {schema}.retrieval_traces (
     CHECK (jsonb_typeof(reason_codes) = 'object')
 );
 
+CREATE TABLE IF NOT EXISTS {schema}.embeddings (
+    embedding_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL REFERENCES {schema}.tenants (tenant_id),
+    repo_id uuid REFERENCES {schema}.repos (repo_id),
+    item_type text NOT NULL,
+    item_id uuid NOT NULL REFERENCES {schema}.decision_versions (decision_version_id),
+    item_hash text NOT NULL,
+    embedding_model_id text NOT NULL,
+    embedding_epoch text NOT NULL,
+    embedding vector NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    metadata jsonb NOT NULL DEFAULT '{{}}'::jsonb,
+    UNIQUE (tenant_id, item_type, item_id, embedding_model_id, embedding_epoch),
+    CHECK (item_type = 'decision_version'),
+    CHECK (item_hash ~ '^[a-f0-9]{{64}}$'),
+    CHECK (embedding_model_id <> ''),
+    CHECK (embedding_epoch <> ''),
+    CHECK (jsonb_typeof(metadata) = 'object')
+);
+
 CREATE INDEX IF NOT EXISTS ledger_events_tenant_time_idx
     ON {schema}.ledger_events (tenant_id, occurred_at, event_id);
 
@@ -488,11 +508,30 @@ CREATE INDEX IF NOT EXISTS decision_scopes_config_key_idx
 CREATE INDEX IF NOT EXISTS source_spans_hash_idx
     ON {schema}.source_spans (tenant_id, span_hash);
 
+CREATE INDEX IF NOT EXISTS decision_versions_text_fts_idx
+    ON {schema}.decision_versions
+    USING gin (to_tsvector('english', decision_text));
+
+CREATE INDEX IF NOT EXISTS decision_versions_text_trgm_idx
+    ON {schema}.decision_versions
+    USING gin (decision_text gin_trgm_ops);
+
+CREATE INDEX IF NOT EXISTS source_spans_excerpt_fts_idx
+    ON {schema}.source_spans
+    USING gin (to_tsvector('english', excerpt));
+
+CREATE INDEX IF NOT EXISTS source_spans_excerpt_trgm_idx
+    ON {schema}.source_spans
+    USING gin (excerpt gin_trgm_ops);
+
 CREATE INDEX IF NOT EXISTS source_documents_metadata_gin_idx
     ON {schema}.source_documents USING gin (metadata);
 
 CREATE INDEX IF NOT EXISTS retrieval_traces_tenant_kind_idx
     ON {schema}.retrieval_traces (tenant_id, query_kind, created_at);
+
+CREATE INDEX IF NOT EXISTS embeddings_lookup_idx
+    ON {schema}.embeddings (tenant_id, item_type, item_id, embedding_model_id, embedding_epoch);
 
 CREATE OR REPLACE FUNCTION {schema}.prevent_ledger_event_mutation()
 RETURNS trigger
@@ -564,6 +603,9 @@ COMMENT ON TABLE {schema}.decision_scopes IS
 
 COMMENT ON TABLE {schema}.retrieval_traces IS
     'Replay/debug projection recording candidate sets, scores, reasons, omitted counts, and config versions.';
+
+COMMENT ON TABLE {schema}.embeddings IS
+    'Rebuildable vector-search projection keyed by model and epoch; ledger_events remains source of truth.';
 
 INSERT INTO {schema}.schema_migrations (version)
 VALUES ({HOSTED_SCHEMA_VERSION})
