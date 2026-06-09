@@ -3,7 +3,7 @@
 **Date:** 2026-06-09
 **Type:** decision
 **Trigger:** T1.1 (diff touches `.cortex/plans/hosted-decision-reviewer.md`)
-**Cites:** plans/hosted-decision-reviewer.md, journal/2026-06-09-hosted-decision-reviewer-plan-adopted, journal/2026-06-09-pr-merged-hosted-substrate-wave
+**Cites:** plans/hosted-decision-reviewer.md, journal/2026-06-09-hosted-decision-reviewer-plan-adopted, journal/2026-06-09-pr-merged-pr477
 
 > A full review of the 12 plan files and 164 open product issues (multi-agent,
 > adversarially verified: 52 confirmed findings of 74 checked) refined the
