@@ -51,11 +51,64 @@ def test_schema_tracks_rebuildable_projections_and_traces() -> None:
     assert "candidate sets, scores, reasons, omitted counts" in sql
 
 
+def test_schema_models_source_documents_as_immutable_snapshots() -> None:
+    sql = create_schema_sql()
+
+    assert "CREATE TABLE IF NOT EXISTS cortex_hosted.source_documents" in sql
+    assert "document_hash text NOT NULL" in sql
+    assert "source_revision text" in sql
+    assert "UNIQUE (tenant_id, document_hash)" in sql
+    assert "UNIQUE (tenant_id, source_document_id, document_hash)" in sql
+    assert "UNIQUE (tenant_id, source_id, external_id, content_hash)" in sql
+    assert "BEFORE UPDATE ON cortex_hosted.source_documents" in sql
+    assert "BEFORE DELETE ON cortex_hosted.source_documents" in sql
+    assert "Immutable source snapshots keyed by content hash" in sql
+
+
+def test_schema_models_citable_source_spans() -> None:
+    sql = create_schema_sql()
+
+    assert "CREATE TABLE IF NOT EXISTS cortex_hosted.source_spans" in sql
+    assert "source_document_id uuid NOT NULL" in sql
+    assert "source_document_hash text NOT NULL" in sql
+    assert (
+        "CONSTRAINT source_spans_source_document_snapshot_fk\n"
+        "    FOREIGN KEY (tenant_id, source_document_id, source_document_hash)\n"
+        "        REFERENCES cortex_hosted.source_documents (\n"
+        "            tenant_id,\n"
+        "            source_document_id,\n"
+        "            document_hash\n"
+        "        )"
+    ) in sql
+    assert "UNIQUE (tenant_id, span_hash)" in sql
+    assert "BEFORE UPDATE ON cortex_hosted.source_spans" in sql
+    assert "BEFORE DELETE ON cortex_hosted.source_spans" in sql
+    assert "Citable source excerpts derived from immutable source document snapshots" in sql
+
+
 def test_schema_records_version() -> None:
     sql = create_schema_sql()
 
-    assert HOSTED_SCHEMA_VERSION == 1
+    assert HOSTED_SCHEMA_VERSION == 2
     assert f"VALUES ({HOSTED_SCHEMA_VERSION})" in sql
+
+
+def test_schema_migrates_v1_source_provenance_tables() -> None:
+    sql = create_schema_sql()
+
+    assert "ADD COLUMN IF NOT EXISTS document_hash text" in sql
+    assert "ADD COLUMN IF NOT EXISTS source_revision text" in sql
+    assert "WHERE document_hash IS NULL" in sql
+    assert "ALTER COLUMN document_hash SET NOT NULL" in sql
+    assert "DROP CONSTRAINT source_documents_tenant_id_source_id_external_id_key" in sql
+    assert "ADD COLUMN IF NOT EXISTS source_document_hash text" in sql
+    assert "WHERE span.source_document_hash IS NULL" in sql
+    assert "ALTER COLUMN source_document_hash SET NOT NULL" in sql
+    assert "DROP CONSTRAINT source_spans_source_document_id_fkey" in sql
+    assert "ADD CONSTRAINT source_spans_source_document_snapshot_fk" in sql
+    assert sql.rfind(f"VALUES ({HOSTED_SCHEMA_VERSION})") > sql.rfind(
+        "ADD CONSTRAINT source_spans_source_document_snapshot_fk"
+    )
 
 
 def test_schema_constraint_addition_is_idempotent() -> None:

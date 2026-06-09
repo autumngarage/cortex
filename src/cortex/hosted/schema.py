@@ -6,7 +6,7 @@ import re
 
 from cortex.hosted.ledger_events import LedgerEventType
 
-HOSTED_SCHEMA_VERSION = 1
+HOSTED_SCHEMA_VERSION = 2
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -30,10 +30,6 @@ CREATE TABLE IF NOT EXISTS {schema}.schema_migrations (
     version integer PRIMARY KEY,
     applied_at timestamptz NOT NULL DEFAULT now()
 );
-
-INSERT INTO {schema}.schema_migrations (version)
-VALUES ({HOSTED_SCHEMA_VERSION})
-ON CONFLICT (version) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS {schema}.tenants (
     tenant_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -85,14 +81,19 @@ CREATE TABLE IF NOT EXISTS {schema}.source_documents (
     source_timestamp timestamptz NOT NULL,
     ingested_at timestamptz NOT NULL DEFAULT now(),
     content_hash text NOT NULL,
+    document_hash text NOT NULL,
+    source_revision text,
     visibility jsonb NOT NULL DEFAULT '{{}}'::jsonb,
     metadata jsonb NOT NULL DEFAULT '{{}}'::jsonb,
-    UNIQUE (tenant_id, source_id, external_id),
+    CONSTRAINT source_documents_snapshot_unique UNIQUE (tenant_id, document_hash),
+    CONSTRAINT source_documents_id_hash_unique UNIQUE (tenant_id, source_document_id, document_hash),
+    CONSTRAINT source_documents_external_content_unique UNIQUE (tenant_id, source_id, external_id, content_hash),
     CHECK (document_type <> ''),
     CHECK (external_id <> ''),
     CHECK (permalink <> ''),
     CHECK (author_ref <> ''),
     CHECK (content_hash ~ '^[a-f0-9]{{64}}$'),
+    CONSTRAINT source_documents_document_hash_check CHECK (document_hash ~ '^[a-f0-9]{{64}}$'),
     CHECK (jsonb_typeof(visibility) = 'object'),
     CHECK (jsonb_typeof(metadata) = 'object')
 );
@@ -100,7 +101,8 @@ CREATE TABLE IF NOT EXISTS {schema}.source_documents (
 CREATE TABLE IF NOT EXISTS {schema}.source_spans (
     source_span_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id uuid NOT NULL REFERENCES {schema}.tenants (tenant_id),
-    source_document_id uuid NOT NULL REFERENCES {schema}.source_documents (source_document_id),
+    source_document_id uuid NOT NULL,
+    source_document_hash text NOT NULL,
     span_hash text NOT NULL,
     start_offset integer NOT NULL,
     end_offset integer NOT NULL,
@@ -108,12 +110,151 @@ CREATE TABLE IF NOT EXISTS {schema}.source_spans (
     permalink text NOT NULL,
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (tenant_id, span_hash),
+    CONSTRAINT source_spans_source_document_hash_check CHECK (source_document_hash ~ '^[a-f0-9]{{64}}$'),
     CHECK (span_hash ~ '^[a-f0-9]{{64}}$'),
     CHECK (start_offset >= 0),
     CHECK (end_offset > start_offset),
     CHECK (excerpt <> ''),
-    CHECK (permalink <> '')
+    CHECK (permalink <> ''),
+    CONSTRAINT source_spans_source_document_snapshot_fk
+    FOREIGN KEY (tenant_id, source_document_id, source_document_hash)
+        REFERENCES {schema}.source_documents (
+            tenant_id,
+            source_document_id,
+            document_hash
+        )
 );
+
+DO $$
+BEGIN
+    ALTER TABLE {schema}.source_documents
+        ADD COLUMN IF NOT EXISTS document_hash text;
+
+    ALTER TABLE {schema}.source_documents
+        ADD COLUMN IF NOT EXISTS source_revision text;
+
+    UPDATE {schema}.source_documents
+    SET document_hash = encode(
+        digest(
+            '{{"content_hash":' || to_json(content_hash)::text ||
+            ',"external_id":' || to_json(external_id)::text ||
+            ',"source_id":' || to_json(source_id::text)::text ||
+            ',"tenant_id":' || to_json(tenant_id::text)::text ||
+            '}}',
+            'sha256'
+        ),
+        'hex'
+    )
+    WHERE document_hash IS NULL;
+
+    ALTER TABLE {schema}.source_documents
+        ALTER COLUMN document_hash SET NOT NULL;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'source_documents_tenant_id_source_id_external_id_key'
+          AND conrelid = '{schema}.source_documents'::regclass
+    ) THEN
+        ALTER TABLE {schema}.source_documents
+            DROP CONSTRAINT source_documents_tenant_id_source_id_external_id_key;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'source_documents_snapshot_unique'
+          AND conrelid = '{schema}.source_documents'::regclass
+    ) THEN
+        ALTER TABLE {schema}.source_documents
+            ADD CONSTRAINT source_documents_snapshot_unique
+            UNIQUE (tenant_id, document_hash);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'source_documents_id_hash_unique'
+          AND conrelid = '{schema}.source_documents'::regclass
+    ) THEN
+        ALTER TABLE {schema}.source_documents
+            ADD CONSTRAINT source_documents_id_hash_unique
+            UNIQUE (tenant_id, source_document_id, document_hash);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'source_documents_external_content_unique'
+          AND conrelid = '{schema}.source_documents'::regclass
+    ) THEN
+        ALTER TABLE {schema}.source_documents
+            ADD CONSTRAINT source_documents_external_content_unique
+            UNIQUE (tenant_id, source_id, external_id, content_hash);
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'source_documents_document_hash_check'
+          AND conrelid = '{schema}.source_documents'::regclass
+    ) THEN
+        ALTER TABLE {schema}.source_documents
+            ADD CONSTRAINT source_documents_document_hash_check
+            CHECK (document_hash ~ '^[a-f0-9]{{64}}$');
+    END IF;
+
+    ALTER TABLE {schema}.source_spans
+        ADD COLUMN IF NOT EXISTS source_document_hash text;
+
+    UPDATE {schema}.source_spans AS span
+    SET source_document_hash = doc.document_hash
+    FROM {schema}.source_documents AS doc
+    WHERE span.source_document_hash IS NULL
+      AND span.tenant_id = doc.tenant_id
+      AND span.source_document_id = doc.source_document_id;
+
+    ALTER TABLE {schema}.source_spans
+        ALTER COLUMN source_document_hash SET NOT NULL;
+
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'source_spans_source_document_id_fkey'
+          AND conrelid = '{schema}.source_spans'::regclass
+    ) THEN
+        ALTER TABLE {schema}.source_spans
+            DROP CONSTRAINT source_spans_source_document_id_fkey;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'source_spans_source_document_hash_check'
+          AND conrelid = '{schema}.source_spans'::regclass
+    ) THEN
+        ALTER TABLE {schema}.source_spans
+            ADD CONSTRAINT source_spans_source_document_hash_check
+            CHECK (source_document_hash ~ '^[a-f0-9]{{64}}$');
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'source_spans_source_document_snapshot_fk'
+          AND conrelid = '{schema}.source_spans'::regclass
+    ) THEN
+        ALTER TABLE {schema}.source_spans
+            ADD CONSTRAINT source_spans_source_document_snapshot_fk
+            FOREIGN KEY (tenant_id, source_document_id, source_document_hash)
+            REFERENCES {schema}.source_documents (
+                tenant_id,
+                source_document_id,
+                document_hash
+            );
+    END IF;
+END;
+$$;
 
 CREATE TABLE IF NOT EXISTS {schema}.ledger_events (
     event_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -299,6 +440,16 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION {schema}.prevent_provenance_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION 'source provenance is immutable; attempted %', TG_OP
+        USING ERRCODE = '55000';
+END;
+$$;
+
 DROP TRIGGER IF EXISTS ledger_events_no_update ON {schema}.ledger_events;
 CREATE TRIGGER ledger_events_no_update
     BEFORE UPDATE ON {schema}.ledger_events
@@ -309,6 +460,26 @@ CREATE TRIGGER ledger_events_no_delete
     BEFORE DELETE ON {schema}.ledger_events
     FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_ledger_event_mutation();
 
+DROP TRIGGER IF EXISTS source_documents_no_update ON {schema}.source_documents;
+CREATE TRIGGER source_documents_no_update
+    BEFORE UPDATE ON {schema}.source_documents
+    FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_provenance_mutation();
+
+DROP TRIGGER IF EXISTS source_documents_no_delete ON {schema}.source_documents;
+CREATE TRIGGER source_documents_no_delete
+    BEFORE DELETE ON {schema}.source_documents
+    FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_provenance_mutation();
+
+DROP TRIGGER IF EXISTS source_spans_no_update ON {schema}.source_spans;
+CREATE TRIGGER source_spans_no_update
+    BEFORE UPDATE ON {schema}.source_spans
+    FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_provenance_mutation();
+
+DROP TRIGGER IF EXISTS source_spans_no_delete ON {schema}.source_spans;
+CREATE TRIGGER source_spans_no_delete
+    BEFORE DELETE ON {schema}.source_spans
+    FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_provenance_mutation();
+
 COMMENT ON TABLE {schema}.ledger_events IS
     'Canonical append-only hosted Cortex ledger. Mutations are forbidden; corrections append new events.';
 
@@ -318,11 +489,21 @@ COMMENT ON TABLE {schema}.decision_nodes IS
 COMMENT ON TABLE {schema}.decision_versions IS
     'Immutable decision projection snapshots rebuilt from ledger_events and source spans.';
 
+COMMENT ON TABLE {schema}.source_documents IS
+    'Immutable source snapshots keyed by content hash so source drift does not overwrite citations.';
+
+COMMENT ON TABLE {schema}.source_spans IS
+    'Citable source excerpts derived from immutable source document snapshots.';
+
 COMMENT ON TABLE {schema}.decision_scopes IS
     'Structural search projection rebuilt from decision_versions and ledger_events.';
 
 COMMENT ON TABLE {schema}.retrieval_traces IS
     'Replay/debug projection recording candidate sets, scores, reasons, omitted counts, and config versions.';
+
+INSERT INTO {schema}.schema_migrations (version)
+VALUES ({HOSTED_SCHEMA_VERSION})
+ON CONFLICT (version) DO NOTHING;
 """.strip()
 
 
