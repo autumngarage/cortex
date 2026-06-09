@@ -1,8 +1,9 @@
 ---
-Status: active
+Status: superseded
 Written: 2026-04-24
 Author: claude-session-2026-04-24
 Goal-hash: 9e961737
+Superseded-by: plans/hosted-decision-reviewer.md
 Updated-by:
   - 2026-04-24T12:30 claude-session-2026-04-24 (consolidated from plans/phase-c-authoring-and-state + phase-d-integration + phase-e-synthesis-and-governance; absorbed the five case-study-driven follow-ups from journal/2026-04-24-case-study-driven-roadmap)
   - 2026-04-24T15:35 claude-session-2026-04-24 (added journal/2026-04-24-v1-followups-parked as resolution target for v1.x+ deferrals per Codex review on PR #30 + SPEC § 4.2)
@@ -17,10 +18,17 @@ Updated-by:
   - 2026-05-03 claude-session-2026-05-03 (post-shipping checkbox flips — v0.7.0 S2 ✅ shipped at v0.8.0 PR #95; cross-platform install risks ✅ documented in v0.8.0; v1.0 .cortex/config.toml schema reference doc ✅ shipped PR #91; v1.0 SPEC-to-test traceability matrix ✅ shipped PR #92; Touchstone post-merge hook 🟡 partially shipped — touchstone PR #129 + cortex PR #98 land the hook + opt-in, canary count still pending. Surfaced via `cortex next` ranking already-shipped items as P0 — drift caught by user's dogfood question. Follow-up automation tracked at cortex#TODO — doctor check that warns when `cortex next` would surface items overlapping with recent release/pr-merged journal entries)
   - 2026-05-04 codex-session-2026-05-04 (dogfood correction: stale high-authority guidance is now a first-class doctor concern — `state.md` generated before newer sources, stale `state.md ## Current work`, and stale active-plan `## Pickup pointer` prose all warn. Retrieval S3 reframed as downstream Sentinel integration; Sentinel filed as autumngarage/sentinel#111. Cortex production readiness no longer depends on Sentinel consuming `cortex retrieve --json`. Also surfaced cortex#107: v0.8.1 tag points at a commit whose package metadata still says 0.8.0.)
   - 2026-05-04 codex-session-2026-05-04 (release-integrity P0 closed by v0.8.2: PR #111 added tag/package metadata verification to scripts/release.sh and release.yml before Homebrew tap bump; GitHub Release v0.8.2 published; Homebrew upgraded autumngarage/cortex/cortex 0.8.1 → 0.8.2; `/opt/homebrew/bin/cortex version` reports 0.8.2. cortex#107 closed.)
+  - 2026-06-09 codex (Status: active → superseded by plans/hosted-decision-reviewer.md; retained as CLI/protocol release-track history)
 Cites: ../../SPEC.md, ../../.cortex/protocol.md, ../doctrine/0001-why-cortex-exists, ../doctrine/0005-scope-boundaries-v2, ../doctrine/0003-spec-is-the-artifact, ../doctrine/0002-compose-by-file-contract-not-code, journal/2026-04-23-phase-c-reordered, journal/2026-04-24-case-study-driven-roadmap, journal/2026-04-24-single-plan-consolidation, journal/2026-04-24-v1-followups-parked, journal/2026-04-24-production-release-rerank, journal/2026-04-24-dogfood-target-touchstone, journal/2026-04-28-cortex-v050-released-tier-2-tier-3-partial-tier-4, journal/2026-04-28-cortex-v051-autumn-mail-dogfood-polish-patch, journal/2026-04-28-codesight-cross-pollination-and-council-review, ../../docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md
 ---
 
 # Ship Cortex v1.0
+
+> **Superseded 2026-06-09:** the active product sequence moved to
+> [`plans/hosted-decision-reviewer.md`](./hosted-decision-reviewer.md), which is
+> guided by the Obsidian Cortex master plan. This file remains useful release
+> history for the file-format CLI/protocol track, but it is no longer the active
+> master plan.
 
 > The one plan from here to v1.0. Sequenced as **feature-readiness tiers**, not calendar releases. Each tier names a capability bar a real project can rely on. The forcing function: install Cortex on three real projects (conductor + touchstone + vesper), do real work, no surprises.
 

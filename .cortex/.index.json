@@ -1,6 +1,6 @@
 {
   "spec": "0.5.0",
-  "generated": "2026-05-25T18:41:11-04:00",
+  "generated": "2026-06-08T22:03:15-04:00",
   "candidates": [
     {
       "id": "2026-04-17-competitive-positioning-and-claude-code-risk",
@@ -250,6 +250,15 @@
       "source": ".cortex/journal/2026-05-25-defer-manifest-semantic-topup-pending-evidence.md",
       "type": "decision",
       "last_touched": "2026-05-25",
+      "tags": [],
+      "supersedes": null,
+      "promoted_to": null
+    },
+    {
+      "id": "2026-06-09-hosted-decision-reviewer-plan-adopted",
+      "source": ".cortex/journal/2026-06-09-hosted-decision-reviewer-plan-adopted.md",
+      "type": "decision",
+      "last_touched": "2026-06-09",
       "tags": [],
       "supersedes": null,
       "promoted_to": null

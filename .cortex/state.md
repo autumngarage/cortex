@@ -1,10 +1,10 @@
 ---
-Generated: 2026-06-08T12:28:26-04:00
+Generated: 2026-06-08T22:06:17-04:00
 Generator: cortex refresh-state v1.6.4
 Sources:
-  - HEAD sha: 9308fb7422582859f8fdaea8576d28f1dff7e67c
-  - .cortex/plans/*.md (11 files)
-  - .cortex/journal/*.md (111 entries, 2026-04-17..2026-06-08)
+  - HEAD sha: 2bb6e0f229bd799276c51e282c220f8dc575f9fd
+  - .cortex/plans/*.md (12 files)
+  - .cortex/journal/*.md (114 entries, 2026-04-17..2026-06-09)
   - .cortex/doctrine/*.md (11 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
@@ -133,10 +133,14 @@ Sources-hash:
   .cortex/journal/2026-05-25-defer-manifest-semantic-topup-pending-evidence.md: d4b8e44ff5b86157eac0f103461c602996061c1aba923d5c723e0739cbdb201f
   .cortex/journal/2026-05-25-pr-merged-1841.md: 1d272cebb469f13d2a715dec6e3f22662e9344e86c8b7eb656cd0da1f518c5bc
   .cortex/journal/2026-06-08-hosted-credit-pricing.md: fdc1fc3bfa9f4d91cfa93770582433a24d0c007b1b43df9a2c41cc0ea48d9fc2
-  .cortex/plans/context-integrity-production.md: 64ea99202b92e8e9ca36ef57fc73b3a8110de3762e8c090b64762481c826eac0
+  .cortex/journal/2026-06-09-context-integrity-plan-superseded.md: b69cbf51f89b2e35c0f2a56582dc81656428be2224d0015c2d5aa2e63c5b3a17
+  .cortex/journal/2026-06-09-cortex-v1-plan-superseded.md: ed867ed340ccbe050465fbb191e2837f8f7a7e44926f7816f5b9bea98db6b6b8
+  .cortex/journal/2026-06-09-hosted-decision-reviewer-plan-adopted.md: 04dc3d7c20f09a39b22fc864fab247895858a25a68b02a105bb52e1530c8bde4
+  .cortex/plans/context-integrity-production.md: 5a1f58bd904f05205dfc1566ce39c8ced474f28bbfd457469dc10133d4c6a1c9
   .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
   .cortex/plans/cortex-v0.3.0.md: d78e60537e30ed81d8464575191674253822ed4953a055ca2a14a9626c5f8b6f
-  .cortex/plans/cortex-v1.md: 3a8aed197e9e994d02cf1e143c5abe1e5bb821c5a0c39145b3040c69a1eb5b65
+  .cortex/plans/cortex-v1.md: dd8b3e937f49dc44ec3104439c556f9a6b99bd0c68ef286986a98ff6f2d411f6
+  .cortex/plans/hosted-decision-reviewer.md: c90a6671a3c6f018f9a1a89a0f334a5509d11bf02e79f5ca39bafbd3aac67a98
   .cortex/plans/init-ux-fixes-from-touchstone.md: fdf183f562d2dcde26101ea6b44163bfccf8377affc712cf1318ec16be4ecaee
   .cortex/plans/phase-b-walking-skeleton.md: 3f52bfc07c327cfc88e26dccdf13b91e1d23cf02ff4dbea2426cd75d088c0e04
   .cortex/plans/phase-c-authoring-and-state.md: 8ab9a5ac4e593102e16ccab03a8b13248ec68f1afd05cd974c19c0c0e361c3c1
@@ -157,7 +161,7 @@ Sources-hash:
   .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476
   .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44
   docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c
-Corpus: 111 Journal entries, 11 Plans, 11 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 114 Journal entries, 12 Plans, 11 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -174,21 +178,20 @@ Spec: 0.5.0
 ## Current work
 
 **Active roadmaps:**
-- [`plans/cortex-v1.md`](./plans/cortex-v1.md) (Ship Cortex v1.0) — the master sequence: **shipped readiness tiers → retrieval interface → v0.9.0 three-target dogfood gate → v1.0 ceremony + compatibility**. The next concrete action lives in that plan's `## Pickup pointer` section.
-- [`plans/context-integrity-production.md`](./plans/context-integrity-production.md) (Build production context integrity) — the productization plan for Cortex as a context build system: budget instrumentation (#244), facts-file handoff (#243), source-PR journal staging (#207), production doctor profile, usage telemetry (#235), and evidence-gated semantic top-up (#234).
-- [`plans/cortex-retrieve.md`](./plans/cortex-retrieve.md) — Cortex-side retrieval sub-plan is shipped and retained for design history. Downstream Sentinel consumption is tracked in autumngarage/sentinel#111, not as a Cortex blocker.
+- [`plans/hosted-decision-reviewer.md`](./plans/hosted-decision-reviewer.md) — the active repo-operational plan. It is guided by the Obsidian Cortex master plan and maps the work to GitHub issues #444-#475.
+- [`plans/cortex-v1.md`](./plans/cortex-v1.md) — superseded as an active plan; retained as CLI/protocol release-track history.
+- [`plans/context-integrity-production.md`](./plans/context-integrity-production.md) — superseded as an active plan; retained as context-integrity substrate history.
+- [`plans/cortex-retrieve.md`](./plans/cortex-retrieve.md) — shipped retrieval sub-plan retained for design history.
 
-This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) are the **canonical** answers to "where are we" and "what's next" per [Doctrine 0007](./doctrine/0007-canonical-ownership-of-state-and-plans.md). Repo-root duplicates (ROADMAP.md, STATUS.md, PLAN.md, NEXT.md) are anti-pattern — README links here instead.
+This file (`.cortex/state.md`) and [`plans/hosted-decision-reviewer.md`](./plans/hosted-decision-reviewer.md) are the repo-internal answers to "where are we" and "what's next" per [Doctrine 0007](./doctrine/0007-canonical-ownership-of-state-and-plans.md). The external Obsidian `cortex_master_plan.md` owns product strategy; `.cortex` points agents to it and records the repo-operational plan.
 
 **Status by stage:**
-- **Readiness tiers through lifecycle are shipped.** Tier 1, Tier 2, Tier 3 Cortex-side, and Tier 4 lifecycle are closed; release details live in the generated `## Shipped recently` section below and the cited release journals.
-- **Retrieval interface is Cortex-side shipped.** BM25, semantic, hybrid, and stable JSON output are available from the Cortex CLI. The remaining Sentinel Planner hookup is downstream work in autumngarage/sentinel#111.
-- **Release integrity is shipped at v0.8.2.** cortex#107 is closed: the corrective `v0.8.2` tag contains matching package metadata, release.yml verifies tag metadata before Homebrew tap bump. <!-- cortex:no-stale-check -->
-- **v0.9.0 dogfood gate is closed.** Cortex installed on conductor (autumngarage/conductor#178), touchstone (autumngarage/touchstone#151), and vesper (henrymodisett/vesper#167). 9 dogfood-surfaced bugs filed and closed in 4 swarm PRs (cortex#145–#148). Fresh-clone acceptance + bare-repo degradation CI fixtures permanent (PRs #150, #151). Retrieval validated per target (PR #149). Behavioral exit-bar review declared the gate exit (PR #152). v0.9.0 released 2026-05-06; `/opt/homebrew/bin/cortex` reports `0.9.0`. <!-- cortex:no-stale-check -->
-- **v1.0.0 — production release** is the active next stage. Three ceremony items already shipped (config.toml schema reference, SPEC-to-test traceability matrix, doctrine review — all 7 hold, no supersedes). Remaining swarmable work: SPEC freeze, README/PITCH/CASE-STUDIES refresh, PRIOR_ART codesight+Karpathy add, CLI help-text polish. User-involved items: pre-1.0 compatibility audit against v0.3/v0.5 fixture repos, brew-install smoke test on a clean machine.
-- **Context integrity production plan is active.** Doctrine 0008 makes the product boundary explicit: Cortex is Context CI for agents, not a generic memory bank. The active plan turns that into measurable production behavior through budget reports, narrow Conductor/facts-file handoffs, source-PR journal staging, production doctor diagnostics, and telemetry-backed retrieval decisions.
+- **Stage 0 — local proof:** prove ledger/search/evaluator locally with cited answers and historical PR replay.
+- **Stage 1 — hosted core:** Railway API service, worker service, Postgres, healthchecks, logs, backups, restore drill, and environment separation.
+- **Stage 2 — GitHub reviewer:** PR webhook, diff-scoped retrieval, advisory comments, and feedback capture.
+- **Stage 3 — Slack ledger console:** `@cortex what did we decide about X?`, `@cortex here is what we decided...`, confirm/reject/merge/supersede/stale.
 
-**Deferred from v1.0** (full list with revisit conditions in [`plans/cortex-v1.md`](./plans/cortex-v1.md) `## Follow-ups (deferred)`): LLM polish features (`refresh-map`, `refresh-state --enhance`, `cortex next --enhance`); triad-mode infrastructure; Sentinel end-of-cycle hook; Touchstone pre-push `--strict`; interactive per-candidate prompts; doctor audits for runtime triggers (T1.2/T1.6/T1.7); single-authority drift + full claim-trace doctor checks; MCP transport surface; standalone `cortex import-knowledge` command; doctrine-conflict resolution in `cortex promote`; manifest detection edge-case test fixtures; retention/cleanup destructive automation. **Note:** retrieval was previously in this list — promoted to v0.7.0 on 2026-05-02 because grep alone doesn't scale past ~100 entries on real-project corpora.
+**Deferred from the hosted core loop:** blocking checks, passive Slack ingestion, Linear/Granola connectors, MCP supply loop, enterprise/on-prem packaging, and marketplace billing. These stay future work until the explicit local/hosted/GitHub/Slack loop works.
 
 ## Open questions
 
@@ -197,8 +200,7 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 
 ## Active plans
 
-- `context-integrity-production` — Build production context integrity; Goal-hash `5372e371`; 60% complete (6/10 checkboxes)
-- `cortex-v1` — Ship Cortex v1.0; Goal-hash `9e961737`; 96% complete (44/46 checkboxes)
+- `hosted-decision-reviewer` — Build hosted decision reviewer; Goal-hash `ec1bc286`; 0% complete (0/6 checkboxes)
 
 ## Shipped recently
 
@@ -267,5 +269,4 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md) 
 
 ## Stale-now / handle-later
 
-- `context-integrity-production` — active plan stale since 2026-05-09; open checkboxes remain
-- `cortex-v1` — active plan stale since 2026-04-28; open checkboxes remain
+- none
