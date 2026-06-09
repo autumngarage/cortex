@@ -9,7 +9,7 @@ Omitted: []
 Incomplete:
   - All sources — `cortex refresh-map` is deferred from v1.0 to v1.x. Until shipped, treat the root-level docs (README.md, SPEC.md, plans/cortex-v1.md, the .cortex/ layout itself) as the authoritative map. Revisit map regeneration when a contributor lands on the dogfood target's repo and the stub becomes a real onboarding gap.
 Conflicts-preserved: []
-Spec: 0.3.1
+Spec: 1.1.0
 ---
 
 # Project Map
