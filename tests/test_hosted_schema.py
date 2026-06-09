@@ -6,6 +6,7 @@ import pytest
 
 from cortex.hosted.ledger_events import LedgerEventType
 from cortex.hosted.schema import HOSTED_SCHEMA_VERSION, create_schema_sql
+from cortex.hosted.scopes import ScopeType
 
 
 def test_schema_declares_postgres_extensions() -> None:
@@ -44,11 +45,40 @@ def test_schema_tracks_rebuildable_projections_and_traces() -> None:
     sql = create_schema_sql()
 
     assert "CREATE TABLE IF NOT EXISTS cortex_hosted.decision_nodes" in sql
+    assert "repo_id uuid" in sql
     assert "Current graph projection rebuilt from ledger_events" in sql
     assert "CREATE TABLE IF NOT EXISTS cortex_hosted.decision_scopes" in sql
     assert "Structural search projection rebuilt from decision_versions" in sql
     assert "CREATE TABLE IF NOT EXISTS cortex_hosted.retrieval_traces" in sql
     assert "candidate sets, scores, reasons, omitted counts" in sql
+
+
+def test_schema_scope_type_check_matches_python_enum() -> None:
+    sql = create_schema_sql()
+
+    scope_check = re.search(r"scope_type text NOT NULL,\n    scope_value text NOT NULL", sql)
+    assert scope_check is not None
+    scope_values_check = re.search(r"CHECK \(scope_type IN \(([^)]+)\)\)", sql)
+    assert scope_values_check is not None
+    ddl_scope_types = {
+        value.strip().strip("'")
+        for value in scope_values_check.group(1).split(",")
+    }
+
+    assert ddl_scope_types == {scope.value for scope in ScopeType}
+
+
+def test_schema_adds_repo_aware_scope_indexes() -> None:
+    sql = create_schema_sql()
+
+    assert "ADD COLUMN IF NOT EXISTS repo_id uuid" in sql
+    assert "decision_nodes_repo_fk" in sql
+    assert "decision_scopes_repo_fk" in sql
+    assert "decision_nodes_tenant_repo_status_idx" in sql
+    assert "decision_scopes_tenant_repo_type_value_idx" in sql
+    assert "decision_scopes_path_idx" in sql
+    assert "decision_scopes_symbol_idx" in sql
+    assert "decision_scopes_config_key_idx" in sql
 
 
 def test_schema_models_source_documents_as_immutable_snapshots() -> None:
@@ -89,7 +119,7 @@ def test_schema_models_citable_source_spans() -> None:
 def test_schema_records_version() -> None:
     sql = create_schema_sql()
 
-    assert HOSTED_SCHEMA_VERSION == 2
+    assert HOSTED_SCHEMA_VERSION == 3
     assert f"VALUES ({HOSTED_SCHEMA_VERSION})" in sql
 
 
