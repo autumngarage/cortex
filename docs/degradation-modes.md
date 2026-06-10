@@ -1,0 +1,204 @@
+# Reviewer degradation modes — the no-silent-failure taxonomy
+
+**Date:** 2026-06-09
+**Owns:** the behavioral vocabulary for visible reviewer failure
+(`DegradationMode`), the per-exception-type classification contract
+(`classify_failure`), and the reporting shape (`DegradationReport`) in
+[`src/cortex/hosted/degradation.py`](../src/cortex/hosted/degradation.py).
+**Does not own:** the substrate invariants themselves
+([docs/hosted-architecture.md](./hosted-architecture.md) § 1.3 owns the
+as-built map) or the evaluator behavior that applies this taxonomy
+(cortex#377, Wave 5).
+Closes cortex#329.
+
+The engineering-principles rule this operationalizes: *fallback behavior may
+continue only when it reports what failed, what was skipped, and what safety
+boundary still holds.* Every mode below names a behavior the shipped
+substrate already exhibits; the taxonomy gives those behaviors one
+vocabulary so the evaluator (cortex#377, Wave 5) and the Stage 2 GitHub
+reviewer can surface them uniformly instead of leaking per-module exception
+names to users.
+
+Two consumption rules:
+
+1. **`classify_failure` maps raised substrate exceptions and the
+   `AnswerState.NO_ANSWER` state to a mode.** Dispatch is by exact concrete
+   type. Unknown exception types raise `DegradationTaxonomyError` — an
+   unclassified failure is never treated as benign, and a subclass never
+   inherits its parent's classification without review.
+2. **`DegradationReport` is how a continuing code path declares a
+   degradation.** It requires a mode, a non-empty `reason_code` (why), a
+   non-empty `source` (what failed), and `safety_boundary_held=True`. A
+   report cannot be constructed with `safety_boundary_held=False`: if no
+   boundary held, the failure is an incident that must propagate, not a
+   degradation that may continue.
+
+The per-type classification table is the dispatch table in
+`degradation.py` (`classified_failure_types()` exposes it); this document
+owns the behavioral definitions.
+
+---
+
+## `fail_closed_refusal`
+
+**Trigger.** The system has an answerable-looking request but refuses to
+answer because the material required to answer safely is absent: no cited
+support, no explicit source authorization, or an operation that would cross
+a declared boundary.
+
+**Shipped examples.**
+
+- `ask_ledger.build_cited_context_pack` returns a `CitedContextPack` with
+  `AnswerState.NO_ANSWER` and `no_answer_reason="no_cited_support"` when no
+  candidate survives the citation filter — an uncited answer is structurally
+  unrepresentable (`src/cortex/hosted/ask_ledger.py`).
+- `visibility.normalize_visible_source_ids` raises
+  `VisibilityBoundaryValidationError` when retrieval is attempted without at
+  least one explicitly authorized source ID — deny-by-default, before any
+  SQL (`src/cortex/hosted/visibility.py`).
+- `storage.validate_canonical_store` raises `StoreBoundaryError` when hosted
+  code tries to use a store other than Postgres for product semantics
+  (`src/cortex/hosted/storage.py`).
+
+**What the user sees.** An explicit refusal with the reason: "no decision
+in the ledger supports an answer to this", or an authorization error naming
+the missing boundary. Never an empty-but-confident answer.
+
+**Never allowed.** Synthesizing an answer without citations; widening
+visibility to make a query succeed; downgrading the refusal to a warning
+while still emitting output.
+
+## `bounded_omission`
+
+**Trigger.** The system answers, but the candidate set was larger than the
+bound it is allowed to return, and the dropped remainder is counted and
+visible.
+
+**Shipped examples.**
+
+- `decisions_for_diff.build_decisions_for_diff_candidate_pack` caps
+  candidates at `MAX_DECISIONS_FOR_DIFF_LIMIT` (30) and records what was
+  dropped in `omitted_counts`, which travels into the retrieval trace
+  (`src/cortex/hosted/decisions_for_diff.py`).
+- `ask_ledger.build_cited_context_pack` records `missing_citations` and
+  `over_limit` counts in `omitted_counts` on every pack — even when the
+  answer ships (`src/cortex/hosted/ask_ledger.py`).
+- Dropped derive chatter is the same behavior at the write side: lane policy
+  logs dropped candidates with reason codes instead of writing them as graph
+  state (docs/hosted-architecture.md § 3.1).
+
+**What the user sees.** A normal answer plus visible omission diagnostics:
+counts per omission reason in the trace/replay report (cortex#331 owns the
+diagnostic surfacing).
+
+**Never allowed.** Dropping candidates without incrementing a visible
+count; truncating context silently to fit a budget; an `omitted_counts`
+that undercounts what was actually dropped.
+
+## `invalid_input_rejected`
+
+**Trigger.** Material fails validation before any model call or any write —
+the operation never starts, so there is no partial output to clean up.
+
+**Shipped examples.**
+
+- `LedgerEvent.__post_init__` raises `LedgerEventValidationError` when a
+  `finding.emitted` event lacks span hashes, a graph snapshot hash, or the
+  (model_id, prompt_version) pair (`src/cortex/hosted/ledger_events.py`).
+- `provenance.SourceDocument.span` raises `ProvenanceValidationError` on
+  out-of-range offsets (`src/cortex/hosted/provenance.py`).
+- `diff_surface.extract_changed_surface` raises
+  `DiffSurfaceValidationError` on unparseable patch text
+  (`src/cortex/hosted/diff_surface.py`).
+- `eval_fixtures.EvalFixture` raises `FixtureValidationError` on fixtures
+  whose findings cite spans absent from the fixture's decisions
+  (`src/cortex/hosted/eval_fixtures.py`).
+- `model_interfaces` (cortex#344) raises `ModelInterfaceValidationError`
+  when boundary material cannot support replayable model calls.
+
+**What the user sees.** The validation error itself, naming the field and
+the constraint. The reviewer reports the input as rejected; it does not
+review a best-effort repair of it.
+
+**Never allowed.** Coercing or defaulting invalid fields to make the call
+proceed; catching the validation error and continuing with a partial
+object; retrying the same invalid input.
+
+## `drift_detected`
+
+**Trigger.** Recorded identity material — a hash, a version stamp — does
+not match the content it claims to describe. The two sides have drifted,
+and results spanning the drift are not comparable.
+
+**Shipped examples.**
+
+- `model_registry.ModelPromptRegistry.resolve_prompt_version` raises
+  `RegistryValidationError` when a stamped prompt-version's hash prefix does
+  not match the registered template content — "prompt drift detected;
+  refuse to treat the verdicts as comparable"
+  (`src/cortex/hosted/model_registry.py`).
+- `RegisteredPrompt.from_payload` raises on a recorded `content_hash` that
+  the stored template text no longer hashes to
+  (`src/cortex/hosted/model_registry.py`).
+- At review time, every `RegistryValidationError` means a verdict's
+  (model, prompt) identity cannot be trusted as stated — unregistered
+  stamps and non-dense versions are the same broken-identity behavior, so
+  the type classifies as drift. The kindred hash/version mismatches in
+  other modules (`eval_fixtures` span-hash recompute mismatch,
+  fixture-schema-version mismatch) classify under their type's dominant
+  reviewer-runtime behavior (`invalid_input_rejected`); cortex#377 may
+  sub-classify those sites where the evaluator can see the behavior
+  directly.
+
+**What the user sees.** A refusal to compare or replay across the drift
+boundary, naming both sides of the mismatch. Verdicts produced before the
+drift stay in the ledger; they are not silently blended with post-drift
+verdicts (the version-your-data-boundaries principle).
+
+**Never allowed.** Treating pre- and post-drift outputs as comparable;
+re-stamping content to make hashes match; guessing which side of the
+mismatch is "current".
+
+## `degraded_capability`
+
+**Trigger.** An optional dependency or lane is unavailable, and the system
+continues in an explicitly reduced mode that it declares — what failed,
+what is skipped, what boundary still holds.
+
+**Shipped examples.**
+
+- `embeddings.VectorRecallReport.passed` returning `False` (recall below
+  the 0.95 floor) means the vector lane is unreliable; the declared reduced
+  mode is retrieval without the vector source — the other ranked sources
+  (exact/scope/full-text/trigram/graph in `ask_ledger.SOURCE_WEIGHTS`)
+  still run, and the citation boundary is unaffected
+  (`src/cortex/hosted/embeddings.py`).
+- `degradation.unregistered_optional_failure_sources()` is this module
+  dogfooding the mode: when `cortex.hosted.model_interfaces` (cortex#344)
+  is not yet importable, its exception type is not registered — declared
+  visibly, and provably safe because an exception class that does not
+  exist cannot be raised.
+
+**What the user sees.** A declared reduced mode: "vector retrieval
+disabled (recall 0.91 < 0.95 floor); lexical and structural retrieval
+active." Output produced in a reduced mode still satisfies every boundary
+above — cited, bounded, visible.
+
+**Never allowed.** Continuing without declaring the reduction; classifying
+an *unexpected* `ImportError` as degraded capability (`classify_failure`
+deliberately has no `ImportError` mapping — only a call site that probes an
+optional dependency on purpose may declare this mode); letting a reduced
+mode skip citation or visibility boundaries.
+
+---
+
+## Relationship to later stages
+
+- **cortex#377 (Wave 5)** applies this taxonomy inside the soft evaluator:
+  every evaluator failure path must classify, and every continuing path
+  must emit a `DegradationReport`.
+- **Stage 2 (GitHub reviewer)** surfaces these modes in advisory comments —
+  the user-facing strings quote `DegradationMode` values so operators can
+  grep a PR comment back to the code path that degraded.
+- **cortex#331 (Wave 7)** owns the omitted-decision diagnostic surfacing
+  that makes `bounded_omission` legible in replay reports.
