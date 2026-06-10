@@ -235,3 +235,7 @@ mode skip citation or visibility boundaries.
   rejected before any extraction or write. Recognized-but-noisy material is
   not a failure at all — it surfaces as `DroppedChatter` with a reason code
   (the write-side `bounded_omission` behavior above).
+- `banking.BankingValidationError`, `cascade.CascadeValidationError`, and
+  `quality_series.QualitySeriesValidationError` classify as
+  `invalid_input_rejected` — policy/composition/series material rejected
+  before any decision or rate is produced.

@@ -33,7 +33,9 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from cortex.hosted.ask_ledger import AnswerState, AskLedgerValidationError
+from cortex.hosted.banking import BankingValidationError
 from cortex.hosted.candidate_metrics import CandidateMetricsValidationError
+from cortex.hosted.cascade import CascadeValidationError
 from cortex.hosted.citation_check import CitationCheckError
 from cortex.hosted.confidence import ConfidenceValidationError
 from cortex.hosted.context_assembly import ContextAssemblyValidationError
@@ -53,6 +55,7 @@ from cortex.hosted.lanes import LanePolicyValidationError
 from cortex.hosted.ledger_events import LedgerEventValidationError
 from cortex.hosted.model_registry import RegistryValidationError
 from cortex.hosted.provenance import ProvenanceValidationError
+from cortex.hosted.quality_series import QualitySeriesValidationError
 from cortex.hosted.recorded_responses import RecordedResponseError
 from cortex.hosted.routing import (
     ClaudeCliOutputError,
@@ -103,6 +106,9 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     RecordedResponseMissingError: DegradationMode.FAIL_CLOSED_REFUSAL,
     RoutingError: DegradationMode.INVALID_INPUT_REJECTED,
     AskLedgerValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    BankingValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    CascadeValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    QualitySeriesValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     ConfidenceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     DecisionsForDiffValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     # DeriveStoreError's marquee failure is the same-idempotency-key /
