@@ -1,8 +1,8 @@
 ---
-Generated: 2026-06-10T10:40:47-04:00
+Generated: 2026-06-10T10:53:14-04:00
 Generator: cortex refresh-state v1.6.4
 Sources:
-  - HEAD sha: 53ac4f534bfc560d66172022cfbb3f26b382e6b6
+  - HEAD sha: f6810afc5695e902e117935993127116651f6716
   - .cortex/plans/*.md (12 files)
   - .cortex/journal/*.md (142 entries, 2026-04-17..2026-06-10)
   - .cortex/doctrine/*.md (11 entries)
@@ -168,7 +168,7 @@ Sources-hash:
   .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
   .cortex/plans/cortex-v0.3.0.md: d78e60537e30ed81d8464575191674253822ed4953a055ca2a14a9626c5f8b6f
   .cortex/plans/cortex-v1.md: 35b18afacd917c6345d450d7f272a8ac37f52efe3af867ffa3f41e4b485f978b
-  .cortex/plans/hosted-decision-reviewer.md: 75d8dfa6bae94416465492570be611260fe652202d4cdf83ab4b671f0c21183f
+  .cortex/plans/hosted-decision-reviewer.md: cf2dc7e23def07d6b00f7171d31af4d9bb62ba39c3a3b3e65ed3cc81b24d6c2a
   .cortex/plans/init-ux-fixes-from-touchstone.md: fdf183f562d2dcde26101ea6b44163bfccf8377affc712cf1318ec16be4ecaee
   .cortex/plans/phase-b-walking-skeleton.md: 4c890ebe0a166b6cf07a0ca150e468614d3130109509e44641cfad216066b0d2
   .cortex/plans/phase-c-authoring-and-state.md: 8ab9a5ac4e593102e16ccab03a8b13248ec68f1afd05cd974c19c0c0e361c3c1
@@ -218,6 +218,8 @@ This file (`.cortex/state.md`) and [`plans/hosted-decision-reviewer.md`](./plans
 - **Stage 1 — hosted core:** Postgres half DONE (schema v6 live on compass, extensions verified, append-only trigger proven, driver+migrations merged with passing live integration tests). Remaining: API shell #470, worker #471, ops #473/#474, env docs #469/#475, server transport #517.
 - **Stage 2 — GitHub reviewer:** PR webhook, diff-scoped retrieval, advisory comments, and feedback capture.
 - **Stage 3 — Slack ledger console:** `@cortex what did we decide about X?`, `@cortex here is what we decided...`, confirm/reject/merge/supersede/stale.
+
+**Path to first customer (2026-06-10):** P1 close the Stage 0 gate → P2 dogfood-deep (vesper/vanguard/outrider live tenants) → P3 simlab (#520-#522: synthetic projects, scenario regression, demo tenant) → P4 hosted core (Stage 1) → P5 design-partner outreach (App registration + Marketplace filing + outreach pack). Canonical detail: the active plan's `## Path to first customer`.
 
 **Deferred from the hosted core loop:** blocking checks, passive Slack ingestion, Linear/Granola connectors, MCP supply loop, enterprise/on-prem packaging, and marketplace billing. These stay future work until the explicit local/hosted/GitHub/Slack loop works.
 
