@@ -49,7 +49,13 @@ from cortex.hosted.model_registry import (
     RegistryValidationError,
 )
 from cortex.hosted.provenance import SourceDocument
-from cortex.hosted.recorded_responses import RecordedResponseError
+from cortex.hosted.recorded_responses import (
+    RecordedResponseError,
+    derive_result_as_payload,
+    derive_result_from_payload,
+    evaluate_result_as_payload,
+    evaluate_result_from_payload,
+)
 from cortex.hosted.routing import (
     AdapterOutcome,
     ClaudeCliAdapter,
@@ -60,10 +66,6 @@ from cortex.hosted.routing import (
     RouteTable,
     RoutingError,
     TaskKind,
-    derive_result_as_payload,
-    derive_result_from_payload,
-    evaluate_result_as_payload,
-    evaluate_result_from_payload,
 )
 
 TENANT = "0b6f9f3e-3a2f-4f2e-9c8d-1a2b3c4d5e6f"
