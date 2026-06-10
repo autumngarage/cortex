@@ -228,6 +228,13 @@ mode skip citation or visibility boundaries.
   recording never falls back to a live call).
 - `recorded_responses.RecordedResponseError` -> `drift_detected` (hash or
   schema-version mismatch in recorded material).
+
+### Eval corpus builder registration (2026-06-10)
+
+- `corpus_builder.CorpusBuilderError` -> `invalid_input_rejected`: corpus
+  material that cannot be frozen into a replayable fixture (unmerged PR,
+  empty diff, ambiguous citation excerpt, non-canonical fixture bytes) is
+  rejected before anything is written.
 - `context_assembly/citation_check/candidate_metrics/graph_snapshot/
   event_ordering` validation errors -> `invalid_input_rejected`.
 - `extractors.ExtractorError` (cortex#351-#353) classifies as

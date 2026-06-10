@@ -37,6 +37,7 @@ from cortex.hosted.candidate_metrics import CandidateMetricsValidationError
 from cortex.hosted.citation_check import CitationCheckError
 from cortex.hosted.confidence import ConfidenceValidationError
 from cortex.hosted.context_assembly import ContextAssemblyValidationError
+from cortex.hosted.corpus_builder import CorpusBuilderError
 from cortex.hosted.cost import BudgetExceededError, CostValidationError
 from cortex.hosted.decisions_for_diff import DecisionsForDiffValidationError
 from cortex.hosted.derive_store import DeriveStoreError
@@ -96,6 +97,10 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     ClaudeCliOutputError: DegradationMode.FAIL_CLOSED_REFUSAL,
     ClaudeCliUnavailableError: DegradationMode.DEGRADED_CAPABILITY,
     ContextAssemblyValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # Corpus material that cannot be frozen into a replayable fixture (unmerged
+    # PR, empty diff, ambiguous citation excerpt, non-canonical bytes) is
+    # rejected before anything is written — same family as fixture validation.
+    CorpusBuilderError: DegradationMode.INVALID_INPUT_REJECTED,
     CostValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     EventOrderingError: DegradationMode.INVALID_INPUT_REJECTED,
     GraphSnapshotValidationError: DegradationMode.INVALID_INPUT_REJECTED,
