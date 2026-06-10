@@ -1,0 +1,15 @@
+{
+  "aggregate_presence_rate": 0.5,
+  "baseline_schema_version": 1,
+  "history": [
+    "2026-06-10: initial baselines from the 6-fixture real-history corpus (cortex#338); presence computed via the model-free fixture-local retrieval emulation"
+  ],
+  "presence_by_fixture": {
+    "consolidated-journal-entries-001": false,
+    "journal-entry-deletion-001": false,
+    "spec-version-drift-001": true,
+    "standalone-boundary-respected-001": true,
+    "standalone-boundary-violation-synthetic-001": false,
+    "touchstone-managed-principles-001": true
+  }
+}
