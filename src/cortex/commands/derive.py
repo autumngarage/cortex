@@ -42,6 +42,7 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 import click
 
+from cortex.hosted.degradation import remediation_for
 from cortex.hosted.derive_store import (
     DeriveEventStore,
     DeriveStoreError,
@@ -450,7 +451,13 @@ def derive_command(
     root = Path(project_root).resolve()
     cortex_dir = root / ".cortex"
     if not cortex_dir.exists():
-        click.echo(f"error: {cortex_dir} does not exist; run `cortex init` first.", err=True)
+        # Refusals name one actionable next command (cortex#516); the hint
+        # comes from the shared remediation table, not an ad-hoc string.
+        click.echo(
+            f"error: {cortex_dir} does not exist; "
+            f"{remediation_for('cortex_dir_missing')}.",
+            err=True,
+        )
         sys.exit(2)
 
     tenant = _validated_uuid_option(tenant_id, option_name="--tenant-id") or default_tenant_id(root)
@@ -464,7 +471,10 @@ def derive_command(
 
     if not source_files and not sources:
         defaults = ", ".join(DEFAULT_SOURCE_RELATIVE_PATHS)
-        click.echo(f"derive: no default sources found (looked for: {defaults})")
+        click.echo(
+            f"derive: no default sources found (looked for: {defaults}); "
+            f"{remediation_for('derive_no_sources')}"
+        )
 
     documents: tuple[SourceDocument, ...] = ()
     gathered_dropped: tuple[DroppedSourceChatter, ...] = ()

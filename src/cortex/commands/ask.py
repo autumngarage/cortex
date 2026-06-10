@@ -39,8 +39,10 @@ from uuid import UUID
 
 import click
 
+from cortex.commands.confirm import CandidateCommandError, count_pending_candidates
 from cortex.commands.derive import default_source_id, default_tenant_id
 from cortex.hosted.ask_ledger import (
+    AnswerState,
     AskLedgerQuery,
     AskLedgerValidationError,
     CitedContextPack,
@@ -53,21 +55,41 @@ from cortex.hosted.ask_surface import (
     render_answer,
     require_query_scoped_question,
 )
+from cortex.hosted.degradation import remediation_for
+from cortex.hosted.derive_store import DeriveStoreError
 
+# Refusal messages carry exactly one actionable next command (cortex#516);
+# the hints come from the one module-level table in
+# cortex.hosted.degradation.REMEDIATION_BY_REASON, never ad-hoc strings.
 HOSTED_LEDGER_NOT_CONFIGURED_MESSAGE = (
-    "hosted ledger not configured; set DATABASE_URL to the hosted Postgres "
+    f"hosted ledger not configured; {remediation_for('database_url_missing')} "
     "to run the cited ask surface (degradation: degraded_capability — the "
     "boundary that holds: no local store is silently substituted for the ledger)"
 )
 HOSTED_EXTRA_MISSING_MESSAGE = (
     "DATABASE_URL is set but the hosted extra is not installed (`psycopg` is "
-    "not importable); install it to run the live ask surface "
-    "(degradation: degraded_capability)"
+    f"not importable); {remediation_for('hosted_driver_missing')} to run the "
+    "live ask surface (degradation: degraded_capability)"
 )
 
 
 class HostedAskError(RuntimeError):
     """Raised when the live hosted read path fails in a nameable way."""
+
+
+def snapshot_missing_message(tenant_id: str) -> str:
+    """Refusal text for a tenant with no registered graph snapshot.
+
+    Carries the one actionable next command from the shared remediation
+    table (cortex#516) so the correct refusal is a next step, not a dead end.
+    """
+
+    return (
+        f"no graph snapshot registered for tenant {tenant_id}; "
+        "the hosted graph projection has not been built yet, so a "
+        "cited answer cannot name its snapshot boundary; "
+        f"remediation: {remediation_for('snapshot_missing')}"
+    )
 
 
 def latest_graph_snapshot_sql(schema: str = "cortex_hosted") -> str:
@@ -126,11 +148,7 @@ def run_hosted_ask(
                 )
                 snapshot_row = cursor.fetchone()
                 if snapshot_row is None:
-                    raise HostedAskError(
-                        f"no graph snapshot registered for tenant {query.tenant_id}; "
-                        "the hosted graph projection has not been built yet, so a "
-                        "cited answer cannot name its snapshot boundary"
-                    )
+                    raise HostedAskError(snapshot_missing_message(query.tenant_id))
                 graph_snapshot_hash = str(snapshot_row[0])
                 cursor.execute(ask_ledger_retrieval_sql(schema), query.as_sql_parameters())
                 column_names = [description[0] for description in cursor.description or ()]
@@ -154,6 +172,26 @@ def _validated_uuid_option(value: str | None, *, option_name: str) -> str | None
     except ValueError as exc:
         raise click.BadParameter(f"{value!r} is not a UUID", param_hint=option_name) from exc
     return value
+
+
+def no_cited_support_remediation(project_root: Path) -> str:
+    """Next-step line for the honest no-answer (cortex#516).
+
+    The pending-candidate count comes from the local derive store when one
+    exists ("N candidates await review"); when the store is absent the hint
+    renders without a count, and a store read failure is reported inline —
+    the count is enrichment, its failure is never silent and never blocks
+    the refusal itself.
+    """
+
+    hint = remediation_for("no_cited_support")
+    try:
+        pending = count_pending_candidates(project_root)
+    except (CandidateCommandError, DeriveStoreError) as exc:
+        return f"remediation: {hint} (pending-candidate count unavailable: {exc})"
+    if pending:
+        return f"remediation: {pending} candidate(s) await review — {hint}"
+    return f"remediation: {hint}"
 
 
 @click.command("ask", context_settings={"help_option_names": ["-h", "--help"]})
@@ -236,4 +274,12 @@ def ask_command(
         click.echo(f"error: {exc}", err=True)
         sys.exit(1)
 
-    click.echo(render_answer(compose_answer(pack)))
+    answer = compose_answer(pack)
+    click.echo(render_answer(answer))
+    if (
+        answer.answer_state is AnswerState.NO_ANSWER
+        and answer.no_answer_reason == "no_cited_support"
+    ):
+        # The refusal is correct; the remediation makes it a next step
+        # instead of a dead end (cortex#516).
+        click.echo(no_cited_support_remediation(root))

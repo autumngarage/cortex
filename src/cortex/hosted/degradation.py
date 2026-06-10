@@ -29,8 +29,10 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
+from types import MappingProxyType
 
 from cortex.hosted.advisory_ladder import AdvisoryLadderError
 from cortex.hosted.ask_ledger import AnswerState, AskLedgerValidationError
@@ -281,6 +283,69 @@ def classify_failure(failure: BaseException | AnswerState) -> DegradationMode:
     return mode
 
 
+# One module-level remediation table (cortex#516). Errors are the onboarding
+# surface of a fail-closed product: every user-facing refusal names exactly
+# one actionable next command, and both the CLI refusal surfaces
+# (`cortex ask` / `cortex derive` / `cortex candidates`) and
+# DegradationReport.remediation draw their hint from this table — never from
+# scattered per-call-site strings. Keys are reason codes as they appear in
+# refusal messages and DegradationReport.reason_code values.
+REMEDIATION_BY_REASON: Mapping[str, str] = MappingProxyType(
+    {
+        # `cortex ask` against a tenant whose graph projection was never
+        # built: no snapshot means no citable boundary.
+        "snapshot_missing": (
+            "run `cortex push` to project confirmed decisions and register a graph snapshot"
+        ),
+        # The honest no-answer: nothing cited qualifies yet. Confirmation is
+        # the act that makes candidates answerable (ask answers only from
+        # confirmed decisions, by design).
+        "no_cited_support": (
+            "run `cortex candidates triage` to review and confirm pending candidates"
+        ),
+        # DATABASE_URL is set but the optional Postgres driver is absent —
+        # mirrors the cortex.hosted.db install hint (the established pattern).
+        "hosted_driver_missing": (
+            "install the hosted Postgres driver: `pip install 'cortex[hosted]'` "
+            "(or `uv sync --extra hosted`)"
+        ),
+        # No DATABASE_URL in the environment: name the env var and the
+        # compass/Railway setup doc section.
+        "database_url_missing": (
+            "set DATABASE_URL to the hosted (compass) Postgres DSN — see "
+            'docs/hosted-ledger.md § "Executable path: driver, migrations, '
+            'integration tests"'
+        ),
+        # `cortex candidates ...` before any derive run produced a store.
+        "derive_store_missing": "run `cortex derive` to propose candidates first",
+        # `cortex derive` invoked outside a Cortex project.
+        "cortex_dir_missing": "run `cortex init` to scaffold `.cortex/` first",
+        # `cortex derive` found none of its default sources.
+        "derive_no_sources": (
+            "pass `--source FILE` to point cortex derive at decision sources"
+        ),
+    }
+)
+
+
+def remediation_for(reason_code: str) -> str:
+    """Return the one actionable next command for a refusal reason code.
+
+    Lookup is fail-closed: an unknown reason code raises
+    ``DegradationTaxonomyError`` instead of returning a generic or empty
+    hint — a refusal surface that wants a remediation must register it in
+    ``REMEDIATION_BY_REASON`` first.
+    """
+
+    hint = REMEDIATION_BY_REASON.get(reason_code)
+    if hint is None:
+        raise DegradationTaxonomyError(
+            f"no remediation registered for reason code {reason_code!r}; add it "
+            "to REMEDIATION_BY_REASON before naming it on a user-facing refusal"
+        )
+    return hint
+
+
 @dataclass(frozen=True)
 class DegradationReport:
     """One visible degradation event, shaped by the no-silent-failure rule.
@@ -291,12 +356,17 @@ class DegradationReport:
     (``safety_boundary_held``). A report with ``safety_boundary_held=False``
     is structurally invalid: if no boundary held, the failure is an incident
     that must propagate, not a degradation that may continue.
+
+    ``remediation`` is the optional one actionable next command for the
+    user-facing surfaces (cortex#516); when present it must be non-empty —
+    a blank hint is a dead end dressed up as help, so it fails validation.
     """
 
     mode: DegradationMode
     reason_code: str
     source: str
     safety_boundary_held: bool
+    remediation: str | None = None
 
     def __post_init__(self) -> None:
         try:
@@ -310,6 +380,9 @@ class DegradationReport:
         _require_non_empty("source", self.source)
         object.__setattr__(self, "reason_code", self.reason_code.strip())
         object.__setattr__(self, "source", self.source.strip())
+        if self.remediation is not None:
+            _require_non_empty("remediation", self.remediation)
+            object.__setattr__(self, "remediation", self.remediation.strip())
         if self.safety_boundary_held is not True:
             raise DegradationTaxonomyError(
                 "a degradation report must attest the safety boundary that still "
@@ -318,14 +391,21 @@ class DegradationReport:
             )
 
     def as_payload(self) -> dict[str, object]:
-        """JSON-ready payload for logs, traces, and advisory comments."""
+        """JSON-ready payload for logs, traces, and advisory comments.
 
-        return {
+        ``remediation`` appears only when set — consumers distinguish "no
+        hint registered" from a hint by key presence, never by a null.
+        """
+
+        payload: dict[str, object] = {
             "mode": self.mode.value,
             "reason_code": self.reason_code,
             "safety_boundary_held": self.safety_boundary_held,
             "source": self.source,
         }
+        if self.remediation is not None:
+            payload["remediation"] = self.remediation
+        return payload
 
 
 def _require_non_empty(name: str, value: str) -> None:

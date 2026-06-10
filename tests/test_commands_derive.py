@@ -25,6 +25,7 @@ from cortex.commands.derive import (
     resolve_source_files,
     run_derive,
 )
+from cortex.hosted.degradation import remediation_for
 from cortex.hosted.derive_store import DeriveEventStore, derive_store_path
 from cortex.hosted.ledger_events import (
     ActorRef,
@@ -138,7 +139,10 @@ def test_cli_requires_cortex_directory(tmp_path: Path) -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["derive", "--path", str(tmp_path)])
     assert result.exit_code == 2
-    assert "run `cortex init` first" in _combined_output(result)
+    # The refusal carries the one actionable next command from the shared
+    # remediation table (cortex#516).
+    assert remediation_for("cortex_dir_missing") in _combined_output(result)
+    assert "cortex init" in _combined_output(result)
 
 
 def test_cli_rejects_non_uuid_tenant_id(fixture_repo: Path) -> None:
