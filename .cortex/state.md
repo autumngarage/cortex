@@ -1,10 +1,10 @@
 ---
-Generated: 2026-06-09T22:03:56-04:00
+Generated: 2026-06-10T10:40:47-04:00
 Generator: cortex refresh-state v1.6.4
 Sources:
-  - HEAD sha: b2fbc58fe9ecaa1f374564ac5b8961c340a84d14
+  - HEAD sha: 53ac4f534bfc560d66172022cfbb3f26b382e6b6
   - .cortex/plans/*.md (12 files)
-  - .cortex/journal/*.md (136 entries, 2026-04-17..2026-06-09)
+  - .cortex/journal/*.md (142 entries, 2026-04-17..2026-06-10)
   - .cortex/doctrine/*.md (11 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
@@ -157,12 +157,18 @@ Sources-hash:
   .cortex/journal/2026-06-09-pr-merged-pr497.md: 398c4c63b435d56752fbe32a2b89c660a1223561cf35e6d24efea5cdcb5df61d
   .cortex/journal/2026-06-09-pr-merged-pr498.md: fd929f2a3223614e7c9adf85877c0e1f0cb1165b723991848a670dc8ab09938d
   .cortex/journal/2026-06-09-pr-merged-pr505.md: de01afd951c9fd7cf8b480e46b9d1d2a21c29fb1c66e6f4aa8711dba8b831c38
+  .cortex/journal/2026-06-09-psycopg-hosted-extra.md: 36ece41f8b1865f9140d0ad3e2ba1277eb37d64396e91215871b96f00ecddff5
   .cortex/journal/2026-06-09-roadmap-refinement-and-issue-hygiene.md: fc39e5f234f3e76c49a0f7672c7156802eb320da237d1865c43082a9b907c11f
+  .cortex/journal/2026-06-10-pe0-first-product-experience.md: 7e0f91e354e99f6551d5012e316bff4b6097e9408cbfbc9099707e2327e4e365
+  .cortex/journal/2026-06-10-pr-merged-pr507.md: 85324c4b7aee2aa89f62f0e7a04043d4358e3ad9d11313fb5e1e5427dcd36aa7
+  .cortex/journal/2026-06-10-pr-merged-pr509.md: 4dbcef2a2f4966282246963b3cfbfd98a4be0d149b0bfbb7c95fe1ad88b5cee2
+  .cortex/journal/2026-06-10-pr-merged-pr510.md: 425ad790cc498cb25adccb72f622f7c088f4dcee5a160cae9da5b57023b1af51
+  .cortex/journal/2026-06-10-pr-merged-pr518.md: 35d3c8f353408c429afde10a3aed839b6ea90042de4cbda77acaf5fc288e6f01
   .cortex/plans/context-integrity-production.md: 131441fcd1a50d92e82f4ba8f64c3d667412bf23dc91efc501502f42f70a5197
   .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
   .cortex/plans/cortex-v0.3.0.md: d78e60537e30ed81d8464575191674253822ed4953a055ca2a14a9626c5f8b6f
   .cortex/plans/cortex-v1.md: 35b18afacd917c6345d450d7f272a8ac37f52efe3af867ffa3f41e4b485f978b
-  .cortex/plans/hosted-decision-reviewer.md: e58eb1e0fdf71a2d47d6e8110f0899a4f3df27afdc5ff156525e3f8fdb62dc5f
+  .cortex/plans/hosted-decision-reviewer.md: 75d8dfa6bae94416465492570be611260fe652202d4cdf83ab4b671f0c21183f
   .cortex/plans/init-ux-fixes-from-touchstone.md: fdf183f562d2dcde26101ea6b44163bfccf8377affc712cf1318ec16be4ecaee
   .cortex/plans/phase-b-walking-skeleton.md: 4c890ebe0a166b6cf07a0ca150e468614d3130109509e44641cfad216066b0d2
   .cortex/plans/phase-c-authoring-and-state.md: 8ab9a5ac4e593102e16ccab03a8b13248ec68f1afd05cd974c19c0c0e361c3c1
@@ -183,7 +189,7 @@ Sources-hash:
   .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476
   .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44
   docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c
-Corpus: 136 Journal entries, 12 Plans, 11 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 142 Journal entries, 12 Plans, 11 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -208,8 +214,8 @@ Spec: 1.1.0
 This file (`.cortex/state.md`) and [`plans/hosted-decision-reviewer.md`](./plans/hosted-decision-reviewer.md) are the repo-internal answers to "where are we" and "what's next" per [Doctrine 0007](./doctrine/0007-canonical-ownership-of-state-and-plans.md). The external Obsidian `cortex_master_plan.md` owns product strategy; `.cortex` points agents to it and records the repo-operational plan.
 
 **Status by stage:**
-- **Stage 0 — local proof:** the Postgres-shaped substrate layer is done (see the `journal/2026-06-09-pr-merged-pr477` … `pr483` series; SQL-as-strings until the first executable path lands with #472). Remaining: derive, eval harness, evaluator, replay, and the dogfood gate (#337 report) — wave order lives in the active plan.
-- **Stage 1 — hosted core:** Railway API service, worker service, Postgres, healthchecks, logs, backups, restore drill, and environment separation.
+- **Stage 0 — local proof:** the loop is BUILT and PROVEN live (2026-06-10): derive→confirm→push→ask→review all ran against Railway compass, ending in the first real contradicts-prior-decision catch (`docs/walkthrough-pe0.md`). Remaining: the Wave 8/9 tail (#322/#326/#338/#367/#368/#373/#374/#376/#339) and the gate artifacts (#450 → hand-grading #378 → the #337 verdict).
+- **Stage 1 — hosted core:** Postgres half DONE (schema v6 live on compass, extensions verified, append-only trigger proven, driver+migrations merged with passing live integration tests). Remaining: API shell #470, worker #471, ops #473/#474, env docs #469/#475, server transport #517.
 - **Stage 2 — GitHub reviewer:** PR webhook, diff-scoped retrieval, advisory comments, and feedback capture.
 - **Stage 3 — Slack ledger console:** `@cortex what did we decide about X?`, `@cortex here is what we decided...`, confirm/reject/merge/supersede/stale.
 
@@ -309,6 +315,10 @@ This file (`.cortex/state.md`) and [`plans/hosted-decision-reviewer.md`](./plans
 - **2026-06-09** — PR #497 merged — feat(gating): deterministic diff-to-changed-surface extractor (`.cortex/journal/2026-06-09-pr-merged-pr497.md`, Type: pr-merged)
 - **2026-06-09** — PR #498 merged — feat(model): narrow derive/evaluate interface boundary (`.cortex/journal/2026-06-09-pr-merged-pr498.md`, Type: pr-merged)
 - **2026-06-09** — PR #505 merged — Stage 0 wave bundle (derive scaffold, labeling+report, degradation, lanes+confidence, guards, guardrail) (`.cortex/journal/2026-06-09-pr-merged-pr505.md`, Type: pr-merged)
+- **2026-06-10** — PR #507 merged — Stage 0 wave 4-6 bundle (17 issues) (`.cortex/journal/2026-06-10-pr-merged-pr507.md`, Type: pr-merged)
+- **2026-06-10** — PR #509 merged — Stage 0 wave 5-7 bundle (~25 issues) (`.cortex/journal/2026-06-10-pr-merged-pr509.md`, Type: pr-merged)
+- **2026-06-10** — PR #510 merged — customer journeys doc (`.cortex/journal/2026-06-10-pr-merged-pr510.md`, Type: pr-merged)
+- **2026-06-10** — PR #518 merged — PE-0 learning-response bundle (6 issues) (`.cortex/journal/2026-06-10-pr-merged-pr518.md`, Type: pr-merged)
 
 ## Stale-now / handle-later
 

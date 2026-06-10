@@ -59,6 +59,7 @@ from cortex.hosted.cost import (
     TokenUsage,
 )
 from cortex.hosted.eval_fixtures import FindingClass, FixtureScope, FixtureValidationError
+from cortex.hosted.evaluator import evaluate_prompt_guidance
 from cortex.hosted.model_interfaces import (
     DeriveCandidate,
     DeriveRequest,
@@ -835,7 +836,8 @@ def _evaluate_prompt(request: EvaluateRequest) -> str:
         '"cited_span_hashes": [str], "summary": str, "confidence_label": str, '
         '"suggested_repair": str | null}], '
         '"omitted_decision_count": int, "degraded_reasons": [str]}\n'
-        "cited_span_hashes must come from the decisions' span_hashes.\n\n"
+        + evaluate_prompt_guidance()
+        + "\n\n"
         + json.dumps(task, sort_keys=True, ensure_ascii=False, indent=2)
     )
 

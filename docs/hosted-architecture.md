@@ -195,3 +195,39 @@ via the milestone structure, operationalized in
 [.cortex/plans/hosted-decision-reviewer.md](../.cortex/plans/hosted-decision-reviewer.md)
 § Build sequence. Wave 1 is #310 (this document), #332, #344, #327, #363;
 #350 follows in Wave 2 building on this brief.
+
+## Module map addendum (2026-06-10 — the Stage 0 build-out)
+
+Everything below landed after this brief's as-built snapshot, in the wave
+bundles of 2026-06-09/10. Grouped by family; each follows the substrate's
+idioms (frozen dataclasses, fail-closed validation, taxonomy-registered
+error types):
+
+- **Model boundary:** `model_interfaces` (derive/evaluate protocols,
+  input-hash binding), `model_registry` (self-certifying prompt versions),
+  `routing` (route table, claude-CLI + recorded adapters), `cascade`
+  (cheap→strong escalation), `cost` (per-call accounting, budgets),
+  `banking` (exact-key reuse policy), `recorded_responses` (the one
+  recording format).
+- **Evaluation:** `evaluator` (the soft core + finding-class evidence
+  gates), `advisory_ladder` (tiering; blocking unrepresentable),
+  `context_assembly` (token-budgeted, whole-candidate, visible omissions),
+  `citation_check`, `candidate_metrics`, `quality_series` (FP vs tone,
+  disjoint by construction), `route_comparison`, `replay_runner`
+  (byte-deterministic), `eval_fixtures` + `corpus_builder` + the committed
+  real-history corpus, `labeling`.
+- **Graph:** `graph_writes` (immutable-with-supersede plans; merge =
+  supersede pair per #487), `graph_snapshot` (canonical hash),
+  `graph_rebuild` (deterministic fold), `event_ordering`
+  (source-timestamp supersede order), `candidate_dedup` (provenance
+  retained), `lanes` + `confidence` + `lane_assignment` (policy:
+  backfilled never auto-promotes).
+- **Derive:** `derive_store` (SQLite local-replay-export), `extractors`
+  (six deterministic repo-native sources), `question_normalization`.
+- **Execution:** `db` (connection policy), `migrations` (applies the
+  shipped DDL; live-verified on Railway compass), `push` (local store →
+  hosted ledger/projection/snapshot), `degradation` (the failure
+  taxonomy + remediation hints).
+- **CLI verbs:** `derive`, `candidates list/confirm/reject/triage`,
+  `push`, `ask`, `review` — the PE-0 loop
+  ([walkthrough](./walkthrough-pe0.md)).
