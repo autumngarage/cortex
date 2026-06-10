@@ -59,6 +59,7 @@ from cortex.hosted.cost import (
     TokenUsage,
 )
 from cortex.hosted.eval_fixtures import FindingClass, FixtureScope, FixtureValidationError
+from cortex.hosted.evaluator import evaluate_prompt_guidance
 from cortex.hosted.model_interfaces import (
     DeriveCandidate,
     DeriveRequest,
@@ -828,7 +829,6 @@ def _evaluate_prompt(request: EvaluateRequest) -> str:
         "metadata": dict(request.metadata),
         "task": "evaluate",
     }
-    allowed_classes = ", ".join(f'"{finding.value}"' for finding in FindingClass)
     return (
         "Judge whether the diff conflicts with the decisions below.\n"
         "Respond with ONLY one JSON object, no prose, shaped exactly as:\n"
@@ -836,18 +836,8 @@ def _evaluate_prompt(request: EvaluateRequest) -> str:
         '"cited_span_hashes": [str], "summary": str, "confidence_label": str, '
         '"suggested_repair": str | null}], '
         '"omitted_decision_count": int, "degraded_reasons": [str]}\n'
-        f"finding_class MUST be exactly one of: {allowed_classes}.\n"
-        'Use "contradicts-prior-decision" when the diff does something a '
-        "confirmed decision forbids or reverses; use "
-        '"reverses-superseded-pattern" when the diff reintroduces a pattern a '
-        "superseded decision retired. If no decision conflicts, return an "
-        "empty findings list — never invent a class outside this vocabulary.\n"
-        'confidence_label MUST be exactly one of: "suggest", "advisory", '
-        '"confirmed_cited".\n'
-        'A "contradicts-prior-decision" finding may cite ONLY a decision whose '
-        'status is "confirmed"; if the conflicting decision is still a '
-        "candidate, do not emit a finding for it.\n"
-        "cited_span_hashes must come from the decisions' span_hashes.\n\n"
+        + evaluate_prompt_guidance()
+        + "\n\n"
         + json.dumps(task, sort_keys=True, ensure_ascii=False, indent=2)
     )
 
