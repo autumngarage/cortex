@@ -32,6 +32,7 @@ import importlib.util
 from dataclasses import dataclass
 from enum import StrEnum
 
+from cortex.hosted.advisory_ladder import AdvisoryLadderError
 from cortex.hosted.ask_ledger import AnswerState, AskLedgerValidationError
 from cortex.hosted.candidate_metrics import CandidateMetricsValidationError
 from cortex.hosted.citation_check import CitationCheckError
@@ -43,6 +44,7 @@ from cortex.hosted.derive_store import DeriveStoreError
 from cortex.hosted.diff_surface import DiffSurfaceValidationError
 from cortex.hosted.embeddings import HostedEmbeddingValidationError
 from cortex.hosted.eval_fixtures import FixtureValidationError
+from cortex.hosted.evaluator import EvaluatorValidationError, UncitedFindingError
 from cortex.hosted.event_ordering import EventOrderingError
 from cortex.hosted.extractors import ExtractorError
 from cortex.hosted.graph_snapshot import GraphSnapshotValidationError
@@ -90,6 +92,9 @@ class DegradationMode(StrEnum):
 # mode would silently mislabel that refinement. Unknown types therefore
 # raise in classify_failure instead of falling back to anything.
 _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
+    # An unknown confidence label or ladder-vocabulary violation is rejected
+    # before any finding can be placed on the ladder (cortex#375).
+    AdvisoryLadderError: DegradationMode.INVALID_INPUT_REJECTED,
     BudgetExceededError: DegradationMode.FAIL_CLOSED_REFUSAL,
     CandidateMetricsValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     CitationCheckError: DegradationMode.INVALID_INPUT_REJECTED,
@@ -110,6 +115,10 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # re-derivation is drift, not bad input.
     DeriveStoreError: DegradationMode.DRIFT_DETECTED,
     DiffSurfaceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # Evaluator material that violates the soft-evaluator contract (class
+    # evidence, registry shape, outcome arithmetic) is rejected before any
+    # emission or ledger draft exists (cortex#370-#372).
+    EvaluatorValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     # An unrecognized or malformed derive source is rejected before any
     # extraction or write; recognized-but-noisy material is not an error at
     # all (it becomes DroppedChatter with a reason code).
@@ -128,6 +137,10 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     RegistryValidationError: DegradationMode.DRIFT_DETECTED,
     ScopeValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     StoreBoundaryError: DegradationMode.FAIL_CLOSED_REFUSAL,
+    # A finding whose provenance is absent from the candidate pack is refused
+    # emission outright — the citation boundary holds (cortex#377), mirroring
+    # ask_ledger's no_cited_support refusal.
+    UncitedFindingError: DegradationMode.FAIL_CLOSED_REFUSAL,
     VisibilityBoundaryValidationError: DegradationMode.FAIL_CLOSED_REFUSAL,
 }
 
