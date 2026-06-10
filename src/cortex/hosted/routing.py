@@ -4,8 +4,9 @@ Scope boundary (from the issue body): this routing layer lives in the hosted
 product surface only. The repo rule that **CLI synthesis shells out directly
 to the ``claude`` CLI (no SDK, no provider abstraction)** is untouched — this
 module serves the hosted reviewer/ledger product, not ``cortex`` CLI
-commands. No vendor SDK is imported anywhere here; the only live transport is
-the ``claude`` CLI via subprocess, plus recorded-response playback.
+commands. No vendor SDK is imported anywhere here; this module's live
+transport is the ``claude`` CLI via subprocess, plus recorded-response
+playback.
 
 The contract:
 
@@ -34,6 +35,18 @@ Recorded-response payloads (``derive_result_as_payload`` /
 format. cortex#347's record/replay harness imports these from here (this
 module never imports from #347's), so recording and playback cannot drift
 into two formats.
+
+A third adapter, ``cortex.hosted.api_transport.ApiHttpAdapter`` (cortex#517),
+registers in the route table exactly like :class:`ClaudeCliAdapter`, under
+``adapter_id: "api-http"`` (``api_transport.API_HTTP_ADAPTER_ID``). It serves
+hosted deployments that cannot shell a user-session CLI: raw HTTPS via stdlib
+``urllib.request`` with no vendor SDK, the API key read from the service
+environment, and every provider REST detail (endpoint, version header, model
+name, retry/backoff knobs) confined to ``RouteConfig.params``. It imports this
+module's prompt renderers and strict-JSON parse/validation helpers, so a route
+table selecting the CLI adapter, ``api-http``, or recorded playback per task
+is purely a config edit — all three adapters enforce one output contract and
+serialize into the one recording format above.
 
 Cascade escalation (cheap-first, escalate on low confidence) is cortex#346;
 the lint/CI enforcement of the no-vendor-SDK boundary is cortex#348.
