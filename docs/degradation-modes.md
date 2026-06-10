@@ -297,3 +297,27 @@ mode skip citation or visibility boundaries.
   missing extension, a newer-than-this-build recorded schema version, or an
   unverifiable `schema_migrations` record blocks the migration visibly and
   rolls back — the runner never reports a success it cannot read back.
+
+### Remediation hints (2026-06-10, cortex#516)
+
+Errors are the onboarding surface of a fail-closed product: a refusal that
+names the problem but not the next command is a dead end. Two additions
+operationalize that:
+
+- `DegradationReport` carries an optional `remediation` field — exactly one
+  actionable next command. It must be non-empty when present (a blank hint
+  fails validation as `DegradationTaxonomyError`) and appears in
+  `as_payload()` output only when set, so consumers distinguish "no hint
+  registered" by key absence, never by a null.
+- Hints live in one module-level table,
+  `degradation.REMEDIATION_BY_REASON`, looked up via `remediation_for`
+  (fail-closed: unknown reason codes raise instead of returning a generic
+  hint). The CLI refusal surfaces — `cortex ask` (missing `DATABASE_URL`,
+  missing driver, missing graph snapshot, the `no_cited_support` no-answer),
+  `cortex derive` (missing `.cortex/`, no default sources), and
+  `cortex candidates` (missing derive store) — draw from the same table, so
+  there are no scattered per-call-site hint strings. The `no_cited_support`
+  hint additionally carries the live pending-candidate count from the local
+  derive store when it is cheaply available ("N candidates await review —
+  run `cortex candidates triage`"); a count failure is reported inline,
+  never silently dropped.
