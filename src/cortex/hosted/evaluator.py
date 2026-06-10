@@ -9,7 +9,7 @@ the emitted findings, every visible drop, the replay key material, and one
 ``finding.emitted`` :class:`~cortex.hosted.ledger_events.LedgerEvent` draft
 per emitted finding.
 
-Three sibling issues live here:
+Four sibling issue families live here:
 
 - **cortex#371 / #372 — finding-class evidence.** The
   :data:`STAGE0_FINDING_CLASS_REGISTRY` maps each Stage 0 finding class to
@@ -19,15 +19,31 @@ Three sibling issues live here:
   ``superseded`` *and* the superseding decision present in the pack
   (recognized by the ``graph:supersedes`` retrieval reason code). Findings
   whose class evidence fails are rejected, reason-coded, and counted — never
-  emitted. The registry is extensible; ``cites-missing-path`` and
-  ``omitted-load-bearing-constraint`` are the cortex#373/#374 shadow lanes
-  and are deliberately not registered here.
+  emitted. The registry is extensible: pass a wider mapping to
+  ``evaluate_diff`` once a new class's evidence contract is reviewed.
 
   Note the fail-closed consequence: ``decisions_for_diff`` retrieval
   currently ships only ``candidate``/``confirmed`` candidates, so the
   ``superseded`` status requirement cannot be satisfied until retrieval
   ships superseded candidates — every ``reverses-superseded-pattern``
   finding is rejected visibly until then, by design.
+
+- **cortex#373 / #374 — the shadow lanes.** ``cites-missing-path`` and
+  ``omitted-load-bearing-constraint`` are registered with ``shadow=True``:
+  their findings pass the same citation gate, class-evidence checks, and
+  confidence-label vocabulary as the live classes, but validated findings
+  are *captured* in :attr:`EvaluationOutcome.shadow_findings` — never
+  emitted, never assessed by the advisory ladder, never drafted into ledger
+  events, and never rendered as advisory — until their measured precision
+  clears the graduation bar. Shadow capture is visible by construction:
+  the outcome counts shadow findings per class, and a shadow-only run is an
+  explicit ``no_findings`` result. ``cites-missing-path`` additionally
+  requires the missing path to be named in the summary;
+  ``omitted-load-bearing-constraint`` requires the summary to name a
+  decision id that context assembly actually omitted for budget plus the
+  omission stage (only budget omissions carry knowable ids — retrieval-stage
+  omissions arrive as counts, so claims about them are unverifiable and are
+  rejected).
 
 - **cortex#375 — the advisory ladder.** Emission behavior and the
   suppression floor come from
@@ -130,6 +146,23 @@ REASON_CONTRADICTED_DECISION_NOT_CONFIRMED = "contradicted_decision_not_confirme
 REASON_REVERSED_DECISION_NOT_SUPERSEDED = "reversed_decision_not_superseded"
 REASON_SUPERSEDING_DECISION_MISSING = "superseding_decision_missing"
 REASON_UNKNOWN_CONFIDENCE_LABEL = "unknown_confidence_label"
+# cortex#373 (cites-missing-path, shadow) rejection codes.
+REASON_MISSING_PATH_NOT_NAMED = "missing_path_not_named"
+REASON_MISSING_PATH_DECISION_NOT_CONFIRMED = "missing_path_decision_not_confirmed"
+# cortex#374 (omitted-load-bearing-constraint, shadow) rejection codes.
+REASON_OMITTED_DECISION_NOT_NAMED = "omitted_decision_not_named"
+REASON_OMISSION_STAGE_NOT_NAMED = "omission_stage_not_named"
+REASON_OMISSION_ANCHOR_NOT_CONFIRMED = "omission_anchor_decision_not_confirmed"
+
+# A finding "names" a path when its summary carries a path-shaped token:
+# a slash-joined relative path (src/app.py, docs/adr/0001.md) or a dotted
+# filename whose extension is at least two characters (retry.py, setup.cfg —
+# the two-character floor keeps prose abbreviations like "e.g." from
+# satisfying the gate; single-character extensions need a directory segment
+# to qualify). The check is deliberately lexical: the evaluator has no
+# filesystem access by design, so "the missing path is named" is the
+# strongest deterministic evidence gate available for cortex#373.
+_PATH_TOKEN_RE = re.compile(r"(?:[\w.-]+/)+[\w.-]+|\b[\w-]+\.[A-Za-z]\w{1,11}\b")
 
 
 class EvaluatorValidationError(ValueError):
@@ -197,14 +230,36 @@ class CompanionEvidenceRequirement:
         _require_non_empty("rejection_code", self.rejection_code)
 
 
+class ClassEvidenceRule(StrEnum):
+    """Class-specific evidence checks beyond companion + cited-status.
+
+    Each rule names one deterministic check ``FindingClassSpec.evidence_failure``
+    dispatches after the companion and status gates. Rules are an enum (not
+    free callables) so a registry entry's evidence contract stays declarative
+    and reviewable.
+    """
+
+    # cortex#373: the missing path must be named in the finding's summary.
+    NAMED_MISSING_PATH = "named-missing-path"
+    # cortex#374: the summary must name a decision id that context assembly
+    # actually omitted for budget, plus the omission stage key.
+    NAMED_BUDGET_OMISSION = "named-budget-omission"
+
+
 @dataclass(frozen=True)
 class FindingClassSpec:
     """Evidence requirements and prompt guidance for one finding class.
 
     ``evidence_failure`` checks the companion requirement first, then the
-    cited decision's status, so both rejection paths are reachable and
-    independently testable. The check order is deterministic and the first
-    failure names the rejection.
+    cited decision's status, then the class-specific ``class_rule`` (when
+    set), so every rejection path is reachable and independently testable.
+    The check order is deterministic and the first failure names the
+    rejection.
+
+    ``shadow=True`` marks a cortex#373/#374 shadow lane: validated findings
+    of the class are captured in ``EvaluationOutcome.shadow_findings``
+    instead of emitted — the advisory ladder and every render layer skip
+    shadow classes by construction.
     """
 
     finding_class: FindingClass
@@ -212,6 +267,8 @@ class FindingClassSpec:
     status_rejection_code: str
     prompt_guidance: str
     companion: CompanionEvidenceRequirement | None = None
+    shadow: bool = False
+    class_rule: ClassEvidenceRule | None = None
 
     def __post_init__(self) -> None:
         valid_statuses = {status.value for status in DecisionStatus}
@@ -222,12 +279,18 @@ class FindingClassSpec:
             )
         _require_non_empty("status_rejection_code", self.status_rejection_code)
         _require_non_empty("prompt_guidance", self.prompt_guidance)
+        if self.class_rule is not None and not isinstance(self.class_rule, ClassEvidenceRule):
+            raise EvaluatorValidationError(
+                f"class_rule must be a ClassEvidenceRule; got {self.class_rule!r}"
+            )
 
     def evidence_failure(
         self,
         *,
+        finding: FindingDraft,
         cited: DecisionsForDiffCandidate,
         pack_candidates: tuple[DecisionsForDiffCandidate, ...],
+        omitted_for_budget_ids: tuple[str, ...],
     ) -> tuple[str, str] | None:
         """Return ``(rejection_code, detail)`` for failed evidence, else None."""
 
@@ -252,13 +315,64 @@ class FindingClassSpec:
                 f"status to be {self.required_cited_status!r}; pack candidate "
                 f"{cited.decision_node_id} has status {cited.status!r}",
             )
+        if self.class_rule is ClassEvidenceRule.NAMED_MISSING_PATH:
+            return _named_missing_path_failure(finding)
+        if self.class_rule is ClassEvidenceRule.NAMED_BUDGET_OMISSION:
+            return _named_budget_omission_failure(finding, omitted_for_budget_ids)
         return None
 
 
-# The Stage 0 registry (cortex#371 + #372). Keys are the only classes the
-# Stage 0 evaluate prompt asks for; cites-missing-path and
-# omitted-load-bearing-constraint stay unregistered until cortex#373/#374
-# graduate from shadow mode. Extensible: pass a wider mapping to
+def _named_missing_path_failure(finding: FindingDraft) -> tuple[str, str] | None:
+    """cortex#373: the missing path must be named in the summary."""
+
+    if _PATH_TOKEN_RE.search(finding.summary) is None:
+        return (
+            REASON_MISSING_PATH_NOT_NAMED,
+            f"{finding.finding_class.value} requires the summary to name the "
+            "missing path (a slash-joined path or a filename with an "
+            "extension); the summary names none",
+        )
+    return None
+
+
+def _named_budget_omission_failure(
+    finding: FindingDraft, omitted_for_budget_ids: tuple[str, ...]
+) -> tuple[str, str] | None:
+    """cortex#374: name an actually-omitted decision id plus its stage.
+
+    Only budget omissions carry knowable decision ids — the evaluator holds
+    both the full pack and the budgeted context, so the omitted set is exact.
+    Retrieval-stage omissions arrive as counts without ids, so a claim about
+    them cannot be verified and fails this gate (fail-closed, by design).
+    """
+
+    named = tuple(
+        node_id for node_id in omitted_for_budget_ids if node_id in finding.summary
+    )
+    if not named:
+        return (
+            REASON_OMITTED_DECISION_NOT_NAMED,
+            f"{finding.finding_class.value} requires the summary to name a "
+            "decision id that context assembly actually omitted; "
+            f"{len(omitted_for_budget_ids)} candidate(s) were omitted at stage "
+            f"{OVER_BUDGET_OMISSION_KEY!r} and the summary names none of them",
+        )
+    if OVER_BUDGET_OMISSION_KEY not in finding.summary:
+        return (
+            REASON_OMISSION_STAGE_NOT_NAMED,
+            f"{finding.finding_class.value} requires the summary to name the "
+            f"omission stage {OVER_BUDGET_OMISSION_KEY!r} alongside omitted "
+            f"decision {named[0]}",
+        )
+    return None
+
+
+# The Stage 0 registry (cortex#371 + #372 live, #373 + #374 shadow). Keys
+# are the only classes the Stage 0 evaluate prompt asks for. The two
+# ``shadow=True`` entries are captured in EvaluationOutcome.shadow_findings —
+# never emitted, never laddered, never rendered — until their measured
+# precision clears the graduation bar; graduation is the explicit, reviewed
+# act of flipping ``shadow`` to False. Extensible: pass a wider mapping to
 # evaluate_diff once a new class's evidence contract is reviewed.
 STAGE0_FINDING_CLASS_REGISTRY: Mapping[FindingClass, FindingClassSpec] = MappingProxyType(
     {
@@ -289,6 +403,34 @@ STAGE0_FINDING_CLASS_REGISTRY: Mapping[FindingClass, FindingClassSpec] = Mapping
                 "decision whose status is 'superseded' and the superseding "
                 "decision is also present in the pack; cite span hashes from "
                 "the superseded decision's citations"
+            ),
+        ),
+        FindingClass.CITES_MISSING_PATH: FindingClassSpec(
+            finding_class=FindingClass.CITES_MISSING_PATH,
+            required_cited_status=DecisionStatus.CONFIRMED.value,
+            status_rejection_code=REASON_MISSING_PATH_DECISION_NOT_CONFIRMED,
+            shadow=True,
+            class_rule=ClassEvidenceRule.NAMED_MISSING_PATH,
+            prompt_guidance=(
+                "emit only when the diff relies on a path that does not exist "
+                "in the changed surface or repo state the candidate pack "
+                "carries; name the missing path in the summary and cite span "
+                "hashes from the confirmed decision establishing the path's "
+                "expected existence"
+            ),
+        ),
+        FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT: FindingClassSpec(
+            finding_class=FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT,
+            required_cited_status=DecisionStatus.CONFIRMED.value,
+            status_rejection_code=REASON_OMISSION_ANCHOR_NOT_CONFIRMED,
+            shadow=True,
+            class_rule=ClassEvidenceRule.NAMED_BUDGET_OMISSION,
+            prompt_guidance=(
+                "emit only when the omission accounting shows context assembly "
+                "omitted a decision whose scope matched the diff; name the "
+                "omitted decision id and the omission stage (for example "
+                "'over_budget') in the summary and cite span hashes from a "
+                "confirmed decision in the pack"
             ),
         ),
     }
@@ -478,15 +620,49 @@ class SuppressedFinding:
 
 
 @dataclass(frozen=True)
+class ShadowFinding:
+    """One validated finding captured in shadow mode (cortex#373/#374).
+
+    Shadow findings cleared the citation gate, their class-evidence checks,
+    and the confidence-label vocabulary — but their class has not earned
+    emission yet. They carry no emission behavior by construction, so no
+    render layer can present one as advisory; the tier is recorded for the
+    precision measurement that decides graduation.
+    """
+
+    finding: FindingDraft
+    decision_version_id: str
+    tier: ConfidenceTier
+
+    def __post_init__(self) -> None:
+        _require_uuid("decision_version_id", self.decision_version_id)
+
+    @property
+    def decision_node_id(self) -> str:
+        return self.finding.decision_node_id
+
+    def as_payload(self) -> dict[str, Any]:
+        return {
+            "decision_version_id": self.decision_version_id,
+            "finding": _finding_payload(self.finding),
+            "shadow": True,
+            "tier": self.tier.value,
+        }
+
+
+@dataclass(frozen=True)
 class EvaluationOutcome:
     """The soft evaluator's only output shape.
 
     Visibility arithmetic: every finding the model proposed is exactly one
-    of emitted, rejected, or suppressed; every ledger draft pairs with one
-    emitted finding; omission counts carried from context assembly stay
-    visible. ``state`` is derived — an outcome with no emitted findings is
-    the explicit fail-closed no-findings result (cortex#377), with the drop
-    accounting in ``rejection_counts`` and ``suppressed_below_floor``.
+    of emitted, rejected, suppressed, or shadow-captured; every ledger draft
+    pairs with one emitted finding; omission counts carried from context
+    assembly stay visible. ``state`` is derived — an outcome with no emitted
+    findings is the explicit fail-closed no-findings result (cortex#377),
+    with the drop accounting in ``rejection_counts`` and
+    ``suppressed_below_floor``. Shadow findings (cortex#373/#374) never flip
+    the state: a shadow-only run is still ``no_findings``, with the capture
+    counted in ``shadow_finding_count`` / ``shadow_class_counts``.
 
     Stamping invariants (cortex#322 + #326): each draft must carry the
     evaluation's graph snapshot hash and (model_id, prompt_version) stamp as
@@ -505,6 +681,7 @@ class EvaluationOutcome:
     omitted_for_budget: int
     model_omitted_decision_count: int
     degraded_reasons: tuple[str, ...] = ()
+    shadow_findings: tuple[ShadowFinding, ...] = ()
 
     def __post_init__(self) -> None:
         if len(self.ledger_event_drafts) != len(self.emitted):
@@ -595,10 +772,31 @@ class EvaluationOutcome:
         return dict(sorted(counts.items()))
 
     @property
-    def candidate_finding_count(self) -> int:
-        """Every finding the model proposed: emitted + rejected + suppressed."""
+    def shadow_finding_count(self) -> int:
+        """Visible count of validated findings captured in shadow mode."""
 
-        return len(self.emitted) + len(self.rejected) + len(self.suppressed)
+        return len(self.shadow_findings)
+
+    @property
+    def shadow_class_counts(self) -> dict[str, int]:
+        """Per-class shadow capture counts; derived so they cannot drift."""
+
+        counts: dict[str, int] = {}
+        for shadow in self.shadow_findings:
+            key = shadow.finding.finding_class.value
+            counts[key] = counts.get(key, 0) + 1
+        return dict(sorted(counts.items()))
+
+    @property
+    def candidate_finding_count(self) -> int:
+        """Every proposed finding: emitted + rejected + suppressed + shadow."""
+
+        return (
+            len(self.emitted)
+            + len(self.rejected)
+            + len(self.suppressed)
+            + len(self.shadow_findings)
+        )
 
     def as_payload(self) -> dict[str, Any]:
         return {
@@ -611,6 +809,9 @@ class EvaluationOutcome:
             "rejected": [rejection.as_payload() for rejection in self.rejected],
             "rejection_counts": self.rejection_counts,
             "replay": self.replay.as_payload(),
+            "shadow_class_counts": self.shadow_class_counts,
+            "shadow_finding_count": self.shadow_finding_count,
+            "shadow_findings": [entry.as_payload() for entry in self.shadow_findings],
             "state": self.state.value,
             "suppressed": [entry.as_payload() for entry in self.suppressed],
             "suppressed_below_floor": self.suppressed_below_floor,
@@ -641,9 +842,11 @@ def evaluate_diff(
     what the budget admitted, refuse predictable budget breaches before the
     model call (``run_ledger`` raises ``BudgetExceededError``), call the
     model boundary, bind the result to the request, then validate every
-    proposed finding through the cortex#377 citation gate, the #371/#372
-    class-evidence registry, and the #375 ladder. ``occurred_at`` is an
-    explicit caller-owned timestamp (timezone-aware, enforced by
+    proposed finding through the cortex#377 citation gate, the #371-#374
+    class-evidence registry, and — for non-shadow classes — the #375 ladder.
+    Validated findings of ``shadow=True`` classes are captured in
+    ``shadow_findings`` instead of emitted (cortex#373/#374). ``occurred_at``
+    is an explicit caller-owned timestamp (timezone-aware, enforced by
     ``LedgerEvent``) so the evaluator has no hidden clock.
     """
 
@@ -696,10 +899,19 @@ def evaluate_diff(
         for candidate in bounded_pack.candidates
         for span in candidate.cited_spans
     }
+    # The cortex#374 evidence material: budget omissions are the one omission
+    # stage with knowable decision ids, because the evaluator holds both the
+    # full pack and the budgeted context it was bounded to.
+    omitted_for_budget_ids = tuple(
+        candidate.decision_node_id
+        for candidate in pack.candidates
+        if candidate.decision_node_id not in candidates_by_id
+    )
 
     emitted: list[EmittedFinding] = []
     rejected: list[RejectedFinding] = []
     suppressed: list[SuppressedFinding] = []
+    shadow: list[ShadowFinding] = []
     drafts: list[LedgerEvent] = []
     for ordinal, finding in enumerate(result.findings):
         cited = candidates_by_id.get(finding.decision_node_id)
@@ -748,7 +960,10 @@ def evaluate_diff(
             )
             continue
         evidence = spec.evidence_failure(
-            cited=cited, pack_candidates=bounded_pack.candidates
+            finding=finding,
+            cited=cited,
+            pack_candidates=bounded_pack.candidates,
+            omitted_for_budget_ids=omitted_for_budget_ids,
         )
         if evidence is not None:
             code, detail = evidence
@@ -758,6 +973,19 @@ def evaluate_diff(
             tier = ladder.tier_for_label(finding.confidence_label)
         except AdvisoryLadderError as exc:
             rejected.append(_rejection(finding, exc, REASON_UNKNOWN_CONFIDENCE_LABEL))
+            continue
+        if spec.shadow:
+            # Shadow capture (cortex#373/#374): validated, counted, never
+            # emitted. The ladder's emission assessment is skipped by
+            # construction — a shadow finding has no behavior to render and
+            # no floor to be suppressed under.
+            shadow.append(
+                ShadowFinding(
+                    finding=finding,
+                    decision_version_id=cited.decision_version_id,
+                    tier=tier,
+                )
+            )
             continue
         assessment = ladder.assess(tier)
         if not assessment.emitted:
@@ -804,6 +1032,7 @@ def evaluate_diff(
         omitted_for_budget=context.omitted_for_budget,
         model_omitted_decision_count=result.omitted_decision_count,
         degraded_reasons=degraded_reasons,
+        shadow_findings=tuple(shadow),
     )
 
 
