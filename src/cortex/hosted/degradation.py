@@ -35,6 +35,7 @@ from enum import StrEnum
 from cortex.hosted.advisory_ladder import AdvisoryLadderError
 from cortex.hosted.ask_ledger import AnswerState, AskLedgerValidationError
 from cortex.hosted.banking import BankingValidationError
+from cortex.hosted.candidate_dedup import CandidateDedupError
 from cortex.hosted.candidate_metrics import CandidateMetricsValidationError
 from cortex.hosted.cascade import CascadeValidationError
 from cortex.hosted.citation_check import CitationCheckError
@@ -49,6 +50,7 @@ from cortex.hosted.eval_fixtures import FixtureValidationError
 from cortex.hosted.evaluator import EvaluatorValidationError, UncitedFindingError
 from cortex.hosted.event_ordering import EventOrderingError
 from cortex.hosted.extractors import ExtractorError
+from cortex.hosted.graph_rebuild import GraphRebuildError
 from cortex.hosted.graph_snapshot import GraphSnapshotValidationError
 from cortex.hosted.graph_writes import GraphWriteValidationError
 from cortex.hosted.labeling import LabelingError
@@ -117,6 +119,9 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     CascadeValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     QualitySeriesValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     RouteComparisonValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # CandidateDedupError fires before any graph write: malformed identity
+    # material or a non-candidate event is refused, nothing partial folds.
+    CandidateDedupError: DegradationMode.INVALID_INPUT_REJECTED,
     ConfidenceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     DecisionsForDiffValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     # DeriveStoreError's marquee failure is the same-idempotency-key /
@@ -133,6 +138,10 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # all (it becomes DroppedChatter with a reason code).
     ExtractorError: DegradationMode.INVALID_INPUT_REJECTED,
     FixtureValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # GraphRebuildError refuses a replay whose log material cannot fold into
+    # a valid projection (missing contract keys, unknown nodes, key/hash
+    # drift); no partial graph is ever returned.
+    GraphRebuildError: DegradationMode.INVALID_INPUT_REJECTED,
     GraphWriteValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     HostedEmbeddingValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     LabelingError: DegradationMode.INVALID_INPUT_REJECTED,

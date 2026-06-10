@@ -259,3 +259,13 @@ mode skip citation or visibility boundaries.
   span hash the pack never offered) is refused emission outright — the
   citation boundary holds (cortex#377), mirroring `ask_ledger`'s
   `no_cited_support` refusal.
+
+### Graph-hardening registrations (2026-06-10, cortex#318/#319/#320)
+
+- `candidate_dedup.CandidateDedupError` -> `invalid_input_rejected`:
+  malformed identity material or a non-`candidate.proposed` event is refused
+  before any dedup fold or graph write — nothing partial is produced.
+- `graph_rebuild.GraphRebuildError` -> `invalid_input_rejected`: a replay
+  whose event log cannot fold into a valid projection (missing replay-contract
+  payload keys, unknown node references, same-idempotency-key/different-hash
+  content) is refused outright; no partial rebuilt graph is ever returned.
