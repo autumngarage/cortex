@@ -109,3 +109,16 @@ exists *before* the website journey is public.
 5. **The journeys impose no resequencing** of the current wave plan; they
    confirm it. The one previously-untracked artifact is the landing page
    itself — filed as a GTM issue alongside this document.
+
+## Reference patterns (CodeRabbit, noted 2026-06-10)
+
+The closest market analog's install grammar is the bar Journey 2 must
+meet: *Sign in with GitHub → pick repos → first PR reviewed minutes
+later*, free for open source, per-seat pricing, configuration via an
+in-repo YAML file. We adopt: the two-click install grammar,
+instant-value-on-first-PR (our cold-start backfill plays that role), a
+free open-source tier as funnel, and seat-language pricing ("active
+contributors", #400). We deliberately diverge on one axis: CodeRabbit
+centers a web dashboard; Cortex keeps GitHub/Slack as the only output
+surfaces and the in-repo config file (#397) as the only knob — the
+no-dashboard assertion above is a feature, not a gap.
