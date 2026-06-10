@@ -354,6 +354,18 @@ def _require_candidate_event(
             f"{rel}: extractor emitted source_id {event.source_id}, "
             f"expected this run's source {source_id}"
         )
+    if event.model_id is not None or event.prompt_version is not None:
+        # cortex#326: this pipeline runs deterministic extractors only — no
+        # model calls happen here, so a (model_id, prompt_version) stamp on a
+        # candidate event would forge model provenance for material no model
+        # produced. A model-backed derive lane stamps through its own
+        # boundary (model_interfaces.DeriveResult), never through this one.
+        raise DeriveSourceError(
+            f"{rel}: extractor emitted a model stamp "
+            f"(model_id={event.model_id!r}, prompt_version={event.prompt_version!r}); "
+            "derive's deterministic extractors make no model calls, so "
+            "candidate events must carry no model provenance (cortex#326)"
+        )
 
 
 def _validated_uuid_option(value: str | None, *, option_name: str) -> str | None:

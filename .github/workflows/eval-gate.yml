@@ -1,0 +1,19 @@
+name: eval-gate
+# The versioned, append-only eval gate (cortex#338): protected quality
+# slices recomputed over the committed corpus; regressions block the PR.
+# Model-free by construction — no live LLM calls, no DATABASE_URL.
+on:
+  pull_request:
+    paths:
+      - "src/cortex/hosted/**"
+      - "tests/fixtures/hosted_eval/**"
+      - "tests/test_protected_slices.py"
+jobs:
+  protected-slices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - run: uv run pytest tests/test_protected_slices.py -v

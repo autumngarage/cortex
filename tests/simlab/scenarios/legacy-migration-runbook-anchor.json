@@ -1,0 +1,36 @@
+{
+  "archetype_id": "legacy-migration",
+  "confirm": [
+    "update `docs/legacy/runbook.md` in the same change"
+  ],
+  "demo_notes": "cites-missing-path edge: deploy steps change, the confirmed rule demands a runbook update, and the runbook it anchors to was deleted two commits ago.",
+  "diff_base_sha": "1313131",
+  "diff_head_sha": "2424242",
+  "expected": {
+    "matched": 1,
+    "missed": 0,
+    "needs_manual_review": false,
+    "over_budget": 0,
+    "pack_omitted": {
+      "over_limit": 0,
+      "status_filtered": 0,
+      "suppressed_below_floor": 13
+    },
+    "unexpected": 0
+  },
+  "expected_findings": [
+    {
+      "decision": "update `docs/legacy/runbook.md` in the same change",
+      "finding_class": "cites-missing-path",
+      "finding_id": "f-stale-runbook",
+      "suggested_repair": "Restore docs/legacy/runbook.md (or supersede the rule to point at the ops wiki) before changing deploy steps.",
+      "summary": "scripts/deploy.sh changed and the confirmed rule requires a matching docs/legacy/runbook.md update, but that runbook no longer exists in the tree — the decision anchors to a missing path."
+    }
+  ],
+  "kind": "scenario",
+  "patch": "diff --git a/scripts/deploy.sh b/scripts/deploy.sh\nindex 1313131..2424242 100644\n--- a/scripts/deploy.sh\n+++ b/scripts/deploy.sh\n@@ -1,3 +1,5 @@\n #!/bin/sh\n set -eu\n+echo running database migrations\n+node lib/db/migrate.js\n echo deploying ledgerd\n",
+  "scenario_id": "legacy-migration-runbook-anchor",
+  "simlab_spec_schema_version": 1,
+  "title": "A stale anchor: the decision's runbook no longer exists",
+  "token_budget": 8000
+}

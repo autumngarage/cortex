@@ -1,0 +1,25 @@
+{
+  "archetype_id": "chatty-startup",
+  "demo_notes": "No-spam in the noisiest archetype: a brand-new metrics module matches no decision scope and produces zero findings.",
+  "diff_base_sha": "0000002",
+  "diff_head_sha": "9898989",
+  "expected": {
+    "matched": 0,
+    "missed": 0,
+    "needs_manual_review": false,
+    "over_budget": 0,
+    "pack_omitted": {
+      "over_limit": 0,
+      "status_filtered": 0,
+      "suppressed_below_floor": 7
+    },
+    "unexpected": 0
+  },
+  "expected_findings": [],
+  "kind": "scenario",
+  "patch": "diff --git a/src/worker/metrics.py b/src/worker/metrics.py\nnew file mode 100644\nindex 0000000..9898989\n--- /dev/null\n+++ b/src/worker/metrics.py\n@@ -0,0 +1,5 @@\n+\"\"\"Worker throughput metrics.\"\"\"\n+\n+\n+def record(name: str) -> None:\n+    _ = name\n",
+  "scenario_id": "chatty-startup-compliant-metrics",
+  "simlab_spec_schema_version": 1,
+  "title": "A noisy corpus stays silent on unrelated work",
+  "token_budget": 8000
+}

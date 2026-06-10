@@ -1,0 +1,44 @@
+{
+  "archetype_id": "chatty-startup",
+  "confirm": [
+    "redact PAN values before logging"
+  ],
+  "demo_notes": "Unconfirmed-twin disclosure: the confirmed commit-body decision emits the finding; the near-duplicate PR-thread candidate is named in degraded reasons instead of double-reporting.",
+  "diff_base_sha": "5656565",
+  "diff_head_sha": "7878787",
+  "expected": {
+    "degraded_reasons_contain": [
+      "status is 'candidate'"
+    ],
+    "evaluator_omitted_decisions": 1,
+    "matched": 1,
+    "missed": 0,
+    "needs_manual_review": false,
+    "over_budget": 0,
+    "pack_omitted": {
+      "over_limit": 0,
+      "status_filtered": 0,
+      "suppressed_below_floor": 5
+    },
+    "unexpected": 0
+  },
+  "expected_findings": [
+    {
+      "decision": "redact PAN values before logging",
+      "finding_class": "contradicts-prior-decision",
+      "finding_id": "f-pan-redaction",
+      "suggested_repair": "Keep redaction in place; replay failed charges from the redacted stream instead of logging raw card numbers.",
+      "summary": "The diff logs the raw line and returns it unredacted in src/worker/logging.py, contradicting the confirmed PAN redaction decision."
+    }
+  ],
+  "kind": "scenario",
+  "patch": "diff --git a/src/worker/logging.py b/src/worker/logging.py\nindex 5656565..7878787 100644\n--- a/src/worker/logging.py\n+++ b/src/worker/logging.py\n@@ -1,6 +1,7 @@\n \"\"\"Worker log pipeline with PAN redaction.\"\"\"\n\n\n-def redact(line: str) -> str:\n-    return line.replace(\"4111111111111111\", \"****1111\")\n+def redact(line: str) -> str:\n+    # debugging: log the raw line so we can replay failed charges\n+    print(line)\n+    return line\n",
+  "scenario_id": "chatty-startup-pan-logging-twin",
+  "scripted_degraded_reasons": [
+    "The PR-thread decision 'PAN redaction mandatory in src/worker/logging.py' also conflicts with this diff, but its status is 'candidate', so no finding was emitted for it (unconfirmed-twin disclosure)."
+  ],
+  "scripted_omitted_decision_count": 1,
+  "simlab_spec_schema_version": 1,
+  "title": "A confirmed redaction rule fires; its unconfirmed twin is disclosed",
+  "token_budget": 8000
+}

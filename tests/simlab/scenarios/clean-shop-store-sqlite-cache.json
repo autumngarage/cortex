@@ -1,0 +1,44 @@
+{
+  "archetype_id": "clean-shop",
+  "confirm": [
+    "module that opens database connections",
+    "Persistence boundary"
+  ],
+  "demo_notes": "Two independent confirmed decisions (ADR 0001 and the CLAUDE.md persistence boundary) cite the same sqlite3 cache; both emit.",
+  "diff_base_sha": "4444444",
+  "diff_head_sha": "5555555",
+  "expected": {
+    "matched": 2,
+    "missed": 0,
+    "needs_manual_review": false,
+    "over_budget": 0,
+    "pack_omitted": {
+      "over_limit": 0,
+      "status_filtered": 0,
+      "suppressed_below_floor": 6
+    },
+    "unexpected": 0
+  },
+  "expected_findings": [
+    {
+      "decision": "module that opens database connections",
+      "finding_class": "contradicts-prior-decision",
+      "finding_id": "f-adr-postgres-only",
+      "suggested_repair": "Use Postgres for the settlement cache or supersede ADR 0001 before introducing an embedded engine.",
+      "summary": "The diff introduces an embedded sqlite3 cache in src/payments/store.py, contradicting ADR 0001 (Postgres is the only persistence engine)."
+    },
+    {
+      "decision": "Persistence boundary",
+      "finding_class": "contradicts-prior-decision",
+      "finding_id": "f-claude-persistence",
+      "suggested_repair": "Route the cache through the Postgres-backed store or supersede the persistence-boundary rule first.",
+      "summary": "The diff adds a non-Postgres durable write path in src/payments/store.py, contradicting the confirmed persistence-boundary rule."
+    }
+  ],
+  "kind": "scenario",
+  "patch": "diff --git a/src/payments/store.py b/src/payments/store.py\nindex 4444444..5555555 100644\n--- a/src/payments/store.py\n+++ b/src/payments/store.py\n@@ -1,7 +1,14 @@\n \"\"\"Persistence boundary: every durable write goes through this module.\"\"\"\n\n import psycopg\n+import sqlite3\n\n\n def connect(dsn: str) -> psycopg.Connection:\n     return psycopg.connect(dsn)\n+\n+\n+def local_cache() -> sqlite3.Connection:\n+    # cache settlement rows locally so nightly batches can resume offline\n+    return sqlite3.connect(\"settlement-cache.db\")\n",
+  "scenario_id": "clean-shop-store-sqlite-cache",
+  "simlab_spec_schema_version": 1,
+  "title": "An ADR and an instruction rule both catch an embedded-DB cache",
+  "token_budget": 8000
+}

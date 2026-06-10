@@ -27,6 +27,10 @@ owns no retrieval, no evaluation, and no model transport of its own:
   directory of recordings (fully offline, CI-safe), ``ClaudeCliAdapter``
   otherwise. A missing ``claude`` binary degrades visibly, naming both
   setup paths — it never crashes and never fabricates findings.
+- **Finding blocks** via ``cortex.hosted.finding_render`` (cortex#376) —
+  the one render path shared with the Stage 2 GitHub comment renderer
+  (cortex#390). This module keeps only the CLI accounting lines and the
+  replay key line.
 
 Exit-code policy (Stage 0, cortex#375): findings NEVER change the exit
 code — blocking is unrepresentable, so the verb exits 0 whether it emitted
@@ -58,8 +62,6 @@ import click
 from cortex.commands.ask import latest_graph_snapshot_sql
 from cortex.commands.derive import default_source_id, default_tenant_id
 from cortex.hosted.advisory_ladder import DEFAULT_ADVISORY_LADDER
-from cortex.hosted.ask_ledger import CitedSourceSpan
-from cortex.hosted.confidence import ConfidenceTier
 from cortex.hosted.context_assembly import ContextAssemblyValidationError
 from cortex.hosted.cost import (
     CostValidationError,
@@ -82,6 +84,11 @@ from cortex.hosted.evaluator import (
     EvaluatorValidationError,
     evaluate_diff,
     evaluate_prompt_guidance,
+)
+from cortex.hosted.finding_render import (
+    FindingRenderError,
+    build_span_index,
+    render_finding_block_lines,
 )
 from cortex.hosted.ledger_events import ActorRef
 from cortex.hosted.model_interfaces import EvaluateModel, ModelInterfaceValidationError
@@ -120,6 +127,9 @@ REVIEW_CLAUDE_MODEL_ID = "anthropic/claude-cli"
 # canonical Stage 0 class guidance (evaluator.evaluate_prompt_guidance), so
 # the self-certifying prompt_version drifts the moment the registered class
 # vocabulary changes — recordings made under the old contract miss visibly.
+# (The cortex#373/#374 shadow classes joining the vocabulary surfaced as
+# exactly that hash drift; the per-run registry starts at v1, so the
+# content-hash suffix, not the version number, is the contract identifier.)
 REVIEW_EVALUATE_PROMPT = RegisteredPrompt(
     prompt_id="review-evaluate",
     version_number=1,
@@ -148,19 +158,6 @@ REVIEW_PRICE_TABLE = ModelPriceTable(
         ),
     ),
 )
-
-# Tier glyphs for the per-finding header. One entry per ladder rung; the
-# completeness invariant is asserted in tests so a new tier cannot render
-# blank.
-TIER_GLYPHS: dict[ConfidenceTier, str] = {
-    ConfidenceTier.SUGGEST: "·",
-    ConfidenceTier.ADVISORY: "▲",
-    ConfidenceTier.CONFIRMED_CITED: "■",
-}
-
-# Citation excerpts render on one line under the permalink; the permalink is
-# the verifiable source, so the inline excerpt is a preview, not the record.
-_CITATION_EXCERPT_CHARS = 160
 
 REVIEW_NO_DECISION_SOURCE_MESSAGE = (
     "no decision source is configured: set DATABASE_URL to the hosted "
@@ -535,50 +532,32 @@ def render_review_report(
     """Render the advisory terminal report.
 
     Per-finding blocks (class, tier glyph, summary, citations with
-    permalinks, suggested repair), then the suppressed/rejected/omitted
-    accounting, then the replay key line. Every number in the accounting is
-    derived from the outcome — nothing is recomputed here.
+    permalinks, suggested repair) come from the one shared render path,
+    ``cortex.hosted.finding_render`` (cortex#376 — the Stage 2 GitHub
+    comment renderer, cortex#390, consumes the same blocks); the
+    CLI-specific accounting lines and the replay key line live here. Every
+    number in the accounting is derived from the outcome — nothing is
+    recomputed. Shadow findings (cortex#373/#374) never render as blocks;
+    when any were captured, their per-class counts render as one visible
+    accounting line.
     """
 
-    span_by_hash: dict[str, CitedSourceSpan] = {
-        span.span_hash: span
-        for candidate in pack.candidates
-        for span in candidate.cited_spans
-    }
+    span_by_hash = build_span_index(pack)
     lines: list[str] = [
         f"cortex review: {len(outcome.emitted)} advisory finding(s) "
         f"(state: {outcome.state.value}; Stage 0 — blocking unrepresentable, "
         "findings never change the exit code)"
     ]
     for index, emitted in enumerate(outcome.emitted, start=1):
-        finding = emitted.finding
         lines.append("")
-        lines.append(
-            f"finding {index}/{len(outcome.emitted)}: "
-            f"{finding.finding_class.value} "
-            f"[{TIER_GLYPHS[emitted.tier]} {emitted.tier.value} -> "
-            f"{emitted.behavior.value}]"
+        lines.extend(
+            render_finding_block_lines(
+                emitted,
+                index=index,
+                total=len(outcome.emitted),
+                span_by_hash=span_by_hash,
+            )
         )
-        lines.append(f"  {finding.summary}")
-        lines.append(
-            f"  decision: {emitted.decision_node_id} "
-            f"(version {emitted.decision_version_id})"
-        )
-        for span_hash in finding.cited_span_hashes:
-            span = span_by_hash.get(span_hash)
-            if span is None:
-                # The evaluator's citation gate makes this unreachable for
-                # its own emissions; reaching it means the pack and outcome
-                # drifted apart, which must never render as a finding.
-                raise ReviewError(
-                    f"emitted finding cites span hash {span_hash} that the "
-                    "candidate pack does not carry; refusing to render an "
-                    "unverifiable citation"
-                )
-            lines.append(f"  citation: {span.permalink}")
-            lines.append(f'    "{_one_line_excerpt(span.excerpt)}"')
-        if finding.suggested_repair is not None:
-            lines.append(f"  suggested repair: {finding.suggested_repair}")
 
     lines.append("")
     for suppressed in outcome.suppressed:
@@ -587,6 +566,15 @@ def render_review_report(
             f"[{suppressed.tier.value}] — {suppressed.reason}"
         )
     lines.append(f"suppressed below floor: {outcome.suppressed_below_floor}")
+    if outcome.shadow_findings:
+        shadow = ", ".join(
+            f"{finding_class} x{count}"
+            for finding_class, count in outcome.shadow_class_counts.items()
+        )
+        lines.append(
+            "shadow findings (cortex#373/#374 — captured, never rendered as "
+            f"advisory): {shadow}"
+        )
     rejection_counts = outcome.rejection_counts
     if rejection_counts:
         rejected = ", ".join(f"{code} x{count}" for code, count in rejection_counts.items())
@@ -618,13 +606,6 @@ def render_review_report(
     return "\n".join(lines)
 
 
-def _one_line_excerpt(excerpt: str) -> str:
-    flattened = " ".join(excerpt.split())
-    if len(flattened) <= _CITATION_EXCERPT_CHARS:
-        return flattened
-    return flattened[:_CITATION_EXCERPT_CHARS] + "…"
-
-
 # ---------------------------------------------------------------------------
 # The command
 # ---------------------------------------------------------------------------
@@ -634,6 +615,7 @@ def _one_line_excerpt(excerpt: str) -> str:
 _REVIEW_PIPELINE_ERRORS = (
     ReviewError,
     ReplayError,
+    FindingRenderError,
     FixtureValidationError,
     DiffSurfaceValidationError,
     DecisionsForDiffValidationError,
@@ -812,6 +794,7 @@ def review_command(
             source_id=source,
             run_ledger=ledger,
         )
+        report = render_review_report(outcome, pack)
     except ReviewDegradedError as exc:
         click.echo(f"cortex review: {exc}", err=True)
         return
@@ -820,4 +803,4 @@ def review_command(
             click.echo(f"error: {line}", err=True)
         sys.exit(1)
 
-    click.echo(render_review_report(outcome, pack))
+    click.echo(report)

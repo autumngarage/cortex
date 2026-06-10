@@ -1,0 +1,148 @@
+{
+  "archetype_id": "chatty-startup",
+  "commits": [
+    {
+      "author_email": "jordan@simlab.test",
+      "author_name": "Jordan Lee",
+      "authored_at": "2026-03-02T09:00:00+00:00",
+      "files": {
+        "CLAUDE.md": "# growthapp — Agent Instructions\n\nMove fast. Most of what we know lives in commit messages and PR threads.\n\n- Always run `make test` before pushing.\n",
+        "Makefile": "test:\n\tpytest -q\n",
+        "README.md": "# growthapp\n\nSynthetic simlab chatty-startup archetype.\n",
+        "src/app/main.py": "\"\"\"The app.\"\"\"\n\nVERSION = \"0.1.0\"\n",
+        "src/worker/logging.py": "\"\"\"Worker log pipeline with PAN redaction.\"\"\"\n\n\ndef redact(line: str) -> str:\n    return line.replace(\"4111111111111111\", \"****1111\")\n",
+        "src/worker/run.py": "\"\"\"Background worker entrypoint.\"\"\"\n\n\ndef main() -> None:\n    while True:\n        break\n"
+      },
+      "message": "chore: bootstrap growthapp"
+    },
+    {
+      "author_email": "jordan@simlab.test",
+      "author_name": "Jordan Lee",
+      "authored_at": "2026-03-02T13:00:00+00:00",
+      "files": {
+        "src/app/main.py": "\"\"\"The app.\"\"\"\n\nVERSION = \"0.1.1\"\n"
+      },
+      "message": "wip"
+    },
+    {
+      "author_email": "jordan@simlab.test",
+      "author_name": "Jordan Lee",
+      "authored_at": "2026-03-03T10:00:00+00:00",
+      "files": {
+        "src/worker/run.py": "\"\"\"Background worker entrypoint (single threaded by decision).\"\"\"\n\n\ndef main() -> None:\n    for _job in poll():\n        handle(_job)\n\n\ndef poll() -> list[str]:\n    return []\n\n\ndef handle(job: str) -> None:\n    _ = job\n"
+      },
+      "message": "feat: queue-backed background worker\n\nWe decided to keep the background worker single threaded because the queue client is not thread safe. The worker entrypoint is `src/worker/run.py`."
+    },
+    {
+      "author_email": "casey@simlab.test",
+      "author_name": "Casey Fox",
+      "authored_at": "2026-03-04T09:00:00+00:00",
+      "files": {
+        "README.md": "# growthapp\n\nSynthetic simlab chatty-startup archetype!\n"
+      },
+      "message": "fix typo"
+    },
+    {
+      "author_email": "jordan@simlab.test",
+      "author_name": "Jordan Lee",
+      "authored_at": "2026-03-05T10:00:00+00:00",
+      "files": {
+        "src/app/payments.py": "\"\"\"Card payments.\"\"\"\n\n\ndef charge(token: str, cents: int) -> bool:\n    return bool(token) and cents > 0\n"
+      },
+      "message": "feat: card payments\n\nWe must redact PAN values before logging anywhere in `src/worker/logging.py`; raw card numbers never go to the log stream."
+    },
+    {
+      "author_email": "casey@simlab.test",
+      "author_name": "Casey Fox",
+      "authored_at": "2026-03-05T16:00:00+00:00",
+      "files": {
+        "Makefile": "test:\n\tpytest -q\n\nlint:\n\truff check .\n"
+      },
+      "message": "bump deps"
+    },
+    {
+      "author_email": "jordan@simlab.test",
+      "author_name": "Jordan Lee",
+      "authored_at": "2026-03-06T11:00:00+00:00",
+      "files": {
+        "src/app/cache.py": "\"\"\"Local dev cache.\"\"\"\n\nimport sqlite3\n\n\ndef open_cache() -> sqlite3.Connection:\n    return sqlite3.connect(\":memory:\")\n"
+      },
+      "message": "refactor: drop redis cache (removes redis dependency)\n\nSwitched to sqlite for the local dev cache instead of redis; production stays on managed Postgres."
+    },
+    {
+      "author_email": "casey@simlab.test",
+      "author_name": "Casey Fox",
+      "authored_at": "2026-03-07T09:00:00+00:00",
+      "files": {
+        "src/app/main.py": "\"\"\"The app.\"\"\"\n\nVERSION = \"0.1.2\"\nPAGE_SIZE = 50\n"
+      },
+      "message": "fix: paginate activity feed"
+    },
+    {
+      "author_email": "jordan@simlab.test",
+      "author_name": "Jordan Lee",
+      "authored_at": "2026-03-08T10:00:00+00:00",
+      "files": {
+        "src/app/analytics.py": "\"\"\"Analytics events.\"\"\"\n\n\ndef track(name: str) -> None:\n    _ = name\n"
+      },
+      "message": "add analytics events"
+    },
+    {
+      "author_email": "casey@simlab.test",
+      "author_name": "Casey Fox",
+      "authored_at": "2026-03-09T09:00:00+00:00",
+      "files": {
+        "src/app/theme.py": "\"\"\"Themes.\"\"\"\n\nDARK = {\"bg\": \"#111\"}\n"
+      },
+      "message": "feat: dark mode"
+    },
+    {
+      "author_email": "jordan@simlab.test",
+      "author_name": "Jordan Lee",
+      "authored_at": "2026-03-10T09:00:00+00:00",
+      "files": {
+        "docs/onboarding.md": "# Onboarding\n\nClone, `make test`, ship.\n"
+      },
+      "message": "docs: onboarding notes"
+    },
+    {
+      "author_email": "casey@simlab.test",
+      "author_name": "Casey Fox",
+      "authored_at": "2026-03-11T09:00:00+00:00",
+      "files": {
+        "src/app/main.py": "\"\"\"The app.\"\"\"\n\nVERSION = \"0.1.3\"\nPAGE_SIZE = 50\nDEBOUNCE_MS = 150\n"
+      },
+      "message": "fix: debounce search input"
+    }
+  ],
+  "description": "A noisy startup repo: one thin CLAUDE.md rule, no ADRs, decisions buried in commit prose and PR threads, plenty of chatter.",
+  "kind": "archetype",
+  "pr_fixtures": [
+    {
+      "comments": [
+        {
+          "body": "Going forward we should never log full card numbers anywhere in the worker; mask to last4.",
+          "created_at": "2026-03-09T11:00:00+00:00",
+          "html_url": "https://github.com/simlab/growthapp/pull/7#discussion_r9001",
+          "id": 9001,
+          "user": {
+            "login": "casey-simlab"
+          }
+        }
+      ],
+      "view": {
+        "author": {
+          "login": "jordan-simlab"
+        },
+        "body": "## Why\n\nCard data in logs is a compliance incident waiting to happen. We must keep\nPAN redaction mandatory in `src/worker/logging.py`; raw card numbers never\nreach the log stream.\n\n## Checklist\n\n- [x] tests pass\n- [x] redaction unit test added\n",
+        "createdAt": "2026-03-09T10:00:00+00:00",
+        "number": 7,
+        "title": "Card payment logging hardening",
+        "url": "https://github.com/simlab/growthapp/pull/7"
+      }
+    }
+  ],
+  "simlab_spec_schema_version": 1,
+  "source_id": "c1d3e5f7-0a2b-5c4d-9e6f-8a0b2c4d6e80",
+  "tenant_id": "2b4d6f80-9a1c-5e3f-7d5b-0c2e4a6c8e02"
+}

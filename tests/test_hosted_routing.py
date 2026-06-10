@@ -773,8 +773,10 @@ def test_claude_evaluate_prompt_uses_stage0_finding_registry(
 
     assert FindingClass.CONTRADICTS_PRIOR_DECISION.value in prompt
     assert FindingClass.REVERSES_SUPERSEDED_PATTERN.value in prompt
-    assert FindingClass.CITES_MISSING_PATH.value not in prompt
-    assert FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT.value not in prompt
+    # The #373/#374 shadow classes are asked for so precision is measurable;
+    # the evaluator captures them in shadow_findings instead of emitting.
+    assert FindingClass.CITES_MISSING_PATH.value in prompt
+    assert FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT.value in prompt
 
 
 # --- budget integration ---------------------------------------------------------

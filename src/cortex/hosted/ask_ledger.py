@@ -55,6 +55,21 @@ class AnswerState(StrEnum):
     NO_ANSWER = "no_answer"
 
 
+# Candidate-ranking tuning knob (cortex#367): these weights are tuned for
+# contradiction detection over decisions, not document search. The one
+# deliberate knob decision recorded here: SCOPE (100) vs FULL_TEXT (70) —
+# a structural-scope match outranks a pure full-text match at the same
+# source rank for every rank, because a diff-shaped query needs the
+# decision that governs the changed surface, not the decision whose prose
+# best resembles the diff text. EXACT stays above SCOPE so explicit refs
+# always win; GRAPH stays lowest so one-hop expansion can corroborate but
+# never dominate a seed. `ask_ledger_retrieval_sql` inlines these values
+# as SQL literals and `decisions_for_diff_retrieval_sql` interpolates them;
+# tests/test_hosted_ranking_pins.py pins the exact values and the
+# Python/SQL lockstep. Do NOT change a weight without running the
+# protected-slice eval gate (cortex#338) against the committed baselines
+# in the same PR — ranking changes without measured replay evidence are
+# how retrieval quietly regresses.
 SOURCE_WEIGHTS: dict[CandidateSource, int] = {
     CandidateSource.EXACT: 120,
     CandidateSource.SCOPE: 100,

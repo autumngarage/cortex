@@ -41,14 +41,21 @@ from cortex.hosted.evaluator import (
     REASON_CONTRADICTED_DECISION_NOT_CONFIRMED,
     REASON_DECISION_REF_NOT_IN_PACK,
     REASON_FINDING_CLASS_NOT_REGISTERED,
+    REASON_MISSING_PATH_DECISION_NOT_CONFIRMED,
+    REASON_MISSING_PATH_NOT_NAMED,
+    REASON_OMISSION_ANCHOR_NOT_CONFIRMED,
+    REASON_OMISSION_STAGE_NOT_NAMED,
+    REASON_OMITTED_DECISION_NOT_NAMED,
     REASON_REVERSED_DECISION_NOT_SUPERSEDED,
     REASON_SUPERSEDING_DECISION_MISSING,
     REASON_UNKNOWN_CONFIDENCE_LABEL,
     STAGE0_FINDING_CLASS_REGISTRY,
+    ClassEvidenceRule,
     EvaluationOutcome,
     EvaluationState,
     EvaluatorValidationError,
     FindingClassSpec,
+    ShadowFinding,
     UncitedFindingError,
     evaluate_diff,
     evaluate_prompt_guidance,
@@ -126,6 +133,7 @@ def _finding(
     label: str = "advisory",
     span_hashes: tuple[str, ...] | None = None,
     decision_node_id: str | None = None,
+    summary: str = "The diff conflicts with a recorded decision.",
 ) -> FindingDraft:
     return FindingDraft(
         finding_class=finding_class,
@@ -137,9 +145,16 @@ def _finding(
             if span_hashes is None
             else span_hashes
         ),
-        summary="The diff conflicts with a recorded decision.",
+        summary=summary,
         confidence_label=label,
     )
+
+
+# A cites-missing-path summary that satisfies the named-path evidence gate.
+MISSING_PATH_SUMMARY = (
+    "The diff imports src/payments/missing_helper.py, which does not exist "
+    "in the changed surface the pack carries."
+)
 
 
 @dataclass
@@ -414,8 +429,15 @@ def test_uncited_finding_error_classifies_as_fail_closed_refusal() -> None:
 def test_rejects_unregistered_finding_class() -> None:
     candidate = _candidate(0)
     pack = _pack([candidate])
-    shadow = _finding(candidate, finding_class=FindingClass.CITES_MISSING_PATH)
-    outcome = _evaluate(pack, _scripted(shadow))
+    narrow_registry = {
+        FindingClass.CONTRADICTS_PRIOR_DECISION: STAGE0_FINDING_CLASS_REGISTRY[
+            FindingClass.CONTRADICTS_PRIOR_DECISION
+        ]
+    }
+    unregistered = _finding(
+        candidate, finding_class=FindingClass.REVERSES_SUPERSEDED_PATTERN
+    )
+    outcome = _evaluate(pack, _scripted(unregistered), registry=narrow_registry)
     rejection = outcome.rejected[0]
     assert rejection.reason_code == REASON_FINDING_CLASS_NOT_REGISTERED
     assert rejection.degradation.mode is DegradationMode.INVALID_INPUT_REJECTED
@@ -456,14 +478,42 @@ def test_stage0_registry_shape() -> None:
     assert set(STAGE0_FINDING_CLASS_REGISTRY) == {
         FindingClass.CONTRADICTS_PRIOR_DECISION,
         FindingClass.REVERSES_SUPERSEDED_PATTERN,
+        FindingClass.CITES_MISSING_PATH,
+        FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT,
     }
     contradicts = STAGE0_FINDING_CLASS_REGISTRY[FindingClass.CONTRADICTS_PRIOR_DECISION]
     assert contradicts.required_cited_status == DecisionStatus.CONFIRMED.value
     assert contradicts.companion is None
+    assert contradicts.shadow is False
+    assert contradicts.class_rule is None
     reverses = STAGE0_FINDING_CLASS_REGISTRY[FindingClass.REVERSES_SUPERSEDED_PATTERN]
     assert reverses.required_cited_status == DecisionStatus.SUPERSEDED.value
     assert reverses.companion is not None
     assert reverses.companion.reason_code_marker == GRAPH_SUPERSEDES_REASON_CODE
+    assert reverses.shadow is False
+    assert reverses.class_rule is None
+    missing_path = STAGE0_FINDING_CLASS_REGISTRY[FindingClass.CITES_MISSING_PATH]
+    assert missing_path.shadow is True
+    assert missing_path.class_rule is ClassEvidenceRule.NAMED_MISSING_PATH
+    assert missing_path.required_cited_status == DecisionStatus.CONFIRMED.value
+    omitted = STAGE0_FINDING_CLASS_REGISTRY[FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT]
+    assert omitted.shadow is True
+    assert omitted.class_rule is ClassEvidenceRule.NAMED_BUDGET_OMISSION
+    assert omitted.required_cited_status == DecisionStatus.CONFIRMED.value
+
+
+def test_shadow_membership_is_a_registry_attribute_not_a_special_case() -> None:
+    """The shadow lanes are ordinary registry entries with shadow=True."""
+
+    shadow_classes = {
+        finding_class
+        for finding_class, spec in STAGE0_FINDING_CLASS_REGISTRY.items()
+        if spec.shadow
+    }
+    assert shadow_classes == {
+        FindingClass.CITES_MISSING_PATH,
+        FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT,
+    }
 
 
 def test_spec_requires_a_known_decision_status() -> None:
@@ -496,12 +546,392 @@ def test_empty_registry_is_rejected() -> None:
 def test_prompt_guidance_asks_for_exactly_the_stage0_classes() -> None:
     text = evaluate_prompt_guidance()
     assert FindingClass.CONTRADICTS_PRIOR_DECISION.value in text
-    assert FindingClass.REVERSES_SUPERSEDED_PATTERN.value in text
-    # The #373/#374 shadow classes are not asked for in Stage 0.
-    assert FindingClass.CITES_MISSING_PATH.value not in text
-    assert FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT.value not in text
+    # The #373/#374 shadow classes are asked for (so precision is
+    # measurable) but the evaluator captures them instead of emitting.
+    assert FindingClass.CITES_MISSING_PATH.value in text
+    assert FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT.value in text
     assert "suggest, advisory, confirmed_cited" in text
     assert evaluate_prompt_guidance() == text
+    # The two pre-shadow definitions are unchanged: same guidance lines as
+    # before the #373/#374 vocabulary extension.
+    assert (
+        "- contradicts-prior-decision: emit only when the diff conflicts "
+        "with a decision in the pack whose status is 'confirmed'; cite span "
+        "hashes from that decision's citations"
+    ) in text
+    assert (
+        "- reverses-superseded-pattern: emit only when the diff reintroduces "
+        "a pattern from a pack decision whose status is 'superseded' and the "
+        "superseding decision is also present in the pack; cite span hashes "
+        "from the superseded decision's citations"
+    ) in text
+
+
+# --- shadow lanes (#373 + #374) ------------------------------------------------
+
+
+def test_cites_missing_path_is_captured_in_shadow_not_emitted() -> None:
+    candidate = _candidate(0)
+    pack = _pack([candidate])
+    proposed = _finding(
+        candidate,
+        finding_class=FindingClass.CITES_MISSING_PATH,
+        summary=MISSING_PATH_SUMMARY,
+    )
+    outcome = _evaluate(pack, _scripted(proposed))
+    assert outcome.emitted == ()
+    assert outcome.rejected == ()
+    assert outcome.suppressed == ()
+    assert outcome.ledger_event_drafts == ()
+    assert outcome.shadow_finding_count == 1
+    captured = outcome.shadow_findings[0]
+    assert isinstance(captured, ShadowFinding)
+    assert captured.finding.finding_class is FindingClass.CITES_MISSING_PATH
+    assert captured.decision_node_id == candidate.decision_node_id
+    assert captured.decision_version_id == candidate.decision_version_id
+    assert captured.tier is ConfidenceTier.ADVISORY
+
+
+def test_shadow_only_run_is_an_explicit_no_findings_state() -> None:
+    """Shadow captures never flip the outcome state to findings_emitted."""
+
+    candidate = _candidate(0)
+    outcome = _evaluate(
+        _pack([candidate]),
+        _scripted(
+            _finding(
+                candidate,
+                finding_class=FindingClass.CITES_MISSING_PATH,
+                summary=MISSING_PATH_SUMMARY,
+            )
+        ),
+    )
+    assert outcome.state is EvaluationState.NO_FINDINGS
+    assert outcome.shadow_finding_count == 1
+
+
+def test_shadow_capture_skips_the_emission_floor_by_construction() -> None:
+    """The ladder never assesses shadow findings: a raised floor cannot
+    suppress them, because they are captured before any emission decision."""
+
+    candidate = _candidate(0)
+    outcome = _evaluate(
+        _pack([candidate]),
+        _scripted(
+            _finding(
+                candidate,
+                finding_class=FindingClass.CITES_MISSING_PATH,
+                summary=MISSING_PATH_SUMMARY,
+                label="suggest",
+            )
+        ),
+        ladder=AdvisoryLadder(emission_floor=ConfidenceTier.ADVISORY),
+    )
+    assert outcome.suppressed == ()
+    assert outcome.shadow_finding_count == 1
+    assert outcome.shadow_findings[0].tier is ConfidenceTier.SUGGEST
+
+
+def test_shadow_findings_never_reach_ledger_drafts_alongside_emissions() -> None:
+    candidate = _candidate(0)
+    pack = _pack([candidate])
+    shadow = _finding(
+        candidate,
+        finding_class=FindingClass.CITES_MISSING_PATH,
+        summary=MISSING_PATH_SUMMARY,
+    )
+    outcome = _evaluate(pack, _scripted(shadow, _finding(candidate)))
+    assert len(outcome.emitted) == 1
+    assert outcome.shadow_finding_count == 1
+    assert len(outcome.ledger_event_drafts) == 1
+    draft = outcome.ledger_event_drafts[0]
+    assert (
+        draft.payload["finding"]["finding_class"]
+        == FindingClass.CONTRADICTS_PRIOR_DECISION.value
+    )
+
+
+def test_shadow_counts_are_visible_per_class() -> None:
+    first = _candidate(0)
+    second = _candidate(1)
+    pack = _pack([first, second])
+    first_cost = default_token_estimator.estimate_tokens(
+        serialize_candidate_payload(first)
+    )
+    omission_summary = (
+        f"Context assembly omitted decision {second.decision_node_id} at stage "
+        "over_budget; its scope matched the diff."
+    )
+    outcome = _evaluate(
+        pack,
+        _scripted(
+            _finding(
+                first,
+                finding_class=FindingClass.CITES_MISSING_PATH,
+                summary=MISSING_PATH_SUMMARY,
+            ),
+            _finding(
+                first,
+                finding_class=FindingClass.CITES_MISSING_PATH,
+                summary="The diff relies on docs/adr/0099-missing.md, which is absent.",
+            ),
+            _finding(
+                first,
+                finding_class=FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT,
+                summary=omission_summary,
+            ),
+        ),
+        token_budget=first_cost,
+    )
+    assert outcome.shadow_finding_count == 3
+    assert outcome.shadow_class_counts == {
+        FindingClass.CITES_MISSING_PATH.value: 2,
+        FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT.value: 1,
+    }
+    payload = outcome.as_payload()
+    assert payload["shadow_class_counts"] == outcome.shadow_class_counts
+    assert payload["shadow_finding_count"] == 3
+
+
+def test_shadow_finding_payload_shape() -> None:
+    candidate = _candidate(0)
+    outcome = _evaluate(
+        _pack([candidate]),
+        _scripted(
+            _finding(
+                candidate,
+                finding_class=FindingClass.CITES_MISSING_PATH,
+                summary=MISSING_PATH_SUMMARY,
+            )
+        ),
+    )
+    payload = outcome.shadow_findings[0].as_payload()
+    assert set(payload) == {"decision_version_id", "finding", "shadow", "tier"}
+    assert payload["shadow"] is True
+    assert payload["tier"] == "advisory"
+    assert payload["finding"]["finding_class"] == FindingClass.CITES_MISSING_PATH.value
+
+
+def test_shadow_finding_requires_uuid_decision_version() -> None:
+    candidate = _candidate(0)
+    with pytest.raises(EvaluatorValidationError, match="decision_version_id"):
+        ShadowFinding(
+            finding=_finding(candidate, finding_class=FindingClass.CITES_MISSING_PATH),
+            decision_version_id="not-a-uuid",
+            tier=ConfidenceTier.ADVISORY,
+        )
+
+
+def test_shadow_class_citation_gate_still_applies() -> None:
+    """#377 runs before shadow capture: forged provenance never shadows."""
+
+    candidate = _candidate(0)
+    pack = _pack([candidate])
+    forged = _finding(
+        candidate,
+        finding_class=FindingClass.CITES_MISSING_PATH,
+        summary=MISSING_PATH_SUMMARY,
+        span_hashes=(hashlib.sha256(b"forged").hexdigest(),),
+    )
+    outcome = _evaluate(pack, _scripted(forged))
+    assert outcome.shadow_findings == ()
+    rejection = outcome.rejected[0]
+    assert rejection.reason_code == REASON_CITED_SPAN_NOT_IN_PACK
+    assert rejection.degradation.mode is DegradationMode.FAIL_CLOSED_REFUSAL
+
+
+def test_shadow_capture_validates_the_confidence_label() -> None:
+    candidate = _candidate(0)
+    outcome = _evaluate(
+        _pack([candidate]),
+        _scripted(
+            _finding(
+                candidate,
+                finding_class=FindingClass.CITES_MISSING_PATH,
+                summary=MISSING_PATH_SUMMARY,
+                label="vibes",
+            )
+        ),
+    )
+    assert outcome.shadow_findings == ()
+    assert outcome.rejected[0].reason_code == REASON_UNKNOWN_CONFIDENCE_LABEL
+
+
+def test_cites_missing_path_requires_a_named_path() -> None:
+    candidate = _candidate(0)
+    outcome = _evaluate(
+        _pack([candidate]),
+        _scripted(
+            _finding(
+                candidate,
+                finding_class=FindingClass.CITES_MISSING_PATH,
+                summary="The diff relies on something that is gone.",
+            )
+        ),
+    )
+    assert outcome.shadow_findings == ()
+    rejection = outcome.rejected[0]
+    assert rejection.reason_code == REASON_MISSING_PATH_NOT_NAMED
+    assert "name the missing path" in rejection.detail
+
+
+def test_bare_filename_with_extension_satisfies_the_named_path_gate() -> None:
+    candidate = _candidate(0)
+    outcome = _evaluate(
+        _pack([candidate]),
+        _scripted(
+            _finding(
+                candidate,
+                finding_class=FindingClass.CITES_MISSING_PATH,
+                summary="The helper module missing_helper.py is absent, e.g. on import.",
+            )
+        ),
+    )
+    assert outcome.shadow_finding_count == 1
+
+
+def test_prose_abbreviations_do_not_satisfy_the_named_path_gate() -> None:
+    candidate = _candidate(0)
+    outcome = _evaluate(
+        _pack([candidate]),
+        _scripted(
+            _finding(
+                candidate,
+                finding_class=FindingClass.CITES_MISSING_PATH,
+                summary="The diff relies on a module that is gone, e.g. an import.",
+            )
+        ),
+    )
+    assert outcome.shadow_findings == ()
+    assert outcome.rejected[0].reason_code == REASON_MISSING_PATH_NOT_NAMED
+
+
+def test_cites_missing_path_requires_confirmed_cited_decision() -> None:
+    """The status gate fires even when the path is named (deterministic order)."""
+
+    candidate = _candidate(0, status="candidate")
+    outcome = _evaluate(
+        _pack([candidate]),
+        _scripted(
+            _finding(
+                candidate,
+                finding_class=FindingClass.CITES_MISSING_PATH,
+                summary=MISSING_PATH_SUMMARY,
+            )
+        ),
+    )
+    assert outcome.shadow_findings == ()
+    rejection = outcome.rejected[0]
+    assert rejection.reason_code == REASON_MISSING_PATH_DECISION_NOT_CONFIRMED
+    assert "'confirmed'" in rejection.detail
+
+
+def test_omitted_constraint_captured_when_id_and_stage_named() -> None:
+    first = _candidate(0)
+    second = _candidate(1)
+    pack = _pack([first, second])
+    first_cost = default_token_estimator.estimate_tokens(
+        serialize_candidate_payload(first)
+    )
+    proposed = _finding(
+        first,
+        finding_class=FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT,
+        summary=(
+            f"Context assembly omitted decision {second.decision_node_id} at "
+            "stage over_budget although its scope matched the diff."
+        ),
+    )
+    outcome = _evaluate(pack, _scripted(proposed), token_budget=first_cost)
+    assert outcome.omitted_for_budget == 1
+    assert outcome.rejected == ()
+    assert outcome.shadow_finding_count == 1
+    assert (
+        outcome.shadow_findings[0].finding.finding_class
+        is FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT
+    )
+
+
+def test_omitted_constraint_requires_an_actually_omitted_decision_id() -> None:
+    """Nothing was omitted for budget, so no omission claim can verify."""
+
+    candidate = _candidate(0)
+    outcome = _evaluate(
+        _pack([candidate]),
+        _scripted(
+            _finding(
+                candidate,
+                finding_class=FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT,
+                summary=(
+                    f"Context assembly omitted decision {UUID(int=777)} at "
+                    "stage over_budget."
+                ),
+            )
+        ),
+    )
+    assert outcome.shadow_findings == ()
+    rejection = outcome.rejected[0]
+    assert rejection.reason_code == REASON_OMITTED_DECISION_NOT_NAMED
+    assert "actually omitted" in rejection.detail
+
+
+def test_omitted_constraint_requires_the_stage_to_be_named() -> None:
+    first = _candidate(0)
+    second = _candidate(1)
+    pack = _pack([first, second])
+    first_cost = default_token_estimator.estimate_tokens(
+        serialize_candidate_payload(first)
+    )
+    proposed = _finding(
+        first,
+        finding_class=FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT,
+        summary=(
+            f"Context assembly omitted decision {second.decision_node_id} "
+            "although its scope matched the diff."
+        ),
+    )
+    outcome = _evaluate(pack, _scripted(proposed), token_budget=first_cost)
+    assert outcome.shadow_findings == ()
+    rejection = outcome.rejected[0]
+    assert rejection.reason_code == REASON_OMISSION_STAGE_NOT_NAMED
+    assert "over_budget" in rejection.detail
+
+
+def test_omitted_constraint_retrieval_stage_claims_are_unverifiable() -> None:
+    """Retrieval omissions arrive as counts without ids: claims fail closed."""
+
+    candidate = _candidate(0)
+    pack = _pack([candidate], omitted_counts={"over_limit": 3}, pool_extra=3)
+    outcome = _evaluate(
+        pack,
+        _scripted(
+            _finding(
+                candidate,
+                finding_class=FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT,
+                summary=(
+                    f"Retrieval omitted decision {UUID(int=778)} at stage "
+                    "over_limit; its scope matched the diff."
+                ),
+            )
+        ),
+    )
+    assert outcome.shadow_findings == ()
+    assert outcome.rejected[0].reason_code == REASON_OMITTED_DECISION_NOT_NAMED
+
+
+def test_omitted_constraint_anchor_must_be_confirmed() -> None:
+    anchor = _candidate(0, status="candidate")
+    outcome = _evaluate(
+        _pack([anchor]),
+        _scripted(
+            _finding(
+                anchor,
+                finding_class=FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT,
+                summary="Context assembly omitted a load-bearing decision.",
+            )
+        ),
+    )
+    assert outcome.shadow_findings == ()
+    assert outcome.rejected[0].reason_code == REASON_OMISSION_ANCHOR_NOT_CONFIRMED
 
 
 # --- ladder emission and suppression (#375) ----------------------------------
@@ -554,15 +984,22 @@ def test_confirmed_cited_emits_blocking_eligible_but_never_blocking() -> None:
 # --- visibility arithmetic (#370 + #377) -------------------------------------
 
 
-def test_visibility_arithmetic_across_emit_reject_suppress() -> None:
+def test_visibility_arithmetic_across_emit_reject_suppress_shadow() -> None:
     first = _candidate(0)
     second = _candidate(1)
     pack = _pack([first, second])
     findings = (
         _finding(first),  # emitted (advisory)
         _finding(first, decision_node_id=str(UUID(int=999))),  # rejected: uncited
-        _finding(second, finding_class=FindingClass.CITES_MISSING_PATH),  # rejected
+        # rejected: shadow class whose summary names no path
+        _finding(second, finding_class=FindingClass.CITES_MISSING_PATH),
         _finding(second, label="suggest"),  # suppressed below raised floor
+        # shadow-captured: named missing path against a confirmed decision
+        _finding(
+            second,
+            finding_class=FindingClass.CITES_MISSING_PATH,
+            summary=MISSING_PATH_SUMMARY,
+        ),
     )
     outcome = _evaluate(
         pack,
@@ -572,15 +1009,17 @@ def test_visibility_arithmetic_across_emit_reject_suppress() -> None:
     assert len(outcome.emitted) == 1
     assert len(outcome.rejected) == 2
     assert outcome.suppressed_below_floor == 1
+    assert outcome.shadow_finding_count == 1
     assert outcome.candidate_finding_count == len(findings)
     assert outcome.rejection_counts == {
         REASON_DECISION_REF_NOT_IN_PACK: 1,
-        REASON_FINDING_CLASS_NOT_REGISTERED: 1,
+        REASON_MISSING_PATH_NOT_NAMED: 1,
     }
     assert len(outcome.ledger_event_drafts) == len(outcome.emitted)
     payload = outcome.as_payload()
-    assert payload["candidate_finding_count"] == 4
+    assert payload["candidate_finding_count"] == 5
     assert payload["suppressed_below_floor"] == 1
+    assert payload["shadow_finding_count"] == 1
     assert payload["state"] == "findings_emitted"
 
 
@@ -662,6 +1101,9 @@ def test_outcome_payload_shape() -> None:
         "rejected",
         "rejection_counts",
         "replay",
+        "shadow_class_counts",
+        "shadow_finding_count",
+        "shadow_findings",
         "state",
         "suppressed",
         "suppressed_below_floor",
@@ -669,3 +1111,6 @@ def test_outcome_payload_shape() -> None:
     }
     assert payload["replay"] == outcome.replay.as_payload()
     assert payload["emitted"][0]["blocking_enabled"] is False
+    assert payload["shadow_findings"] == []
+    assert payload["shadow_finding_count"] == 0
+    assert payload["shadow_class_counts"] == {}
