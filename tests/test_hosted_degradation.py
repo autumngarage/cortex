@@ -21,11 +21,13 @@ from cortex.hosted.db import HostedDbError
 from cortex.hosted.decisions_for_diff import DecisionsForDiffValidationError
 from cortex.hosted.degradation import (
     OPTIONAL_FAILURE_SOURCES,
+    REMEDIATION_BY_REASON,
     DegradationMode,
     DegradationReport,
     DegradationTaxonomyError,
     classified_failure_types,
     classify_failure,
+    remediation_for,
     unregistered_optional_failure_sources,
 )
 from cortex.hosted.diff_surface import DiffSurfaceValidationError
@@ -269,3 +271,93 @@ def test_classified_failure_types_cover_the_expected_table() -> None:
     classified = set(classified_failure_types())
     for failure_type, _ in EXPECTED_CLASSIFICATIONS:
         assert failure_type in classified
+
+
+# ---------------------------------------------------------------------------
+# Remediation hints (cortex#516)
+# ---------------------------------------------------------------------------
+
+# The user-facing refusal reason codes wired through the CLI surfaces, each
+# with the substring its one actionable next command must name. This is the
+# completeness extension of the taxonomy tests: a reason added to the table
+# must be expected here, and vice versa.
+EXPECTED_REMEDIATIONS: tuple[tuple[str, str], ...] = (
+    ("snapshot_missing", "cortex push"),
+    ("no_cited_support", "cortex candidates triage"),
+    ("hosted_driver_missing", "cortex[hosted]"),
+    ("database_url_missing", "DATABASE_URL"),
+    ("derive_store_missing", "cortex derive"),
+    ("cortex_dir_missing", "cortex init"),
+    ("derive_no_sources", "--source"),
+)
+
+
+@pytest.mark.parametrize(
+    ("reason_code", "expected_command"),
+    EXPECTED_REMEDIATIONS,
+    ids=[reason for reason, _ in EXPECTED_REMEDIATIONS],
+)
+def test_every_user_facing_reason_carries_an_actionable_remediation(
+    reason_code: str, expected_command: str
+) -> None:
+    hint = remediation_for(reason_code)
+    assert hint.strip(), f"remediation for {reason_code!r} must be non-empty"
+    assert expected_command in hint
+    # Exactly one actionable `cortex ...` invocation per hint — a hint that
+    # chains several commands is a checklist, not a next step.
+    assert hint.count("run `cortex ") <= 1
+
+
+def test_remediation_table_and_expectations_stay_in_lockstep() -> None:
+    assert set(REMEDIATION_BY_REASON) == {reason for reason, _ in EXPECTED_REMEDIATIONS}
+
+
+def test_remediation_lookup_fails_closed_on_unknown_reason() -> None:
+    with pytest.raises(DegradationTaxonomyError, match="no remediation registered"):
+        remediation_for("made_up_reason")
+
+
+def test_report_carries_remediation_in_payload_when_present() -> None:
+    report = DegradationReport(
+        mode=DegradationMode.FAIL_CLOSED_REFUSAL,
+        reason_code="no_cited_support",
+        source="cortex.hosted.ask_ledger.build_cited_context_pack",
+        safety_boundary_held=True,
+        remediation=remediation_for("no_cited_support"),
+    )
+    payload = report.as_payload()
+    assert payload["remediation"] == remediation_for("no_cited_support")
+
+
+def test_report_omits_remediation_key_when_absent() -> None:
+    report = DegradationReport(
+        mode=DegradationMode.FAIL_CLOSED_REFUSAL,
+        reason_code="no_cited_support",
+        source="cortex.hosted.ask_ledger.build_cited_context_pack",
+        safety_boundary_held=True,
+    )
+    assert report.remediation is None
+    assert "remediation" not in report.as_payload()
+
+
+def test_report_strips_remediation_whitespace() -> None:
+    report = DegradationReport(
+        mode=DegradationMode.FAIL_CLOSED_REFUSAL,
+        reason_code="no_cited_support",
+        source="cortex.hosted.ask_ledger",
+        safety_boundary_held=True,
+        remediation="  run `cortex candidates triage`  ",
+    )
+    assert report.remediation == "run `cortex candidates triage`"
+
+
+@pytest.mark.parametrize("blank", ["", "   "], ids=["empty", "whitespace"])
+def test_report_rejects_blank_remediation(blank: str) -> None:
+    with pytest.raises(DegradationTaxonomyError, match="remediation"):
+        DegradationReport(
+            mode=DegradationMode.FAIL_CLOSED_REFUSAL,
+            reason_code="no_cited_support",
+            source="cortex.hosted.ask_ledger",
+            safety_boundary_held=True,
+            remediation=blank,
+        )

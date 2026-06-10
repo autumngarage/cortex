@@ -14,6 +14,10 @@ from typing import Any, cast
 from uuid import UUID
 
 from cortex.hosted.embeddings import HOSTED_VECTOR_INDEX_CONFIG_VERSION
+from cortex.hosted.question_normalization import (
+    QUESTION_NORMALIZATION_VERSION,
+    strip_question_boilerplate,
+)
 from cortex.hosted.scopes import QueryScope, query_scope_parameters
 from cortex.hosted.visibility import (
     SourceVisibilityScope,
@@ -22,7 +26,13 @@ from cortex.hosted.visibility import (
     visible_source_documents_ctes,
 )
 
-ASK_LEDGER_RETRIEVAL_CONFIG_VERSION = f"ask-ledger-v2+{HOSTED_VECTOR_INDEX_CONFIG_VERSION}"
+# v3 (cortex#512): the FTS leg consumes the boilerplate-stripped question and
+# softens AND-gating to OR-with-ranking; the normalization version composes
+# into the config version so traces recorded under different normalization
+# behavior never aggregate as comparable (cortex#467).
+ASK_LEDGER_RETRIEVAL_CONFIG_VERSION = (
+    f"ask-ledger-v3+{HOSTED_VECTOR_INDEX_CONFIG_VERSION}+{QUESTION_NORMALIZATION_VERSION}"
+)
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 
@@ -106,6 +116,18 @@ class AskLedgerQuery:
                 raise AskLedgerValidationError("embedding_vector must not be empty")
 
     @property
+    def fts_query(self) -> str:
+        """Boilerplate-stripped question text for the FTS leg (cortex#512).
+
+        The trigram leg keeps the raw question; only full-text search consumes
+        the stripped residue, so "what did we decide about X?" matches
+        decisions about X instead of requiring the word "decide" to appear in
+        the decision text.
+        """
+
+        return strip_question_boilerplate(self.query)
+
+    @property
     def query_hash(self) -> str:
         return _hash_mapping(
             {
@@ -115,6 +137,7 @@ class AskLedgerQuery:
                 "embedding_vector": None
                 if self.embedding_vector is None
                 else list(self.embedding_vector),
+                "fts_query": self.fts_query,
                 "limit": self.limit,
                 "query": self.query.strip(),
                 "repo_installation_id": self.repo_installation_id,
@@ -135,6 +158,7 @@ class AskLedgerQuery:
             "tenant_id": self.tenant_id,
             "repo_id": self.repo_id,
             "query": self.query.strip(),
+            "fts_query": self.fts_query,
             "exact_refs": list(self.exact_refs),
             "repo_installation_id": self.repo_installation_id,
             "visible_source_ids": list(self.visible_source_ids),
@@ -426,6 +450,13 @@ def ask_ledger_retrieval_sql(schema: str = "cortex_hosted") -> str:
     full-text, trigram, optional vector, and one-hop graph expansion sources.
     Embeddings are a rebuildable projection keyed by model, dimension, and
     epoch; callers pass NULL embedding parameters when vector search is absent.
+
+    FTS leg (cortex#512): consumes ``%(fts_query)s`` — the boilerplate-stripped
+    question (`AskLedgerQuery.fts_query`) — and ORs the residue's lexemes
+    instead of ANDing them, so natural-question phrasing cannot gate recall to
+    zero; RRF fusion plus ``SOURCE_WEIGHTS`` provide precision. The trigram leg
+    keeps the raw ``%(query)s``. Populating the embeddings table so the vector
+    leg rescues stemming mismatches is follow-up scope, not handled here.
     """
 
     _validate_sql_identifier(schema)
@@ -496,16 +527,31 @@ scope_candidates AS (
       ON version.decision_node_id = scope.decision_node_id
     ORDER BY version.decision_node_id, q.structural_weight DESC, version.updated_at DESC
 ),
+fts_query AS (
+    -- cortex#512: %(fts_query)s is the boilerplate-stripped question. The
+    -- plainto_tsquery text form ('a' & 'b') is rewritten to OR ('a' | 'b') so
+    -- question terms rank instead of gate; plainto_tsquery owns tokenizing and
+    -- lexeme quoting, and its output never contains a literal ' & ' inside a
+    -- lexeme. numnode() guards the all-stopword residue: an empty tsquery
+    -- yields zero rows here, so the leg degrades to no candidates instead of
+    -- erroring.
+    SELECT to_tsquery(
+        'english',
+        replace(plainto_tsquery('english', %(fts_query)s)::text, ' & ', ' | ')
+    ) AS query
+    WHERE numnode(plainto_tsquery('english', %(fts_query)s)) > 0
+),
 fts_candidates AS (
     SELECT
         version.decision_node_id,
         'full_text'::text AS source,
         row_number() OVER (
-            ORDER BY ts_rank_cd(to_tsvector('english', version.decision_text), websearch_to_tsquery('english', %(query)s)) DESC
+            ORDER BY ts_rank_cd(to_tsvector('english', version.decision_text), fts.query) DESC
         ) AS source_rank,
         'full_text:decision_text'::text AS reason_code
     FROM base_versions AS version
-    WHERE to_tsvector('english', version.decision_text) @@ websearch_to_tsquery('english', %(query)s)
+    CROSS JOIN fts_query AS fts
+    WHERE to_tsvector('english', version.decision_text) @@ fts.query
 ),
 trigram_candidates AS (
     SELECT

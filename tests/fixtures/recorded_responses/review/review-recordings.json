@@ -1,0 +1,33 @@
+{
+  "derive": [],
+  "evaluate": [
+    {
+      "degraded_reasons": [],
+      "findings": [],
+      "input_hash": "6276c8d3e507175ca88e6ecff9809e312d84474d5e4633349118e02beb1d389e",
+      "model_id": "anthropic/claude-fable-5",
+      "omitted_decision_count": 0,
+      "prompt_version": "review-evaluate/v1+ab9e37e9394b"
+    },
+    {
+      "degraded_reasons": [],
+      "findings": [
+        {
+          "cited_span_hashes": [
+            "e0a2a49fbd6d2ac2650415105be461c1c794491aa11c418c742e68b0092f2d73"
+          ],
+          "confidence_label": "advisory",
+          "decision_node_id": "9c4adcdf-fcfc-6a61-cd5c-280eb51dba96",
+          "finding_class": "contradicts-prior-decision",
+          "suggested_repair": "Keep exponential backoff (2.0 ** attempt) or supersede the decision before landing a fixed delay.",
+          "summary": "The diff replaces exponential backoff with a fixed 0.5s delay."
+        }
+      ],
+      "input_hash": "66154d7036cc6bb54aed8b9cfaa65ceae6d2ce1a85fed728d9a234ef96f6af1e",
+      "model_id": "anthropic/claude-fable-5",
+      "omitted_decision_count": 0,
+      "prompt_version": "review-evaluate/v1+ab9e37e9394b"
+    }
+  ],
+  "recorded_responses_schema_version": 1
+}

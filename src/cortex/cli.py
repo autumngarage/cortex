@@ -30,9 +30,11 @@ from cortex.commands.migrate_state import migrate_state_command
 from cortex.commands.next import next_command
 from cortex.commands.plan import plan_group
 from cortex.commands.promote import promote_command
+from cortex.commands.push import push_command
 from cortex.commands.refresh_index import refresh_index_command
 from cortex.commands.refresh_state import refresh_state_command
 from cortex.commands.retrieve import retrieve_command
+from cortex.commands.review import review_command
 from cortex.commands.status import run_status, status_command
 from cortex.commands.sync import sync_command, update_command
 from cortex.commands.usage import usage_command
@@ -161,9 +163,11 @@ cli.add_command(migrate_state_command)
 cli.add_command(grep_command)
 cli.add_command(status_command)
 cli.add_command(promote_command)
+cli.add_command(push_command)
 cli.add_command(refresh_index_command)
 cli.add_command(refresh_state_command)
 cli.add_command(retrieve_command)
+cli.add_command(review_command)
 cli.add_command(next_command)
 cli.add_command(journal_group)
 cli.add_command(plan_group)

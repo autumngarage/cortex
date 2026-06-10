@@ -15,3 +15,8 @@ We decided to drive ingestion from webhooks instead of polling.
 
 Closes-issue: #354
 
+d4e5f6a7b8091a2b3c4d5e6f7081920a1b2c3d4eDee Wrapper <dee@example.com>2026-06-04T08:15:00+00:00chore(auto-sync): quiet the non-git skip path
+
+Non-git projects skip the stale-input hook quietly (no safety gate to
+apply) instead of printing "git unavailable" on every read.
+

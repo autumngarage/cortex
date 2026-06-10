@@ -287,6 +287,12 @@ mode skip citation or visibility boundaries.
   boundary (cortex#382) — the corpus is never enumerated to make a query
   succeed.
 
+### Retrieval question-normalization registration (2026-06-10, cortex#512)
+
+- `question_normalization.QuestionNormalizationError` ->
+  `invalid_input_rejected`: an empty question is rejected before any
+  boilerplate stripping or retrieval — nothing partial reaches the FTS leg.
+
 ### Executable-path registrations (2026-06-09, cortex#472)
 
 - `db.HostedDbError` classifies as `fail_closed_refusal`: a connection that
@@ -297,3 +303,36 @@ mode skip citation or visibility boundaries.
   missing extension, a newer-than-this-build recorded schema version, or an
   unverifiable `schema_migrations` record blocks the migration visibly and
   rolls back — the runner never reports a success it cannot read back.
+
+### Push registration (2026-06-10, cortex#513)
+
+- `push.HostedPushError` -> `drift_detected`: its marquee failure is a
+  derive-export row whose recomputed event hash, or a working-tree file
+  whose content-keyed document hash, no longer matches what the export
+  recorded — `cortex push` refuses to replay content that disagrees with
+  its recorded identity, naming both sides. (Span drift on a file-backed
+  candidate is not an error at all: the candidate is excluded as a counted,
+  path-naming skip — the write-side `bounded_omission` behavior.)
+### Remediation hints (2026-06-10, cortex#516)
+
+Errors are the onboarding surface of a fail-closed product: a refusal that
+names the problem but not the next command is a dead end. Two additions
+operationalize that:
+
+- `DegradationReport` carries an optional `remediation` field — exactly one
+  actionable next command. It must be non-empty when present (a blank hint
+  fails validation as `DegradationTaxonomyError`) and appears in
+  `as_payload()` output only when set, so consumers distinguish "no hint
+  registered" by key absence, never by a null.
+- Hints live in one module-level table,
+  `degradation.REMEDIATION_BY_REASON`, looked up via `remediation_for`
+  (fail-closed: unknown reason codes raise instead of returning a generic
+  hint). The CLI refusal surfaces — `cortex ask` (missing `DATABASE_URL`,
+  missing driver, missing graph snapshot, the `no_cited_support` no-answer),
+  `cortex derive` (missing `.cortex/`, no default sources), and
+  `cortex candidates` (missing derive store) — draw from the same table, so
+  there are no scattered per-call-site hint strings. The `no_cited_support`
+  hint additionally carries the live pending-candidate count from the local
+  derive store when it is cheaply available ("N candidates await review —
+  run `cortex candidates triage`"); a count failure is reported inline,
+  never silently dropped.
