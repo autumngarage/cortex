@@ -36,6 +36,7 @@ from cortex.hosted.advisory_ladder import AdvisoryLadderError
 from cortex.hosted.ask_ledger import AnswerState, AskLedgerValidationError
 from cortex.hosted.banking import BankingValidationError
 from cortex.hosted.candidate_dedup import CandidateDedupError
+from cortex.hosted.ask_surface import AskSurfaceValidationError, BrowseIndexRefusedError
 from cortex.hosted.candidate_metrics import CandidateMetricsValidationError
 from cortex.hosted.cascade import CascadeValidationError
 from cortex.hosted.citation_check import CitationCheckError
@@ -122,6 +123,13 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # CandidateDedupError fires before any graph write: malformed identity
     # material or a non-candidate event is refused, nothing partial folds.
     CandidateDedupError: DegradationMode.INVALID_INPUT_REJECTED,
+    # Malformed answer material (e.g. an uncited answer line) is refused at
+    # construction, before any rendering — nothing partial reaches the user.
+    AskSurfaceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # A browse-shaped question is refused to hold the no-browsable-index
+    # boundary (cortex#382): the corpus is never enumerated to make a query
+    # succeed, same family as the visibility deny-by-default refusal.
+    BrowseIndexRefusedError: DegradationMode.FAIL_CLOSED_REFUSAL,
     ConfidenceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     DecisionsForDiffValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     # DeriveStoreError's marquee failure is the same-idempotency-key /
