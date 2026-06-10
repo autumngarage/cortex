@@ -1,0 +1,10 @@
+{
+  "number": 612,
+  "title": "feat: route ledger writes through the queue",
+  "body": "## Why\n\nWe route all ledger writes through the queue so replay stays ordered.\n\n## Approach\n\n- Switch the writer to the queue client in `src/cortex/hosted/graph_writes.py`.\n\n## Test plan\n\nRan the replay suite locally.\n\n## Checklist\n\n- [ ] Tests pass\n- [x] Docs updated\n\n<!-- template: describe your change -->\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+  "author": {
+    "login": "octocat"
+  },
+  "createdAt": "2026-06-02T12:00:00Z",
+  "url": "https://github.com/autumngarage/cortex/pull/612"
+}
