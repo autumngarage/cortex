@@ -247,7 +247,7 @@ def _parsed_port(parts: SplitResult) -> int | None:
 
 def _import_driver() -> Any:
     try:
-        import psycopg  # type: ignore[import-not-found]
+        import psycopg
     except ImportError as exc:
         raise HostedDbError(f"{_DRIVER_INSTALL_HINT} (import failed: {exc})") from exc
     return psycopg
