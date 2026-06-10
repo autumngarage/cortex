@@ -1,0 +1,63 @@
+{
+  "decisions": [
+    {
+      "decision_id": "retry-backoff-decision",
+      "decision_text": "Outbound webhook retries use exponential backoff with jitter; fixed-interval retries are forbidden.",
+      "scopes": [],
+      "source_timestamp": "2026-05-14T09:30:00+00:00",
+      "spans": [
+        {
+          "end_offset": 217,
+          "excerpt": "all outbound webhook retries use exponential backoff with jitter; fixed-interval retries are forbidden because they synchronized thundering herds during the May incident.",
+          "permalink": "https://github.com/acme/payments/blob/main/docs/adr/0007-retry-policy.md",
+          "source_document_hash": "b46d85b8253db4e6404e39ddcb0b2298759e0dbe240fb5273696a1f14b4572fa",
+          "span_hash": "f148498f9c298dbf70aa9590699bc57a95076a958d90b93b2d96801a1feed353",
+          "start_offset": 47
+        }
+      ],
+      "status": "confirmed"
+    }
+  ],
+  "diff": {
+    "base_sha": "a1b2c3d4e5f6a7b8",
+    "changed_paths": [
+      "src/payments/webhook_client.py"
+    ],
+    "config_keys": [],
+    "head_sha": "b2c3d4e5f6a7b8c9",
+    "issue_refs": [],
+    "patch": "--- a/src/payments/webhook_client.py\n+++ b/src/payments/webhook_client.py\n@@ -10,7 +10,7 @@\n-    delay = backoff_with_jitter(attempt)\n+    delay = 5.0\n",
+    "repo_name": "payments",
+    "repo_owner": "acme",
+    "symbols": [
+      "backoff_with_jitter"
+    ]
+  },
+  "expected_findings": [
+    {
+      "cited_span_hashes": [
+        "f148498f9c298dbf70aa9590699bc57a95076a958d90b93b2d96801a1feed353"
+      ],
+      "decision_id": "retry-backoff-decision",
+      "finding_class": "contradicts-prior-decision",
+      "finding_id": "finding-fixed-retry",
+      "suggested_repair": "Restore exponential backoff with jitter (see cited ADR span).",
+      "summary": "The diff replaces exponential backoff with a fixed 5s retry loop in webhook_client.py, contradicting the confirmed retry-policy decision."
+    }
+  ],
+  "fixture_id": "contradiction-001",
+  "fixture_schema_version": 1,
+  "labels": [
+    {
+      "finding_id": "finding-fixed-retry",
+      "graded_at": "2026-06-09",
+      "grader": "henry",
+      "label": "correct_useful",
+      "note": "Exactly the incident class the ledger exists to prevent."
+    }
+  ],
+  "metadata": {
+    "scenario": "fixed-retry-contradiction",
+    "source": "hand-authored"
+  }
+}
