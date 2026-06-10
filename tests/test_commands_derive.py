@@ -96,7 +96,12 @@ def test_resolve_defaults_skips_missing_entries(tmp_path: Path) -> None:
     (root / "CLAUDE.md").write_text("# Only file\n")
     files = resolve_source_files(root, ())
     assert [path.name for path in files] == ["CLAUDE.md"]
-    assert DEFAULT_SOURCE_RELATIVE_PATHS == ("CLAUDE.md", "AGENTS.md", "docs/adr")
+    assert DEFAULT_SOURCE_RELATIVE_PATHS == (
+        "CLAUDE.md",
+        "AGENTS.md",
+        "docs/adr",
+        "docs/decisions",
+    )
 
 
 def test_resolve_explicit_missing_source_is_an_error(fixture_repo: Path) -> None:
@@ -104,14 +109,19 @@ def test_resolve_explicit_missing_source_is_an_error(fixture_repo: Path) -> None
         resolve_source_files(fixture_repo, (Path("does-not-exist.md"),))
 
 
-def test_cli_scaffold_runs_with_empty_extractor_and_creates_store(
+def test_cli_runs_repo_native_extractors_and_reports_drops(
     fixture_repo: Path,
 ) -> None:
+    """The fixture has no constraint-shaped material: zero candidates, all
+    blocks visibly dropped with reason codes (never silently skipped)."""
+
     runner = CliRunner()
     result = runner.invoke(cli, ["derive", "--path", str(fixture_repo)])
     assert result.exit_code == 0, result.output
     assert "3 source file(s)" in result.output
     assert "0 candidate event(s)" in result.output
+    assert "dropped:" in result.output
+    assert "adr:missing_status" in result.output
     db_path = derive_store_path(fixture_repo)
     assert db_path.exists()
     with DeriveEventStore(db_path) as store:
@@ -318,3 +328,168 @@ def test_run_derive_persists_exactly_the_emitted_events(fixture_repo: Path) -> N
         event.event_hash for event in result.events
     ]
     assert exported[0] == result.events[0].as_insert_parameters()
+
+
+# ---------------------------------------------------------------------------
+# Repo-native extractor end-to-end (issues #351 + #352 + #353)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def populated_repo(tmp_path: Path) -> Path:
+    """A fixture repo exercising all three repo-native source types."""
+
+    root = tmp_path / "repo-native"
+    (root / ".cortex").mkdir(parents=True)
+    (root / "CLAUDE.md").write_text(
+        "# Project instructions\n"
+        "\n"
+        "This project is a reference CLI.\n"
+        "\n"
+        "## Hard requirements\n"
+        "\n"
+        "- Never store credentials in `config/` files.\n"
+        "- All ledger writes must go through `src/db/client.py`.\n"
+        "\n"
+        "Deploys must not run on Fridays.\n",
+        encoding="utf-8",
+    )
+    (root / "AGENTS.md").write_text(
+        "# Agents\n"
+        "\n"
+        "- **One code path.** Share business logic across modes.\n",
+        encoding="utf-8",
+    )
+    adr_dir = root / "docs" / "adr"
+    adr_dir.mkdir(parents=True)
+    (adr_dir / "0001-use-postgres.md").write_text(
+        "# 1. Use Postgres\n"
+        "\n"
+        "Status: Accepted\n"
+        "\n"
+        "## Context\n"
+        "\n"
+        "We need durable storage.\n"
+        "\n"
+        "## Decision\n"
+        "\n"
+        "We will use Postgres for the hosted ledger.\n",
+        encoding="utf-8",
+    )
+    (adr_dir / "0002-drop-redis.md").write_text(
+        "# 2. Drop Redis\n"
+        "\n"
+        "Status: Superseded by 0001\n"
+        "\n"
+        "## Decision\n"
+        "\n"
+        "We drop Redis in favor of Postgres LISTEN/NOTIFY.\n",
+        encoding="utf-8",
+    )
+    github_dir = root / ".github"
+    github_dir.mkdir()
+    (github_dir / "CODEOWNERS").write_text(
+        "# ownership\n"
+        "*.py @backend-team\n"
+        "docs/orphan\n",
+        encoding="utf-8",
+    )
+    return root
+
+
+def test_cli_repo_native_end_to_end_emits_candidates_with_stable_keys(
+    populated_repo: Path,
+) -> None:
+    """`cortex derive` over all three source types: candidates persisted with
+    stable idempotency keys, drops reported, reruns fully idempotent."""
+
+    runner = CliRunner()
+    first = runner.invoke(cli, ["derive", "--path", str(populated_repo)])
+    assert first.exit_code == 0, first.output
+    assert "5 source file(s)" in first.output
+    assert "7 candidate event(s)" in first.output
+    assert "(7 inserted, 0 duplicate)" in first.output
+    assert "dropped:" in first.output
+    assert "codeowners:unowned_pattern_reset x1" in first.output
+
+    with DeriveEventStore(derive_store_path(populated_repo)) as store:
+        exported = store.export_events()
+    assert len(exported) == 7
+    keys = [row["idempotency_key"] for row in exported]
+    assert len(set(keys)) == 7
+
+    second = runner.invoke(cli, ["derive", "--path", str(populated_repo)])
+    assert second.exit_code == 0, second.output
+    assert "(0 inserted, 7 duplicate)" in second.output
+    with DeriveEventStore(derive_store_path(populated_repo)) as store:
+        assert store.export_events() == exported
+
+
+def test_cli_repo_native_events_carry_lane_and_span_provenance(
+    populated_repo: Path,
+) -> None:
+    import json
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["derive", "--path", str(populated_repo)])
+    assert result.exit_code == 0, result.output
+    with DeriveEventStore(derive_store_path(populated_repo)) as store:
+        exported = store.export_events()
+
+    payloads = [json.loads(str(row["payload"])) for row in exported]
+    by_source_type: dict[str, list[dict[str, object]]] = {}
+    for payload in payloads:
+        by_source_type.setdefault(str(payload["source_type"]), []).append(payload)
+    assert sorted(by_source_type) == ["adr", "agent_instructions", "codeowners"]
+    assert len(by_source_type["agent_instructions"]) == 4
+    assert len(by_source_type["adr"]) == 2
+    assert len(by_source_type["codeowners"]) == 1
+
+    # Every candidate carries spans, and stored span hashes match the payload.
+    for row, payload in zip(exported, payloads, strict=True):
+        spans = payload["spans"]
+        assert isinstance(spans, list) and spans
+        assert row["source_span_hashes"] == [span["span_hash"] for span in spans]
+
+    # Lane policy semantics: accepted ADR auto-promotes, superseded does not.
+    adr_lanes = {
+        str(payload["decision_text"]).splitlines()[0]: payload["lane_assignment"]
+        for payload in by_source_type["adr"]
+    }
+    accepted = adr_lanes["1. Use Postgres"]
+    superseded = adr_lanes["2. Drop Redis"]
+    assert isinstance(accepted, dict) and isinstance(superseded, dict)
+    assert accepted["auto_promotable"] is True
+    assert accepted["backfilled"] is False
+    assert superseded["auto_promotable"] is False
+    assert superseded["advisory_only"] is True
+
+    codeowners = by_source_type["codeowners"][0]
+    assert codeowners["decision_text"] == "@backend-team own *.py"
+    lane = codeowners["lane_assignment"]
+    assert isinstance(lane, dict)
+    assert lane["auto_promotable"] is True
+
+
+def test_resolve_defaults_pick_one_codeowners_by_github_precedence(
+    populated_repo: Path,
+) -> None:
+    # Add a second, lower-precedence CODEOWNERS; only .github/ should win.
+    (populated_repo / "CODEOWNERS").write_text("*.md @docs-team\n", encoding="utf-8")
+    files = resolve_source_files(populated_repo, ())
+    codeowners = [path for path in files if path.name == "CODEOWNERS"]
+    assert len(codeowners) == 1
+    assert codeowners[0] == (populated_repo / ".github" / "CODEOWNERS").resolve()
+
+
+def test_cli_unrecognized_explicit_source_fails_closed(populated_repo: Path) -> None:
+    (populated_repo / "notes.md").write_text("# Notes\n\nFreeform text.\n", encoding="utf-8")
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["derive", "--path", str(populated_repo), "--source", "notes.md"]
+    )
+    assert result.exit_code == 1
+    combined = _combined_output(result)
+    assert "notes.md" in combined
+    assert "no repo-native extractor recognizes" in combined
+    assert not derive_store_path(populated_repo).exists()
