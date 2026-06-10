@@ -27,6 +27,7 @@ from cortex.audit_instructions import (
 )
 from cortex.banner import SUBTITLE_DOCTOR, cortex_version, print_banner
 from cortex.doctor_checks import (
+    check_sources_hash_drift,
     run_audit_checks,
     run_issue_ref_checks,
     run_plain_checks,
@@ -142,6 +143,15 @@ def _format_issue(issue: Issue) -> str:
     "Use with --strict to fail on warnings.",
 )
 @click.option(
+    "--check",
+    "fast_check",
+    type=click.Choice(["sources-hash"]),
+    default=None,
+    help="Run one fast, exit-code-clean check and skip the full structural pass. "
+    "`sources-hash` compares the working tree's .cortex/ source files against "
+    "state.md's recorded Sources-hash entries (pre-commit guard; exits 1 on drift).",
+)
+@click.option(
     "--strict",
     is_flag=True,
     default=False,
@@ -179,6 +189,7 @@ def doctor_command(
     run_audit_instructions: bool,
     run_audit_pr_trailers: bool,
     run_audit_issue_refs: bool,
+    fast_check: str | None,
     production: bool,
     strict: bool,
     as_json: bool,
@@ -191,8 +202,26 @@ def doctor_command(
 
     The ``--audit*`` flags add optional Protocol-compliance and external-claim
     checks on top of the structural pass. Run them independently or together.
+    ``--check <name>`` runs one fast exit-code-clean check instead of the
+    structural pass (built for pre-commit hooks).
     """
     target_path = Path(target_path).resolve()
+    if fast_check is not None:
+        if (
+            production
+            or as_json
+            or run_audit
+            or run_audit_digests
+            or run_audit_instructions
+            or run_audit_pr_trailers
+            or run_audit_issue_refs
+        ):
+            raise click.UsageError(
+                "--check runs a single fast check; do not combine it with "
+                "--production, --json, or --audit* flags"
+            )
+        _run_fast_check(target_path, fast_check)
+        return
     if production:
         _run_production_doctor(target_path, as_json=as_json)
         return
@@ -250,6 +279,21 @@ def doctor_command(
         _print_siblings(target_path)
 
     if errors or (strict and (warnings or instruction_warnings)):
+        sys.exit(1)
+
+
+def _run_fast_check(project_root: Path, name: str) -> None:
+    """Run one exit-code-clean fast check: no banner, no structural pass.
+
+    Skips are printed (visible degrade, exit 0); drift goes to stderr and
+    exits 1 so pre-commit blocks the commit.
+    """
+    if name != "sources-hash":  # pragma: no cover — click.Choice guards values
+        raise click.UsageError(f"unknown --check name: {name!r}")
+    result = check_sources_hash_drift(project_root)
+    for line in result.lines:
+        click.echo(line, file=sys.stderr if not result.ok else sys.stdout)
+    if not result.ok:
         sys.exit(1)
 
 
