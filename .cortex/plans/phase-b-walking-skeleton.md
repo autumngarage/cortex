@@ -71,6 +71,10 @@ Brew formula mirrors Touchstone's: `url` points at a tagged GitHub release tarba
 
 ## Work items
 
+> *Note (2026-06-09): the unchecked boxes below were re-scoped into the
+> phase-c plans and `cortex-v1.md` when this plan shipped at v0.1.0; they are
+> retained unticked as an accurate record of what Phase B itself delivered.*
+
 ### Scaffold + plumbing
 
 - [x] **Python project scaffold** — `pyproject.toml` with `click`, `pytest`, `pytest-cov`, `ruff`, `mypy`; `src/cortex/__init__.py` with `__version__` + `SUPPORTED_SPEC_VERSIONS` + `SUPPORTED_PROTOCOL_VERSIONS`; `src/cortex/cli.py` click entrypoint; `.python-version` (3.12); `uv.lock` committed. Package data for `.cortex/protocol.md` + `.cortex/templates/` deferred to the `cortex init` slice.

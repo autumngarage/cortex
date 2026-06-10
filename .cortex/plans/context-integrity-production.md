@@ -63,13 +63,13 @@ Artifact policy for this plan:
 - [x] #244 — add token-budget instrumentation and guardrails for Cortex agent workflows.
 - [x] #243 — add a narrow journal-drafting facts-file handoff for cheap model or Conductor summarization.
 - [x] #207 — design decided in doctrine/candidate (see PR: https://github.com/autumngarage/cortex/compare/main...docs/source-pr-staging-adr?expand=1).
-- [ ] Define context artifact contracts: source vs derived classes, schema/version fields, generated edit policy, and source-to-derived invalidation rules.
+- [ ] Define context artifact contracts: source vs derived classes, schema/version fields, generated edit policy, and source-to-derived invalidation rules. *(Parked 2026-06-09 — superseded track; revisit only if the CLI/protocol track resumes. See `journal/2026-06-09-roadmap-refinement-and-issue-hygiene`.)*
 - [x] Add the production doctor profile with human-readable and JSON diagnostics, stable diagnostic codes, and nonzero exit codes for stale-derived, missing-source, unresolved-provenance, budget-exceeded, policy-violation, and manual-edit-to-generated cases.
 - [x] Wire the production doctor profile into this repo's review/release path.
 - [x] #235 — record local grep:retrieve/manifest usage ratio with privacy-preserving metadata.
-- [ ] Use #235 telemetry to decide #234 with a journaled product decision.
-- [ ] Add end-to-end fixtures for fresh repo, stale generated state, budget exceeded, invalid facts file, source-PR journal staging, and optional Autumn Garage integrations.
-- [ ] Refresh docs/spec-conformance once the production doctor profile exists.
+- [ ] Use #235 telemetry to decide #234 with a journaled product decision. *(Parked 2026-06-09 — lives on in open issue cortex#234 + `doctrine/candidate-manifest-semantic-topup`'s promotion checklist; evidence-gated, no clock.)*
+- [ ] Add end-to-end fixtures for fresh repo, stale generated state, budget exceeded, invalid facts file, source-PR journal staging, and optional Autumn Garage integrations. *(Parked 2026-06-09 — superseded track; see `journal/2026-06-09-roadmap-refinement-and-issue-hygiene`.)*
+- [ ] Refresh docs/spec-conformance once the production doctor profile exists. *(Parked 2026-06-09 — superseded track; see `journal/2026-06-09-roadmap-refinement-and-issue-hygiene`.)*
 
 ## Follow-ups (deferred)
 

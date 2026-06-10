@@ -1,14 +1,14 @@
 ---
-Generated: 2026-06-08T22:06:17-04:00
+Generated: 2026-06-09T19:38:14-04:00
 Generator: cortex refresh-state v1.6.4
 Sources:
-  - HEAD sha: 2bb6e0f229bd799276c51e282c220f8dc575f9fd
+  - HEAD sha: bf0e32f7e8fce86e020d6e3f0fa454db3eea6d0f
   - .cortex/plans/*.md (12 files)
-  - .cortex/journal/*.md (114 entries, 2026-04-17..2026-06-09)
+  - .cortex/journal/*.md (129 entries, 2026-04-17..2026-06-09)
   - .cortex/doctrine/*.md (11 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
-  - SPEC version: 0.5.0
+  - SPEC version: 1.1.0
   - pyproject.toml: 1.6.4 + cortex package version: 1.6.4
 Sources-hash:
   .cortex/doctrine/0001-why-cortex-exists.md: e20d6d52fac419bf22ad43ddf01762f03504f348ef0b2cc30d3983b4c8bec063
@@ -136,13 +136,28 @@ Sources-hash:
   .cortex/journal/2026-06-09-context-integrity-plan-superseded.md: b69cbf51f89b2e35c0f2a56582dc81656428be2224d0015c2d5aa2e63c5b3a17
   .cortex/journal/2026-06-09-cortex-v1-plan-superseded.md: ed867ed340ccbe050465fbb191e2837f8f7a7e44926f7816f5b9bea98db6b6b8
   .cortex/journal/2026-06-09-hosted-decision-reviewer-plan-adopted.md: 04dc3d7c20f09a39b22fc864fab247895858a25a68b02a105bb52e1530c8bde4
-  .cortex/plans/context-integrity-production.md: 5a1f58bd904f05205dfc1566ce39c8ced474f28bbfd457469dc10133d4c6a1c9
+  .cortex/journal/2026-06-09-pr-merged-pr298.md: 6f4374f1dd6cb7389572cc9f9d12fcb3caa559207ae8b6b1f5c8e4a22dd03e27
+  .cortex/journal/2026-06-09-pr-merged-pr299.md: 175ba8b875c6c6b5983e5d099a42fa91688cdcb4e79451b8342c0909e0c9541d
+  .cortex/journal/2026-06-09-pr-merged-pr300.md: 1bae4dde596000885569bacbc52dc305c281069240fce4697a794634dc9fdaf1
+  .cortex/journal/2026-06-09-pr-merged-pr303.md: d45f92337dedb43d6e90e6543c94b0ba525f2ec2b4abfbc30182b7123e0df6ef
+  .cortex/journal/2026-06-09-pr-merged-pr304.md: a184c1ff3d177652e82fe99b380228c0b1ff768c6d5c135dedca648fbc998288
+  .cortex/journal/2026-06-09-pr-merged-pr305.md: d20d4bd1dbd26eec55e5dc95d64458c9bb3d624a1ca199171dc621a5189fd77f
+  .cortex/journal/2026-06-09-pr-merged-pr476.md: 7da07e168d04ec4052816005030475391189fee2b9a32c47a171087ff98d9a6b
+  .cortex/journal/2026-06-09-pr-merged-pr477.md: 411f24a008bd0170c5d801de1dcd204e394f39506d06171a9b882f91802f26b0
+  .cortex/journal/2026-06-09-pr-merged-pr478.md: 1bc1ababfe06581a2f93374f18217cdc154da64889935dfd41f0399750fe3019
+  .cortex/journal/2026-06-09-pr-merged-pr479.md: 05d33fc583c7fe39be201c74f99d7d2b8467677a5e7d02de2b2c4b4b47ee1da0
+  .cortex/journal/2026-06-09-pr-merged-pr480.md: afead4e7c80b664a106ee06a1697bce6abfbfb731768c8e9d0c26db22e39c2b2
+  .cortex/journal/2026-06-09-pr-merged-pr481.md: 827cce736049e30ba265528a723b03914bc40a19bc1db221f37b4ffd7ce7378b
+  .cortex/journal/2026-06-09-pr-merged-pr482.md: 7ef175d521d23d7d1be169078aac16791d4cab7ee97b9d6c6a29ee400c6edc74
+  .cortex/journal/2026-06-09-pr-merged-pr483.md: 1e4173adbf59a5e8c8fc6579b8c9da8ca2dbcb53fc7f945dea533fce6b446470
+  .cortex/journal/2026-06-09-roadmap-refinement-and-issue-hygiene.md: fc39e5f234f3e76c49a0f7672c7156802eb320da237d1865c43082a9b907c11f
+  .cortex/plans/context-integrity-production.md: 131441fcd1a50d92e82f4ba8f64c3d667412bf23dc91efc501502f42f70a5197
   .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
   .cortex/plans/cortex-v0.3.0.md: d78e60537e30ed81d8464575191674253822ed4953a055ca2a14a9626c5f8b6f
-  .cortex/plans/cortex-v1.md: dd8b3e937f49dc44ec3104439c556f9a6b99bd0c68ef286986a98ff6f2d411f6
-  .cortex/plans/hosted-decision-reviewer.md: c90a6671a3c6f018f9a1a89a0f334a5509d11bf02e79f5ca39bafbd3aac67a98
+  .cortex/plans/cortex-v1.md: 35b18afacd917c6345d450d7f272a8ac37f52efe3af867ffa3f41e4b485f978b
+  .cortex/plans/hosted-decision-reviewer.md: e58eb1e0fdf71a2d47d6e8110f0899a4f3df27afdc5ff156525e3f8fdb62dc5f
   .cortex/plans/init-ux-fixes-from-touchstone.md: fdf183f562d2dcde26101ea6b44163bfccf8377affc712cf1318ec16be4ecaee
-  .cortex/plans/phase-b-walking-skeleton.md: 3f52bfc07c327cfc88e26dccdf13b91e1d23cf02ff4dbea2426cd75d088c0e04
+  .cortex/plans/phase-b-walking-skeleton.md: 4c890ebe0a166b6cf07a0ca150e468614d3130109509e44641cfad216066b0d2
   .cortex/plans/phase-c-authoring-and-state.md: 8ab9a5ac4e593102e16ccab03a8b13248ec68f1afd05cd974c19c0c0e361c3c1
   .cortex/plans/phase-c-first-synthesis.md: 6f665b8f0667478e00b4fee88744d2054ed6ee1157bd1f250a6f918bdec17bee
   .cortex/plans/phase-d-integration.md: 4e7a3e708eb7b60e5ac7fd9b080bc41363043875c9984e6141d579e119fc843d
@@ -161,7 +176,7 @@ Sources-hash:
   .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476
   .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44
   docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c
-Corpus: 114 Journal entries, 12 Plans, 11 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 129 Journal entries, 12 Plans, 11 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -169,7 +184,7 @@ Incomplete:
   - .cortex/journal/2026-05-03-pr-merged-2057.md — shipped journal title contains unresolved template placeholder
   - .cortex/journal/2026-05-03-pr-merged-2119.md — shipped journal title contains unresolved template placeholder
 Conflicts-preserved: []
-Spec: 0.5.0
+Spec: 1.1.0
 ---
 
 # Project State
@@ -178,7 +193,7 @@ Spec: 0.5.0
 ## Current work
 
 **Active roadmaps:**
-- [`plans/hosted-decision-reviewer.md`](./plans/hosted-decision-reviewer.md) — the active repo-operational plan. It is guided by the Obsidian Cortex master plan and maps the work to GitHub issues #444-#475.
+- [`plans/hosted-decision-reviewer.md`](./plans/hosted-decision-reviewer.md) — the active repo-operational plan. It is guided by the Obsidian Cortex master plan and maps the work to GitHub issues #306-#475 (plus post-plan additions; milestones are the stage authority, per-stage trackers #445/#485/#446/#455, master tracker #444).
 - [`plans/cortex-v1.md`](./plans/cortex-v1.md) — superseded as an active plan; retained as CLI/protocol release-track history.
 - [`plans/context-integrity-production.md`](./plans/context-integrity-production.md) — superseded as an active plan; retained as context-integrity substrate history.
 - [`plans/cortex-retrieve.md`](./plans/cortex-retrieve.md) — shipped retrieval sub-plan retained for design history.
@@ -186,7 +201,7 @@ Spec: 0.5.0
 This file (`.cortex/state.md`) and [`plans/hosted-decision-reviewer.md`](./plans/hosted-decision-reviewer.md) are the repo-internal answers to "where are we" and "what's next" per [Doctrine 0007](./doctrine/0007-canonical-ownership-of-state-and-plans.md). The external Obsidian `cortex_master_plan.md` owns product strategy; `.cortex` points agents to it and records the repo-operational plan.
 
 **Status by stage:**
-- **Stage 0 — local proof:** prove ledger/search/evaluator locally with cited answers and historical PR replay.
+- **Stage 0 — local proof:** the Postgres-shaped substrate layer is done (see the `journal/2026-06-09-pr-merged-pr477` … `pr483` series; SQL-as-strings until the first executable path lands with #472). Remaining: derive, eval harness, evaluator, replay, and the dogfood gate (#337 report) — wave order lives in the active plan.
 - **Stage 1 — hosted core:** Railway API service, worker service, Postgres, healthchecks, logs, backups, restore drill, and environment separation.
 - **Stage 2 — GitHub reviewer:** PR webhook, diff-scoped retrieval, advisory comments, and feedback capture.
 - **Stage 3 — Slack ledger console:** `@cortex what did we decide about X?`, `@cortex here is what we decided...`, confirm/reject/merge/supersede/stale.
@@ -200,7 +215,7 @@ This file (`.cortex/state.md`) and [`plans/hosted-decision-reviewer.md`](./plans
 
 ## Active plans
 
-- `hosted-decision-reviewer` — Build hosted decision reviewer; Goal-hash `ec1bc286`; 0% complete (0/6 checkboxes)
+- `hosted-decision-reviewer` — Build hosted decision reviewer; Goal-hash `ec1bc286`; 29% complete (2/7 checkboxes)
 
 ## Shipped recently
 
@@ -266,6 +281,20 @@ This file (`.cortex/state.md`) and [`plans/hosted-decision-reviewer.md`](./plans
 - **2026-05-12** — Release v1.6.3 (`.cortex/journal/2026-05-12-release-1.6.3.md`, Type: release)
 - **2026-05-15** — PR #280 merged — test(cortex): align pr-merged hook shim (`.cortex/journal/2026-05-15-pr-merged-0200.md`, Type: pr-merged)
 - **2026-05-25** — PR #295 merged — docs(doctrine): stage manifest semantic-top-up candidate; defer pending evidence (#234) (`.cortex/journal/2026-05-25-pr-merged-1841.md`, Type: pr-merged)
+- **2026-06-09** — PR #298 merged — Refresh conductor integrations to v0.10.32 (`.cortex/journal/2026-06-09-pr-merged-pr298.md`, Type: pr-merged)
+- **2026-06-09** — PR #299 merged — Refresh conductor integrations to v0.10.33 (`.cortex/journal/2026-06-09-pr-merged-pr299.md`, Type: pr-merged)
+- **2026-06-09** — PR #300 merged — Refresh conductor integrations to v0.10.34 (`.cortex/journal/2026-06-09-pr-merged-pr300.md`, Type: pr-merged)
+- **2026-06-09** — PR #303 merged — fix: restore post-merge hook after touchstone 2.11.43 sync (`.cortex/journal/2026-06-09-pr-merged-pr303.md`, Type: pr-merged)
+- **2026-06-09** — PR #304 merged — fix: restore staging wiring after touchstone sync and honor config opt-out (`.cortex/journal/2026-06-09-pr-merged-pr304.md`, Type: pr-merged)
+- **2026-06-09** — PR #305 merged — docs: clarify hosted credit pricing (`.cortex/journal/2026-06-09-pr-merged-pr305.md`, Type: pr-merged)
+- **2026-06-09** — PR #476 merged — docs: align cortex memory with hosted plan (`.cortex/journal/2026-06-09-pr-merged-pr476.md`, Type: pr-merged)
+- **2026-06-09** — PR #477 merged — feat: add hosted ledger schema substrate (`.cortex/journal/2026-06-09-pr-merged-pr477.md`, Type: pr-merged)
+- **2026-06-09** — PR #478 merged — feat: add hosted source provenance spans (`.cortex/journal/2026-06-09-pr-merged-pr478.md`, Type: pr-merged)
+- **2026-06-09** — PR #479 merged — feat: add hosted decision scope index (`.cortex/journal/2026-06-09-pr-merged-pr479.md`, Type: pr-merged)
+- **2026-06-09** — PR #480 merged — feat: add hosted ask ledger retrieval (`.cortex/journal/2026-06-09-pr-merged-pr480.md`, Type: pr-merged)
+- **2026-06-09** — PR #481 merged — feat: add hosted decisions-for-diff retrieval (`.cortex/journal/2026-06-09-pr-merged-pr481.md`, Type: pr-merged)
+- **2026-06-09** — PR #482 merged — feat: add hosted embedding projection checks (`.cortex/journal/2026-06-09-pr-merged-pr482.md`, Type: pr-merged)
+- **2026-06-09** — PR #483 merged — Enforce hosted source visibility boundaries (`.cortex/journal/2026-06-09-pr-merged-pr483.md`, Type: pr-merged)
 
 ## Stale-now / handle-later
 
