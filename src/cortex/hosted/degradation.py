@@ -39,6 +39,7 @@ from cortex.hosted.derive_store import DeriveStoreError
 from cortex.hosted.diff_surface import DiffSurfaceValidationError
 from cortex.hosted.embeddings import HostedEmbeddingValidationError
 from cortex.hosted.eval_fixtures import FixtureValidationError
+from cortex.hosted.extractors import ExtractorError
 from cortex.hosted.labeling import LabelingError
 from cortex.hosted.lanes import LanePolicyValidationError
 from cortex.hosted.ledger_events import LedgerEventValidationError
@@ -82,6 +83,10 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # re-derivation is drift, not bad input.
     DeriveStoreError: DegradationMode.DRIFT_DETECTED,
     DiffSurfaceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # An unrecognized or malformed derive source is rejected before any
+    # extraction or write; recognized-but-noisy material is not an error at
+    # all (it becomes DroppedChatter with a reason code).
+    ExtractorError: DegradationMode.INVALID_INPUT_REJECTED,
     FixtureValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     HostedEmbeddingValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     LabelingError: DegradationMode.INVALID_INPUT_REJECTED,

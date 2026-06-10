@@ -211,3 +211,8 @@ mode skip citation or visibility boundaries.
 - `derive_store.DeriveStoreError` classifies as `drift_detected`: its
   marquee failure is a same-idempotency-key / different-event-hash
   collision, i.e. recorded state disagreeing with a re-derivation.
+- `extractors.ExtractorError` (cortex#351-#353) classifies as
+  `invalid_input_rejected`: a source no repo-native extractor recognizes is
+  rejected before any extraction or write. Recognized-but-noisy material is
+  not a failure at all — it surfaces as `DroppedChatter` with a reason code
+  (the write-side `bounded_omission` behavior above).
