@@ -32,6 +32,19 @@ import importlib.util
 from dataclasses import dataclass
 from enum import StrEnum
 
+from cortex.hosted.candidate_metrics import CandidateMetricsValidationError
+from cortex.hosted.citation_check import CitationCheckError
+from cortex.hosted.context_assembly import ContextAssemblyValidationError
+from cortex.hosted.cost import BudgetExceededError, CostValidationError
+from cortex.hosted.event_ordering import EventOrderingError
+from cortex.hosted.graph_snapshot import GraphSnapshotValidationError
+from cortex.hosted.recorded_responses import RecordedResponseError
+from cortex.hosted.routing import (
+    ClaudeCliOutputError,
+    ClaudeCliUnavailableError,
+    RecordedResponseMissingError,
+    RoutingError,
+)
 from cortex.hosted.ask_ledger import AnswerState, AskLedgerValidationError
 from cortex.hosted.confidence import ConfidenceValidationError
 from cortex.hosted.decisions_for_diff import DecisionsForDiffValidationError
@@ -75,6 +88,18 @@ class DegradationMode(StrEnum):
 # mode would silently mislabel that refinement. Unknown types therefore
 # raise in classify_failure instead of falling back to anything.
 _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
+    BudgetExceededError: DegradationMode.FAIL_CLOSED_REFUSAL,
+    CandidateMetricsValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    CitationCheckError: DegradationMode.INVALID_INPUT_REJECTED,
+    ClaudeCliOutputError: DegradationMode.FAIL_CLOSED_REFUSAL,
+    ClaudeCliUnavailableError: DegradationMode.DEGRADED_CAPABILITY,
+    ContextAssemblyValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    CostValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    EventOrderingError: DegradationMode.INVALID_INPUT_REJECTED,
+    GraphSnapshotValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    RecordedResponseError: DegradationMode.DRIFT_DETECTED,
+    RecordedResponseMissingError: DegradationMode.FAIL_CLOSED_REFUSAL,
+    RoutingError: DegradationMode.INVALID_INPUT_REJECTED,
     AskLedgerValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     ConfidenceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     DecisionsForDiffValidationError: DegradationMode.INVALID_INPUT_REJECTED,

@@ -214,3 +214,19 @@ mode skip citation or visibility boundaries.
 - `graph_writes.GraphWriteValidationError` classifies as
   `invalid_input_rejected` — a write plan that would violate graph
   invariants is refused before any statement executes.
+
+### Wave 4-6 bundle registrations (2026-06-09)
+
+- `cost.BudgetExceededError` -> `fail_closed_refusal`: a call refused before
+  spend to hold the budget boundary; `cost.CostValidationError` ->
+  `invalid_input_rejected`.
+- `routing.RoutingError` -> `invalid_input_rejected` (config/contract
+  rejected); `ClaudeCliUnavailableError` -> `degraded_capability` (transport
+  missing, named visibly); `ClaudeCliOutputError` -> `fail_closed_refusal`
+  (unparseable model output is refused, never fabricated);
+  `RecordedResponseMissingError` -> `fail_closed_refusal` (a missing
+  recording never falls back to a live call).
+- `recorded_responses.RecordedResponseError` -> `drift_detected` (hash or
+  schema-version mismatch in recorded material).
+- `context_assembly/citation_check/candidate_metrics/graph_snapshot/
+  event_ordering` validation errors -> `invalid_input_rejected`.

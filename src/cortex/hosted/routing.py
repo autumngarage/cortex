@@ -72,6 +72,12 @@ from cortex.hosted.model_interfaces import (
 )
 from cortex.hosted.model_registry import ModelPromptRegistry, RegistryValidationError
 from cortex.hosted.provenance import ProvenanceValidationError, SourceSpan, content_hash
+from cortex.hosted.recorded_responses import (
+    derive_result_as_payload,
+    derive_result_from_payload,
+    evaluate_result_as_payload,
+    evaluate_result_from_payload,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -570,7 +576,7 @@ class RecordedResponseAdapter:
     This is the playback half of the seam cortex#347 formalizes (fixture
     locations, record/replay toggles, CI pinning). The recording format is
     the payload shape produced by ``derive_result_as_payload`` /
-    ``evaluate_result_as_payload`` in this module — one format, importable
+    ``evaluate_result_as_payload`` in this module — one format, owned by
     by #347's harness. A missing recording is a hard, named failure, never
     a silent live call.
     """
@@ -680,71 +686,6 @@ class RecordedResponseAdapter:
 
 
 # --- The one recording format (#347 imports these; never the reverse) -------
-
-
-def derive_result_as_payload(result: DeriveResult) -> dict[str, Any]:
-    return {
-        "candidates": [_candidate_as_payload(candidate) for candidate in result.candidates],
-        "degraded_reasons": list(result.degraded_reasons),
-        "dropped": [
-            {"excerpt_hash": item.excerpt_hash, "reason_code": item.reason_code}
-            for item in result.dropped
-        ],
-        "input_hash": result.input_hash,
-        "model_id": result.model_id,
-        "prompt_version": result.prompt_version,
-    }
-
-
-def derive_result_from_payload(payload: Mapping[str, Any]) -> DeriveResult:
-    try:
-        return DeriveResult(
-            candidates=tuple(
-                _candidate_from_payload(item)
-                for item in _get_object_list(payload, "candidates")
-            ),
-            model_id=_get_str(payload, "model_id"),
-            prompt_version=_get_str(payload, "prompt_version"),
-            input_hash=_get_str(payload, "input_hash"),
-            dropped=tuple(
-                DroppedChatter(
-                    reason_code=_get_str(item, "reason_code"),
-                    excerpt_hash=_get_str(item, "excerpt_hash"),
-                )
-                for item in _get_object_list(payload, "dropped")
-            ),
-            degraded_reasons=_get_str_tuple(payload, "degraded_reasons"),
-        )
-    except ModelInterfaceValidationError as exc:
-        raise RoutingError(f"recorded derive result is invalid: {exc}") from exc
-
-
-def evaluate_result_as_payload(result: EvaluateResult) -> dict[str, Any]:
-    return {
-        "degraded_reasons": list(result.degraded_reasons),
-        "findings": [_finding_as_payload(finding) for finding in result.findings],
-        "input_hash": result.input_hash,
-        "model_id": result.model_id,
-        "omitted_decision_count": result.omitted_decision_count,
-        "prompt_version": result.prompt_version,
-    }
-
-
-def evaluate_result_from_payload(payload: Mapping[str, Any]) -> EvaluateResult:
-    try:
-        return EvaluateResult(
-            findings=tuple(
-                _finding_from_payload(item)
-                for item in _get_object_list(payload, "findings")
-            ),
-            model_id=_get_str(payload, "model_id"),
-            prompt_version=_get_str(payload, "prompt_version"),
-            input_hash=_get_str(payload, "input_hash"),
-            omitted_decision_count=_get_int(payload, "omitted_decision_count"),
-            degraded_reasons=_get_str_tuple(payload, "degraded_reasons"),
-        )
-    except ModelInterfaceValidationError as exc:
-        raise RoutingError(f"recorded evaluate result is invalid: {exc}") from exc
 
 
 def _candidate_as_payload(candidate: DeriveCandidate) -> dict[str, Any]:

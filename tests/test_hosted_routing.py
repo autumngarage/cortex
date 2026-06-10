@@ -49,6 +49,7 @@ from cortex.hosted.model_registry import (
     RegistryValidationError,
 )
 from cortex.hosted.provenance import SourceDocument
+from cortex.hosted.recorded_responses import RecordedResponseError
 from cortex.hosted.routing import (
     AdapterOutcome,
     ClaudeCliAdapter,
@@ -533,7 +534,7 @@ def test_recorded_span_hash_drift_is_refused() -> None:
     derive_request = _derive_request()
     payload = derive_result_as_payload(_derive_result(derive_request, model_id=STUB_A_MODEL))
     payload["candidates"][0]["spans"][0]["span_hash"] = hashlib.sha256(b"drift").hexdigest()
-    with pytest.raises(RoutingError, match="recording drifted"):
+    with pytest.raises(RecordedResponseError, match="must be recomputable"):
         derive_result_from_payload(payload)
 
 
