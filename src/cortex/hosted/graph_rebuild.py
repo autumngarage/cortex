@@ -102,6 +102,9 @@ _PROJECTION_NOOP_EVENT_TYPES = frozenset(
         LedgerEventType.FINDING_EMITTED,
         LedgerEventType.FEEDBACK_RECORDED,
         LedgerEventType.PROJECTION_REBUILT,
+        # Raw webhook/Slack arrival records (cortex#471) are provenance for
+        # later derivation, never decision-graph state.
+        LedgerEventType.SOURCE_EVENT_RECEIVED,
     }
 )
 

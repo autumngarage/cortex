@@ -33,6 +33,10 @@ class LedgerEventType(StrEnum):
     FEEDBACK_RECORDED = "feedback.recorded"
     STALE_MARKED = "decision.stale_marked"
     PROJECTION_REBUILT = "projection.rebuilt"
+    # Raw source-event arrival (cortex#471): a webhook/Slack delivery recorded
+    # verbatim-by-reference before any derivation. Never graph state — the
+    # rebuild fold treats it as a projection noop.
+    SOURCE_EVENT_RECEIVED = "source.event_received"
 
 
 SOURCE_SPAN_REQUIRED_EVENTS = frozenset(

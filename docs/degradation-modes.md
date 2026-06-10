@@ -317,6 +317,24 @@ mode skip citation or visibility boundaries.
   its recorded identity, naming both sides. (Span drift on a file-backed
   candidate is not an error at all: the candidate is excluded as a counted,
   path-naming skip — the write-side `bounded_omission` behavior.)
+### Stage 1 service-shell registrations (2026-06-10, cortex#470/#471)
+
+- `jobs.HostedJobError` -> `invalid_input_rejected`: a job that would
+  violate the canonical queue contract (empty job type or idempotency key,
+  non-JSON-object payload, malformed claim row, invalid backoff parameters)
+  is rejected before any row is written or any handler runs.
+- `api.config.ServiceConfigError` -> `invalid_input_rejected`: a malformed
+  service environment (non-integer `PORT`, non-UUID `CORTEX_TENANT_ID`,
+  blank-but-set secret, unpaired tenant/source mapping) refuses startup
+  before any request is served. Missing *optional* variables are not errors
+  — they degrade per endpoint (degraded `/healthz` body, 503 webhook
+  refusal) with the gap named in the response.
+- `api.webhooks.WebhookValidationError` -> `invalid_input_rejected`: a
+  structurally malformed delivery (bad event-name header, oversized
+  delivery GUID, non-object JSON body) is rejected with a 400 before any
+  job row exists. Signature mismatches are not raised at all — they are
+  answered 401 with no detail about which part failed.
+
 ### Remediation hints (2026-06-10, cortex#516)
 
 Errors are the onboarding surface of a fail-closed product: a refusal that
