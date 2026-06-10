@@ -1,0 +1,279 @@
+{
+  "decisions": [
+    {
+      "decision_id": "d-17ed0b8008b4",
+      "decision_text": "@simlab/payments-team own src/payments/",
+      "scopes": [
+        {
+          "normalized_value": "src/payments",
+          "scope_type": "path",
+          "value": "src/payments/"
+        },
+        {
+          "normalized_value": "simlab/payments-team",
+          "scope_type": "owner",
+          "value": "@simlab/payments-team"
+        }
+      ],
+      "source_timestamp": "2026-02-02 09:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 77,
+          "excerpt": "src/payments/ @simlab/payments-team",
+          "permalink": ".github/CODEOWNERS",
+          "source_document_hash": "da16445eee59e6460185dae15fd311408c60d55343a702eaa3be5e035877e9bc",
+          "span_hash": "19d8a75245320446b3d06f2f8418d21e000edfa0ac43ac504d4feb3c93a1e9ad",
+          "start_offset": 42
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-19a6d4debc79",
+      "decision_text": "0002 — REST over gRPC for the public API\n\nThe public API stays REST over HTTP with JSON bodies, served from\n`src/api/server.py`. We do not expose gRPC services to merchants.\n\nMerchant integrators asked for curl-able endpoints; gRPC tooling support\nwas uneven across their stacks.",
+      "scopes": [
+        {
+          "normalized_value": "src/api/server.py",
+          "scope_type": "path",
+          "value": "src/api/server.py"
+        }
+      ],
+      "source_timestamp": "2026-02-03 10:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 42,
+          "excerpt": "0002 — REST over gRPC for the public API",
+          "permalink": "docs/adr/0002-rest-over-grpc.md",
+          "source_document_hash": "89f11e65b9a525b9c2356a1ad0ba06fdea38995831437ea1ede19fb31a83afc3",
+          "span_hash": "c202df0a4c5808a0e9f8120dcc2be83510770dba22c7553724c4be660f7917ad",
+          "start_offset": 2
+        },
+        {
+          "end_offset": 324,
+          "excerpt": "The public API stays REST over HTTP with JSON bodies, served from\n`src/api/server.py`. We do not expose gRPC services to merchants.",
+          "permalink": "docs/adr/0002-rest-over-grpc.md",
+          "source_document_hash": "89f11e65b9a525b9c2356a1ad0ba06fdea38995831437ea1ede19fb31a83afc3",
+          "span_hash": "0d03f8eaaeb2a2744dd11e2b58d849ce1ed85880efc2e7c6aa53003cb60c9ac0",
+          "start_offset": 193
+        },
+        {
+          "end_offset": 178,
+          "excerpt": "Merchant integrators asked for curl-able endpoints; gRPC tooling support\nwas uneven across their stacks.",
+          "permalink": "docs/adr/0002-rest-over-grpc.md",
+          "source_document_hash": "89f11e65b9a525b9c2356a1ad0ba06fdea38995831437ea1ede19fb31a83afc3",
+          "span_hash": "010adb1af2b237cbe0f809beb0aa0b88d2ff49316f6abf6762fd3e2673d54606",
+          "start_offset": 74
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-6709af51c94c",
+      "decision_text": "**Retry policy.** Webhook retries in `src/payments/retry.py` must use exponential backoff with jitter; fixed delays are forbidden.",
+      "scopes": [
+        {
+          "normalized_value": "src/payments/retry.py",
+          "scope_type": "path",
+          "value": "src/payments/retry.py"
+        }
+      ],
+      "source_timestamp": "2026-02-02 09:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 307,
+          "excerpt": "**Retry policy.** Webhook retries in `src/payments/retry.py` must use exponential backoff with jitter; fixed delays are forbidden.",
+          "permalink": "CLAUDE.md",
+          "source_document_hash": "1de23d5d57cbddc97e05f609b94fc6690acbff1dbfcff7dd62e3cad812cd6ecf",
+          "span_hash": "5f476b921266081a89a0cc3f3450d06eeb949964ae108636cd34dde0a4f13681",
+          "start_offset": 177
+        }
+      ],
+      "status": "confirmed"
+    },
+    {
+      "decision_id": "d-76d1cffaee05",
+      "decision_text": "0003 — Structured JSON event logging\n\nEvery payment event is logged as a single structured JSON line through\n`src/payments/audit_log.py`; printf-style logging is forbidden in the\npayment path.\n\nPlain-text logs made settlement incidents slow to reconstruct.",
+      "scopes": [
+        {
+          "normalized_value": "src/payments/audit_log.py",
+          "scope_type": "path",
+          "value": "src/payments/audit_log.py"
+        }
+      ],
+      "source_timestamp": "2026-02-03 10:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 38,
+          "excerpt": "0003 — Structured JSON event logging",
+          "permalink": "docs/adr/0003-structured-event-logging.md",
+          "source_document_hash": "7077c7df47d6dd4979380ed4e857cff115013f908eeada858633c3f03d9024c5",
+          "span_hash": "c2f8be92c0f9736545d3d4d28090dfafa4c7e26db123521c32cfc1d18f329a58",
+          "start_offset": 2
+        },
+        {
+          "end_offset": 301,
+          "excerpt": "Every payment event is logged as a single structured JSON line through\n`src/payments/audit_log.py`; printf-style logging is forbidden in the\npayment path.",
+          "permalink": "docs/adr/0003-structured-event-logging.md",
+          "source_document_hash": "7077c7df47d6dd4979380ed4e857cff115013f908eeada858633c3f03d9024c5",
+          "span_hash": "c98d5a7a1f3953449e6550f10fc0c74282a40e7459017e7ad86bf477c4822717",
+          "start_offset": 147
+        },
+        {
+          "end_offset": 132,
+          "excerpt": "Plain-text logs made settlement incidents slow to reconstruct.",
+          "permalink": "docs/adr/0003-structured-event-logging.md",
+          "source_document_hash": "7077c7df47d6dd4979380ed4e857cff115013f908eeada858633c3f03d9024c5",
+          "span_hash": "66efc243b20f15a9d67aeec3edb3774e90c114fe37e6be7fa53cdf85af7f5ffb",
+          "start_offset": 70
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-895392ec7cd1",
+      "decision_text": "**Persistence boundary.** All durable writes go through `src/payments/store.py` and must target Postgres only; embedded database engines are forbidden.",
+      "scopes": [
+        {
+          "normalized_value": "src/payments/store.py",
+          "scope_type": "path",
+          "value": "src/payments/store.py"
+        }
+      ],
+      "source_timestamp": "2026-02-02 09:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 461,
+          "excerpt": "**Persistence boundary.** All durable writes go through `src/payments/store.py` and must target Postgres only; embedded database engines are forbidden.",
+          "permalink": "CLAUDE.md",
+          "source_document_hash": "1de23d5d57cbddc97e05f609b94fc6690acbff1dbfcff7dd62e3cad812cd6ecf",
+          "span_hash": "e6c09383b8c8237e4bac01418d30a784ad959929eaa50a9af858951b677500f1",
+          "start_offset": 310
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-aea73c070b84",
+      "decision_text": "0001 — Postgres is the only persistence engine\n\nAll durable state lives in Postgres. `src/payments/store.py` is the only\nmodule that opens database connections, and embedded engines such as SQLite\nmust not be introduced anywhere in the service.\n\nEarly prototypes wrote settlement state to ad-hoc SQLite files, which\ncorrupted twice during deploys and could not be queried in production.",
+      "scopes": [
+        {
+          "normalized_value": "src/payments/store.py",
+          "scope_type": "path",
+          "value": "src/payments/store.py"
+        }
+      ],
+      "source_timestamp": "2026-02-03 10:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 48,
+          "excerpt": "0001 — Postgres is the only persistence engine",
+          "permalink": "docs/adr/0001-postgres-only-persistence.md",
+          "source_document_hash": "a8bbd6fa568e3a0885cbee796c6286d1252bb3365b9b48909f0b7bc7a17db2b0",
+          "span_hash": "e70797189e82c8b6f60550915b45f4c56d2706e8d89a5c80c4833ea5682c3cc5",
+          "start_offset": 2
+        },
+        {
+          "end_offset": 431,
+          "excerpt": "All durable state lives in Postgres. `src/payments/store.py` is the only\nmodule that opens database connections, and embedded engines such as SQLite\nmust not be introduced anywhere in the service.",
+          "permalink": "docs/adr/0001-postgres-only-persistence.md",
+          "source_document_hash": "a8bbd6fa568e3a0885cbee796c6286d1252bb3365b9b48909f0b7bc7a17db2b0",
+          "span_hash": "cc6358a9c31109ce59657cb6e356ae3312e90da1d48180e866514819abde2963",
+          "start_offset": 235
+        },
+        {
+          "end_offset": 220,
+          "excerpt": "Early prototypes wrote settlement state to ad-hoc SQLite files, which\ncorrupted twice during deploys and could not be queried in production.",
+          "permalink": "docs/adr/0001-postgres-only-persistence.md",
+          "source_document_hash": "a8bbd6fa568e3a0885cbee796c6286d1252bb3365b9b48909f0b7bc7a17db2b0",
+          "span_hash": "93bc79fe3a37c7c1320a57e26e2aeee913c31e2daa46f2ba41202c42e41d54a5",
+          "start_offset": 80
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-b3be92967a0b",
+      "decision_text": "**API transport.** The public API in `src/api/server.py` must stay REST over HTTP; do not expose gRPC endpoints.",
+      "scopes": [
+        {
+          "normalized_value": "src/api/server.py",
+          "scope_type": "path",
+          "value": "src/api/server.py"
+        }
+      ],
+      "source_timestamp": "2026-02-02 09:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 576,
+          "excerpt": "**API transport.** The public API in `src/api/server.py` must stay REST over HTTP; do not expose gRPC endpoints.",
+          "permalink": "CLAUDE.md",
+          "source_document_hash": "1de23d5d57cbddc97e05f609b94fc6690acbff1dbfcff7dd62e3cad812cd6ecf",
+          "span_hash": "fcddbf6a6d666ea38d1561d343e38ed0528a320f00317ca646f81058aced4021",
+          "start_offset": 464
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-d4af4190f8af",
+      "decision_text": "@simlab/architecture own docs/adr/",
+      "scopes": [
+        {
+          "normalized_value": "docs/adr",
+          "scope_type": "path",
+          "value": "docs/adr/"
+        },
+        {
+          "normalized_value": "simlab/architecture",
+          "scope_type": "owner",
+          "value": "@simlab/architecture"
+        }
+      ],
+      "source_timestamp": "2026-02-02 09:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 108,
+          "excerpt": "docs/adr/ @simlab/architecture",
+          "permalink": ".github/CODEOWNERS",
+          "source_document_hash": "da16445eee59e6460185dae15fd311408c60d55343a702eaa3be5e035877e9bc",
+          "span_hash": "85e0e023cb3aba87d16f43e6ffa647165e53056d67505f6bfb34ae21360a3c87",
+          "start_offset": 78
+        }
+      ],
+      "status": "candidate"
+    }
+  ],
+  "diff": {
+    "base_sha": "1111111",
+    "changed_paths": [],
+    "config_keys": [],
+    "head_sha": "2222222",
+    "issue_refs": [],
+    "patch": "diff --git a/src/payments/retry.py b/src/payments/retry.py\nindex 1111111..2222222 100644\n--- a/src/payments/retry.py\n+++ b/src/payments/retry.py\n@@ -1,9 +1,7 @@\n \"\"\"Webhook retry policy: exponential backoff with jitter (ADR-adjacent).\"\"\"\n\n-import random\n-\n BASE_DELAY_SECONDS = 0.5\n\n\n def next_delay(attempt: int) -> float:\n-    jitter = random.uniform(0.0, 0.25)\n-    return BASE_DELAY_SECONDS * (2 ** attempt) + jitter\n+    # fixed delay keeps the math simple\n+    return BASE_DELAY_SECONDS\n",
+    "repo_name": "clean-shop",
+    "repo_owner": "simlab",
+    "symbols": []
+  },
+  "expected_findings": [
+    {
+      "cited_span_hashes": [
+        "5f476b921266081a89a0cc3f3450d06eeb949964ae108636cd34dde0a4f13681"
+      ],
+      "decision_id": "d-6709af51c94c",
+      "finding_class": "contradicts-prior-decision",
+      "finding_id": "f-retry-policy",
+      "suggested_repair": "Keep exponential backoff with jitter, or supersede the retry-policy decision before landing a fixed delay.",
+      "summary": "The diff replaces exponential backoff with jitter with a fixed 0.5s delay in src/payments/retry.py, reversing the confirmed retry-policy decision."
+    }
+  ],
+  "fixture_id": "simlab-clean-shop-retry-fixed-delay-001",
+  "fixture_schema_version": 1,
+  "labels": [],
+  "metadata": {
+    "archetype_id": "clean-shop",
+    "notes": "Promoted from the simlab scenario pack (tests/simlab/scenarios); decisions and spans come from the deterministic materialize/derive pipeline over the synthetic archetype.",
+    "scenario_id": "clean-shop-retry-fixed-delay",
+    "scenario_title": "Confirmed retry policy catches a fixed-delay rewrite",
+    "source": "simlab"
+  }
+}

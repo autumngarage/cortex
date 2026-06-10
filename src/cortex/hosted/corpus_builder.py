@@ -50,7 +50,8 @@ from cortex.hosted.eval_fixtures import (
 
 REAL_HISTORY_SOURCE = "real-history"
 SYNTHETIC_SOURCE = "synthetic"
-CORPUS_SOURCES = frozenset({REAL_HISTORY_SOURCE, SYNTHETIC_SOURCE})
+SIMLAB_SOURCE = "simlab"
+CORPUS_SOURCES = frozenset({REAL_HISTORY_SOURCE, SYNTHETIC_SOURCE, SIMLAB_SOURCE})
 
 _COMMAND_TIMEOUT_SECONDS = 120.0
 
@@ -348,9 +349,11 @@ def load_corpus(directory: Path) -> tuple[EvalFixture, ...]:
     Fail-closed invariants: at least one fixture exists, each file round-trips
     byte-identically through canonical JSON, each filename matches its
     ``fixture_id``, fixture ids are unique, and ``metadata.source`` is a known
-    corpus source class. Grading state is intentionally not checked here —
-    the same loader serves the corpus before and after the cortex#333
-    hand-labeling pass.
+    corpus source class (``real-history`` for frozen PR / commit-range diffs,
+    ``synthetic`` for the clearly-marked hand-written diff, ``simlab`` for
+    fixtures promoted from the deterministic simlab scenario packs). Grading
+    state is intentionally not checked here — the same loader serves the
+    corpus before and after the cortex#333 hand-labeling pass.
     """
 
     if not directory.is_dir():

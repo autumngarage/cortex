@@ -1,0 +1,90 @@
+{
+  "decisions": [
+    {
+      "decision_id": "outrider-api-version-boundaries",
+      "decision_text": "Outrider's public API is a versioned boundary: schema or semantic changes to a response bump the owning version constant (AGENT_DETAIL_RESPONSE_VERSION for /v1/agents/{name}) and ship the docs/CONTRACT.md compatibility or migration plan in the same PR; model_version cohorts are never blended or rescoped silently.",
+      "scopes": [
+        {
+          "normalized_value": "outrider/api/agents.py",
+          "scope_type": "path",
+          "value": "outrider/api/agents.py"
+        },
+        {
+          "normalized_value": "docs/CONTRACT.md",
+          "scope_type": "path",
+          "value": "docs/CONTRACT.md"
+        }
+      ],
+      "source_timestamp": "2026-06-04T18:52:28-04:00",
+      "spans": [
+        {
+          "end_offset": 14186,
+          "excerpt": "- `AGENT_DETAIL_RESPONSE_VERSION` (currently `2.2.0`) — for `/v1/agents/{id}/calibration` and the `/v1/agents/{id}` track-record detail surface.",
+          "permalink": "https://github.com/outriderintel/outrider/blob/dcd6c2c98ad3554dd61a086eb65b30f19720298d/docs/CONTRACT.md",
+          "source_document_hash": "2a0da4c96179af0d71b386ea67260396b970cab1ee0e8721636fc3b4e1c400f6",
+          "span_hash": "1afcc4d3375fbfc25edac3f6d5453dcdf09fdb56cfb3ab5eaee8cd9021dd5234",
+          "start_offset": 14042
+        },
+        {
+          "end_offset": 4194,
+          "excerpt": "- **Version your data boundaries** — `ResearchProposal.research_version` and `model_version` bump on any schema or model change. Don't aggregate across model versions in calibration without explicit handling.",
+          "permalink": "https://github.com/outriderintel/outrider/blob/dcd6c2c98ad3554dd61a086eb65b30f19720298d/CLAUDE.md",
+          "source_document_hash": "1289572a5eb55a0ecb57c6ab3b4ae6fee91b65acf4457b7af8e36139685994c2",
+          "span_hash": "08da7e41134f3feb5bff2351166eabbca6e069b426fae74e41d4cd44e6acc81c",
+          "start_offset": 3986
+        },
+        {
+          "end_offset": 4692,
+          "excerpt": "- **Preserve compatibility at boundaries** — public API/schema changes need a compatibility or migration plan that covers vanguard *and* future external subscribers in the same PR.",
+          "permalink": "https://github.com/outriderintel/outrider/blob/dcd6c2c98ad3554dd61a086eb65b30f19720298d/CLAUDE.md",
+          "source_document_hash": "1289572a5eb55a0ecb57c6ab3b4ae6fee91b65acf4457b7af8e36139685994c2",
+          "span_hash": "0e1c5044b982fc2d12e4c564cda773f6ca05b0ae13ed49ad2fb3ac72fd51636d",
+          "start_offset": 4512
+        }
+      ],
+      "status": "confirmed"
+    }
+  ],
+  "diff": {
+    "base_sha": "dcd6c2c98ad3554dd61a086eb65b30f19720298d",
+    "changed_paths": [
+      "outrider/api/agents.py",
+      "outrider/api/server.py",
+      "outrider/platform/model_version.py"
+    ],
+    "config_keys": [],
+    "head_sha": "72c747d3188b08093885faafc456c5c2d68c1d32",
+    "issue_refs": [],
+    "patch": "diff --git a/outrider/api/agents.py b/outrider/api/agents.py\nindex c49f7906..3c90a19e 100644\n--- a/outrider/api/agents.py\n+++ b/outrider/api/agents.py\n@@ -25,8 +25,9 @@ already exposes — the module is projection only. The registry's\n ``REGISTRY`` tuple keeps its semantics; this file just forwards the\n data over JSON. Track-record metrics are computed from\n ``agent_predictions`` (the resolved-prediction ledger Outrider already\n-maintains) and ``proposal_queue`` (the canonical model-version log),\n-both Outrider-cluster tables; no customer-cluster reads.\n+maintains, including prediction-time model_version boundaries) and\n+``proposal_queue`` (for proposal/PnL lookup), both Outrider-cluster\n+tables; no customer-cluster reads.\n \n Routes are wired onto the FastAPI app from\n :mod:`outrider.api.server` via :func:`register_agents_routes`,\n@@ -58,6 +59,7 @@ from outrider.platform.agent_registry import (\n     get_agent,\n     get_category_to_agent_map,\n )\n+from outrider.platform.model_version import current_model_version\n from outrider.platform.db import (\n     agent_calibration_state,\n     agent_predictions,\n@@ -526,8 +528,9 @@ def _compute_track_record(\n \n     Methodology (also documented under ``docs/CONTRACT.md``):\n \n-    1. ``n_proposals`` — count of ``agent_predictions`` rows for this\n-       agent with ``created_at >= window_start``. Includes unresolved.\n+    1. ``n_proposals`` — count of current-``model_version``\n+       ``agent_predictions`` rows for this agent with\n+       ``created_at >= window_start``. Includes unresolved.\n     2. ``n_resolved`` — same scope, restricted to ``outcome IS NOT\n        NULL``. Brier / hit_rate denominator.\n     3. ``brier_score`` — ``mean((predicted_prob - outcome)^2)`` over\n@@ -540,11 +543,11 @@ def _compute_track_record(\n        window. Falls back to 0.0 when no payload carries the field.\n     6. ``calibration_age_days`` — days since the most recent resolved\n        prediction in the window.\n-    7. ``by_model_version`` — per-version segmentation of (1)–(4).\n-       Joined ``agent_predictions`` ↔ ``proposal_queue`` via\n-       ``ticker == market_id`` ∧ ``agent``. Empty dict when no join\n-       hits resolved predictions in the window.\n+    7. ``by_model_version`` — per-version segmentation of (1)–(4)\n+       using ``agent_predictions.model_version``. Empty dict when no\n+       resolved predictions carry a model_version in the window.\n     \"\"\"\n+    model_version = current_model_version(agent_name)\n     pred_rows = session.execute(\n         select(\n             agent_predictions.c.ticker,\n@@ -552,8 +555,10 @@ def _compute_track_record(\n             agent_predictions.c.outcome,\n             agent_predictions.c.created_at,\n             agent_predictions.c.resolved_at,\n+            agent_predictions.c.model_version,\n         )\n         .where(agent_predictions.c.agent == agent_name)\n+        .where(agent_predictions.c.model_version == model_version)\n         .where(agent_predictions.c.created_at >= window_start)\n     ).all()\n \n@@ -585,25 +590,9 @@ def _compute_track_record(\n         if latest is not None:\n             calibration_age_days = max(0, (now - latest).days)\n \n-    # Per-model-version segmentation. We join via ticker == market_id\n-    # because agent_predictions does not carry model_version itself.\n-    # Build a {ticker: model_version} map from proposal_queue restricted\n-    # to this agent — small enough to stay in memory.\n-    pq_rows = session.execute(\n-        select(proposal_queue.c.payload, proposal_queue.c.market_id)\n-        .where(proposal_queue.c.agent == agent_name)\n-        .where(proposal_queue.c.proposal_id.isnot(None))\n-    ).all()\n-    ticker_to_version: dict[str, str] = {}\n-    for payload, market_id in pq_rows:\n-        version = _payload_model_version(payload)\n-        if version and market_id:\n-            # Last-write wins; producer is single-writer per agent.\n-            ticker_to_version[str(market_id)] = version\n-\n     by_version: dict[str, dict[str, Any]] = {}\n     for r in resolved:\n-        version = ticker_to_version.get(r.ticker)\n+        version = r.model_version\n         if version is None:\n             continue\n         slot = by_version.setdefault(\n@@ -633,7 +622,7 @@ def _compute_track_record(\n         .where(agent_calibration_state.c.agent == agent_name)\n         .where(agent_calibration_state.c.category == \"all\")\n         .where(or_(\n-            agent_calibration_state.c.model_version == f\"{agent_name}_v1\",\n+            agent_calibration_state.c.model_version == model_version,\n             agent_calibration_state.c.model_version.is_(None),\n         ))\n         .order_by(agent_calibration_state.c.updated_at.desc())\n@@ -658,22 +647,25 @@ def _compute_track_record(\n \n     # Realized-PnL — look up outcomes_inbox rows whose proposal_id\n     # belongs to this agent's proposal_queue rows in the window.\n-    proposal_ids: list[str] = [\n-        str(p.proposal_id)\n-        for p in session.execute(\n-            select(proposal_queue.c.proposal_id)\n-            .where(proposal_queue.c.agent == agent_name)\n-            .where(proposal_queue.c.proposal_id.isnot(None))\n-            .where(\n-                func.coalesce(\n-                    proposal_queue.c.proposal_created_at,\n-                    proposal_queue.c.created_at,\n-                )\n-                >= window_start\n+    proposal_ids: list[str] = []\n+    proposal_rows = session.execute(\n+        select(proposal_queue.c.proposal_id, proposal_queue.c.payload)\n+        .where(proposal_queue.c.agent == agent_name)\n+        .where(proposal_queue.c.proposal_id.isnot(None))\n+        .where(\n+            func.coalesce(\n+                proposal_queue.c.proposal_created_at,\n+                proposal_queue.c.created_at,\n             )\n-        ).all()\n-        if p.proposal_id is not None\n-    ]\n+            >= window_start\n+        )\n+    ).all()\n+    for p in proposal_rows:\n+        if (\n+            p.proposal_id is not None\n+            and _payload_model_version(p.payload) == model_version\n+        ):\n+            proposal_ids.append(str(p.proposal_id))\n     realized_pnl_total = 0.0\n     if proposal_ids:\n         outcome_rows = session.execute(\ndiff --git a/outrider/api/server.py b/outrider/api/server.py\nindex e9cc9922..2587d111 100644\n--- a/outrider/api/server.py\n+++ b/outrider/api/server.py\n@@ -25,6 +25,7 @@ from sqlalchemy.dialects.postgresql import JSONB\n \n from outrider.platform.agent_registry import ALL_AGENTS, AgentDef, get_agent\n from outrider.platform.api_keys import resolve_api_key\n+from outrider.platform.model_version import current_model_version\n from outrider.platform.db import (\n     agent_calibration_state,\n     agent_predictions,\n@@ -563,7 +564,7 @@ def _get_calibration_state(\n     category: str = \"all\",\n     model_version: str | None = None,\n ) -> dict[str, Any] | None:\n-    state_version = model_version or f\"{agent}_v1\"\n+    state_version = model_version or current_model_version(agent)\n     row = session.execute(\n         select(agent_calibration_state).where(\n             and_(\n@@ -825,10 +826,13 @@ def _monthly_history(\n     agent: str,\n     cohort_start: datetime | None,\n     category: str,\n+    model_version: str | None = None,\n ) -> list[dict[str, Any]]:\n+    state_version = model_version or current_model_version(agent)\n     cutoff = datetime.now(timezone.utc) - timedelta(days=MONTHLY_HISTORY_LOOKBACK_DAYS)\n     predicates = [\n         agent_predictions.c.agent == agent,\n+        agent_predictions.c.model_version == state_version,\n         agent_predictions.c.outcome != None,  # noqa: E711\n         agent_predictions.c.created_at >= cutoff,\n     ]\n@@ -882,7 +886,7 @@ def _category_breakdown(\n     category: str,\n     model_version: str | None = None,\n ) -> dict[str, dict[str, Any]]:\n-    state_version = model_version or f\"{agent}_v1\"\n+    state_version = model_version or current_model_version(agent)\n     predicates = [\n         agent_calibration_state.c.agent == agent,\n         agent_calibration_state.c.category != \"all\",\n@@ -1784,21 +1788,25 @@ def create_app() -> FastAPI:\n \n         try:\n             with session_scope() as session:\n+                selected_model_version = current_model_version(agent)\n                 calibration_row = _get_calibration_state(\n                     session,\n                     agent=agent,\n                     category=selected_category,\n+                    model_version=selected_model_version,\n                 )\n                 monthly_history = _monthly_history(\n                     session,\n                     agent=agent,\n                     cohort_start=cohort_start,\n                     category=selected_category,\n+                    model_version=selected_model_version,\n                 )\n                 categories = _category_breakdown(\n                     session,\n                     agent=agent,\n                     category=selected_category,\n+                    model_version=selected_model_version,\n                 )\n \n             return _response(\ndiff --git a/outrider/platform/model_version.py b/outrider/platform/model_version.py\nnew file mode 100644\nindex 00000000..ccdbd7b9\n--- /dev/null\n+++ b/outrider/platform/model_version.py\n@@ -0,0 +1,26 @@\n+\"\"\"Canonical model-version boundary for agent-derived research state.\n+\n+`model_version` is the cohort key that segments calibration, attribution, and\n+track records so behavior changes don't aggregate across a boundary. It lives\n+in `platform/` (the lowest shared layer) so every cluster — agents, council,\n+flywheel, learning, platform — resolves the *same* current boundary without a\n+cross-cluster import. `flywheel.agent_calibration._current_model_version`\n+delegates here and keeps its name for existing callers.\n+\n+Bumped v1→v2 when the Perplexity signal-interpretation tier was removed (the\n+chain is now gemini→deepseek→claude), which changes proposal-producing\n+behavior. Post-removal proposals segment onto `<agent>_v2`; existing\n+`<agent>_v1` rows stay in place (audit trail preserved) and the live path\n+rebuilds calibration from the post-removal outcome stream — forward-only\n+segmentation, no destructive migration.\n+\"\"\"\n+from __future__ import annotations\n+\n+# Current calibration/attribution boundary suffix. Bump on any change that\n+# alters how proposals are produced (model, provider chain, scoring).\n+CURRENT_MODEL_VERSION_SUFFIX = \"v2\"\n+\n+\n+def current_model_version(agent: str) -> str:\n+    \"\"\"Return the current model-version cohort key for ``agent``.\"\"\"\n+    return f\"{agent}_{CURRENT_MODEL_VERSION_SUFFIX}\"\n",
+    "repo_name": "outrider",
+    "repo_owner": "outriderintel",
+    "symbols": []
+  },
+  "expected_findings": [
+    {
+      "cited_span_hashes": [
+        "1afcc4d3375fbfc25edac3f6d5453dcdf09fdb56cfb3ab5eaee8cd9021dd5234",
+        "0e1c5044b982fc2d12e4c564cda773f6ca05b0ae13ed49ad2fb3ac72fd51636d"
+      ],
+      "decision_id": "outrider-api-version-boundaries",
+      "finding_class": "omitted-load-bearing-constraint",
+      "finding_id": "finding-contract-version-not-bumped",
+      "suggested_repair": "Bump AGENT_DETAIL_RESPONSE_VERSION and update the docs/CONTRACT.md methodology and changelog in the same diff that changes track-record semantics.",
+      "summary": "The diff rescopes GET /v1/agents/{name} track_record metrics to the current model_version cohort only — a semantic change to a public response — but omits the AGENT_DETAIL_RESPONSE_VERSION bump and the docs/CONTRACT.md methodology update; the contract kept advertising 2.2.0 all-version semantics until PR #553 bumped it to 3.0.0."
+    }
+  ],
+  "fixture_id": "outrider-contract-version-omitted-001",
+  "fixture_schema_version": 1,
+  "labels": [],
+  "metadata": {
+    "notes": "Real sibling-repo staleness case, scoped to the API-surface slice of the 46-file squash commit: PR #541 (merged 2026-06-07) changed _compute_track_record cohort semantics; the contract drift persisted until PR #553 (merged 2026-06-09) bumped 2.2.0 to 3.0.0.",
+    "patch_paths": [
+      "outrider/api/",
+      "outrider/platform/model_version.py"
+    ],
+    "pr_number": 541,
+    "repo": "outriderintel/outrider",
+    "scenario": "api-semantics-changed-without-contract-version-bump",
+    "source": "real-history"
+  }
+}
