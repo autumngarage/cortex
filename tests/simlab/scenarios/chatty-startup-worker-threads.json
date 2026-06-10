@@ -1,0 +1,36 @@
+{
+  "archetype_id": "chatty-startup",
+  "confirm": [
+    "single threaded"
+  ],
+  "demo_notes": "Chatty-startup payoff: the single-threaded-worker decision lives in a commit body, not a doc, and still catches the ThreadPoolExecutor diff with a commit-cited finding.",
+  "diff_base_sha": "1212121",
+  "diff_head_sha": "3434343",
+  "expected": {
+    "matched": 1,
+    "missed": 0,
+    "needs_manual_review": false,
+    "over_budget": 0,
+    "pack_omitted": {
+      "over_limit": 0,
+      "status_filtered": 0,
+      "suppressed_below_floor": 6
+    },
+    "unexpected": 0
+  },
+  "expected_findings": [
+    {
+      "decision": "single threaded",
+      "finding_class": "contradicts-prior-decision",
+      "finding_id": "f-single-threaded",
+      "suggested_repair": "Keep the worker single threaded, or confirm a superseding decision after making the queue client thread safe.",
+      "summary": "The diff adds a ThreadPoolExecutor to src/worker/run.py, contradicting the confirmed decision to keep the worker single threaded (queue client is not thread safe)."
+    }
+  ],
+  "kind": "scenario",
+  "patch": "diff --git a/src/worker/run.py b/src/worker/run.py\nindex 1212121..3434343 100644\n--- a/src/worker/run.py\n+++ b/src/worker/run.py\n@@ -1,8 +1,10 @@\n \"\"\"Background worker entrypoint (single threaded by decision).\"\"\"\n\n+from concurrent.futures import ThreadPoolExecutor\n+\n\n def main() -> None:\n-    for _job in poll():\n-        handle(_job)\n+    with ThreadPoolExecutor(max_workers=8) as pool:\n+        pool.map(handle, poll())\n\n\n def poll() -> list[str]:\n",
+  "scenario_id": "chatty-startup-worker-threads",
+  "simlab_spec_schema_version": 1,
+  "title": "A decision buried in commit prose catches a threading rewrite",
+  "token_budget": 8000
+}

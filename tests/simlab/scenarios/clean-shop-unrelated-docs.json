@@ -1,0 +1,25 @@
+{
+  "archetype_id": "clean-shop",
+  "demo_notes": "Honest empty-pack behavior: nothing structurally matches, so the pack is empty, no findings are fabricated, and every omission is counted at its stage.",
+  "diff_base_sha": "0000001",
+  "diff_head_sha": "6666666",
+  "expected": {
+    "matched": 0,
+    "missed": 0,
+    "needs_manual_review": false,
+    "over_budget": 0,
+    "pack_omitted": {
+      "over_limit": 0,
+      "status_filtered": 0,
+      "suppressed_below_floor": 8
+    },
+    "unexpected": 0
+  },
+  "expected_findings": [],
+  "kind": "scenario",
+  "patch": "diff --git a/docs/marketing.md b/docs/marketing.md\nnew file mode 100644\nindex 0000000..6666666\n--- /dev/null\n+++ b/docs/marketing.md\n@@ -0,0 +1,3 @@\n+# Launch notes\n+\n+Payments, but friendly.\n",
+  "scenario_id": "clean-shop-unrelated-docs",
+  "simlab_spec_schema_version": 1,
+  "title": "A diff outside every decision scope yields an empty pack",
+  "token_budget": 8000
+}

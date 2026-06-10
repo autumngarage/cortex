@@ -1,0 +1,36 @@
+{
+  "archetype_id": "clean-shop",
+  "confirm": [
+    "exponential backoff with jitter"
+  ],
+  "demo_notes": "The marquee true positive: a confirmed CLAUDE.md rule, a diff that quietly reverses it, one cited advisory finding.",
+  "diff_base_sha": "1111111",
+  "diff_head_sha": "2222222",
+  "expected": {
+    "matched": 1,
+    "missed": 0,
+    "needs_manual_review": false,
+    "over_budget": 0,
+    "pack_omitted": {
+      "over_limit": 0,
+      "status_filtered": 0,
+      "suppressed_below_floor": 7
+    },
+    "unexpected": 0
+  },
+  "expected_findings": [
+    {
+      "decision": "exponential backoff with jitter",
+      "finding_class": "contradicts-prior-decision",
+      "finding_id": "f-retry-policy",
+      "suggested_repair": "Keep exponential backoff with jitter, or supersede the retry-policy decision before landing a fixed delay.",
+      "summary": "The diff replaces exponential backoff with jitter with a fixed 0.5s delay in src/payments/retry.py, reversing the confirmed retry-policy decision."
+    }
+  ],
+  "kind": "scenario",
+  "patch": "diff --git a/src/payments/retry.py b/src/payments/retry.py\nindex 1111111..2222222 100644\n--- a/src/payments/retry.py\n+++ b/src/payments/retry.py\n@@ -1,9 +1,7 @@\n \"\"\"Webhook retry policy: exponential backoff with jitter (ADR-adjacent).\"\"\"\n\n-import random\n-\n BASE_DELAY_SECONDS = 0.5\n\n\n def next_delay(attempt: int) -> float:\n-    jitter = random.uniform(0.0, 0.25)\n-    return BASE_DELAY_SECONDS * (2 ** attempt) + jitter\n+    # fixed delay keeps the math simple\n+    return BASE_DELAY_SECONDS\n",
+  "scenario_id": "clean-shop-retry-fixed-delay",
+  "simlab_spec_schema_version": 1,
+  "title": "Confirmed retry policy catches a fixed-delay rewrite",
+  "token_budget": 8000
+}
