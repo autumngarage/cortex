@@ -63,6 +63,7 @@ from cortex.hosted.ledger_events import LedgerEventValidationError
 from cortex.hosted.migrations import HostedMigrationError
 from cortex.hosted.model_registry import RegistryValidationError
 from cortex.hosted.provenance import ProvenanceValidationError
+from cortex.hosted.push import HostedPushError
 from cortex.hosted.quality_series import QualitySeriesValidationError
 from cortex.hosted.recorded_responses import RecordedResponseError
 from cortex.hosted.replay_runner import ReplayError
@@ -163,6 +164,11 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # any partial state exists — refusal, boundary held.
     HostedDbError: DegradationMode.FAIL_CLOSED_REFUSAL,
     HostedEmbeddingValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # HostedPushError's marquee failure is drift: a derive-export row whose
+    # recomputed event hash, or a working-tree file whose content-keyed
+    # document hash, disagrees with what the export recorded — the push
+    # refuses to replay content that no longer matches its identity.
+    HostedPushError: DegradationMode.DRIFT_DETECTED,
     # HostedMigrationError blocks a migration that cannot be verified
     # (missing extension, unrecorded schema_migrations version) and rolls
     # back — refusal, boundary held.
