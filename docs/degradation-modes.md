@@ -241,3 +241,18 @@ mode skip citation or visibility boundaries.
   before any decision or rate is produced.
 - `route_comparison.RouteComparisonValidationError` classifies as
   `invalid_input_rejected`.
+
+### Wave 5 evaluator registrations (2026-06-10)
+
+- `advisory_ladder.AdvisoryLadderError` -> `invalid_input_rejected`: an
+  unknown confidence label or ladder-vocabulary violation is rejected before
+  the finding can be placed on the ladder (cortex#375).
+- `evaluator.EvaluatorValidationError` -> `invalid_input_rejected`:
+  evaluator material that violates the soft-evaluator contract (finding-class
+  evidence, registry shape, outcome arithmetic) is rejected before any
+  emission or ledger draft exists (cortex#370-#372).
+- `evaluator.UncitedFindingError` -> `fail_closed_refusal`: a finding whose
+  provenance is absent from the candidate pack (unresolvable decision ref or
+  span hash the pack never offered) is refused emission outright — the
+  citation boundary holds (cortex#377), mirroring `ask_ledger`'s
+  `no_cited_support` refusal.
