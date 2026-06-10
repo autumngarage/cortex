@@ -19,6 +19,7 @@ from cortex.hosted.ask_ledger import (
     reciprocal_rank_fusion,
     retrieval_trace_insert_sql,
 )
+from cortex.hosted.question_normalization import QUESTION_NORMALIZATION_VERSION
 from cortex.hosted.scopes import ChangedSurface
 
 TENANT_ID = "11111111-1111-4111-8111-111111111111"
@@ -333,7 +334,15 @@ def test_ask_ledger_retrieval_sql_includes_hybrid_sources_visibility_and_citatio
     assert "WHERE EXISTS (" in sql
     assert "embedding.embedding <=> %(embedding_vector)s::vector" in sql
     assert "embedding.embedding_dimension = vector_dims(%(embedding_vector)s::vector)" in sql
-    assert "websearch_to_tsquery('english', %(query)s)" in sql
+    # cortex#512: the FTS leg consumes the stripped question and ORs lexemes;
+    # AND-gating websearch_to_tsquery over the raw question is gone for good.
+    assert "websearch_to_tsquery" not in sql
+    assert "fts_query AS" in sql
+    assert (
+        "replace(plainto_tsquery('english', %(fts_query)s)::text, ' & ', ' | ')" in sql
+    )
+    assert "numnode(plainto_tsquery('english', %(fts_query)s)) > 0" in sql
+    # The trigram leg keeps the raw question.
     assert "similarity(version.decision_text, %(query)s)" in sql
     assert "jsonb_agg(" in sql
     assert "source_document_id" in sql
@@ -357,3 +366,74 @@ def test_retrieval_trace_insert_sql_persists_replay_fields() -> None:
 def test_ask_ledger_sql_rejects_unsafe_schema_identifier() -> None:
     with pytest.raises(AskLedgerValidationError, match="invalid SQL identifier"):
         ask_ledger_retrieval_sql("bad;drop")
+
+
+# ---------------------------------------------------------------------------
+# cortex#512 — natural-question boilerplate must not poison the FTS leg
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("live_repro_query", "expected_fts_query"),
+    [
+        # The three live repro queries from cortex#512, verbatim.
+        ("compose sentinel touchstone", "compose sentinel touchstone"),
+        (
+            "what did we decide about composing with sentinel and touchstone?",
+            "composing with sentinel and touchstone",
+        ),
+        ("sentinel touchstone composition", "sentinel touchstone composition"),
+    ],
+)
+def test_repro_queries_feed_stripped_text_to_the_fts_leg_only(
+    live_repro_query: str, expected_fts_query: str
+) -> None:
+    query = AskLedgerQuery(
+        tenant_id=TENANT_ID,
+        query=live_repro_query,
+        visible_source_ids=(SOURCE_ID,),
+    )
+    params = query.as_sql_parameters()
+    sql = ask_ledger_retrieval_sql()
+
+    # The FTS leg consumes the stripped residue; the trigram leg keeps the
+    # raw question — boilerplate words can never AND-gate FTS recall to zero.
+    assert params["fts_query"] == expected_fts_query
+    assert params["query"] == live_repro_query
+    assert "plainto_tsquery('english', %(fts_query)s)" in sql
+    assert "plainto_tsquery('english', %(query)s)" not in sql
+    assert "similarity(version.decision_text, %(query)s)" in sql
+    assert "similarity(version.decision_text, %(fts_query)s)" not in sql
+
+
+def test_fts_query_is_replayable_through_the_query_hash() -> None:
+    marquee = AskLedgerQuery(
+        tenant_id=TENANT_ID,
+        query="what did we decide about composing with sentinel and touchstone?",
+        visible_source_ids=(SOURCE_ID,),
+    )
+    clean = AskLedgerQuery(
+        tenant_id=TENANT_ID,
+        query="composing with sentinel and touchstone",
+        visible_source_ids=(SOURCE_ID,),
+    )
+
+    # Same FTS residue, but the raw question still differs (trigram leg), so
+    # the two retrievals hash as distinct replayable inputs.
+    assert marquee.fts_query == clean.fts_query
+    assert marquee.query_hash != clean.query_hash
+
+
+def test_config_version_composes_normalization_and_vector_versions() -> None:
+    # Ranking behavior changed (cortex#512) -> config version bumped, and the
+    # normalization version is composed in so a stop-phrase list change cannot
+    # ship without moving the no-cross-config-aggregation boundary (cortex#467).
+    assert ASK_LEDGER_RETRIEVAL_CONFIG_VERSION.startswith("ask-ledger-v3+")
+    assert QUESTION_NORMALIZATION_VERSION in ASK_LEDGER_RETRIEVAL_CONFIG_VERSION
+    assert "pgvector-hnsw-v1" in ASK_LEDGER_RETRIEVAL_CONFIG_VERSION
+
+
+def test_fts_and_trigram_reason_codes_stay_distinguishable() -> None:
+    sql = ask_ledger_retrieval_sql()
+    assert "'full_text:decision_text'::text AS reason_code" in sql
+    assert "'trigram:decision_text'::text AS reason_code" in sql
