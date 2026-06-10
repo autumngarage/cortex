@@ -318,7 +318,8 @@ def test_review_renders_cited_contradiction_finding_fully_offline(
     assert "over_budget=0" in out
     # The replay key line carries the full key material.
     assert f"replay-key: model={PLAYBACK_MODEL_ID}" in out
-    assert "retrieval=fixture-local-structural-v1" in out
+    # v2: glob-granularity structural matching (cortex#484).
+    assert "retrieval=fixture-local-structural-v2" in out
     assert f"prompt={review.REVIEW_PROMPT_VERSION}" in out
     assert "run=cortex-review-" in out
 

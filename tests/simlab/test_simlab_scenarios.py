@@ -317,4 +317,5 @@ def test_replay_results_are_the_shipped_report_shape(
 
     for result in replayed_results.values():
         assert isinstance(result.replay, ReplayResult)
-        assert result.replay.retrieval_config_version == "fixture-local-structural-v1"
+        # v2: glob-granularity structural matching (cortex#484).
+        assert result.replay.retrieval_config_version == "fixture-local-structural-v2"

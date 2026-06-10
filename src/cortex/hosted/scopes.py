@@ -13,6 +13,9 @@ _ISSUE_REF_RE = re.compile(r"(?:^|/issues/|#)(\d+)$")
 
 SEMANTIC_MATCH_WEIGHT = 40
 
+# The one wildcard the structural glob matcher understands (cortex#484).
+GLOB_WILDCARD = "**"
+
 
 class ScopeValidationError(ValueError):
     """Raised when a scope cannot be normalized into the structural index."""
@@ -204,10 +207,123 @@ RETURNING decision_scope_id, scope_type, normalized_value;
 """.strip()
 
 
+# ---------------------------------------------------------------------------
+# Glob/directory-granularity structural matching (cortex#484)
+#
+# Documented mechanism: REVERSED LIKE ON GLOB PATTERNS. A decision scope of
+# type 'glob' (e.g. 'src/api/**') matches a concrete changed path
+# ('src/api/handlers/foo.py') when the path matches the glob translated into
+# a SQL LIKE pattern: LIKE metacharacters the glob may carry literally
+# (backslash, percent, underscore) are escaped, then each '**' becomes the
+# LIKE any-sequence wildcard '%'. Only '**' is a wildcard; every other
+# character — including a lone '*' — matches itself, so 'src/api/**' matches
+# 'src/api/handlers/foo.py' but never 'src/apiX/foo.py' (LIKE is anchored at
+# both ends). 'src/api/**' does not match the bare directory path 'src/api'.
+#
+# Precedence: an exact path match keeps the query scope's own structural
+# weight (PATH = 100); a glob match scores STRUCTURAL_SCOPE_WEIGHTS[GLOB]
+# (98), so exact path always outranks glob — the cortex#484 precedence rule,
+# pinned in tests/test_hosted_ranking_pins.py.
+#
+# Boundedness: both SQL surfaces evaluate the LIKE only inside the tenant's
+# decision_scopes partition (every join carries the tenant filter), and only
+# rows with scope_type = 'glob' can enter the glob branch. The scan is
+# bounded by the tenant's scope rows — never a cross-tenant or full-table
+# scan. The exact-equality branch keeps its index path unchanged.
+#
+# Both structural SQL surfaces (the standalone matcher below and the
+# `scope_candidates` CTE in `decisions_for_diff_retrieval_sql`) embed the
+# SAME fragments built here, and `glob_matches_path` mirrors the translation
+# for the fixture-local replay emulation — one semantic, three consumers.
+# ---------------------------------------------------------------------------
+
+# Exact structural match: the original (scope_type, normalized_value) join.
+_EXACT_SCOPE_MATCH_SQL = (
+    "(scope.scope_type = q.scope_type AND scope.normalized_value = q.normalized_value)"
+)
+
+
+def glob_like_pattern_sql(glob_expr: str) -> str:
+    """SQL expression producing the LIKE pattern for a normalized-glob column.
+
+    Escapes the LIKE metacharacters (backslash, percent, underscore) so they
+    match literally, then turns each ``**`` into ``%``. See the cortex#484
+    mechanism note above.
+    """
+
+    escaped = (
+        f"replace(replace(replace({glob_expr}, '\\', '\\\\'), '%', '\\%'), '_', '\\_')"
+    )
+    return f"replace({escaped}, '{GLOB_WILDCARD}', '%')"
+
+
+def scope_structural_match_sql() -> str:
+    """The shared join condition: exact (scope_type, value) OR glob-vs-path.
+
+    Expects the query-scope relation aliased ``q`` and the decision-scope
+    relation aliased ``scope`` — the aliases both structural SQL surfaces
+    already use, asserted in their tests so the surfaces cannot drift.
+    """
+
+    glob_pattern = glob_like_pattern_sql("scope.normalized_value")
+    return (
+        f"({_EXACT_SCOPE_MATCH_SQL}\n"
+        "      OR (scope.scope_type = 'glob' AND q.scope_type = 'path'\n"
+        f"          AND q.normalized_value LIKE {glob_pattern}))"
+    )
+
+
+def scope_match_weight_sql() -> str:
+    """Per-match structural weight: exact keeps the query weight, glob is 98.
+
+    Exact path (PATH weight) outranks glob (GLOB weight) by construction —
+    the cortex#484 precedence rule via STRUCTURAL_SCOPE_WEIGHTS.
+    """
+
+    glob_weight = STRUCTURAL_SCOPE_WEIGHTS[ScopeType.GLOB]
+    return (
+        f"CASE WHEN {_EXACT_SCOPE_MATCH_SQL} THEN q.structural_weight "
+        f"ELSE {glob_weight} END"
+    )
+
+
+def scope_match_reason_sql() -> str:
+    """Per-match reason code: exact keeps the query reason, glob names the glob."""
+
+    return (
+        f"CASE WHEN {_EXACT_SCOPE_MATCH_SQL} THEN q.reason_code "
+        "ELSE 'scope:glob:' || scope.normalized_value END"
+    )
+
+
+def glob_matches_path(normalized_glob: str, normalized_path: str) -> bool:
+    """Python mirror of the SQL reversed-LIKE glob mechanism (cortex#484).
+
+    Callers pass already-normalized values (the ``normalized_value`` column
+    contents). Only ``**`` is a wildcard; every other character matches
+    itself, and the match is anchored at both ends — exactly the LIKE
+    semantics the SQL fragments produce, so the fixture-local replay
+    emulation and the hosted SQL surfaces cannot disagree.
+    """
+
+    pattern = ".*".join(
+        re.escape(part) for part in normalized_glob.split(GLOB_WILDCARD)
+    )
+    return re.fullmatch(pattern, normalized_path) is not None
+
+
 def decisions_for_diff_scope_sql(schema: str = "cortex_hosted") -> str:
-    """Return structural candidate retrieval SQL for `decisions_for_diff`."""
+    """Return structural candidate retrieval SQL for `decisions_for_diff`.
+
+    Matches decision scopes on exact (scope_type, normalized_value) equality
+    plus glob-vs-path granularity (cortex#484) — see the documented
+    mechanism above `glob_like_pattern_sql`.
+    """
 
     _validate_sql_identifier(schema)
+    match_condition = scope_structural_match_sql()
+    match_weight = scope_match_weight_sql()
+    match_reason = scope_match_reason_sql()
     return f"""
 WITH query_scopes AS (
     SELECT *
@@ -224,13 +340,12 @@ ranked_matches AS (
         node.status,
         scope.scope_type,
         scope.normalized_value,
-        q.reason_code,
-        q.structural_weight,
+        {match_reason} AS reason_code,
+        {match_weight} AS structural_weight,
         node.updated_at
     FROM query_scopes AS q
     JOIN {schema}.decision_scopes AS scope
-      ON scope.scope_type = q.scope_type
-     AND scope.normalized_value = q.normalized_value
+      ON {match_condition}
     JOIN {schema}.decision_nodes AS node
       ON node.tenant_id = scope.tenant_id
      AND node.decision_node_id = scope.decision_node_id
@@ -238,7 +353,7 @@ ranked_matches AS (
       AND (%(repo_id)s::uuid IS NULL OR scope.repo_id IS NULL OR scope.repo_id = %(repo_id)s::uuid)
       AND (%(repo_id)s::uuid IS NULL OR node.repo_id IS NULL OR node.repo_id = %(repo_id)s::uuid)
       AND node.status IN ('candidate', 'confirmed')
-    ORDER BY node.decision_node_id, q.structural_weight DESC, node.updated_at DESC
+    ORDER BY node.decision_node_id, {match_weight} DESC, node.updated_at DESC
 )
 SELECT
     decision_node_id,
