@@ -30,7 +30,8 @@ from cortex.commands.derive import (
 from cortex.hosted.derive_store import DeriveEventStore, derive_store_path
 from cortex.hosted.extractors import (
     COMMIT_MESSAGE_DOCUMENT_TYPE,
-    DROP_COMMIT_BODY_LINE_WITHOUT_DECISION_VERB,
+    DROP_COMMIT_BODY_MID_CLAUSE_START,
+    DROP_COMMIT_BODY_PARAGRAPH_WITHOUT_DECISION_VERB,
     DROP_COMMIT_EMPTY_MESSAGE,
     DROP_COMMIT_SUBJECT_WITHOUT_DECISION_PATTERN,
     DROP_COMMIT_TRAILER_WITHOUT_CANDIDATE,
@@ -141,23 +142,96 @@ def test_non_decision_subject_drops_with_reason() -> None:
     ]
 
 
-def test_body_decision_verb_lines_become_candidates_with_real_offsets() -> None:
-    line_a = "We decided to drive ingestion from webhooks."
-    line_b = "The poller is no longer the entry point."
-    content = f"chore: tidy\n\n{line_a}\nPlain context prose.\n{line_b}\n"
+def test_body_decision_paragraphs_become_candidates_with_real_offsets() -> None:
+    para_a = "We decided to drive ingestion from webhooks."
+    para_b = "The poller is no longer the entry point."
+    content = f"chore: tidy\n\n{para_a}\n\nPlain context prose.\n\n{para_b}\n"
     outcome = extract_commit_message_decisions(_commit(content))
     texts = [item.candidate.decision_text for item in outcome.extracted]
-    assert texts == [line_a, line_b]
-    for item, line in zip(outcome.extracted, (line_a, line_b), strict=True):
+    assert texts == [para_a, para_b]
+    for item, paragraph in zip(outcome.extracted, (para_a, para_b), strict=True):
         span = item.candidate.spans[0]
-        assert span.start_offset == content.index(line)
-        assert span.excerpt == line
-        assert item.metadata["statement_kind"] == "body_line"
+        assert span.start_offset == content.index(paragraph)
+        assert span.excerpt == paragraph
+        assert item.metadata["statement_kind"] == "body_paragraph"
     reasons = [chatter.reason_code for chatter in outcome.dropped]
     assert reasons == [
         DROP_COMMIT_SUBJECT_WITHOUT_DECISION_PATTERN,
-        DROP_COMMIT_BODY_LINE_WITHOUT_DECISION_VERB,
+        DROP_COMMIT_BODY_PARAGRAPH_WITHOUT_DECISION_VERB,
     ]
+
+
+def test_hard_wrapped_paragraph_unwraps_to_one_whole_sentence_candidate() -> None:
+    """The cortex#511 live failure shape (commit 54587e8): the decision verb
+    sits on a hard-wrap continuation line; the candidate must be the whole
+    unwrapped sentence spanning the full original line range, never the
+    fragment."""
+
+    wrapped = (
+        "Non-git projects skip the stale-input hook quietly (no safety gate to\n"
+        'apply) instead of printing "git unavailable" on every read.'
+    )
+    content = f"chore: tidy\n\n{wrapped}\n"
+    outcome = extract_commit_message_decisions(_commit(content))
+    assert [item.candidate.decision_text for item in outcome.extracted] == [
+        "Non-git projects skip the stale-input hook quietly (no safety gate to "
+        'apply) instead of printing "git unavailable" on every read.'
+    ]
+    span = outcome.extracted[0].candidate.spans[0]
+    # The span covers the FULL original line range, hard wrap included.
+    assert span.start_offset == content.index("Non-git")
+    assert span.end_offset == span.start_offset + len(wrapped)
+    assert span.excerpt == wrapped
+    assert outcome.extracted[0].metadata["statement_kind"] == "body_paragraph"
+    # Only the non-T1.8 subject drops; the continuation line never surfaces
+    # as its own candidate or its own drop.
+    assert [chatter.reason_code for chatter in outcome.dropped] == [
+        DROP_COMMIT_SUBJECT_WITHOUT_DECISION_PATTERN
+    ]
+
+
+def test_mid_clause_paragraph_start_drops_with_reason_never_emits() -> None:
+    # A paragraph that IS the fragment (e.g. a capture mangled by a stray
+    # blank line) matches "instead of" but starts mid-clause; the guard drops
+    # it visibly instead of emitting an unusable decision statement.
+    content = (
+        "chore: tidy\n"
+        "\n"
+        "Non-git projects skip the stale-input hook quietly (no safety gate to\n"
+        "\n"
+        'apply) instead of printing "git unavailable" on every read.\n'
+    )
+    outcome = extract_commit_message_decisions(_commit(content))
+    assert outcome.extracted == ()
+    reasons = [chatter.reason_code for chatter in outcome.dropped]
+    assert reasons == [
+        DROP_COMMIT_SUBJECT_WITHOUT_DECISION_PATTERN,
+        DROP_COMMIT_BODY_PARAGRAPH_WITHOUT_DECISION_VERB,
+        DROP_COMMIT_BODY_MID_CLAUSE_START,
+    ]
+
+
+def test_trailer_line_terminates_the_unwrap_run() -> None:
+    content = (
+        "fix: scheduler regression\n"
+        "\n"
+        "The scheduler must use monotonic clocks\n"
+        "across every retry path.\n"
+        "Closes-issue: #354\n"
+    )
+    outcome = extract_commit_message_decisions(_commit(content))
+    texts = [item.candidate.decision_text for item in outcome.extracted]
+    assert texts == [
+        "fix: scheduler regression",
+        "The scheduler must use monotonic clocks across every retry path.",
+    ]
+    body = outcome.extracted[1]
+    assert body.candidate.spans[0].excerpt == (
+        "The scheduler must use monotonic clocks\nacross every retry path."
+    )
+    # The trailer never joins the unwrapped statement; it stays a scope hint.
+    assert body.metadata["issue_refs"] == ["#354"]
+    assert outcome.dropped == ()
 
 
 def test_trailers_contribute_issue_ref_scopes_to_every_candidate() -> None:
@@ -452,6 +526,7 @@ def test_commit_documents_from_git_log_fixture_are_deterministic() -> None:
         "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
         "b2c3d4e5f6a7081920a1b2c3d4e5f60718293a4b",
         "c3d4e5f6a7b8091a2b3c4d5e6f7081920a1b2c3d",
+        "d4e5f6a7b8091a2b3c4d5e6f7081920a1b2c3d4e",
     ]
     first = gathered.documents[0]
     assert first.document_type == COMMIT_MESSAGE_DOCUMENT_TYPE
@@ -472,8 +547,20 @@ def test_git_log_fixture_extracts_candidates_end_to_end() -> None:
     events = [event for document in gathered.documents for event in extractor(document)]
     texts = [event.payload["decision_text"] for event in events]
     assert "feat: replace the polling loop (replaces poller)" in texts
-    assert "The scheduler must use monotonic clocks." in texts
+    # Consecutive body lines unwrap into one logical statement (cortex#511).
+    assert (
+        "The scheduler must use monotonic clocks. "
+        "Some context prose that binds nothing." in texts
+    )
     assert "We decided to drive ingestion from webhooks instead of polling." in texts
+    # The 54587e8-shaped wrapped paragraph: the decision verb lives on the
+    # continuation line; the candidate is the whole unwrapped sentence.
+    assert (
+        "Non-git projects skip the stale-input hook quietly (no safety gate to "
+        'apply) instead of printing "git unavailable" on every read.' in texts
+    )
+    # The fragment the old per-line extractor emitted can never reappear.
+    assert not any(text.startswith("apply)") for text in texts)
 
 
 def test_commit_documents_with_empty_message_drop_visibly() -> None:
@@ -517,12 +604,12 @@ def test_gather_commit_documents_invokes_git_with_the_pinned_format(
         return raw
 
     gathered = gather_commit_message_documents(
-        tmp_path, tenant_id=TENANT_ID, source_id=SOURCE_ID, limit=3, runner=runner
+        tmp_path, tenant_id=TENANT_ID, source_id=SOURCE_ID, limit=4, runner=runner
     )
-    assert len(gathered.documents) == 3
+    assert len(gathered.documents) == 4
     assert seen == [
         (
-            ("git", "log", "-n", "3", f"--pretty=format:{GIT_LOG_PRETTY_FORMAT}"),
+            ("git", "log", "-n", "4", f"--pretty=format:{GIT_LOG_PRETTY_FORMAT}"),
             tmp_path,
         )
     ]

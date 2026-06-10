@@ -16,12 +16,17 @@ text sources a repo already has:
 - **CODEOWNERS** (cortex#353): each well-formed rule line becomes one
   ownership candidate (``<owners> own <pattern>``) with the pattern as a
   path/glob scope and each owner as an owner scope.
-- **Commit messages** (cortex#354): one ``SourceDocument`` per commit
-  (``document_type`` ``commit_message``, ``external_id`` the sha). Subject
-  lines matching the Protocol T1.8 patterns and body lines carrying decision
-  verbs become per-statement candidates with exact offsets; Closes-issue /
-  BREAKING CHANGE trailers contribute ``issue_ref`` scope hints, never
-  candidates of their own.
+- **Commit messages** (cortex#354, paragraph unwrap per cortex#511): one
+  ``SourceDocument`` per commit (``document_type`` ``commit_message``,
+  ``external_id`` the sha). Subject lines matching the Protocol T1.8 patterns
+  become per-statement candidates with exact offsets. Body lines are
+  hard-wrapped by git convention, so consecutive non-blank body lines are
+  unwrapped into one logical statement per paragraph (blank line separates
+  paragraphs) *before* decision-verb matching; a matched candidate's span
+  covers the full original line range and its ``decision_text`` is the
+  unwrapped statement, so a mid-clause continuation line can never be emitted
+  as a fragment. Closes-issue / BREAKING CHANGE trailers contribute
+  ``issue_ref`` scope hints, never candidates of their own.
 - **PR descriptions** (cortex#355, ``document_type`` ``pr_description``):
   sections matter — statements under ``## Why`` / ``## Decision`` /
   ``## Approach`` headings rank as candidates; checklists, template stubs,
@@ -101,6 +106,12 @@ from cortex.hosted.provenance import SourceDocument
 from cortex.hosted.scopes import ScopeType
 
 EXTRACTORS_VERSION = 1
+# cortex#511: the commit-body extractor now unwraps hard-wrapped paragraphs
+# before decision-verb matching — a behavior change that re-versions only this
+# extractor's identity (version-your-data-boundaries: candidates produced
+# before and after the unwrap must not be treated as the same extractor's
+# output). The other extractors are unchanged and keep EXTRACTORS_VERSION.
+COMMIT_MESSAGE_EXTRACTOR_VERSION = 2
 
 EXTRACTOR_IDS: Mapping[DeriveSourceType, str] = MappingProxyType(
     {
@@ -110,7 +121,7 @@ EXTRACTOR_IDS: Mapping[DeriveSourceType, str] = MappingProxyType(
         DeriveSourceType.ADR: f"repo-native/adr@v{EXTRACTORS_VERSION}",
         DeriveSourceType.CODEOWNERS: f"repo-native/codeowners@v{EXTRACTORS_VERSION}",
         DeriveSourceType.COMMIT_MESSAGE: (
-            f"repo-native/commit-message@v{EXTRACTORS_VERSION}"
+            f"repo-native/commit-message@v{COMMIT_MESSAGE_EXTRACTOR_VERSION}"
         ),
         DeriveSourceType.PR_DESCRIPTION: (
             f"repo-native/pr-description@v{EXTRACTORS_VERSION}"
@@ -156,9 +167,10 @@ DROP_CODEOWNERS_INVALID_OWNER = "codeowners:invalid_owner"
 DROP_COMMIT_SUBJECT_WITHOUT_DECISION_PATTERN = (
     "commit_message:subject_without_decision_pattern"
 )
-DROP_COMMIT_BODY_LINE_WITHOUT_DECISION_VERB = (
-    "commit_message:body_line_without_decision_verb"
+DROP_COMMIT_BODY_PARAGRAPH_WITHOUT_DECISION_VERB = (
+    "commit_message:body_paragraph_without_decision_verb"
 )
+DROP_COMMIT_BODY_MID_CLAUSE_START = "commit_message:body_mid_clause_start"
 DROP_COMMIT_TRAILER_WITHOUT_CANDIDATE = "commit_message:trailer_without_candidate"
 DROP_COMMIT_TRAILER_WITHOUT_ISSUE_REF = "commit_message:trailer_without_issue_ref"
 DROP_COMMIT_EMPTY_MESSAGE = "commit_message:empty_message"
@@ -270,6 +282,13 @@ _COMMIT_BREAKING_TRAILER_RE = re.compile(
 )
 _ISSUE_REF_TOKEN_RE = re.compile(r"(?:[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+)?#\d+\b")
 _COMMIT_SHA_RE = re.compile(r"^[0-9a-f]{7,64}$")
+# cortex#511 mid-clause guard: a statement that starts with closing
+# punctuation, or whose first token closes a bracket it never opened
+# (the live `apply) instead of ...` fragment shape), is a hard-wrap fragment
+# masquerading as a sentence — drop it visibly, never emit it. Closed
+# heuristic on purpose; legitimate lowercase paragraph starts are untouched.
+_MID_CLAUSE_LEAD_CHARS = ")]},;:."
+_MID_CLAUSE_BRACKET_PAIRS = ((")", "("), ("]", "["), ("}", "{"))
 
 # --- PR-description heuristics (#355; closed, documented sets) -----------------
 
@@ -937,12 +956,20 @@ def extract_commit_message_decisions(document: SourceDocument) -> ExtractionOutc
     """Extract decision-shaped statements from one commit message (issue #354).
 
     Deterministic heuristics only: the subject line qualifies when it matches
-    a Protocol T1.8 pattern; body lines qualify when they carry a decision
-    verb from the closed set. Closes-issue / BREAKING CHANGE trailers never
-    become candidates — they contribute ``issue_ref`` scope hints to every
-    candidate extracted from the same commit. Every non-qualifying line drops
-    with a reason code; trailers that could not be consumed (no candidate to
-    attach to, or no issue ref to contribute) drop visibly too.
+    a Protocol T1.8 pattern. Body lines are hard-wrapped by git convention
+    (cortex#511), so consecutive non-blank, non-trailer body lines are
+    unwrapped into one logical statement per paragraph before decision-verb
+    matching; a matching paragraph becomes one candidate whose span covers the
+    full original line range and whose ``decision_text`` is the unwrapped
+    statement — a hard-wrap continuation line can never be emitted as a
+    fragment. A matched statement that still starts mid-clause (closing
+    punctuation, or a first token closing a bracket it never opened) drops
+    visibly instead of being emitted. Closes-issue / BREAKING CHANGE trailers
+    never become candidates — they contribute ``issue_ref`` scope hints to
+    every candidate extracted from the same commit. Every non-qualifying
+    paragraph drops with a reason code; trailers that could not be consumed
+    (no candidate to attach to, or no issue ref to contribute) drop visibly
+    too.
     """
 
     content = document.content
@@ -951,9 +978,28 @@ def extract_commit_message_decisions(document: SourceDocument) -> ExtractionOutc
     trailer_ranges: list[tuple[int, int, tuple[str, ...]]] = []
     dropped: list[DroppedChatter] = []
     subject_seen = False
+    paragraph_lines: list[_Line] = []
+
+    def flush_paragraph() -> None:
+        if not paragraph_lines:
+            return
+        first, last = paragraph_lines[0], paragraph_lines[-1]
+        start, end = _trimmed(content, first.start, last.start + len(last.text))
+        paragraph_lines.clear()
+        excerpt = content[start:end]
+        statement = _unwrapped_statement(excerpt)
+        if not _COMMIT_DECISION_VERB_RE.search(statement):
+            dropped.append(
+                _dropped(DROP_COMMIT_BODY_PARAGRAPH_WITHOUT_DECISION_VERB, excerpt)
+            )
+        elif _is_mid_clause_start(statement):
+            dropped.append(_dropped(DROP_COMMIT_BODY_MID_CLAUSE_START, excerpt))
+        else:
+            statement_ranges.append((start, end, "body_paragraph"))
 
     for line in _content_lines(content):
         if not line.text.strip():
+            flush_paragraph()
             continue
         start, end = _trimmed(content, line.start, line.start + len(line.text))
         excerpt = content[start:end]
@@ -968,12 +1014,14 @@ def extract_commit_message_decisions(document: SourceDocument) -> ExtractionOutc
             continue
         trailer_refs = _commit_trailer_issue_refs(excerpt)
         if trailer_refs is not None:
+            # A trailer line terminates the current unwrap run: the lines
+            # before it stay one logical statement, the trailer stays a
+            # per-line scope-hint channel.
+            flush_paragraph()
             trailer_ranges.append((start, end, trailer_refs))
             continue
-        if _COMMIT_DECISION_VERB_RE.search(excerpt):
-            statement_ranges.append((start, end, "body_line"))
-        else:
-            dropped.append(_dropped(DROP_COMMIT_BODY_LINE_WITHOUT_DECISION_VERB, excerpt))
+        paragraph_lines.append(line)
+    flush_paragraph()
 
     issue_refs = tuple(
         dict.fromkeys(ref for _start, _end, refs in trailer_ranges for ref in refs)
@@ -1016,10 +1064,14 @@ def _commit_statement(
     issue_refs: tuple[str, ...],
 ) -> ExtractedCandidate:
     span = document.span(start_offset=start, end_offset=end)
-    pairs = [(scope.scope_type, scope.value) for scope in proposed_path_scopes(span.excerpt)]
+    # decision_text is the unwrapped logical statement (cortex#511); the span
+    # still cites the exact original offsets, hard wraps included. For a
+    # single-line statement the two are identical.
+    statement = _unwrapped_statement(span.excerpt)
+    pairs = [(scope.scope_type, scope.value) for scope in proposed_path_scopes(statement)]
     pairs.extend((ScopeType.ISSUE_REF, ref) for ref in issue_refs)
     candidate = DeriveCandidate(
-        decision_text=span.excerpt,
+        decision_text=statement,
         spans=(span,),
         proposed_scopes=_deduped_scopes(pairs),
     )
@@ -1028,6 +1080,29 @@ def _commit_statement(
         lane=lane,
         metadata={"statement_kind": statement_kind, "issue_refs": list(issue_refs)},
     )
+
+
+def _unwrapped_statement(excerpt: str) -> str:
+    """Join hard-wrapped lines into one logical statement (cortex#511).
+
+    Git convention wraps paragraphs at whitespace, so joining stripped lines
+    with single spaces reconstructs the author's sentence exactly; a
+    single-line excerpt round-trips unchanged.
+    """
+
+    return " ".join(line.strip() for line in excerpt.splitlines() if line.strip())
+
+
+def _is_mid_clause_start(statement: str) -> bool:
+    """True when a statement starts mid-clause (cortex#511 fragment guard)."""
+
+    if statement[:1] in _MID_CLAUSE_LEAD_CHARS:
+        return True
+    head = statement.split(None, 1)[0] if statement.split() else statement
+    for close_char, open_char in _MID_CLAUSE_BRACKET_PAIRS:
+        if close_char in head and open_char not in head.split(close_char, 1)[0]:
+            return True
+    return False
 
 
 def _commit_trailer_issue_refs(line: str) -> tuple[str, ...] | None:
