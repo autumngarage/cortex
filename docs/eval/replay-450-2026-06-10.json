@@ -1,0 +1,354 @@
+{
+  "fixtures_run": 6,
+  "matched_total": 0,
+  "missed_total": 4,
+  "needs_manual_review_count": 0,
+  "replay_report_schema_version": 1,
+  "results": [
+    {
+      "budget": {
+        "estimated_tokens_used": 0,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 0,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 8000,
+        "token_budget": 8000
+      },
+      "context_hash": "f95c4048af5df3d76bac4cfc9c09929072e79d2a5b0718633cb83faa4ec0b9c8",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [
+          "empty_decision_pack"
+        ],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [
+          {
+            "decision_id": "pr-merged-entry-per-merge",
+            "finding_id": "finding-consolidated-pr-merged-entries",
+            "omitted_at_stage": "suppressed_below_floor"
+          }
+        ],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 1
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 1
+        }
+      },
+      "expected_finding_outcomes": [
+        {
+          "cited_span_hashes": [
+            "505736c66e5b3c61a228e8ff5c7992f5229f177bfe9d2a65ca67a38bf8ddb672",
+            "c87b35b88990960a895e9280e488601e6ccfa53d950499ce00a6dc067a60fe72"
+          ],
+          "decision_id": "pr-merged-entry-per-merge",
+          "finding_class": "contradicts-prior-decision",
+          "finding_id": "finding-consolidated-pr-merged-entries",
+          "matched": false,
+          "omitted_at_stage": "suppressed_below_floor"
+        }
+      ],
+      "fixture_hash": "878c2b23f1c2b09264100acdf08aab8db078e03a33e48358a2f01f3d3fd9bead",
+      "fixture_id": "consolidated-journal-entries-001",
+      "graph_snapshot_hash": "5eae0463d49530689fefc57fd0bb9352486a53a3afcae1d0ef0772952ad4b2b4",
+      "input_hash": "caaa48cfc7c882c40fd394852fd26e45ee99782b189ab38575a01738d5e035fc",
+      "matched_count": 0,
+      "missed_count": 1,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "7bf165c97f3361a8202dca39f7cf57c1ca9c9b384e267fde552a99b700d75094",
+      "replay_report_schema_version": 1,
+      "retrieval_config_version": "fixture-local-structural-v1",
+      "unexpected_count": 0,
+      "unexpected_emissions": []
+    },
+    {
+      "budget": {
+        "estimated_tokens_used": 0,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 0,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 8000,
+        "token_budget": 8000
+      },
+      "context_hash": "a0bda25ded84aa6f274e9b634270768eb7ddb44742921a2c61997d1398ece938",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [
+          "empty_decision_pack"
+        ],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [
+          {
+            "decision_id": "journal-append-only",
+            "finding_id": "finding-journal-entry-deleted",
+            "omitted_at_stage": "suppressed_below_floor"
+          }
+        ],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 1
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 1
+        }
+      },
+      "expected_finding_outcomes": [
+        {
+          "cited_span_hashes": [
+            "aa880ac6fad9d8877342b1b469af630fd1c8214aef1d4430fb123103eadacc0c"
+          ],
+          "decision_id": "journal-append-only",
+          "finding_class": "contradicts-prior-decision",
+          "finding_id": "finding-journal-entry-deleted",
+          "matched": false,
+          "omitted_at_stage": "suppressed_below_floor"
+        }
+      ],
+      "fixture_hash": "53ad4c3b0de96b23e084d3462595966f3b7d6d2925816f73092dd65844854b05",
+      "fixture_id": "journal-entry-deletion-001",
+      "graph_snapshot_hash": "13e329592166fd6029b2739b99b8d104cb17f2cf1bec37cdf4075f0d734132fa",
+      "input_hash": "68c173e3915ad266294a3a49f9d605b6220076de96671b3629394b3032b4e5af",
+      "matched_count": 0,
+      "missed_count": 1,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "11037bb1a3e16fe3fc464b6007f1e78ddaa7e74e61f302fd98301da59566c75b",
+      "replay_report_schema_version": 1,
+      "retrieval_config_version": "fixture-local-structural-v1",
+      "unexpected_count": 0,
+      "unexpected_emissions": []
+    },
+    {
+      "budget": {
+        "estimated_tokens_used": 361,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 1,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 7639,
+        "token_budget": 8000
+      },
+      "context_hash": "b8865aa1019eaf82e7e53d555812964691cc33693a481577b00539af2fbd8ef8",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        }
+      },
+      "expected_finding_outcomes": [
+        {
+          "cited_span_hashes": [
+            "70e32623ebd58ff4158d9574441e8ba510a70ff67f378c9d4e283e6b0c29a36f",
+            "8d4f5b3db90bc0ea85fe21e683578ffc1c2eb0c350e9df9d3e715b393b9f59ed"
+          ],
+          "decision_id": "spec-version-declared",
+          "finding_class": "omitted-load-bearing-constraint",
+          "finding_id": "finding-spec-version-stale",
+          "matched": false,
+          "omitted_at_stage": null
+        }
+      ],
+      "fixture_hash": "2e2f939c1f00fa2a0120543f21c6dc729a5c344193dee67883d5845b84dabdf8",
+      "fixture_id": "spec-version-drift-001",
+      "graph_snapshot_hash": "1409aad96285d880471774b37ce9bba042210d97bc865ad50726ee6ca59e32fa",
+      "input_hash": "b526959955bbb6608490c0cd44aa91db025787ed0216e3defe547df43362735e",
+      "matched_count": 0,
+      "missed_count": 1,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "74d060bffc068abf33472a968ff1ddf0d9d6a6646310158b24c3331f16a66128",
+      "replay_report_schema_version": 1,
+      "retrieval_config_version": "fixture-local-structural-v1",
+      "unexpected_count": 1,
+      "unexpected_emissions": [
+        {
+          "cited_span_hashes": [
+            "70e32623ebd58ff4158d9574441e8ba510a70ff67f378c9d4e283e6b0c29a36f",
+            "8d4f5b3db90bc0ea85fe21e683578ffc1c2eb0c350e9df9d3e715b393b9f59ed"
+          ],
+          "decision_id": "spec-version-declared",
+          "decision_node_id": "b2f1abe2-94ff-089f-5fe9-02a95fba24e1",
+          "finding_class": "contradicts-prior-decision",
+          "reason": "no_matching_expected_finding",
+          "summary": "The diff releases the spec version (SPEC.md bumps 1.1.0-dev to 1.1.0 and SPEC_VERSION_LITERAL in src/cortex/__init__.py bumps 1.0.0 to 1.1.0) but does not update .cortex/SPEC_VERSION, which the confirmed decision requires to track the released SPEC.md version whenever the spec version changes."
+        }
+      ]
+    },
+    {
+      "budget": {
+        "estimated_tokens_used": 0,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 0,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 8000,
+        "token_budget": 8000
+      },
+      "context_hash": "771a2fb58b08e61846af1d19d0471b7d1dd6d16c459a0a15da9097b931741ddc",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [
+          "decision_pack_empty: no decisions were provided in the candidate pack, so no conflict evaluation against the diff was possible"
+        ],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 1
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 1
+        }
+      },
+      "expected_finding_outcomes": [],
+      "fixture_hash": "0f2e4b60b5b9e252fb9dc5c256c134caf803bcd443d3679ddf9c89126e725008",
+      "fixture_id": "standalone-boundary-respected-001",
+      "graph_snapshot_hash": "cbe4a44ca39a47e71cf120978aeade7393f5421a9d9454c6cc440491fd840618",
+      "input_hash": "427b83ba6164c7b34117e0602b8250dc4d068aaaa1ca6899051e0c568845b88b",
+      "matched_count": 0,
+      "missed_count": 0,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "418166e76b572e98da95ec0d3e028b0547a4733fbd7ed44be8b0375b54086def",
+      "replay_report_schema_version": 1,
+      "retrieval_config_version": "fixture-local-structural-v1",
+      "unexpected_count": 0,
+      "unexpected_emissions": []
+    },
+    {
+      "budget": {
+        "estimated_tokens_used": 0,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 0,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 8000,
+        "token_budget": 8000
+      },
+      "context_hash": "e522902d1340d41f2eb50c3055d15da8933c21070674e39a4d8ef654d82e6d92",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [
+          "empty_decision_pack: candidate pack carries zero decisions, so no contradicts/supersede/omission findings can be grounded in cited spans"
+        ],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [
+          {
+            "decision_id": "standalone-boundary-doctrine-0002",
+            "finding_id": "finding-quartet-import",
+            "omitted_at_stage": "suppressed_below_floor"
+          }
+        ],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 1
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 1
+        }
+      },
+      "expected_finding_outcomes": [
+        {
+          "cited_span_hashes": [
+            "c12d2e495956ba34f043d4493d05d8a4138c460a5abddb2fa98c100dc7219227"
+          ],
+          "decision_id": "standalone-boundary-doctrine-0002",
+          "finding_class": "contradicts-prior-decision",
+          "finding_id": "finding-quartet-import",
+          "matched": false,
+          "omitted_at_stage": "suppressed_below_floor"
+        }
+      ],
+      "fixture_hash": "2bfcabce0f8e8881fec9641d910d9bf5c5fb5bd7ccdf7c4b80dba4cd3a64afbf",
+      "fixture_id": "standalone-boundary-violation-synthetic-001",
+      "graph_snapshot_hash": "339160eeca8e5d396cc74fb20052ab066eb8b37babf9698b456ce06e2ccbb425",
+      "input_hash": "aade7a867fc4c588a53ea5ae830541222c0b6ab4bcf6fbd8cc666f1ceb582c41",
+      "matched_count": 0,
+      "missed_count": 1,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "69e6a046ffee026430bbfaa2a71e9be31544261b0d620a1b7d4751da1b360b91",
+      "replay_report_schema_version": 1,
+      "retrieval_config_version": "fixture-local-structural-v1",
+      "unexpected_count": 0,
+      "unexpected_emissions": []
+    },
+    {
+      "budget": {
+        "estimated_tokens_used": 0,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 0,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 8000,
+        "token_budget": 8000
+      },
+      "context_hash": "a6c5275ac5dc5ccfd6a72f2a429f327d62e1757336c3f6e15f3fa0de4b55d0c7",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [
+          "decision pack is empty; no confirmed or superseded decisions were supplied to judge the diff against"
+        ],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 1
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 1
+        }
+      },
+      "expected_finding_outcomes": [],
+      "fixture_hash": "a9e3e18028fa139b8e093d280a1361c7aea7d25f3b48f0e103b35ed57909b49f",
+      "fixture_id": "touchstone-managed-principles-001",
+      "graph_snapshot_hash": "f14a9ea403e6e4c7c9c8a2d382a928fb5bde7a35c41d7a0ca56209bc9ad021a3",
+      "input_hash": "dd2db5b93cd5b84c41709e6c73ea09424a33b0de1e8a7545e3881360ac70df5a",
+      "matched_count": 0,
+      "missed_count": 0,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "08f30006737f7f6e51f60a4028366638f6764d0f872e35071d94780e9a132233",
+      "replay_report_schema_version": 1,
+      "retrieval_config_version": "fixture-local-structural-v1",
+      "unexpected_count": 0,
+      "unexpected_emissions": []
+    }
+  ],
+  "unexpected_total": 1
+}
