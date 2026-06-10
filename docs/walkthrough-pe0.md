@@ -97,8 +97,31 @@ A real decision, verbatim, permalink-cited, from the live database.
   walkthrough's glue and dead-ends specced
 - touchstone#454 — branch-guard blocks its own recommended remedy
 
-## Not yet in this walkthrough
+## 7. Review — the thesis, demonstrated (added 2026-06-10, same day)
 
-The evaluator leg (`cortex review`: diff → bounded candidates → cited
-advisory finding) — modules merged, verb in flight (#515). It joins this
-document the day it runs for real.
+A diff adding `import touchstone` (forbidden by the confirmed
+compose-by-file-contract decision):
+
+```
+$ DATABASE_URL=… cortex review --diff contradiction.diff
+cortex review: 1 advisory finding(s) (state: findings_emitted; Stage 0 — blocking unrepresentable)
+
+finding 1/1: contradicts-prior-decision [■ confirmed_cited]
+  The diff adds src/cortex/hosted/siblings_bridge.py which does `import touchstone` …
+  directly reversing the confirmed compose-by-file-contract decision …
+  decision: 9d10e912-… (version 4044520f-…)
+  citation: https://github.com/autumngarage/cortex/blob/main/CLAUDE.md
+  suggested repair: Remove the `import touchstone` dependency. Replace the bridge with
+  file-contract integration … matching the pattern Sentinel uses for Touchstone detection.
+
+degraded reasons: Decision 71842fd2-… also conflicts, but its status is 'candidate',
+  so no contradicts-prior-decision finding was emitted for it.
+replay-key: model=anthropic/claude-cli prompt=review-evaluate/v1+… snapshot=8fca5eed…
+```
+
+Three invariants visible in one transcript: advisory-only (exit 0), the
+confirmed-status evidence gate (the candidate twin was found, declined,
+and disclosed), and the full replay key. Getting here surfaced one fix:
+the evaluate prompt starved the model of vocabulary (finding classes,
+confidence labels, the confirmed-only rule) — fixed in this commit; the
+boundary's refusal of the invented class is what caught it.
