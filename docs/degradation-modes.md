@@ -230,3 +230,8 @@ mode skip citation or visibility boundaries.
   schema-version mismatch in recorded material).
 - `context_assembly/citation_check/candidate_metrics/graph_snapshot/
   event_ordering` validation errors -> `invalid_input_rejected`.
+- `extractors.ExtractorError` (cortex#351-#353) classifies as
+  `invalid_input_rejected`: a source no repo-native extractor recognizes is
+  rejected before any extraction or write. Recognized-but-noisy material is
+  not a failure at all — it surfaces as `DroppedChatter` with a reason code
+  (the write-side `bounded_omission` behavior above).

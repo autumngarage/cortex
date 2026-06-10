@@ -1,12 +1,16 @@
-"""`cortex derive` — scaffold: walk local sources, emit candidate ledger events.
+"""`cortex derive` — walk local sources, emit candidate ledger events.
 
-Stage 0 issue #350. This command reconstructs the decision surface from
-sources a repo already has. The scaffold ships the full pipeline shape —
-source walk → `SourceDocument` snapshot → pluggable extractor → validated
-`LedgerEvent` (`EVENT_SCHEMA_VERSION`, `CANDIDATE_PROPOSED`) → local SQLite
-replay-export store — with a default extractor that emits zero candidates.
-Real extractors land with issues #351-#357 and plug in through the
-`CandidateExtractor` callable type; derive defines no event shape of its own.
+Stage 0 issues #350 (scaffold) + #351/#352/#353 (repo-native extractors).
+This command reconstructs the decision surface from sources a repo already
+has. The pipeline shape — source walk → `SourceDocument` snapshot →
+pluggable extractor → validated `LedgerEvent` (`EVENT_SCHEMA_VERSION`,
+`CANDIDATE_PROPOSED`) → local SQLite replay-export store — is the #350
+scaffold; the default extractor is now the deterministic repo-native
+dispatcher in `cortex.hosted.extractors` (CLAUDE.md/AGENTS.md rules, ADRs
+near-verbatim, CODEOWNERS ownership signals). Further extractors (#354-#357)
+plug in through the same `CandidateExtractor` callable type; derive defines
+no event shape of its own. `empty_extractor` remains available for callers
+that want the walk without extraction.
 
 Identity defaults (documented contract):
 
@@ -27,6 +31,7 @@ failed run leaves the store untouched and recoverable).
 from __future__ import annotations
 
 import sys
+from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -40,6 +45,7 @@ from cortex.hosted.derive_store import (
     DeriveStoreError,
     derive_store_path,
 )
+from cortex.hosted.extractors import ExtractorError, RepoNativeExtractor
 from cortex.hosted.ledger_events import (
     EVENT_SCHEMA_VERSION,
     LedgerEvent,
@@ -49,7 +55,20 @@ from cortex.hosted.ledger_events import (
 from cortex.hosted.provenance import ProvenanceValidationError, SourceDocument
 
 DERIVE_UUID_NAMESPACE = uuid5(NAMESPACE_URL, "https://github.com/autumngarage/cortex#derive")
-DEFAULT_SOURCE_RELATIVE_PATHS: tuple[str, ...] = ("CLAUDE.md", "AGENTS.md", "docs/adr")
+DEFAULT_SOURCE_RELATIVE_PATHS: tuple[str, ...] = (
+    "CLAUDE.md",
+    "AGENTS.md",
+    "docs/adr",
+    "docs/decisions",
+)
+# GitHub resolves at most one CODEOWNERS file, in this precedence order; the
+# default walk ingests only the first match so non-effective copies cannot
+# propose ownership decisions that are not in force.
+DEFAULT_CODEOWNERS_RELATIVE_PATHS: tuple[str, ...] = (
+    ".github/CODEOWNERS",
+    "CODEOWNERS",
+    "docs/CODEOWNERS",
+)
 DERIVE_DOCUMENT_TYPE = "repo-file"
 # Scaffold attribution: real per-author provenance arrives with the git-aware
 # extractors (#351-#357); until then the deriver itself is the recorded author.
@@ -106,7 +125,10 @@ def resolve_source_files(project_root: Path, explicit: Sequence[Path]) -> tuple[
     Explicit sources must exist — a missing path is an error, never a skip.
     Default sources are best-effort by design ("if present"). Directories
     expand to their ``*.md`` files recursively in sorted order so the walk is
-    deterministic; duplicates collapse keeping first occurrence.
+    deterministic; duplicates collapse keeping first occurrence. CODEOWNERS
+    defaults follow GitHub's single-file precedence
+    (``DEFAULT_CODEOWNERS_RELATIVE_PATHS``): only the first existing location
+    is ingested.
     """
 
     root = project_root.resolve()
@@ -130,6 +152,11 @@ def resolve_source_files(project_root: Path, explicit: Sequence[Path]) -> tuple[
             files.extend(sorted(p.resolve() for p in path.rglob("*.md") if p.is_file()))
         elif path.is_file():
             files.append(path.resolve())
+    for relative in DEFAULT_CODEOWNERS_RELATIVE_PATHS:
+        path = root / relative
+        if path.is_file():
+            files.append(path.resolve())
+            break
     return tuple(dict.fromkeys(files))
 
 
@@ -197,6 +224,8 @@ def _extract_candidates(
         extracted = tuple(extractor(document))
     except LedgerEventValidationError as exc:
         raise DeriveSourceError(f"{rel}: candidate event failed envelope validation: {exc}") from exc
+    except ExtractorError as exc:
+        raise DeriveSourceError(f"{rel}: {exc}") from exc
     for event in extracted:
         _require_candidate_event(event, rel=rel, tenant_id=tenant_id, source_id=source_id)
     return extracted
@@ -298,8 +327,9 @@ def _validated_uuid_option(value: str | None, *, option_name: str) -> str | None
     type=click.Path(path_type=Path),
     help=(
         "Source file or directory (repeatable; directories expand to *.md "
-        "recursively). Default when omitted: CLAUDE.md, AGENTS.md, and "
-        "docs/adr/ — each only if present."
+        "recursively). Default when omitted: CLAUDE.md, AGENTS.md, docs/adr/, "
+        "docs/decisions/, and the first CODEOWNERS found in GitHub precedence "
+        "order (.github/, repo root, docs/) — each only if present."
     ),
 )
 @click.option(
@@ -337,12 +367,15 @@ def derive_command(
 ) -> None:
     """Walk local sources and emit candidate decisions as ledger events.
 
-    Scaffold (issue #350): the pipeline reads each source into an immutable
-    snapshot, runs the configured extractor (default: none — zero
-    candidates), validates every event against the hosted ledger envelope,
-    and persists to the local replay-export store at
-    ``.cortex/.index/derive-events.sqlite``. Re-running over unchanged inputs
-    is a no-op; deleting the store and re-running reproduces it exactly.
+    The pipeline (issue #350) reads each source into an immutable snapshot,
+    runs the deterministic repo-native extractors (issues #351-#353:
+    CLAUDE.md/AGENTS.md rules, ADRs near-verbatim, CODEOWNERS ownership
+    signals — no model calls), validates every event against the hosted
+    ledger envelope, and persists to the local replay-export store at
+    ``.cortex/.index/derive-events.sqlite``. Source material that does not
+    become a candidate is reported as dropped chatter with reason codes.
+    Re-running over unchanged inputs is a no-op; deleting the store and
+    re-running reproduces it exactly.
     """
 
     root = Path(project_root).resolve()
@@ -364,13 +397,14 @@ def derive_command(
         defaults = ", ".join(DEFAULT_SOURCE_RELATIVE_PATHS)
         click.echo(f"derive: no default sources found (looked for: {defaults})")
 
+    extractor = RepoNativeExtractor()
     try:
         result = run_derive(
             project_root=root,
             source_files=source_files,
             tenant_id=tenant,
             source_id=source,
-            extractor=empty_extractor,
+            extractor=extractor,
         )
     except (DeriveSourceError, DeriveStoreError) as exc:
         for line in str(exc).splitlines():
@@ -382,4 +416,12 @@ def derive_command(
         f"{len(result.events)} candidate event(s) "
         f"({result.inserted} inserted, {result.ignored} duplicate)"
     )
+    # Dropped chatter is visible by contract (bounded_omission): every
+    # non-candidate block carries a reason code, never a silent skip.
+    if extractor.dropped:
+        reason_counts = Counter(record.chatter.reason_code for record in extractor.dropped)
+        summary = ", ".join(
+            f"{reason} x{count}" for reason, count in sorted(reason_counts.items())
+        )
+        click.echo(f"dropped: {len(extractor.dropped)} chatter record(s) ({summary})")
     click.echo(f"store: {result.db_path}")
