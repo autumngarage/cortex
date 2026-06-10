@@ -1,0 +1,425 @@
+{
+  "decisions": [
+    {
+      "decision_id": "d-27900557febb",
+      "decision_text": "Switched to the `pg` pool in `lib/db/pool.js` instead of `mysql2`.",
+      "scopes": [
+        {
+          "normalized_value": "lib/db/pool.js",
+          "scope_type": "path",
+          "value": "lib/db/pool.js"
+        }
+      ],
+      "source_timestamp": "2026-01-25 09:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 130,
+          "excerpt": "Switched to the `pg` pool in `lib/db/pool.js` instead of `mysql2`.",
+          "permalink": "commit:0ab805c78beedcdbf9a2a5c966a42dfbfcc485ad",
+          "source_document_hash": "15bcad40947b5ecf7c4e49ff8a921d41b16fcdf193a97119836ffc8f2ccd0114",
+          "span_hash": "2d09caff0a1924fac735fc28fec0cbe361d83a6d3753a23485243403aa65faa6",
+          "start_offset": 64
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-2f7edf12b2bf",
+      "decision_text": "Whenever `scripts/deploy.sh` changes, update `docs/legacy/runbook.md` in the same change; deploy steps must never drift from the runbook.",
+      "scopes": [
+        {
+          "normalized_value": "scripts/deploy.sh",
+          "scope_type": "path",
+          "value": "scripts/deploy.sh"
+        },
+        {
+          "normalized_value": "docs/legacy/runbook.md",
+          "scope_type": "path",
+          "value": "docs/legacy/runbook.md"
+        }
+      ],
+      "source_timestamp": "2026-01-12 09:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 355,
+          "excerpt": "Whenever `scripts/deploy.sh` changes, update `docs/legacy/runbook.md` in the same change; deploy steps must never drift from the runbook.",
+          "permalink": "CLAUDE.md",
+          "source_document_hash": "4712c30d301f71e97a4e72d1817459ce50e2ff366115b67803b3b8b6fd85f754",
+          "span_hash": "875c9f9f41b810b8278d190258e4b2d4ccd0f8640cd019e9ff99a01fbb97071e",
+          "start_offset": 218
+        }
+      ],
+      "status": "confirmed"
+    },
+    {
+      "decision_id": "d-33dccea0624c",
+      "decision_text": "0004 — Postgres as the ledger store\n\nThe ledger persists to Postgres; `lib/db/pool.js` must open connections\nthrough the `pg` pool only, and the `mysql2` driver must not be\nreintroduced.\n\nThe MySQL ledger (ADR 0002) lacked transactional DDL and is superseded by\nthis decision.",
+      "scopes": [
+        {
+          "normalized_value": "lib/db/pool.js",
+          "scope_type": "path",
+          "value": "lib/db/pool.js"
+        }
+      ],
+      "source_timestamp": "2026-01-13 09:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 37,
+          "excerpt": "0004 — Postgres as the ledger store",
+          "permalink": "docs/adr/0004-postgres-ledger-store.md",
+          "source_document_hash": "640d066f6ea2412ae86bb35f20fc179a70ea875f004a8be6cb1acb7bf57b231d",
+          "span_hash": "7c055172d88e9a8f9991af6cad877457622c2ce3f725cf6aa82e0e9473d47c7b",
+          "start_offset": 2
+        },
+        {
+          "end_offset": 321,
+          "excerpt": "The ledger persists to Postgres; `lib/db/pool.js` must open connections\nthrough the `pg` pool only, and the `mysql2` driver must not be\nreintroduced.",
+          "permalink": "docs/adr/0004-postgres-ledger-store.md",
+          "source_document_hash": "640d066f6ea2412ae86bb35f20fc179a70ea875f004a8be6cb1acb7bf57b231d",
+          "span_hash": "bdfb3eb26a81e41c0d19327080abdd71accd6ab7e65473ba4feb86ca72fe30ab",
+          "start_offset": 172
+        },
+        {
+          "end_offset": 157,
+          "excerpt": "The MySQL ledger (ADR 0002) lacked transactional DDL and is superseded by\nthis decision.",
+          "permalink": "docs/adr/0004-postgres-ledger-store.md",
+          "source_document_hash": "640d066f6ea2412ae86bb35f20fc179a70ea875f004a8be6cb1acb7bf57b231d",
+          "span_hash": "67eecba1d2fc4bbf2f0ca7dfab69966cc24d826eeb0d3963040aad61220b17ac",
+          "start_offset": 69
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-3f8796a1a384",
+      "decision_text": "@simlab/ops own docs/legacy/runbook.md",
+      "scopes": [
+        {
+          "normalized_value": "docs/legacy/runbook.md",
+          "scope_type": "path",
+          "value": "docs/legacy/runbook.md"
+        },
+        {
+          "normalized_value": "simlab/ops",
+          "scope_type": "owner",
+          "value": "@simlab/ops"
+        }
+      ],
+      "source_timestamp": "2026-01-12 09:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 98,
+          "excerpt": "docs/legacy/runbook.md @simlab/ops",
+          "permalink": "CODEOWNERS",
+          "source_document_hash": "adff453bb6a563b7546ffb4f20a93714088b5497d963f839806b716e57c69a31",
+          "span_hash": "d3d6872017b8dfd4f4b99c62e3c3dfebff2a9905d07d59183527fb91bb69b5e8",
+          "start_offset": 64
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-4c9d9853aab8",
+      "decision_text": "refactor: promise-based scheduler (removes callback continuations)",
+      "scopes": [],
+      "source_timestamp": "2026-01-20 10:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 66,
+          "excerpt": "refactor: promise-based scheduler (removes callback continuations)",
+          "permalink": "commit:7f26f81bae16f90dfa041ffd4064cd5488c8a51c",
+          "source_document_hash": "e6d8a12639cfd672f8e17cd1e0774cba3fd4fb33c5caf3f33e5fe0fb7f608b1e",
+          "span_hash": "92beda36daf80447e7b09ddbbe9aa47eafc60891c0e6821b7c100cfdb5024748",
+          "start_offset": 0
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-51795ff9d5c1",
+      "decision_text": "0001 — Callback-style continuations for job scheduling\n\nJob scheduling in `lib/jobs/scheduler.js` passes continuation callbacks;\neach job invokes `done(err)` when it completes.\n\nThe original scheduler predates promise support in our runtime.",
+      "scopes": [
+        {
+          "normalized_value": "lib/jobs/scheduler.js",
+          "scope_type": "path",
+          "value": "lib/jobs/scheduler.js"
+        }
+      ],
+      "source_timestamp": "2026-01-13 09:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 56,
+          "excerpt": "0001 — Callback-style continuations for job scheduling",
+          "permalink": "docs/adr/0001-callback-continuations.md",
+          "source_document_hash": "0ebb3c4ba6c4827b259c1bfe84ea050d605486d79676931879fa4afd8de205ce",
+          "span_hash": "57da6f606711ebfaf390b1885a0fc7dee33852d506a6897c77cd299bb62c19fe",
+          "start_offset": 2
+        },
+        {
+          "end_offset": 300,
+          "excerpt": "Job scheduling in `lib/jobs/scheduler.js` passes continuation callbacks;\neach job invokes `done(err)` when it completes.",
+          "permalink": "docs/adr/0001-callback-continuations.md",
+          "source_document_hash": "0ebb3c4ba6c4827b259c1bfe84ea050d605486d79676931879fa4afd8de205ce",
+          "span_hash": "7e8ae967c07b597b0b045db4fdae05d0cc736978664f3b2fee4a0b247c46236c",
+          "start_offset": 180
+        },
+        {
+          "end_offset": 165,
+          "excerpt": "The original scheduler predates promise support in our runtime.",
+          "permalink": "docs/adr/0001-callback-continuations.md",
+          "source_document_hash": "0ebb3c4ba6c4827b259c1bfe84ea050d605486d79676931879fa4afd8de205ce",
+          "span_hash": "c181affd201fa18ac5d5a5fbfabb9c91cbe80af2ca40dc9436cb52e4baed7fde",
+          "start_offset": 102
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-703589080184",
+      "decision_text": "feat: migrate ledger store to postgres (replaces mysql driver)",
+      "scopes": [],
+      "source_timestamp": "2026-01-25 09:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 62,
+          "excerpt": "feat: migrate ledger store to postgres (replaces mysql driver)",
+          "permalink": "commit:0ab805c78beedcdbf9a2a5c966a42dfbfcc485ad",
+          "source_document_hash": "15bcad40947b5ecf7c4e49ff8a921d41b16fcdf193a97119836ffc8f2ccd0114",
+          "span_hash": "0438a68391a16925a6bd8176cbf43e8296d3e2fecf005088c1941bb4822e2768",
+          "start_offset": 0
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-932c298aa41f",
+      "decision_text": "@simlab/platform own lib/jobs/",
+      "scopes": [
+        {
+          "normalized_value": "lib/jobs",
+          "scope_type": "path",
+          "value": "lib/jobs/"
+        },
+        {
+          "normalized_value": "simlab/platform",
+          "scope_type": "owner",
+          "value": "@simlab/platform"
+        }
+      ],
+      "source_timestamp": "2026-01-12 09:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 63,
+          "excerpt": "lib/jobs/ @simlab/platform",
+          "permalink": "CODEOWNERS",
+          "source_document_hash": "adff453bb6a563b7546ffb4f20a93714088b5497d963f839806b716e57c69a31",
+          "span_hash": "9248aaf30c206e7fa1daf552f671801ed63c022e1518a411fe69885d38db0245",
+          "start_offset": 37
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-b21b7848eee6",
+      "decision_text": "0002 — MySQL as the ledger store\n\nThe ledger persists to MySQL through the shared pool in `lib/db/pool.js`.\n\nMySQL was the only managed database our first host offered.",
+      "scopes": [
+        {
+          "normalized_value": "lib/db/pool.js",
+          "scope_type": "path",
+          "value": "lib/db/pool.js"
+        }
+      ],
+      "source_timestamp": "2026-01-13 09:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 34,
+          "excerpt": "0002 — MySQL as the ledger store",
+          "permalink": "docs/adr/0002-mysql-storage.md",
+          "source_document_hash": "69cbe8f4669456dc7fe95d1d58bdbaa74cdbecf40f151f05ee7bab7a040dc258",
+          "span_hash": "6db92ddd2726c33b4bcb579a9de2308f30bde19f6728820d43b1cfe5fc87a265",
+          "start_offset": 2
+        },
+        {
+          "end_offset": 227,
+          "excerpt": "The ledger persists to MySQL through the shared pool in `lib/db/pool.js`.",
+          "permalink": "docs/adr/0002-mysql-storage.md",
+          "source_document_hash": "69cbe8f4669456dc7fe95d1d58bdbaa74cdbecf40f151f05ee7bab7a040dc258",
+          "span_hash": "9a74dead20dfc51ab630f16fe3642af34e9f2c696c7c4160b200245616f672df",
+          "start_offset": 154
+        },
+        {
+          "end_offset": 139,
+          "excerpt": "MySQL was the only managed database our first host offered.",
+          "permalink": "docs/adr/0002-mysql-storage.md",
+          "source_document_hash": "69cbe8f4669456dc7fe95d1d58bdbaa74cdbecf40f151f05ee7bab7a040dc258",
+          "span_hash": "ff6eacc91630ad624946aa0aa06a8b215fba34db582012553af633c1779da4d2",
+          "start_offset": 80
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-d6529ed6d684",
+      "decision_text": "The scheduler in `lib/jobs/scheduler.js` no longer accepts callback continuations; jobs must return promises.",
+      "scopes": [
+        {
+          "normalized_value": "lib/jobs/scheduler.js",
+          "scope_type": "path",
+          "value": "lib/jobs/scheduler.js"
+        }
+      ],
+      "source_timestamp": "2026-01-20 10:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 177,
+          "excerpt": "The scheduler in `lib/jobs/scheduler.js` no longer accepts callback continuations; jobs must return promises.",
+          "permalink": "commit:7f26f81bae16f90dfa041ffd4064cd5488c8a51c",
+          "source_document_hash": "e6d8a12639cfd672f8e17cd1e0774cba3fd4fb33c5caf3f33e5fe0fb7f608b1e",
+          "span_hash": "32fc2624d2e32cce949ab69a020a6288bbaa695e9f280a608d225ae60d94e0e3",
+          "start_offset": 68
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-d72c10505d2f",
+      "decision_text": "@simlab/storage own lib/db/",
+      "scopes": [
+        {
+          "normalized_value": "lib/db",
+          "scope_type": "path",
+          "value": "lib/db/"
+        },
+        {
+          "normalized_value": "simlab/storage",
+          "scope_type": "owner",
+          "value": "@simlab/storage"
+        }
+      ],
+      "source_timestamp": "2026-01-12 09:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 36,
+          "excerpt": "lib/db/ @simlab/storage",
+          "permalink": "CODEOWNERS",
+          "source_document_hash": "adff453bb6a563b7546ffb4f20a93714088b5497d963f839806b716e57c69a31",
+          "span_hash": "3de396448c4b84cda9965b28fff3b7b73a05c101935ba3abf1f0a12a207506bd",
+          "start_offset": 13
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-dd4b1773df1a",
+      "decision_text": "0003 — Promise-based job scheduling\n\nAll job scheduling in `lib/jobs/scheduler.js` must use promises with\nasync/await; callback-style continuation passing must not be reintroduced.\n\nCallback-style continuations in the scheduler produced unrecoverable nested\nerror handling; ADR 0001 is superseded by this decision.",
+      "scopes": [
+        {
+          "normalized_value": "lib/jobs/scheduler.js",
+          "scope_type": "path",
+          "value": "lib/jobs/scheduler.js"
+        }
+      ],
+      "source_timestamp": "2026-01-13 09:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 37,
+          "excerpt": "0003 — Promise-based job scheduling",
+          "permalink": "docs/adr/0003-promise-based-scheduling.md",
+          "source_document_hash": "e16cf1027949646e20fb6a47a88a3bf43b77bc5b434cc700c569965754d7ff0a",
+          "span_hash": "d4ccc77f1561da5b4190cfc741aed58e1f6d023dcbd349b4f8a679a43cd1900e",
+          "start_offset": 2
+        },
+        {
+          "end_offset": 359,
+          "excerpt": "All job scheduling in `lib/jobs/scheduler.js` must use promises with\nasync/await; callback-style continuation passing must not be reintroduced.",
+          "permalink": "docs/adr/0003-promise-based-scheduling.md",
+          "source_document_hash": "e16cf1027949646e20fb6a47a88a3bf43b77bc5b434cc700c569965754d7ff0a",
+          "span_hash": "1c005866abf14f61bcf357c32cbe61bd308d420fb0425a543dc7afdecbec421a",
+          "start_offset": 216
+        },
+        {
+          "end_offset": 201,
+          "excerpt": "Callback-style continuations in the scheduler produced unrecoverable nested\nerror handling; ADR 0001 is superseded by this decision.",
+          "permalink": "docs/adr/0003-promise-based-scheduling.md",
+          "source_document_hash": "e16cf1027949646e20fb6a47a88a3bf43b77bc5b434cc700c569965754d7ff0a",
+          "span_hash": "406b6d15dc5235c062c5c4b634a2a756081ff643840a8ae63d27715028982746",
+          "start_offset": 69
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-e0cac3554232",
+      "decision_text": "fix: scheduler regression after promise migration",
+      "scopes": [],
+      "source_timestamp": "2026-01-27 09:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 49,
+          "excerpt": "fix: scheduler regression after promise migration",
+          "permalink": "commit:4c5c0b55b39762fb0c5fd0cb9134c81f7502a82a",
+          "source_document_hash": "ba436c8713816a9ab119403362857056b60f308719817cb7fc10c9703b303202",
+          "span_hash": "7ffff213d18371d0939add46eff5376585150c7e554d63418adf6ebbf1ec7f6c",
+          "start_offset": 0
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-ffef5be8156f",
+      "decision_text": "Database access goes through `lib/db/pool.js`; direct driver connections are forbidden.",
+      "scopes": [
+        {
+          "normalized_value": "lib/db/pool.js",
+          "scope_type": "path",
+          "value": "lib/db/pool.js"
+        }
+      ],
+      "source_timestamp": "2026-01-12 09:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 215,
+          "excerpt": "Database access goes through `lib/db/pool.js`; direct driver connections are forbidden.",
+          "permalink": "CLAUDE.md",
+          "source_document_hash": "4712c30d301f71e97a4e72d1817459ce50e2ff366115b67803b3b8b6fd85f754",
+          "span_hash": "e319be9f530fc4f1ff3f7771a9ee2d766d2b6ceb55ec0e937aacf132c0b4a04c",
+          "start_offset": 128
+        }
+      ],
+      "status": "candidate"
+    }
+  ],
+  "diff": {
+    "base_sha": "1313131",
+    "changed_paths": [],
+    "config_keys": [],
+    "head_sha": "2424242",
+    "issue_refs": [],
+    "patch": "diff --git a/scripts/deploy.sh b/scripts/deploy.sh\nindex 1313131..2424242 100644\n--- a/scripts/deploy.sh\n+++ b/scripts/deploy.sh\n@@ -1,3 +1,5 @@\n #!/bin/sh\n set -eu\n+echo running database migrations\n+node lib/db/migrate.js\n echo deploying ledgerd\n",
+    "repo_name": "legacy-migration",
+    "repo_owner": "simlab",
+    "symbols": []
+  },
+  "expected_findings": [
+    {
+      "cited_span_hashes": [
+        "875c9f9f41b810b8278d190258e4b2d4ccd0f8640cd019e9ff99a01fbb97071e"
+      ],
+      "decision_id": "d-2f7edf12b2bf",
+      "finding_class": "cites-missing-path",
+      "finding_id": "f-stale-runbook",
+      "suggested_repair": "Restore docs/legacy/runbook.md (or supersede the rule to point at the ops wiki) before changing deploy steps.",
+      "summary": "scripts/deploy.sh changed and the confirmed rule requires a matching docs/legacy/runbook.md update, but that runbook no longer exists in the tree — the decision anchors to a missing path."
+    }
+  ],
+  "fixture_id": "simlab-legacy-migration-runbook-anchor-001",
+  "fixture_schema_version": 1,
+  "labels": [],
+  "metadata": {
+    "archetype_id": "legacy-migration",
+    "notes": "Promoted from the simlab scenario pack (tests/simlab/scenarios); decisions and spans come from the deterministic materialize/derive pipeline over the synthetic archetype.",
+    "scenario_id": "legacy-migration-runbook-anchor",
+    "scenario_title": "A stale anchor: the decision's runbook no longer exists",
+    "source": "simlab"
+  }
+}
