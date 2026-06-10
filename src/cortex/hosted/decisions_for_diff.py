@@ -334,7 +334,18 @@ def build_decisions_for_diff_candidate_pack(
 
 
 def decisions_for_diff_retrieval_sql(schema: str = "cortex_hosted") -> str:
-    """Return hybrid retrieval SQL for `decisions_for_diff` evaluator input."""
+    """Return hybrid retrieval SQL for `decisions_for_diff` evaluator input.
+
+    Ranking knob (cortex#367): the fusion weights interpolate from
+    ``SOURCE_WEIGHTS`` — structural scope (100) dominates the pure-text legs
+    (full_text 70, trigram 55) at equal source rank, tuning the candidate
+    pack for contradiction detection rather than document search: the
+    evaluator needs the decision that governs the changed surface, not the
+    decision whose prose best resembles the diff. Weight changes require the
+    protected-slice eval gate (cortex#338) against the committed baselines
+    in the same PR; tests/test_hosted_ranking_pins.py pins the values and
+    the Python/SQL lockstep.
+    """
 
     _validate_sql_identifier(schema)
     scope_weight = SOURCE_WEIGHTS[CandidateSource.SCOPE]
