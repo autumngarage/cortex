@@ -234,6 +234,42 @@ the Stage 0 gate outcome; #442/#402 and #434 gate Stage 2 onboarding;
 month-six kill/pivot runs calendar-gated from Stage 2 partner onboarding,
 consuming #443 + #337 + #395.
 
+## Path to first customer (added 2026-06-10)
+
+Five overlapping phases from PE-0 to the first design-partner
+conversation. P1-P3 run in parallel; P4 follows the P1 gate per the
+do-not-host rule; P5 requires P4 plus the dogfood bar.
+
+- **P1 — Close the Stage 0 gate.** The Wave 8/9 tail (#322, #326, #338,
+  #367, #368, #373, #374, #376, #339), the #450 batch replay over the
+  corpus, LLM-judge pre-grading + founder spot-check against the >=70%
+  bar (#378), and the #337 report verdict. Founder effort: ~20 minutes of
+  grading, one proceed/grind/narrow/fallback call.
+- **P2 — Dogfood deep on our own projects.** vesper, vanguard, and
+  outrider each get the full live loop (triage → push to their own
+  compass tenants → confirm → ask → review on real diffs); cortex runs
+  `cortex review` on its own PRs pre-merge. Every friction point files an
+  issue same-day (the PE-0 pattern). Cross-repo evidence feeds #339's
+  sibling-corpus completion.
+- **P3 — Simlab: the simulated testing environment.** Deterministic fake
+  projects (#520), scripted PR scenarios with known expected findings —
+  the end-to-end regression harness and the demo rails (#521), and a
+  standing isolated demo tenant with a 5-minute customer script (#522).
+  Simlab is both the safety net for fast iteration and the demo
+  environment for P5 conversations.
+- **P4 — Hosted core up and running (Stage 1, tracker #485).** API shell
+  + webhook receiver (#470), worker (#471), server-side model transport
+  (#517), env/secret docs (#469/#475), backups + observability drills
+  (#473/#474). Exit: the same loop served over HTTP from compass, one
+  code path with local.
+- **P5 — First customer conversation.** Prerequisites: P1 verdict =
+  proceed; #452/#453 dogfood-on-cortex-PRs bar met; the App registered
+  (docs/setup/github-app.md — owner task) with Marketplace verification
+  filed (#384); the outreach pack (#402 expectations one-pager, #442
+  legal surfaces, #396 install playbook) and the #437 warm-referral map.
+  The conversation target is a design partner per Journey 4 in
+  docs/product/customer-journeys.md — pilot/LOI, not self-serve.
+
 ## Success Criteria
 
 - The active session-start state points to this plan as the master current
