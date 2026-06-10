@@ -1652,6 +1652,28 @@ def extract_repo_native(document: SourceDocument) -> ExtractionOutcome:
     return _EXTRACTORS_BY_SOURCE_TYPE[classify_source(document)](document)
 
 
+def ensure_unstamped_deterministic_event(event: LedgerEvent) -> LedgerEvent:
+    """Refuse a model stamp on a deterministic extractor's event (cortex#326).
+
+    Repo-native extractors make no model calls, so their
+    ``CANDIDATE_PROPOSED`` events must carry no ``(model_id,
+    prompt_version)`` stamp — a stamp appearing here would forge model
+    provenance for material no model produced, poisoning replay and the
+    cortex#328 banking discipline. Returns the event unchanged when the
+    invariant holds; raises ``ExtractorError`` visibly otherwise.
+    """
+
+    if event.model_id is not None or event.prompt_version is not None:
+        raise ExtractorError(
+            f"deterministic extractor event {event.source_event_external_id!r} "
+            f"carries a model stamp (model_id={event.model_id!r}, "
+            f"prompt_version={event.prompt_version!r}); repo-native extractors "
+            "make no model calls and must not stamp model provenance "
+            "(cortex#326)"
+        )
+    return event
+
+
 def candidate_events(
     document: SourceDocument, outcome: ExtractionOutcome
 ) -> tuple[LedgerEvent, ...]:
@@ -1664,6 +1686,10 @@ def candidate_events(
     same-key/different-hash collision error therefore only fires on real
     divergence, and re-running over unchanged sources is always an ignored
     duplicate, never a collision.
+
+    Provenance invariant (cortex#326): every event passes
+    ``ensure_unstamped_deterministic_event`` — deterministic extraction
+    never carries a ``(model_id, prompt_version)`` stamp.
     """
 
     events: list[LedgerEvent] = []
@@ -1697,26 +1723,28 @@ def candidate_events(
             f"#{candidate.spans[0].span_hash}"
         )
         events.append(
-            LedgerEvent(
-                tenant_id=document.tenant_id,
-                source_id=document.source_id,
-                event_type=LedgerEventType.CANDIDATE_PROPOSED,
-                actor=ActorRef(actor_type="derive", actor_id=outcome.extractor_id),
-                occurred_at=document.source_timestamp,
-                idempotency_key=derive_idempotency_key(
+            ensure_unstamped_deterministic_event(
+                LedgerEvent(
+                    tenant_id=document.tenant_id,
                     source_id=document.source_id,
                     event_type=LedgerEventType.CANDIDATE_PROPOSED,
+                    actor=ActorRef(actor_type="derive", actor_id=outcome.extractor_id),
+                    occurred_at=document.source_timestamp,
+                    idempotency_key=derive_idempotency_key(
+                        source_id=document.source_id,
+                        event_type=LedgerEventType.CANDIDATE_PROPOSED,
+                        source_event_external_id=external_ref,
+                        payload={
+                            "candidate": payload,
+                            "extractor": outcome.extractor_id,
+                            "metadata": metadata,
+                        },
+                    ),
                     source_event_external_id=external_ref,
-                    payload={
-                        "candidate": payload,
-                        "extractor": outcome.extractor_id,
-                        "metadata": metadata,
-                    },
-                ),
-                source_event_external_id=external_ref,
-                source_span_hashes=candidate.span_hashes,
-                payload=payload,
-                metadata=metadata,
+                    source_span_hashes=candidate.span_hashes,
+                    payload=payload,
+                    metadata=metadata,
+                )
             )
         )
     return tuple(events)

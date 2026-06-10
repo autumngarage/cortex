@@ -51,6 +51,16 @@ The prompt-side contract for the Stage 0 classes is documented by
 :func:`evaluate_prompt_guidance`: the registered evaluate prompt template
 (``model_registry``) must ask for exactly the registered classes, and the
 stamped ``prompt_version`` identifies that contract for replay.
+
+Ledger-draft stamping (cortex#322 + #326): every ``finding.emitted`` draft is
+a model-backed call site, so it carries the full replay stamp from the
+``EvaluateResult`` — ``model_id`` + ``prompt_version`` as first-class event
+fields, ``input_hash`` inside the replay payload, and the cortex#328
+``bank_key`` (sha256 over task + input_hash + model_id + prompt_version) so
+the cache discipline is queryable from the ledger. Each draft also carries a
+``decision_version_id`` resolved from the candidate pack by
+``decision_node_id``; the draft builder and ``EvaluationOutcome`` both refuse
+drift between the pack, the emitted finding, and the draft payload visibly.
 """
 
 from __future__ import annotations
@@ -72,6 +82,7 @@ from cortex.hosted.advisory_ladder import (
     AdvisoryLadderError,
     EmissionBehavior,
 )
+from cortex.hosted.banking import BankKey
 from cortex.hosted.confidence import ConfidenceTier
 from cortex.hosted.context_assembly import (
     OVER_BUDGET_OMISSION_KEY,
@@ -354,6 +365,23 @@ class EvaluationReplayKey:
         if self.token_budget < 1:
             raise EvaluatorValidationError("token_budget must be >= 1")
 
+    @property
+    def bank_key(self) -> str:
+        """The cortex#328 cache identity this evaluation banks under.
+
+        Derived, never stored separately: ``hash(inputs) + model_id +
+        prompt_version`` for the ``evaluate`` task. Stamped onto every
+        ``finding.emitted`` ledger draft (cortex#326) so reuse/re-derivation
+        decisions stay attributable from the ledger alone.
+        """
+
+        return BankKey(
+            task="evaluate",
+            input_hash=self.input_hash,
+            model_id=self.model_id,
+            prompt_version=self.prompt_version,
+        ).bank_key
+
     def as_payload(self) -> dict[str, Any]:
         return {
             "candidate_set_hash": self.candidate_set_hash,
@@ -459,6 +487,13 @@ class EvaluationOutcome:
     visible. ``state`` is derived — an outcome with no emitted findings is
     the explicit fail-closed no-findings result (cortex#377), with the drop
     accounting in ``rejection_counts`` and ``suppressed_below_floor``.
+
+    Stamping invariants (cortex#322 + #326): each draft must carry the
+    evaluation's graph snapshot hash and (model_id, prompt_version) stamp as
+    event fields, its emitted finding's pack-resolved ``decision_version_id``
+    in the payload, and the replay key's ``bank_key`` in the payload. Drift
+    between the pack, the emitted finding, and the draft is refused here —
+    visibly, never repaired.
     """
 
     replay: EvaluationReplayKey
@@ -500,6 +535,22 @@ class EvaluationOutcome:
                 raise EvaluatorValidationError(
                     "ledger drafts must carry the evaluation's "
                     "(model_id, prompt_version) stamp"
+                )
+            draft_decision_version = draft.payload.get("decision_version_id")
+            if draft_decision_version != emitted.decision_version_id:
+                raise EvaluatorValidationError(
+                    "a ledger draft must carry its emitted finding's "
+                    "decision_version_id (cortex#322); draft payload carries "
+                    f"{draft_decision_version!r}, the emitted finding cites "
+                    f"{emitted.decision_version_id}"
+                )
+            draft_bank_key = draft.payload.get("bank_key")
+            if draft_bank_key != self.replay.bank_key:
+                raise EvaluatorValidationError(
+                    "a ledger draft must carry the evaluation's bank key "
+                    "(hash(inputs) + model_id + prompt_version, cortex#326); "
+                    f"draft payload carries {draft_bank_key!r}, expected "
+                    f"{self.replay.bank_key}"
                 )
         _validate_omission_counts("total_omitted", self.total_omitted)
         if OVER_BUDGET_OMISSION_KEY not in self.total_omitted:
@@ -728,6 +779,7 @@ def evaluate_diff(
         drafts.append(
             _finding_emitted_event(
                 emitted=emitted_finding,
+                cited=cited,
                 ordinal=ordinal,
                 replay=replay,
                 tenant_id=tenant_id,
@@ -780,6 +832,7 @@ def _rejection(
 def _finding_emitted_event(
     *,
     emitted: EmittedFinding,
+    cited: DecisionsForDiffCandidate,
     ordinal: int,
     replay: EvaluationReplayKey,
     tenant_id: str,
@@ -794,9 +847,29 @@ def _finding_emitted_event(
     it. ``ordinal`` is the finding's position in the model result, so the
     idempotency key is stable across replays regardless of how many sibling
     findings were rejected.
+
+    ``cited`` is the pack candidate the finding's ``decision_node_id``
+    resolved to; the builder refuses drift between the pack and the emitted
+    finding (cortex#322) before any draft exists, so a draft can never carry
+    a ``decision_version_id`` the pack does not attribute to that decision.
     """
 
+    if cited.decision_node_id != emitted.finding.decision_node_id:
+        raise EvaluatorValidationError(
+            "draft builder refuses citation drift (cortex#322): the emitted "
+            f"finding cites decision {emitted.finding.decision_node_id}, but "
+            f"the resolved pack candidate is {cited.decision_node_id}"
+        )
+    if cited.decision_version_id != emitted.decision_version_id:
+        raise EvaluatorValidationError(
+            "draft builder refuses decision-version drift between the pack "
+            f"and the emitted finding (cortex#322): pack candidate "
+            f"{cited.decision_node_id} carries decision_version_id "
+            f"{cited.decision_version_id}, the emitted finding carries "
+            f"{emitted.decision_version_id}"
+        )
     payload: dict[str, Any] = {
+        "bank_key": replay.bank_key,
         "behavior": emitted.behavior.value,
         "blocking_enabled": BLOCKING_ENABLED,
         "confidence_tier": emitted.tier.value,

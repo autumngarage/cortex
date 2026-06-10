@@ -258,6 +258,13 @@ BEGIN
 END;
 $$;
 
+-- TODO(cortex#322): per-event-type hardening is deferred as schema churn —
+-- e.g. CHECK (event_type <> 'finding.emitted' OR graph_snapshot_hash IS NOT
+-- NULL) and matching model-stamp / decision_version_id payload requirements,
+-- so a writer that bypasses the LedgerEvent dataclass cannot insert an
+-- unstamped finding. Python-side enforcement lives in
+-- cortex.hosted.ledger_events (__post_init__) and cortex.hosted.evaluator
+-- (draft builder + EvaluationOutcome).
 CREATE TABLE IF NOT EXISTS {schema}.ledger_events (
     event_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id uuid NOT NULL REFERENCES {schema}.tenants (tenant_id),
