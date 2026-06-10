@@ -1,4 +1,4 @@
-"""Assemble the committed Stage 0 eval corpus from real cortex history (cortex#339).
+"""Assemble the committed Stage 0 eval corpus from real history (cortex#339).
 
 Run from the repository root (requires ``git`` history and the ``gh`` CLI):
 
@@ -11,6 +11,19 @@ base SHA, with offsets computed against the pinned content. Rebuilding with
 the same inputs is byte-identical, so re-running this script is the
 reconciliation check for the committed corpus.
 
+Three source classes feed the corpus:
+
+- **cortex history** — merged PRs and commit ranges from this repository.
+- **sibling-repo history** — merged PRs and commit ranges from
+  ``henrymodisett/vesper``, ``outriderintel/vanguard``, and
+  ``outriderintel/outrider``. Rebuilding these requires local checkouts of
+  the siblings (``$CORTEX_SIBLINGS_ROOT``, default ``~/repos``) for pinned
+  document content, plus ``gh`` access to the repos for the PR-backed diffs.
+- **simlab promotions** — deterministic scenario triples from
+  ``tests/simlab/scenarios`` converted into corpus fixtures through the
+  shipped materialize → derive → ``build_scenario_fixture`` pipeline
+  (``metadata.source = "simlab"``). Same spec twice yields identical bytes.
+
 All fixtures are written ungraded (``labels`` empty); grading happens through
 the cortex#333 hand-labeling workflow, never by treating model output as
 ground truth.
@@ -18,10 +31,15 @@ ground truth.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import os
+import sys
+import tempfile
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from cortex.hosted.corpus_builder import (
+    SIMLAB_SOURCE,
+    CommandRunner,
     build_document_span,
     build_fixture_from_commit_range,
     build_fixture_from_pr,
@@ -64,25 +82,37 @@ CLAUDE_MD_PATH = "CLAUDE.md"
 SYNTHETIC_HEAD_SHA = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
 
 
-def _pinned_span(pin_sha: str, path: str, excerpt: str) -> tuple[FixtureSourceSpan, str]:
+def _pinned_span_for(
+    repo: str,
+    pin_sha: str,
+    path: str,
+    excerpt: str,
+    *,
+    runner: CommandRunner = run_command,
+) -> tuple[FixtureSourceSpan, str]:
     """Freeze an excerpt of a repo document at a pinned commit.
 
     Returns the span plus the document's last-change timestamp at that pin,
-    used as the decision's ``source_timestamp``.
+    used as the decision's ``source_timestamp``. ``runner`` lets sibling-repo
+    builders route ``git`` invocations into their own checkouts.
     """
 
-    content = run_command(["git", "show", f"{pin_sha}:{path}"])
+    content = runner(["git", "show", f"{pin_sha}:{path}"])
     span = build_document_span(
         document_content=content,
         excerpt=excerpt,
-        permalink=f"https://github.com/{REPO}/blob/{pin_sha}/{path}",
+        permalink=f"https://github.com/{repo}/blob/{pin_sha}/{path}",
     )
-    timestamp = run_command(
-        ["git", "log", "-1", "--format=%cI", pin_sha, "--", path]
-    ).strip()
+    timestamp = runner(["git", "log", "-1", "--format=%cI", pin_sha, "--", path]).strip()
     if not timestamp:
         raise RuntimeError(f"no last-change timestamp for {path} at {pin_sha}")
     return span, timestamp
+
+
+def _pinned_span(pin_sha: str, path: str, excerpt: str) -> tuple[FixtureSourceSpan, str]:
+    """Freeze an excerpt of a cortex document at a pinned commit."""
+
+    return _pinned_span_for(REPO, pin_sha, path, excerpt)
 
 
 def _standalone_boundary_decision(pin_sha: str) -> FixtureDecision:
@@ -416,6 +446,401 @@ def build_standalone_boundary_synthetic() -> EvalFixture:
     )
 
 
+# ---------------------------------------------------------------------------
+# Sibling-repo fixtures (cortex#339: items drawn from more than one repo)
+# ---------------------------------------------------------------------------
+
+VESPER_REPO = "henrymodisett/vesper"
+VANGUARD_REPO = "outriderintel/vanguard"
+OUTRIDER_REPO = "outriderintel/outrider"
+
+SIBLINGS_ROOT = Path(os.environ.get("CORTEX_SIBLINGS_ROOT", str(Path.home() / "repos")))
+
+# Sibling history pins (full SHAs; immutable once merged).
+VESPER_PR308_BASE = "087a9d2c9a1517e242c6a7fdc76db0e35c193f9b"
+VESPER_PR385_BASE = "3937e793918c08bf15c42dc790f74b14834aaf59"
+VANGUARD_PR559_BASE = "85133fabf82f218627dbdfde098a52bacff623ee"
+OUTRIDER_PR541_BASE = "dcd6c2c98ad3554dd61a086eb65b30f19720298d"
+OUTRIDER_PR541_SQUASH = "72c747d3188b08093885faafc456c5c2d68c1d32"
+
+VESPER_CLAUDE_MD = "CLAUDE.md"
+OUTRIDER_CLAUDE_MD = "CLAUDE.md"
+OUTRIDER_CONTRACT_PATH = "docs/CONTRACT.md"
+VANGUARD_DOCTRINE_0002_PATH = ".cortex/doctrine/0002-portfolio-decision-boundary.md"
+
+_VESPER_DESIGN_SYSTEM_INTRO = (
+    "All UI must use the existing design system in `Sources/Design/DesignSystem.swift`. "
+    "Never hardcode:"
+)
+_VESPER_ICONS_RULE = (
+    "- **Icons**: Use `LucideImage(.iconName, size: ...)` and `LucideLabel(...)` from "
+    "`Sources/Design/LucideIcon.swift` — never `Image(systemName:)` or "
+    "`Label(_, systemImage:)`. Sizes come from "
+    "`Design.Typography.iconBaseSize/iconSmallSize/iconXSmallSize/iconMicroSize`. "
+    "Lucide is the only icon vocabulary; SF Symbols are not used."
+)
+_VESPER_BUTTON_STYLES_RULE = (
+    "- **Button styles**: Use `IconButtonStyle`, `GhostButtonStyle`, `SurfaceButtonStyle` "
+    "from `ButtonStyles.swift`"
+)
+
+
+def _sibling_runner(repo: str) -> CommandRunner:
+    """Route ``git`` calls into the sibling checkout; ``gh`` passes through.
+
+    ``gh`` commands carry ``--repo`` and are cwd-independent; ``git`` commands
+    need the sibling's object store, so they run with ``-C <checkout>``. The
+    checkout location comes from ``$CORTEX_SIBLINGS_ROOT`` (default
+    ``~/repos``); a missing checkout fails closed in ``run_command``.
+    """
+
+    repo_dir = SIBLINGS_ROOT / repo.partition("/")[2]
+
+    def runner(argv: Sequence[str]) -> str:
+        if argv and argv[0] == "git":
+            return run_command(["git", "-C", str(repo_dir), *argv[1:]])
+        return run_command(list(argv))
+
+    return runner
+
+
+def _vesper_design_system_decision(pin_sha: str, *, runner: CommandRunner) -> FixtureDecision:
+    intro_span, _ = _pinned_span_for(
+        VESPER_REPO, pin_sha, VESPER_CLAUDE_MD, _VESPER_DESIGN_SYSTEM_INTRO, runner=runner
+    )
+    icons_span, _ = _pinned_span_for(
+        VESPER_REPO, pin_sha, VESPER_CLAUDE_MD, _VESPER_ICONS_RULE, runner=runner
+    )
+    buttons_span, timestamp = _pinned_span_for(
+        VESPER_REPO, pin_sha, VESPER_CLAUDE_MD, _VESPER_BUTTON_STYLES_RULE, runner=runner
+    )
+    return FixtureDecision(
+        decision_id="vesper-design-system-tokens",
+        decision_text=(
+            "All Vesper UI goes through the design system: tokens from "
+            "Sources/Design/DesignSystem.swift, icons exclusively via LucideImage/"
+            "LucideLabel from Sources/Design/LucideIcon.swift (never Image(systemName:); "
+            "Lucide is the only icon vocabulary, SF Symbols are not used), and button "
+            "styles from ButtonStyles.swift."
+        ),
+        status=DecisionStatus.CONFIRMED,
+        source_timestamp=timestamp,
+        spans=(intro_span, icons_span, buttons_span),
+        scopes=(
+            FixtureScope(scope_type=ScopeType.PATH, value="Sources/Design/LucideIcon.swift"),
+            FixtureScope(scope_type=ScopeType.PATH, value="Sources/Design/ButtonStyles.swift"),
+            FixtureScope(scope_type=ScopeType.PATH, value="Sources/Design/DesignSystem.swift"),
+            FixtureScope(scope_type=ScopeType.GLOB, value="Sources/**"),
+        ),
+    )
+
+
+def build_vesper_lucide_icon_violation() -> EvalFixture:
+    """vesper PR #308 moved the AI picker to native controls and introduced
+    six ``Image(systemName:)`` call sites — contradicting the still-standing
+    Lucide-only icon-vocabulary decision in CLAUDE.md (real positive case)."""
+
+    runner = _sibling_runner(VESPER_REPO)
+    decision = _vesper_design_system_decision(VESPER_PR308_BASE, runner=runner)
+    icons_span_hash = decision.spans[1].span_hash
+    finding = ExpectedFinding(
+        finding_id="finding-sf-symbols-vocabulary",
+        finding_class=FindingClass.CONTRADICTS_PRIOR_DECISION,
+        decision_id="vesper-design-system-tokens",
+        cited_span_hashes=(icons_span_hash,),
+        summary=(
+            "The diff replaces Lucide-based picker controls with native ones and adds "
+            "Image(systemName:) call sites in AIInvitePopover.swift and "
+            "WindowWatchButton.swift, contradicting the confirmed decision that Lucide "
+            "is the only icon vocabulary and SF Symbols are not used."
+        ),
+        suggested_repair=(
+            "Route the new glyphs through LucideImage/LucideLabel, or supersede the "
+            "Lucide-only icon-vocabulary decision in CLAUDE.md in the same change."
+        ),
+    )
+    return build_fixture_from_pr(
+        VESPER_REPO,
+        308,
+        fixture_id="vesper-lucide-icon-vocabulary-001",
+        decisions=(decision,),
+        expected_findings=(finding,),
+        extra_metadata={
+            "scenario": "native-picker-controls-reintroduce-sf-symbols",
+            "notes": (
+                "Real sibling-repo positive case: the PR deliberately adopted native "
+                "AppKit-style controls, but the Lucide-only decision was never "
+                "superseded — the advisory reviewer should cite the contradiction and "
+                "let the human decide."
+            ),
+        },
+        runner=runner,
+    )
+
+
+def build_vesper_workspace_sheet_respected() -> EvalFixture:
+    """vesper PR #385 added a new sheet built entirely from design-system
+    tokens, theme colors, LucideLabel, and vesper button styles — the
+    design-system decision respected (negative case)."""
+
+    runner = _sibling_runner(VESPER_REPO)
+    decision = _vesper_design_system_decision(VESPER_PR385_BASE, runner=runner)
+    return build_fixture_from_pr(
+        VESPER_REPO,
+        385,
+        fixture_id="vesper-workspace-sheet-tokens-respected-001",
+        decisions=(decision,),
+        expected_findings=(),
+        extra_metadata={
+            "scenario": "new-sheet-built-from-design-tokens",
+            "notes": (
+                "Negative case: NewWorkspaceSheet.swift uses Spacing/Typography tokens, "
+                "theme colors, LucideLabel, and vesperGhostButtonStyle throughout — "
+                "exactly the shape the design-system decision requires."
+            ),
+        },
+        runner=runner,
+    )
+
+
+def build_vanguard_portfolio_boundary_respected() -> EvalFixture:
+    """vanguard PR #559 refined dust-floor sizing math inside the vault —
+    Doctrine 0002 allows the math to evolve as long as allocation authority
+    stays with PortfolioDecision (negative case)."""
+
+    runner = _sibling_runner(VANGUARD_REPO)
+    boundary_span, _ = _pinned_span_for(
+        VANGUARD_REPO,
+        VANGUARD_PR559_BASE,
+        VANGUARD_DOCTRINE_0002_PATH,
+        "> A versioned `PortfolioDecision` layer is the authoritative source of "
+        "trade-or-no-trade and target budget for every proposal. The runner consumes "
+        "these decisions; it does not independently size or select against current "
+        "portfolio state. The optimizer *math* inside the boundary may evolve; the "
+        "*boundary* is doctrine.",
+        runner=runner,
+    )
+    risk_guard_span, timestamp = _pinned_span_for(
+        VANGUARD_REPO,
+        VANGUARD_PR559_BASE,
+        VANGUARD_DOCTRINE_0002_PATH,
+        "  - `vault/risk_guard.py` — defense-in-depth hard gate. Survives indefinitely.",
+        runner=runner,
+    )
+    decision = FixtureDecision(
+        decision_id="vanguard-portfolio-decision-boundary",
+        decision_text=(
+            "Vanguard's runner does not independently decide allocation: a versioned "
+            "PortfolioDecision is the authoritative source of trade-or-no-trade and "
+            "target budget (Doctrine 0002). The sizing math inside the boundary may "
+            "evolve; vault/risk_guard.py survives as the defense-in-depth hard gate."
+        ),
+        status=DecisionStatus.CONFIRMED,
+        source_timestamp=timestamp,
+        spans=(boundary_span, risk_guard_span),
+        scopes=(
+            FixtureScope(scope_type=ScopeType.PATH, value="vanguard/runner.py"),
+            FixtureScope(scope_type=ScopeType.PATH, value="vanguard/vault/position_sizer.py"),
+            FixtureScope(scope_type=ScopeType.PATH, value="vanguard/vault/risk_guard.py"),
+        ),
+    )
+    return build_fixture_from_pr(
+        VANGUARD_REPO,
+        559,
+        fixture_id="vanguard-portfolio-boundary-respected-001",
+        decisions=(decision,),
+        expected_findings=(),
+        extra_metadata={
+            "scenario": "dust-floor-exemption-inside-the-boundary",
+            "notes": (
+                "Negative case: the atomic-minimum dust-floor exemption evolves sizing "
+                "math inside the Doctrine 0002 boundary (risk_guard helper mirrored "
+                "into the runner pre-check for one code path); allocation authority "
+                "stays with PortfolioDecision."
+            ),
+        },
+        runner=runner,
+    )
+
+
+def build_outrider_contract_version_omitted() -> EvalFixture:
+    """outrider PR #541 rescoped public track records to the current
+    model_version cohort without bumping AGENT_DETAIL_RESPONSE_VERSION or
+    updating docs/CONTRACT.md — the drift PR #553 later fixed (real
+    omitted-load-bearing-constraint case)."""
+
+    runner = _sibling_runner(OUTRIDER_REPO)
+    version_span, _ = _pinned_span_for(
+        OUTRIDER_REPO,
+        OUTRIDER_PR541_BASE,
+        OUTRIDER_CONTRACT_PATH,
+        "- `AGENT_DETAIL_RESPONSE_VERSION` (currently `2.2.0`) — for "
+        "`/v1/agents/{id}/calibration` and the `/v1/agents/{id}` track-record detail "
+        "surface.",
+        runner=runner,
+    )
+    boundaries_span, _ = _pinned_span_for(
+        OUTRIDER_REPO,
+        OUTRIDER_PR541_BASE,
+        OUTRIDER_CLAUDE_MD,
+        "- **Version your data boundaries** — `ResearchProposal.research_version` and "
+        "`model_version` bump on any schema or model change. Don't aggregate across "
+        "model versions in calibration without explicit handling.",
+        runner=runner,
+    )
+    compat_span, timestamp = _pinned_span_for(
+        OUTRIDER_REPO,
+        OUTRIDER_PR541_BASE,
+        OUTRIDER_CLAUDE_MD,
+        "- **Preserve compatibility at boundaries** — public API/schema changes need a "
+        "compatibility or migration plan that covers vanguard *and* future external "
+        "subscribers in the same PR.",
+        runner=runner,
+    )
+    decision = FixtureDecision(
+        decision_id="outrider-api-version-boundaries",
+        decision_text=(
+            "Outrider's public API is a versioned boundary: schema or semantic changes "
+            "to a response bump the owning version constant (AGENT_DETAIL_RESPONSE_"
+            "VERSION for /v1/agents/{name}) and ship the docs/CONTRACT.md compatibility "
+            "or migration plan in the same PR; model_version cohorts are never blended "
+            "or rescoped silently."
+        ),
+        status=DecisionStatus.CONFIRMED,
+        source_timestamp=timestamp,
+        spans=(version_span, boundaries_span, compat_span),
+        scopes=(
+            FixtureScope(scope_type=ScopeType.PATH, value="outrider/api/agents.py"),
+            FixtureScope(scope_type=ScopeType.PATH, value="docs/CONTRACT.md"),
+        ),
+    )
+    finding = ExpectedFinding(
+        finding_id="finding-contract-version-not-bumped",
+        finding_class=FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT,
+        decision_id="outrider-api-version-boundaries",
+        cited_span_hashes=(version_span.span_hash, compat_span.span_hash),
+        summary=(
+            "The diff rescopes GET /v1/agents/{name} track_record metrics to the "
+            "current model_version cohort only — a semantic change to a public "
+            "response — but omits the AGENT_DETAIL_RESPONSE_VERSION bump and the "
+            "docs/CONTRACT.md methodology update; the contract kept advertising 2.2.0 "
+            "all-version semantics until PR #553 bumped it to 3.0.0."
+        ),
+        suggested_repair=(
+            "Bump AGENT_DETAIL_RESPONSE_VERSION and update the docs/CONTRACT.md "
+            "methodology and changelog in the same diff that changes track-record "
+            "semantics."
+        ),
+    )
+    return build_fixture_from_commit_range(
+        OUTRIDER_REPO,
+        OUTRIDER_PR541_BASE,
+        OUTRIDER_PR541_SQUASH,
+        fixture_id="outrider-contract-version-omitted-001",
+        decisions=(decision,),
+        expected_findings=(finding,),
+        paths=("outrider/api/", "outrider/platform/model_version.py"),
+        pr_number=541,
+        extra_metadata={
+            "scenario": "api-semantics-changed-without-contract-version-bump",
+            "notes": (
+                "Real sibling-repo staleness case, scoped to the API-surface slice of "
+                "the 46-file squash commit: PR #541 (merged 2026-06-07) changed "
+                "_compute_track_record cohort semantics; the contract drift persisted "
+                "until PR #553 (merged 2026-06-09) bumped 2.2.0 to 3.0.0."
+            ),
+        },
+        runner=runner,
+    )
+
+
+# ---------------------------------------------------------------------------
+# simlab promotions (cortex#339: scenario triples as corpus fixtures)
+# ---------------------------------------------------------------------------
+
+SIMLAB_PROMOTED_SCENARIOS = (
+    "chatty-startup-worker-threads",
+    "clean-shop-retry-fixed-delay",
+    "clean-shop-unrelated-docs",
+    "legacy-migration-runbook-anchor",
+)
+
+
+def _repo_root_on_sys_path() -> None:
+    """Make ``tests.simlab`` importable when run as a script from repo root."""
+
+    root = Path(__file__).resolve().parents[3]
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+
+
+def build_simlab_promotions() -> tuple[EvalFixture, ...]:
+    """Convert the promoted simlab scenario triples into corpus fixtures.
+
+    Each scenario's archetype is materialized and derived through the shipped
+    pipeline (``tests.simlab.generator``) and the scenario's EvalFixture is
+    built by the shipped ``tests.simlab.runner.build_scenario_fixture`` — the
+    same decisions, spans, and expected findings the simlab regression pack
+    replays. The fixture is then re-stamped with corpus metadata
+    (``source = "simlab"``, stable ``simlab-<scenario>-001`` ids). Both specs
+    and pipeline are deterministic, so rebuilds are byte-identical.
+
+    Promotion covers static scenarios only: drift scenarios
+    (``post_derive_edits``) exercise working-tree state and stay in the
+    simlab pack.
+    """
+
+    _repo_root_on_sys_path()
+    from tests.simlab.generator import derive_materialized, materialize_archetype
+    from tests.simlab.runner import build_scenario_fixture
+    from tests.simlab.specs import load_archetype_specs, load_scenario_specs
+
+    archetypes = load_archetype_specs()
+    scenarios = {spec.scenario_id: spec for spec in load_scenario_specs()}
+    fixtures: list[EvalFixture] = []
+    for scenario_id in SIMLAB_PROMOTED_SCENARIOS:
+        if scenario_id not in scenarios:
+            raise RuntimeError(f"promoted simlab scenario not found: {scenario_id!r}")
+        scenario = scenarios[scenario_id]
+        if scenario.post_derive_edits:
+            raise RuntimeError(
+                f"scenario {scenario_id!r} carries post_derive_edits; drift scenarios "
+                "stay in the simlab regression pack and are not promoted"
+            )
+        archetype = archetypes[scenario.archetype_id]
+        with tempfile.TemporaryDirectory(prefix="simlab-corpus-") as tmp:
+            repo = materialize_archetype(archetype, Path(tmp) / scenario_id)
+            derive_materialized(repo)
+            scenario_fixture = build_scenario_fixture(scenario, repo)
+        if scenario_fixture.drift_skips:
+            raise RuntimeError(
+                f"scenario {scenario_id!r} produced unexpected span-drift skips during "
+                "promotion; refusing to freeze a fixture that lost decisions"
+            )
+        base = scenario_fixture.fixture
+        fixtures.append(
+            EvalFixture(
+                fixture_id=f"simlab-{scenario.scenario_id}-001",
+                diff=base.diff,
+                decisions=base.decisions,
+                expected_findings=base.expected_findings,
+                labels=(),
+                metadata={
+                    "source": SIMLAB_SOURCE,
+                    "archetype_id": scenario.archetype_id,
+                    "scenario_id": scenario.scenario_id,
+                    "scenario_title": scenario.title,
+                    "notes": (
+                        "Promoted from the simlab scenario pack (tests/simlab/"
+                        "scenarios); decisions and spans come from the deterministic "
+                        "materialize/derive pipeline over the synthetic archetype."
+                    ),
+                },
+            )
+        )
+    return tuple(fixtures)
+
+
 def main() -> None:
     builders: tuple[Callable[[], EvalFixture], ...] = (
         build_standalone_boundary_respected,
@@ -424,10 +849,15 @@ def main() -> None:
         build_journal_entry_deletion,
         build_touchstone_managed_principles,
         build_standalone_boundary_synthetic,
+        build_vesper_lucide_icon_violation,
+        build_vesper_workspace_sheet_respected,
+        build_vanguard_portfolio_boundary_respected,
+        build_outrider_contract_version_omitted,
     )
     CORPUS_DIR.mkdir(parents=True, exist_ok=True)
-    for builder in builders:
-        fixture = builder()
+    fixtures = [builder() for builder in builders]
+    fixtures.extend(build_simlab_promotions())
+    for fixture in fixtures:
         path = write_fixture(fixture, CORPUS_DIR)
         print(f"wrote {path}")
 

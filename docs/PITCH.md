@@ -1,197 +1,187 @@
 # Cortex — the pitch
 
-Plain-language explanations for sharing the project. SPEC.md and the Protocol are the load-bearing artifacts; this doc is the human-facing summary. Four sections, shortest first:
+Plain-language explanations for sharing the project. The canonical scope
+and anti-goals live in
+[product/scope-and-anti-goals.md](./product/scope-and-anti-goals.md); the
+end-to-end user journeys in
+[product/customer-journeys.md](./product/customer-journeys.md); SPEC.md
+and the Protocol remain the load-bearing artifacts for the file layer.
+This doc is the human-facing summary. Five sections, shortest first:
 
 1. [The one-liner](#the-one-liner)
-2. [What it's for](#what-its-for)
-3. [The vision](#the-vision)
-4. [The interaction model — day in the life](#the-interaction-model--day-in-the-life)
+2. [The incident](#the-incident)
+3. [What Cortex is](#what-cortex-is)
+4. [What's real today — and what isn't yet](#whats-real-today--and-what-isnt-yet)
+5. [The vision](#the-vision)
 
 ---
 
 ## The one-liner
 
-> **Cortex is Context CI for AI agents: a git-native memory protocol that builds, budgets, and verifies the context agents rely on.**
+> **Cortex is a reviewer that remembers every decision your team has ever
+> made — and tells you when an AI agent's pull request quietly
+> contradicts one.**
 
 Alternates by audience:
 
-- **For developers:** *A context build system for agent work: sources in Markdown, generated context with provenance, doctor checks before stale memory ships.*
-- **For teams:** *A git-native, cross-tool standard for the reasoning layer around your code — so decisions survive sessions, tools, and teammates.*
-- **For skeptics:** *Every AI coding tool is building its own proprietary memory. Cortex is the shared, auditable context layer they should converge on instead.*
-- **The existential version:** *Code answers what. Git answers when. Cortex answers why.*
+- **For developers:** *A decision ledger built from the places decisions
+  actually get made, plus a PR reviewer that flags changes contradicting
+  it — with a citation, never a vibe.*
+- **For teams:** *Your team's authoritative intent, captured where it
+  happens and enforced at the merge gate — regardless of which agent or
+  human wrote the diff.*
+- **For skeptics:** *Code review checks the code. CI checks the build.
+  Nothing checks the context the agent reasoned from. Cortex is that
+  check.*
+- **The existential version:** *Code answers what. Git answers when.
+  Cortex answers what the team decided — and tells you when your agent
+  forgot.*
 
 ---
 
-## What it's for
+## The incident
 
-Try this: open a new Claude Code or Cursor session on a project you've been working on for a month and ask *"where were we?"* It doesn't know. Every session starts cold. The code shows *what* exists and git shows *when* things changed, but nothing durable captures *why* — why we picked this architecture, what we already tried, which decisions are load-bearing.
+An AI agent changed code in a way that contradicted something your team
+had already decided.
 
-People patch this with a hand-maintained `CLAUDE.md` or a `.cursor/rules/` folder, and it rots. Cursor shipped a "Memories" feature in 2025 and quietly removed it five months later. The community has been hand-building the same three-file `.brain/` folder in every repo. The problem is real; nobody has cracked it.
+Not broken code — plausible code. The tests passed. The diff read
+cleanly. It just reintroduced the pattern you retired last quarter, or
+quietly dropped the constraint that was the whole point of the design,
+or "remembered" an API that was deleted in March. A reviewer burned an
+afternoon catching it. Or didn't.
 
-**Cortex is a standard for how projects remember, compile, and verify context — stored as plain Markdown in your git repo, so any AI tool can read and write the same memory.**
+AI agents now write a fast-growing share of production code, and they
+are fluent, fast, and confidently wrong about a project's own history.
+The deeper issue: **nothing verifies what the agent believed the rules
+were.** And the decisions an agent should be held to rarely live in any
+one file — they get made in Slack threads, GitHub issues, PR reviews,
+and meeting notes, where they decay and where no agent will ever look.
+A team's authoritative intent has no home, so an agent contradicts it
+for free.
 
-It defines one small folder (`.cortex/`) with six kinds of documents:
+---
 
-- **Doctrine** — load-bearing decisions (*why this architecture, why this scope*). Numbered, never edited. If a decision changes, you write a new entry that "supersedes" the old one.
-- **Journal** — a running log of what happened and what you learned. Append-only; you don't rewrite history.
-- **Plans** — active efforts, each with measurable success criteria.
-- **Procedures** — how-to guides for recurring operations.
-- **Map** and **State** — generated summaries of "what exists structurally" and "what's current."
+## What Cortex is
 
-It also defines a **protocol** — rules any AI agent follows: when to write to the journal (a test broke after passing, a dependency changed, a PR merged, a plan status changed), what invariants to respect (journal never rewritten, doctrine never deleted, every generated summary declares its sources). The AI drafts entries continuously as it works; the human reviews a small queue and decides what gets "promoted" from fleeting journal notes into permanent doctrine. The CLI then compiles bounded context surfaces from those sources and checks that they are fresh, cited, and within budget.
+**Cortex is the decision ledger plus the reviewer that enforces it.**
 
-**Why the approach is different:**
+- **The ledger.** A provenance-first record of decisions — each one
+  carrying its source, author, timestamp, link, and supersede state, so
+  a later decision overturns an earlier one and the history stays
+  honest. Capture is broad (code, PRs, instruction files, ADRs; later
+  Slack and issues); confirmation is human — candidates never become
+  decisions on a model's say-so.
+- **The reviewer.** A soft evaluator that diffs every new change
+  against the relevant slice of the ledger and leaves an inline comment
+  the way a senior teammate who happened to remember would: *"this
+  reverses what was decided in #eng-arch on 2026-05-12 [link]"*.
+  Advisory by default — a wrong comment is ignored, not a blocked
+  merge. Individual decisions earn the right to block only after their
+  own measured precision proves out.
+- **The open foundation.** Underneath both sits the `.cortex/` file
+  protocol and reference CLI: an open, portable, git-native format for
+  project memory. Plain Markdown in your repo, append-only journal,
+  immutable-with-supersede doctrine, generated context that declares
+  its sources. Any tool can read and write it; nothing is trapped in a
+  vendor's cloud. The hosted product is a workflow, inference, and
+  audit layer around those files — never a proprietary memory store.
 
-- **Cross-tool by design.** Cursor in the morning, Claude Code in the afternoon, a human at night — all read and write the same `.cortex/` folder. Nothing is trapped in a vendor's cloud.
-- **Auditable.** Every summary cites its sources. Staleness is surfaced, not hidden.
-- **Budgeted.** Session-start context is compiled through `cortex manifest --budget <N>`; deeper lookup uses grep/retrieve rather than bloating every prompt.
-- **Humans stay in the loop.** AI proposes; humans promote. The memory improves by deliberate review, not drift.
-- **It's protocol-first, not a proprietary memory store.** Any tool can implement it. If one vendor ships multi-layer memory natively, the spec is what they converge on.
+The discipline that keeps this focused: **broad inputs, narrow output.**
+Cortex ingests from anywhere decisions are made, but only ever acts
+through a few sharp surfaces — the cited answer, the advisory finding,
+the explicit "no cited decision found." It is deliberately not a chat
+agent, not a code generator, not a wiki, not a dashboard. The full
+scope contract, including what Cortex will not do even if asked, is
+[product/scope-and-anti-goals.md](./product/scope-and-anti-goals.md).
 
-**Status.** v1.6.1 is installable today — `brew tap autumngarage/cortex && brew install autumngarage/cortex/cortex && cortex init` (fully-qualified name side-steps an unrelated `cortex` in homebrew-core). The v0.9.0 three-target dogfood gate is closed: `conductor`, `touchstone`, and `vesper` all install Cortex via the Homebrew tap; nine real bugs surfaced and fixed in v0.9.0; the fresh-clone and bare-repo-degradation install flows are now CI fixtures. The design test case was real: the conductor incident (a stale `CLAUDE.md` claim steered an agent to recommend the wrong install path eight releases after the Homebrew tap had shipped) shaped both the `cortex doctor --audit-instructions` check and the release-event trigger (T1.10). The pattern held in the wild — the vesper install caught the same class of stale external claim (`YOUR_USERNAME/vesper.git` template URL still in the README). See [`docs/CASE-STUDIES.md`](./CASE-STUDIES.md) for both incidents documented. For composition with adjacent tools: a project running both Cortex and [codesight](https://github.com/autumngarage/codesight) gets `read .codesight/CODESIGHT.md → what the code does today` and `read .cortex/state.md → what's in flight, why, by when`. They compose by file contract — neither imports the other. LLM synthesis (`refresh-map`, `refresh-state --enhance`, `cortex next --enhance`) is deferred to v1.x. Any project can adopt the pattern by running the CLI or by hand-authoring the files and telling its AI to follow the protocol.
+---
 
-**The bet:** that the answer to "AI projects lose memory" is a shared context integrity standard, not another proprietary memory feature.
+## What's real today — and what isn't yet
+
+Honesty section. The claims above split cleanly into shipped and
+pre-launch:
+
+**The local loop is real.** On 2026-06-10 the full loop ran end-to-end
+against live infrastructure: `cortex derive` extracted decision
+candidates from a real repo, a human confirmed two into the ledger,
+`cortex ask` returned cited answers (and correctly refused to answer
+from unconfirmed candidates), and the evaluator caught its first real
+contradicts-prior-decision finding — with the right citation, after
+correctly rejecting an unconfirmed twin. The transcript is
+[walkthrough-pe0.md](./walkthrough-pe0.md). The refusals in that
+transcript are the product working: no snapshot, no answer; no
+confirmation, no citation; no citation, no finding.
+
+**The file protocol and CLI are shipped and installable:**
+
+```
+brew install autumngarage/cortex/cortex   # fully qualified — homebrew-core has an unrelated `cortex`
+cortex init
+cortex doctor
+```
+
+Source installs work too: `uv tool install
+git+https://github.com/autumngarage/cortex.git`. The local CLI
+validates the file contract, compiles token-budgeted session manifests,
+runs exact and ranked lookup, and surfaces stale generated context —
+deterministically, no LLM required. It is free and stays free: it is
+the funnel and the protocol.
+
+**The hosted product is pre-launch.** The GitHub App (advisory PR
+comments on every pull request) and the Slack ledger console (`@cortex
+what did we decide about X?`) are the productized surfaces of the same
+loop, currently being built in the open in this repo. Pricing shape is
+documented ahead of launch in [HOSTED-PRICING.md](./HOSTED-PRICING.md):
+platform entitlement plus metered credits for LLM-backed work,
+deterministic checks included. The journeys from landing page to
+install to payment are pinned issue-by-issue in
+[product/customer-journeys.md](./product/customer-journeys.md).
 
 How to compare it:
 
 | Category | What it optimizes for | Why Cortex is different |
 |---|---|---|
-| Memory bank | A place to store notes | Cortex treats notes as source inputs and verifies the generated context agents consume. |
-| RAG / retrieval | Fast lookup over a corpus | Cortex keeps retrieval subordinate to provenance, source hashes, and reviewable context artifacts. |
-| Agent framework | Planning and executing work | Cortex does not run the agent; it packages and checks the context the agent receives. |
-| Context integrity layer | Fresh, cited, bounded context | This is Cortex's home category: Markdown + git sources, generated manifests, budget checks, and doctor gates. |
-
-**Hosted product implication.** Cortex core is useful without an LLM: the local
-CLI can validate, compile, budget, and retrieve context deterministically. The
-commercial GitHub/Slack surface is where LLMs become central. A smart PR review
-needs a model to judge whether a diff disagrees with cited Cortex memory and to
-write the inline explanation. A useful Slack assistant needs a model to
-understand the question, choose evidence, and synthesize an answer. The planned
-pricing shape is therefore platform entitlement plus usage credits for
-LLM-backed invocations, with deterministic Context CI included. See
-[`HOSTED-PRICING.md`](./HOSTED-PRICING.md) for the canonical model.
+| AI code reviewer (CodeRabbit-style) | Correctness and style of the diff | Cortex reviews the *context the agent believed*, against a cross-source decision record a PR-bound tool cannot assemble. It composes alongside code review. |
+| Memory bank / notes folder | A place to store notes | Cortex's ledger is provenance-first and enforced: decisions carry sources and supersede edges, and a reviewer acts on them at the merge gate. |
+| RAG / retrieval | Fast lookup over a corpus | Retrieval stays subordinate to provenance and citation; an answer without a confirmed, cited decision is an explicit no-answer. |
+| Agent framework | Planning and executing work | Cortex does not run agents or write code; it is the neutral check on the agents that do. |
 
 ---
 
 ## The vision
 
-We're in the middle of a quiet transition in software. A year ago, an AI-coding assistant was something you asked for autocomplete. Today, serious teams ship real code through Claude Code, Cursor, and agents that run overnight. The pace is real; the productivity is real.
+We're in the middle of a quiet transition in software. Serious teams now
+ship real code through Claude Code, Cursor, and agents that run
+overnight. The pace is real; the productivity is real. And something is
+quietly breaking: the share of code written by authors who have never
+read the team's history — and can't — keeps rising.
 
-But something is quietly breaking. Every session with these tools starts from zero. The code doesn't explain *why it is this way*. Chat context evaporates when the window closes. The human who made the decision is at lunch. The AI that made the decision doesn't remember. A month of reasoning — about which architecture, which trade-offs, which dead ends — lives nowhere.
+Code review was built to catch bad code from authors who shared the
+team's context. It was never built to catch plausible code from authors
+who lack it. That gap is structural, and it sits at the one chokepoint
+no IDE or model vendor owns: the merge gate.
 
-Teams are feeling this as friction. Individual engineers patch it with hand-written `CLAUDE.md` files. Whole companies are starting to worry about it. Vendors know: Cursor shipped a "Memories" feature in 2025 and pulled it five months later. Anthropic keeps adding memory primitives to Claude Code. Nobody has solved it, and the crucial open question is *whose memory wins*.
+The bet Cortex is making: **agent-context integrity becomes a standard
+category** — checked the way teams check formatting, types, and tests
+today — and the standard is open, portable, and owned by the ecosystem
+rather than trapped inside one vendor's IDE. If every AI vendor ships
+its own memory, projects get ten silos and switching tools means losing
+everything the team learned. The alternative is a file-format standard
+any tool can read and write, with a ledger that lives in your repo —
+portable, auditable, yours — and a reviewer that makes it enforceable.
 
-**The bet Cortex is making is that the answer is nobody's — it's a shared standard for context integrity.**
+**What it looks like when it works.** A decision gets made in passing —
+a Slack thread, a PR review, an ADR. Cortex stages it; a human confirms
+it with one click. Weeks later, an agent that never saw that thread
+opens a PR that contradicts it, and Cortex comments with the citation.
+The decision changes; someone posts the update; Cortex records the
+supersede and stops flagging the dead rule. Every review, override, and
+👍/👎 sharpens the evaluator — the ledger is worth more in month six
+than on install, by construction.
 
-If every AI vendor ships its own memory, projects get ten silos. Memory becomes proprietary, lock-in gets worse, and switching tools means losing everything you learned on the previous one. The alternative — the one AGENTS.md hinted at, the one the community is reaching for with hand-rolled `.brain/` folders — is a file-format standard any tool can read and write. Memory that lives in your git repo, portable, auditable, yours.
+Cortex's role is to be **the decision graph and the reviewer that
+enforces it** — neutral across agents, auditable by citation, riding
+the model curve, and better every day it runs.
 
-Cortex is the attempt at that standard. Six small document types. A protocol that tells AI agents when to write to them. Three invariants that keep the history honest: append-only journal, immutable-with-supersede doctrine, every generated summary declaring its sources. A build step turns that corpus into bounded context; a doctor step checks freshness and contracts. The AI drafts continuously as it works; the human reviews a short queue and decides what becomes permanent.
-
-**What it looks like when it works.**
-
-You open a session on a project you last touched six weeks ago. The AI loads a small token-budgeted slice of the project's memory: current state, load-bearing decisions, active plans, recent journal entries. It answers *"where were we?"* with citations and tells you when the context is stale or incomplete. You work. It writes as it works. At the end of the day you spend thirty seconds on a promotion queue — *yes, that's a real pattern, promote it to doctrine*; *no, skip*. Over months, the project gets sharper, not noisier. Over years, onboarding a new teammate (or a new AI) is a matter of pointing them at `.cortex/`.
-
-You move between tools — Cursor one day, Claude Code the next, a terminal agent the day after. The memory is the same. You change teams and your replacement inherits your reasoning, not just your code. A decision made in a crashed chat three weeks ago is still in the journal, with the evidence that led to it.
-
-**Why now.** AI-assisted development is early enough that the standards are unsettled. The next twelve months decide whether project memory becomes proprietary — fragmented across vendors, lost on every tool switch — or shared, portable, durable. Cortex is a bet on the second outcome: the same move the industry already made with AGENTS.md, extended from *instructions* to *memory*. A spec any tool can implement, lived out as files in a git repo.
-
-Code answers *what*. Git answers *when*. Cortex is the layer that answers *why* — and makes that context durable, auditable, budgeted, and yours.
-
----
-
-## The interaction model — day in the life
-
-Three moments of interaction, almost all of them light.
-
-### 1. One-time setup (~2 minutes)
-
-Setup in any project looks like this:
-
-```
-brew tap autumngarage/cortex
-brew install autumngarage/cortex/cortex    # qualified — avoids the unrelated Prometheus `cortex` in homebrew-core
-cortex init
-cortex doctor    # verify
-```
-
-Source installs work too: `uv tool install git+https://github.com/autumngarage/cortex.git`. You can also hand-author the `.cortex/` folder following [SPEC.md](../SPEC.md) § 2 and copying [`.cortex/protocol.md`](../.cortex/protocol.md) + [`.cortex/templates/`](../.cortex/templates/) from this repo — the CLI is a convenience around the file format, not a requirement.
-
-Either way, the second step is the same — add one line to your `AGENTS.md` or `CLAUDE.md`:
-
-```
-@.cortex/protocol.md
-@.cortex/state.md
-```
-
-That's it. The project now has a `.cortex/` folder and every agent that reads `AGENTS.md` inherits the protocol.
-
-### 2. During work — mostly invisible
-
-You work normally. Claude Code, Cursor, Aider, whatever. You don't type anything differently. The agent reads `.cortex/state.md` at session start (it's in context via the import) and it knows where you left off.
-
-As you work, the agent writes to `.cortex/journal/` on its own — triggered by deterministic events:
-
-- **Test broke after passing earlier** → writes an incident entry
-- **Diff touched a doctrine file** → writes a decision entry
-- **Dependency changed (`pyproject.toml`, `package.json`, etc.)** → writes an entry
-- **A plan's status changed** → writes a plan-transition entry
-- **PR merged** → writes a merge summary
-- **Commit message matched patterns like `fix: ... regression`** → writes an entry
-
-You see these as one-line tool-use notifications in the transcript (*"wrote journal/2026-04-18-auth-retry-flake.md"*). You don't have to stop. You don't have to approve each one. They're append-only notes, not decisions.
-
-The agent also reads `.cortex/doctrine/` when it needs to remember *why* something is the way it is. If you ask *"why is the retry backoff exponential?"* — instead of guessing, it greps doctrine and cites `doctrine/0015-exponential-retry-backoff.md`.
-
-### 3. The daily check-in — ~30 seconds
-
-Once a day, or whenever you feel like it, you run the bare command:
-
-```
-$ cortex
-Cortex — your-project   spec v0.4.0-dev   state: fresh (regenerated 2h ago)
-
-▸ 7 Journal entries since last check
-▸ 3 promotion candidates (1 stale, 2 proposed)
-▸ March 2026 digest overdue by 8 days
-
- [1] j-2026-04-18-auth-retry   [trivial]   3 entries say the same thing
-     → Promote to doctrine/0015?  [y/n/view/defer/skip]: y
-
- [2] j-2026-04-17-test-scoping  [editorial] New pattern; no Doctrine covers
-     → Promote to doctrine/0016?  [y/n/view/defer/skip]: skip
-
- [3] j-2026-03-22-flaky-ci      [stale, 17d] Re-proposed after 3 new entries
-     → Promote to doctrine/0017?  [y/n/view/defer/skip]: y
-
-Generate March 2026 digest now?  [y/n]: y
-
-Anything else?
-```
-
-You press `y`, `n`, `skip`, or `view`. The whole interaction is 30 seconds. Skipped candidates surface again later with new evidence attached. Stale ones get flagged for another look.
-
-That's the UX. That's *all* the UX. The deeper product is the build system underneath it: sources, generated context, invalidation, budget checks, and CI-style verification.
-
-### What the human controls
-
-- **Every doctrine entry.** Nothing becomes "permanent" without a human pressing `y`.
-- **What counts as significant.** Project-specific trigger thresholds are configurable (e.g., "journal every PR merge" vs. "only architecturally-significant ones").
-- **Overrides.** You can always hand-author a journal entry, supersede a doctrine entry, kill a promotion candidate forever.
-
-### What's automated
-
-- **Writing the journal** (AI does it, triggered deterministically).
-- **Detecting staleness** (`cortex doctor` warns when state is >24h old).
-- **Surfacing candidates** (when a journal pattern repeats, it shows up in the queue).
-- **Regenerating the State** (`cortex refresh-state`, deterministic, planned for v0.4.0; byte-identical output on unchanged inputs so diffs only show when priorities actually move).
-- **Regenerating the Map** (`cortex refresh-map`, LLM-driven, deferred to v1.x; map changes slowly on solo projects so automating it is no longer on the v1.0 critical path).
-
-### The key invariant
-
-You can always answer *"where were we?"* by just asking. The next session starts where the last one ended — even across a crash, across tool switches (Cursor → Claude Code), across team members. Because everything is files in git and the agent reads them at session start.
-
-### The single sentence version
-
-> Install once, let the AI write the journal as it works, press `y` on a short queue once a day.
-
-Everything else is the machinery that makes that interaction trustworthy — the invariants, the doctor checks, the seven-field provenance — but as a user, you only touch the surface.
+Code answers *what*. Git answers *when*. Cortex answers *what the team
+decided* — and makes that answer durable, cited, and enforceable.

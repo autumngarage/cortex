@@ -1,0 +1,174 @@
+{
+  "decisions": [
+    {
+      "decision_id": "d-2ec96a25c070",
+      "decision_text": "We decided to keep the background worker single threaded because the queue client is not thread safe. The worker entrypoint is `src/worker/run.py`.",
+      "scopes": [
+        {
+          "normalized_value": "src/worker/run.py",
+          "scope_type": "path",
+          "value": "src/worker/run.py"
+        }
+      ],
+      "source_timestamp": "2026-03-03 10:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 185,
+          "excerpt": "We decided to keep the background worker single threaded because the queue client is not thread safe. The worker entrypoint is `src/worker/run.py`.",
+          "permalink": "commit:d25f83b1b8be59d1e747bc088a1e4286d262a9fa",
+          "source_document_hash": "aa6b3afb98a3de02439f51eec5ce94d48d1b95f1929f6f1cfcba988cd1ff6932",
+          "span_hash": "d8899df900c984336a043499404f3e35ed74ab355a09d1a105b83d768fb95be2",
+          "start_offset": 38
+        }
+      ],
+      "status": "confirmed"
+    },
+    {
+      "decision_id": "d-82779426feec",
+      "decision_text": "Card data in logs is a compliance incident waiting to happen. We must keep\nPAN redaction mandatory in `src/worker/logging.py`; raw card numbers never\nreach the log stream.",
+      "scopes": [
+        {
+          "normalized_value": "src/worker/logging.py",
+          "scope_type": "path",
+          "value": "src/worker/logging.py"
+        }
+      ],
+      "source_timestamp": "2026-03-09 10:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 179,
+          "excerpt": "Card data in logs is a compliance incident waiting to happen. We must keep\nPAN redaction mandatory in `src/worker/logging.py`; raw card numbers never\nreach the log stream.",
+          "permalink": "https://github.com/simlab/growthapp/pull/7",
+          "source_document_hash": "7a3b0132dac6fbd3d17ba643aaa61139d145636f4c3384a4256dd93859ae69ee",
+          "span_hash": "8c67dc11f0620360f367037fd3662c10fdec1004c972565bf8f1a0bac93c59c4",
+          "start_offset": 8
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-901defb537d3",
+      "decision_text": "refactor: drop redis cache (removes redis dependency)",
+      "scopes": [],
+      "source_timestamp": "2026-03-06 11:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 53,
+          "excerpt": "refactor: drop redis cache (removes redis dependency)",
+          "permalink": "commit:b7e65f7b4287192302abff3767c4a9ac2dbe4b84",
+          "source_document_hash": "05ed8ec8f627e3af1dcc1e949d81fa7d4cb4259f0f8ac0f66ed9c77eeaa436d7",
+          "span_hash": "b3c048b095138c78a779dd8aa9d2ce0a9971c97cbdcac1040bf988bfa75ed70d",
+          "start_offset": 0
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-9af62b6d1e7d",
+      "decision_text": "Switched to sqlite for the local dev cache instead of redis; production stays on managed Postgres.",
+      "scopes": [],
+      "source_timestamp": "2026-03-06 11:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 153,
+          "excerpt": "Switched to sqlite for the local dev cache instead of redis; production stays on managed Postgres.",
+          "permalink": "commit:b7e65f7b4287192302abff3767c4a9ac2dbe4b84",
+          "source_document_hash": "05ed8ec8f627e3af1dcc1e949d81fa7d4cb4259f0f8ac0f66ed9c77eeaa436d7",
+          "span_hash": "b25f12fed52f2bc68ef7ba453c502e91748bb42f207d4b7c5931c0c43900bf3d",
+          "start_offset": 55
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-c35140f1dcb1",
+      "decision_text": "Always run `make test` before pushing.",
+      "scopes": [],
+      "source_timestamp": "2026-03-02 09:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 148,
+          "excerpt": "Always run `make test` before pushing.",
+          "permalink": "CLAUDE.md",
+          "source_document_hash": "4aad0d054836e71f6b401baacefd37705df3fec1b4985059274cc0ee36a1c3f1",
+          "span_hash": "5962f8c54ba903a54d1e338c0c43d15a60f8fd187370032f88e596a6725efa93",
+          "start_offset": 110
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-d2ea868be95c",
+      "decision_text": "Going forward we should never log full card numbers anywhere in the worker; mask to last4.",
+      "scopes": [],
+      "source_timestamp": "2026-03-09 11:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 90,
+          "excerpt": "Going forward we should never log full card numbers anywhere in the worker; mask to last4.",
+          "permalink": "https://github.com/simlab/growthapp/pull/7#discussion_r9001",
+          "source_document_hash": "ce5117edd2e2cb442c20d55765ada83cf31188118efc8b2f2b405347eb2511e6",
+          "span_hash": "a30f21aa67aad0ed1d7c4ff3f38fd5e8680e461f9a88fbdbdb89332696c100bf",
+          "start_offset": 0
+        }
+      ],
+      "status": "candidate"
+    },
+    {
+      "decision_id": "d-d7f7cacf5d12",
+      "decision_text": "We must redact PAN values before logging anywhere in `src/worker/logging.py`; raw card numbers never go to the log stream.",
+      "scopes": [
+        {
+          "normalized_value": "src/worker/logging.py",
+          "scope_type": "path",
+          "value": "src/worker/logging.py"
+        }
+      ],
+      "source_timestamp": "2026-03-05 10:00:00+00:00",
+      "spans": [
+        {
+          "end_offset": 143,
+          "excerpt": "We must redact PAN values before logging anywhere in `src/worker/logging.py`; raw card numbers never go to the log stream.",
+          "permalink": "commit:e49fc4cb9980fe3e16ed9138bc0c15010666a2b6",
+          "source_document_hash": "8e6f31ddc34ff46c15ef36837af926e20944dd0ea43b911ae93d52c2586429c3",
+          "span_hash": "20218520614d18c483feed6938263fb5b75eca4fdce0c03a457c28bb6aa0e121",
+          "start_offset": 21
+        }
+      ],
+      "status": "candidate"
+    }
+  ],
+  "diff": {
+    "base_sha": "1212121",
+    "changed_paths": [],
+    "config_keys": [],
+    "head_sha": "3434343",
+    "issue_refs": [],
+    "patch": "diff --git a/src/worker/run.py b/src/worker/run.py\nindex 1212121..3434343 100644\n--- a/src/worker/run.py\n+++ b/src/worker/run.py\n@@ -1,8 +1,10 @@\n \"\"\"Background worker entrypoint (single threaded by decision).\"\"\"\n\n+from concurrent.futures import ThreadPoolExecutor\n+\n\n def main() -> None:\n-    for _job in poll():\n-        handle(_job)\n+    with ThreadPoolExecutor(max_workers=8) as pool:\n+        pool.map(handle, poll())\n\n\n def poll() -> list[str]:\n",
+    "repo_name": "chatty-startup",
+    "repo_owner": "simlab",
+    "symbols": []
+  },
+  "expected_findings": [
+    {
+      "cited_span_hashes": [
+        "d8899df900c984336a043499404f3e35ed74ab355a09d1a105b83d768fb95be2"
+      ],
+      "decision_id": "d-2ec96a25c070",
+      "finding_class": "contradicts-prior-decision",
+      "finding_id": "f-single-threaded",
+      "suggested_repair": "Keep the worker single threaded, or confirm a superseding decision after making the queue client thread safe.",
+      "summary": "The diff adds a ThreadPoolExecutor to src/worker/run.py, contradicting the confirmed decision to keep the worker single threaded (queue client is not thread safe)."
+    }
+  ],
+  "fixture_id": "simlab-chatty-startup-worker-threads-001",
+  "fixture_schema_version": 1,
+  "labels": [],
+  "metadata": {
+    "archetype_id": "chatty-startup",
+    "notes": "Promoted from the simlab scenario pack (tests/simlab/scenarios); decisions and spans come from the deterministic materialize/derive pipeline over the synthetic archetype.",
+    "scenario_id": "chatty-startup-worker-threads",
+    "scenario_title": "A decision buried in commit prose catches a threading rewrite",
+    "source": "simlab"
+  }
+}

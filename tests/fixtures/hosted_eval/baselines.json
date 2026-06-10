@@ -1,15 +1,26 @@
 {
-  "aggregate_presence_rate": 0.5,
+  "aggregate_presence_rate": 1.0,
   "baseline_schema_version": 1,
   "history": [
-    "2026-06-10: initial baselines from the 6-fixture real-history corpus (cortex#338); presence computed via the model-free fixture-local retrieval emulation"
+    "2026-06-10: initial baselines from the 6-fixture real-history corpus (cortex#338); presence computed via the model-free fixture-local retrieval emulation",
+    "2026-06-10: glob/directory scope matching (cortex#484) lifted the three structural misses; 6-fixture aggregate promoted 0.5 -> 1.0 (fix/grader-and-presence)",
+    "2026-06-10: corpus grown 6 -> 14 (4 sibling-repo real-history + 4 simlab promotions, cortex#339); entries added at honestly-measured presence (feat/corpus-growth)",
+    "2026-06-10: bundle merge re-measurement over the union (glob fix x 14 fixtures); this entry's values are the recomputed floor"
   ],
   "presence_by_fixture": {
-    "consolidated-journal-entries-001": false,
-    "journal-entry-deletion-001": false,
+    "consolidated-journal-entries-001": true,
+    "journal-entry-deletion-001": true,
+    "outrider-contract-version-omitted-001": true,
+    "simlab-chatty-startup-worker-threads-001": true,
+    "simlab-clean-shop-retry-fixed-delay-001": true,
+    "simlab-clean-shop-unrelated-docs-001": true,
+    "simlab-legacy-migration-runbook-anchor-001": true,
     "spec-version-drift-001": true,
     "standalone-boundary-respected-001": true,
-    "standalone-boundary-violation-synthetic-001": false,
-    "touchstone-managed-principles-001": true
+    "standalone-boundary-violation-synthetic-001": true,
+    "touchstone-managed-principles-001": true,
+    "vanguard-portfolio-boundary-respected-001": true,
+    "vesper-lucide-icon-vocabulary-001": true,
+    "vesper-workspace-sheet-tokens-respected-001": true
   }
 }

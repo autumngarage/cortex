@@ -19,7 +19,14 @@ from cortex.hosted.ask_ledger import (
     RetrievalTrace,
 )
 from cortex.hosted.embeddings import HOSTED_VECTOR_INDEX_CONFIG_VERSION
-from cortex.hosted.scopes import ChangedSurface, QueryScope, query_scope_parameters
+from cortex.hosted.scopes import (
+    ChangedSurface,
+    QueryScope,
+    query_scope_parameters,
+    scope_match_reason_sql,
+    scope_match_weight_sql,
+    scope_structural_match_sql,
+)
 from cortex.hosted.visibility import (
     SourceVisibilityScope,
     VisibilityBoundaryValidationError,
@@ -345,6 +352,13 @@ def decisions_for_diff_retrieval_sql(schema: str = "cortex_hosted") -> str:
     protected-slice eval gate (cortex#338) against the committed baselines
     in the same PR; tests/test_hosted_ranking_pins.py pins the values and
     the Python/SQL lockstep.
+
+    Scope matching (cortex#484): the ``scope_candidates`` CTE embeds the
+    shared structural-match fragments from ``scopes.py`` — exact
+    (scope_type, normalized_value) equality plus glob-vs-path granularity
+    via reversed LIKE on glob patterns, with exact path outranking glob via
+    STRUCTURAL_SCOPE_WEIGHTS. See the mechanism note above
+    ``scopes.glob_like_pattern_sql``.
     """
 
     _validate_sql_identifier(schema)
@@ -359,6 +373,9 @@ def decisions_for_diff_retrieval_sql(schema: str = "cortex_hosted") -> str:
         version_alias="version",
         tenant_alias="node",
     )
+    scope_match_condition = scope_structural_match_sql()
+    scope_weight_expr = scope_match_weight_sql()
+    scope_reason_expr = scope_match_reason_sql()
     return f"""
 WITH query_scopes AS (
     SELECT *
@@ -399,17 +416,16 @@ scope_candidates AS (
     SELECT DISTINCT ON (version.decision_node_id)
         version.decision_node_id,
         'scope'::text AS source,
-        row_number() OVER (ORDER BY q.structural_weight DESC, version.updated_at DESC) AS source_rank,
-        q.reason_code
+        row_number() OVER (ORDER BY {scope_weight_expr} DESC, version.updated_at DESC) AS source_rank,
+        {scope_reason_expr} AS reason_code
     FROM query_scopes AS q
     JOIN {schema}.decision_scopes AS scope
       ON scope.tenant_id = %(tenant_id)s
-     AND scope.scope_type = q.scope_type
-     AND scope.normalized_value = q.normalized_value
+     AND {scope_match_condition}
      AND (%(repo_id)s::uuid IS NULL OR scope.repo_id IS NULL OR scope.repo_id = %(repo_id)s::uuid)
     JOIN base_versions AS version
       ON version.decision_node_id = scope.decision_node_id
-    ORDER BY version.decision_node_id, q.structural_weight DESC, version.updated_at DESC
+    ORDER BY version.decision_node_id, {scope_weight_expr} DESC, version.updated_at DESC
 ),
 fts_candidates AS (
     SELECT
