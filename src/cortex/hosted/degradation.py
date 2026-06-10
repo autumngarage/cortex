@@ -39,6 +39,7 @@ from cortex.hosted.derive_store import DeriveStoreError
 from cortex.hosted.diff_surface import DiffSurfaceValidationError
 from cortex.hosted.embeddings import HostedEmbeddingValidationError
 from cortex.hosted.eval_fixtures import FixtureValidationError
+from cortex.hosted.graph_writes import GraphWriteValidationError
 from cortex.hosted.labeling import LabelingError
 from cortex.hosted.lanes import LanePolicyValidationError
 from cortex.hosted.ledger_events import LedgerEventValidationError
@@ -83,6 +84,7 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     DeriveStoreError: DegradationMode.DRIFT_DETECTED,
     DiffSurfaceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     FixtureValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    GraphWriteValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     HostedEmbeddingValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     LabelingError: DegradationMode.INVALID_INPUT_REJECTED,
     LanePolicyValidationError: DegradationMode.INVALID_INPUT_REJECTED,

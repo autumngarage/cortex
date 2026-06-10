@@ -211,3 +211,6 @@ mode skip citation or visibility boundaries.
 - `derive_store.DeriveStoreError` classifies as `drift_detected`: its
   marquee failure is a same-idempotency-key / different-event-hash
   collision, i.e. recorded state disagreeing with a re-derivation.
+- `graph_writes.GraphWriteValidationError` classifies as
+  `invalid_input_rejected` — a write plan that would violate graph
+  invariants is refused before any statement executes.
