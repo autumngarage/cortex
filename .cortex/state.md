@@ -1,10 +1,10 @@
 ---
-Generated: 2026-06-09T19:38:14-04:00
+Generated: 2026-06-09T20:15:44-04:00
 Generator: cortex refresh-state v1.6.4
 Sources:
-  - HEAD sha: bf0e32f7e8fce86e020d6e3f0fa454db3eea6d0f
+  - HEAD sha: 2bf1adae817a9d4f5e069847a936b9d102e12a8b
   - .cortex/plans/*.md (12 files)
-  - .cortex/journal/*.md (129 entries, 2026-04-17..2026-06-09)
+  - .cortex/journal/*.md (130 entries, 2026-04-17..2026-06-09)
   - .cortex/doctrine/*.md (11 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
@@ -150,6 +150,7 @@ Sources-hash:
   .cortex/journal/2026-06-09-pr-merged-pr481.md: 827cce736049e30ba265528a723b03914bc40a19bc1db221f37b4ffd7ce7378b
   .cortex/journal/2026-06-09-pr-merged-pr482.md: 7ef175d521d23d7d1be169078aac16791d4cab7ee97b9d6c6a29ee400c6edc74
   .cortex/journal/2026-06-09-pr-merged-pr483.md: 1e4173adbf59a5e8c8fc6579b8c9da8ca2dbcb53fc7f945dea533fce6b446470
+  .cortex/journal/2026-06-09-pr-merged-pr493.md: 24f86d94bc40ee0955a824ba7e5b7de3c12010290270cdf7ff2db57d5751dbc7
   .cortex/journal/2026-06-09-roadmap-refinement-and-issue-hygiene.md: fc39e5f234f3e76c49a0f7672c7156802eb320da237d1865c43082a9b907c11f
   .cortex/plans/context-integrity-production.md: 131441fcd1a50d92e82f4ba8f64c3d667412bf23dc91efc501502f42f70a5197
   .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
@@ -176,7 +177,7 @@ Sources-hash:
   .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476
   .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44
   docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c
-Corpus: 129 Journal entries, 12 Plans, 11 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 130 Journal entries, 12 Plans, 11 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -295,6 +296,7 @@ This file (`.cortex/state.md`) and [`plans/hosted-decision-reviewer.md`](./plans
 - **2026-06-09** — PR #481 merged — feat: add hosted decisions-for-diff retrieval (`.cortex/journal/2026-06-09-pr-merged-pr481.md`, Type: pr-merged)
 - **2026-06-09** — PR #482 merged — feat: add hosted embedding projection checks (`.cortex/journal/2026-06-09-pr-merged-pr482.md`, Type: pr-merged)
 - **2026-06-09** — PR #483 merged — Enforce hosted source visibility boundaries (`.cortex/journal/2026-06-09-pr-merged-pr483.md`, Type: pr-merged)
+- **2026-06-09** — PR #493 merged — docs(plan): refine hosted-decision-reviewer roadmap (`.cortex/journal/2026-06-09-pr-merged-pr493.md`, Type: pr-merged)
 
 ## Stale-now / handle-later
 
