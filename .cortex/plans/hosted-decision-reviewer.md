@@ -6,6 +6,7 @@ Goal-hash: ec1bc286
 Updated-by:
   - 2026-06-09T00:00 codex (created from the Obsidian Cortex master plan and GitHub roadmap issues #444-#475)
   - 2026-06-09T17:30 claude (recorded the #477-#483 substrate merge wave; full-backlog review: wave ordering, per-stage exit gates, issue-range fix #306-#475, milestone/label numbering resolution, hygiene pass across 164 issues)
+  - 2026-06-10T10:30 claude (PE-0 complete: Stage 0 Waves 1-7 + most of 8 built and merged across bundles #505/#507/#509/#518; first live cited answer and first real contradiction catch on Railway compass; pickup pointer moved to the Wave 8/9 tail + Stage 1 frontier)
 Cites: journal/2026-06-09-hosted-decision-reviewer-plan-adopted, journal/2026-06-09-roadmap-refinement-and-issue-hygiene, state.md § Current work, docs/HOSTED-PRICING.md
 ---
 
@@ -261,8 +262,11 @@ consuming #443 + #337 + #395.
 - [x] Stage 0 substrate: database/search/ledger schema, provenance, scope
   index, retrieval, visibility (#460-#466, #468) — shipped via PRs #477-#483,
   2026-06-09.
-- [ ] Stage 0 local proof: derive, eval harness, evaluator, replay, dogfood
-  gate — Waves 1-10 above (tracker #445); gate artifact #337.
+- [ ] Stage 0 local proof — Waves 1-7 and most of 8 SHIPPED (derive with
+  six extractors, eval harness, evaluator with both thesis finding classes,
+  replay runner, read-value surfaces, push/triage/review verbs; first live
+  catch 2026-06-10 per the walkthrough). Remaining: #322/#326/#338/#367/
+  #368/#373/#374/#376/#339 + gate artifacts #450 → #378 → #337.
 - [ ] Stage 1 hosted core: #469-#475 (tracker #485), including the first
   executable SQL path (#472).
 - [ ] Stage 2 GitHub reviewer: #384-#397 build, #452/#453 dogfood,

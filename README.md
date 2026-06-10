@@ -93,10 +93,13 @@ The durable product decision is [Doctrine 0008](./.cortex/doctrine/0008-context-
 
 The reference CLI does not need an LLM for deterministic Context CI: it can
 validate the file contract, build manifests, run exact lookup, and surface stale
-generated context locally. A future hosted Cortex product is different. GitHub
+generated context locally. The hosted Cortex product is different. GitHub
 PR review and Slack conversations need model-backed semantic judgment to feel
 smart: finding a real disagreement between a diff and Doctrine, verifying the
-evidence, or answering a natural-language project question.
+evidence, or answering a natural-language project question. The local proof of
+that loop ran end-to-end on 2026-06-10 — derive → confirm → cited answer →
+the first real contradiction caught with citation; the transcript lives in
+[`docs/walkthrough-pe0.md`](./docs/walkthrough-pe0.md).
 
 The canonical hosted pricing and cost model lives in
 [`docs/HOSTED-PRICING.md`](./docs/HOSTED-PRICING.md). In short: deterministic
@@ -179,7 +182,7 @@ Solo Cortex is *good notes with conventions*. Triad Cortex is *enforced institut
 
 Production-ready and shipped via Homebrew. Three reference installs in the wild: `conductor`, `touchstone`, and `vesper` install Cortex via the Homebrew tap. Latest release: [GitHub Releases](https://github.com/autumngarage/cortex/releases). Run `cortex version` to see the installed build.
 
-For "where are we now" and "what's next": [`.cortex/state.md`](./.cortex/state.md) is the canonical current state; [`.cortex/plans/cortex-v1.md`](./.cortex/plans/cortex-v1.md) is the master launch sequence; [`.cortex/plans/context-integrity-production.md`](./.cortex/plans/context-integrity-production.md) owns the context-integrity roadmap. README deliberately keeps only this pointer per [Doctrine 0007](./.cortex/doctrine/0007-canonical-ownership-of-state-and-plans.md) — repo-root files that restate `.cortex/` content are anti-pattern.
+For "where are we now" and "what's next": [`.cortex/state.md`](./.cortex/state.md) is the canonical current state; [`.cortex/plans/hosted-decision-reviewer.md`](./.cortex/plans/hosted-decision-reviewer.md) is the active master plan (the hosted decision reviewer: local proof → Railway core → GitHub App → Slack console). The earlier launch tracks ([`cortex-v1.md`](./.cortex/plans/cortex-v1.md), [`context-integrity-production.md`](./.cortex/plans/context-integrity-production.md)) are retained as history. README deliberately keeps only this pointer per [Doctrine 0007](./.cortex/doctrine/0007-canonical-ownership-of-state-and-plans.md) — repo-root files that restate `.cortex/` content are anti-pattern.
 
 ## Documentation
 
