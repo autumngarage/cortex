@@ -1,0 +1,47 @@
+[
+  {
+    "id": 95,
+    "body": "Convention: error codes are namespaced per module going forward.",
+    "user": {
+      "login": "cara"
+    },
+    "created_at": "2026-06-03T11:00:00Z",
+    "html_url": "https://github.com/autumngarage/cortex/pull/612#discussion_r95"
+  },
+  {
+    "id": 91,
+    "body": "lgtm!",
+    "user": {
+      "login": "alice"
+    },
+    "created_at": "2026-06-03T09:00:00Z",
+    "html_url": "https://github.com/autumngarage/cortex/pull/612#discussion_r91"
+  },
+  {
+    "id": 92,
+    "body": "We should never call the database from the render path.",
+    "user": {
+      "login": "bob"
+    },
+    "created_at": "2026-06-03T09:05:00Z",
+    "html_url": "https://github.com/autumngarage/cortex/pull/612#discussion_r92"
+  },
+  {
+    "id": 93,
+    "body": "👍",
+    "user": {
+      "login": "alice"
+    },
+    "created_at": "2026-06-03T09:10:00Z",
+    "html_url": "https://github.com/autumngarage/cortex/pull/612#discussion_r93"
+  },
+  {
+    "id": 94,
+    "body": "typo: recieve -> receive",
+    "user": {
+      "login": "bob"
+    },
+    "created_at": "2026-06-03T09:15:00Z",
+    "html_url": "https://github.com/autumngarage/cortex/pull/612#discussion_r94"
+  }
+]
