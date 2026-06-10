@@ -1,0 +1,815 @@
+{
+  "fixtures_run": 14,
+  "matched_total": 5,
+  "matched_with_class_difference_total": 2,
+  "missed_shadow_total": 1,
+  "missed_total": 1,
+  "needs_manual_review_count": 0,
+  "replay_report_schema_version": 2,
+  "results": [
+    {
+      "budget": {
+        "estimated_tokens_used": 343,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 1,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 7657,
+        "token_budget": 8000
+      },
+      "context_hash": "18e035f5ca1d287915598de8c8dd308f8ac9aaebcd431b91caa2b4b169da4546",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        }
+      },
+      "expected_finding_outcomes": [
+        {
+          "cited_span_hashes": [
+            "505736c66e5b3c61a228e8ff5c7992f5229f177bfe9d2a65ca67a38bf8ddb672",
+            "c87b35b88990960a895e9280e488601e6ccfa53d950499ce00a6dc067a60fe72"
+          ],
+          "decision_id": "pr-merged-entry-per-merge",
+          "finding_class": "contradicts-prior-decision",
+          "finding_id": "finding-consolidated-pr-merged-entries",
+          "grade": "matched",
+          "matched_finding_class": null,
+          "omitted_at_stage": null
+        }
+      ],
+      "fixture_hash": "878c2b23f1c2b09264100acdf08aab8db078e03a33e48358a2f01f3d3fd9bead",
+      "fixture_id": "consolidated-journal-entries-001",
+      "graph_snapshot_hash": "5eae0463d49530689fefc57fd0bb9352486a53a3afcae1d0ef0772952ad4b2b4",
+      "input_hash": "e8782f6770ab3db014cf8f23aa2ea3034f319ccd63d5cdcc89157c9a2b09c001",
+      "matched_count": 1,
+      "matched_with_class_difference_count": 0,
+      "missed_count": 0,
+      "missed_shadow_count": 0,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "6623f1af798abbe2dd272c1bab05ba8ebce93c6489691d3d209a45f46a8feb9c",
+      "replay_report_schema_version": 2,
+      "retrieval_config_version": "fixture-local-structural-v2",
+      "unexpected_count": 1,
+      "unexpected_emissions": [
+        {
+          "cited_span_hashes": [
+            "505736c66e5b3c61a228e8ff5c7992f5229f177bfe9d2a65ca67a38bf8ddb672",
+            "c87b35b88990960a895e9280e488601e6ccfa53d950499ce00a6dc067a60fe72"
+          ],
+          "decision_id": "pr-merged-entry-per-merge",
+          "decision_node_id": "151d9c8b-b8df-1d1a-bea8-a1a4b1c2c8c9",
+          "finding_class": "contradicts-prior-decision",
+          "reason": "no_matching_expected_finding",
+          "summary": "New journal entry 2026-06-09-pr-merged-hosted-substrate-wave.md consolidates seven default-branch merges (#477-#483) into one pr-merged entry with a plural 'Merge-commits:' field listing seven shas ('T1.9 (x7, consolidated here as backfill)'), conflicting with the confirmed decision requiring exactly one pr-merged entry per merge with a singular Merge-commit sha."
+        }
+      ]
+    },
+    {
+      "budget": {
+        "estimated_tokens_used": 254,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 1,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 7746,
+        "token_budget": 8000
+      },
+      "context_hash": "1d9b49b44451d6ee675cc5ca92d3612394b220aa614ff9b3d855fae48f5f0fa1",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        }
+      },
+      "expected_finding_outcomes": [
+        {
+          "cited_span_hashes": [
+            "aa880ac6fad9d8877342b1b469af630fd1c8214aef1d4430fb123103eadacc0c"
+          ],
+          "decision_id": "journal-append-only",
+          "finding_class": "contradicts-prior-decision",
+          "finding_id": "finding-journal-entry-deleted",
+          "grade": "matched",
+          "matched_finding_class": null,
+          "omitted_at_stage": null
+        }
+      ],
+      "fixture_hash": "53ad4c3b0de96b23e084d3462595966f3b7d6d2925816f73092dd65844854b05",
+      "fixture_id": "journal-entry-deletion-001",
+      "graph_snapshot_hash": "13e329592166fd6029b2739b99b8d104cb17f2cf1bec37cdf4075f0d734132fa",
+      "input_hash": "8a11f0caf84ecfcd268213b49fd9c9390cb67adbacef1a4f6bc01b8b6f97c79d",
+      "matched_count": 1,
+      "matched_with_class_difference_count": 0,
+      "missed_count": 0,
+      "missed_shadow_count": 0,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "b8d42f6730f69c18bb9b01270269b7f7e516efb12824409fef83d569bf866a2d",
+      "replay_report_schema_version": 2,
+      "retrieval_config_version": "fixture-local-structural-v2",
+      "unexpected_count": 0,
+      "unexpected_emissions": []
+    },
+    {
+      "budget": {
+        "estimated_tokens_used": 571,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 1,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 7429,
+        "token_budget": 8000
+      },
+      "context_hash": "2b08a615fc67beb3a3f08b17adbc0ac32ec516ba4c005ac81942db7ce5eccf03",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        }
+      },
+      "expected_finding_outcomes": [
+        {
+          "cited_span_hashes": [
+            "0e1c5044b982fc2d12e4c564cda773f6ca05b0ae13ed49ad2fb3ac72fd51636d",
+            "1afcc4d3375fbfc25edac3f6d5453dcdf09fdb56cfb3ab5eaee8cd9021dd5234"
+          ],
+          "decision_id": "outrider-api-version-boundaries",
+          "finding_class": "omitted-load-bearing-constraint",
+          "finding_id": "finding-contract-version-not-bumped",
+          "grade": "missed_shadow",
+          "matched_finding_class": null,
+          "omitted_at_stage": null
+        }
+      ],
+      "fixture_hash": "bdc78a5bd737f9519d0c45446f39f19c348e542e03aeb4a8363fa800bb138ddb",
+      "fixture_id": "outrider-contract-version-omitted-001",
+      "graph_snapshot_hash": "360ec13104b3de42c463209557a610bdee88db55425dd0865c6710f59609b201",
+      "input_hash": "2d1998a53fa4a2b25f1ce559bb265575d3e6c8187e152b297004ca74de454b48",
+      "matched_count": 0,
+      "matched_with_class_difference_count": 0,
+      "missed_count": 0,
+      "missed_shadow_count": 1,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "f366be0062f69314530fcb0bdf012b2900172c7596be43ac2a9ce40b3e3478bb",
+      "replay_report_schema_version": 2,
+      "retrieval_config_version": "fixture-local-structural-v2",
+      "unexpected_count": 1,
+      "unexpected_emissions": [
+        {
+          "cited_span_hashes": [
+            "08da7e41134f3feb5bff2351166eabbca6e069b426fae74e41d4cd44e6acc81c",
+            "0e1c5044b982fc2d12e4c564cda773f6ca05b0ae13ed49ad2fb3ac72fd51636d",
+            "1afcc4d3375fbfc25edac3f6d5453dcdf09fdb56cfb3ab5eaee8cd9021dd5234"
+          ],
+          "decision_id": "outrider-api-version-boundaries",
+          "decision_node_id": "653e1255-76ce-8dac-f28d-2eda62008b56",
+          "finding_class": "contradicts-prior-decision",
+          "reason": "no_matching_expected_finding",
+          "summary": "The diff makes semantic changes to the /v1/agents/{name} response — n_proposals/n_resolved/brier are rescoped from all agent_predictions rows to current-model_version rows only, monthly_history gains a model_version filter, calibration-state lookup is rescoped from the hardcoded '<agent>_v1' cohort to current_model_version() ('<agent>_v2'), and realized-PnL proposal selection is newly filtered by payload model_version — but it neither bumps AGENT_DETAIL_RESPONSE_VERSION nor ships the docs/CONTRACT.md compatibility/migration update in the same PR (the docstring even claims the methodology 'is documented under docs/CONTRACT.md', which the diff leaves untouched). This silently rescopes which model_version cohort backs the public response, violating the confirmed versioned-boundary decision."
+        }
+      ]
+    },
+    {
+      "budget": {
+        "estimated_tokens_used": 222,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 1,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 7778,
+        "token_budget": 8000
+      },
+      "context_hash": "05b8fe7fb3c6ea89a12834cfd1fa0535800233a83832572bf67792c1d0371e7a",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 6
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 6
+        }
+      },
+      "expected_finding_outcomes": [
+        {
+          "cited_span_hashes": [
+            "d8899df900c984336a043499404f3e35ed74ab355a09d1a105b83d768fb95be2"
+          ],
+          "decision_id": "d-2ec96a25c070",
+          "finding_class": "contradicts-prior-decision",
+          "finding_id": "f-single-threaded",
+          "grade": "matched",
+          "matched_finding_class": null,
+          "omitted_at_stage": null
+        }
+      ],
+      "fixture_hash": "f8bdd13974594b7eaf9b9c8348de474f2e33fc8b2a8bf1af90f28c2c1885eb69",
+      "fixture_id": "simlab-chatty-startup-worker-threads-001",
+      "graph_snapshot_hash": "bbb168709467c0be372e25b9b4939167edfb6a1d30d57c89708510d9936bdd7d",
+      "input_hash": "316042322b608e7119a63dbe786775dec019918b593a7911e96b53321d96b808",
+      "matched_count": 1,
+      "matched_with_class_difference_count": 0,
+      "missed_count": 0,
+      "missed_shadow_count": 0,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "9e7edf33048cc5f0a730703dfe268fbaef25a81203768fffde59203dc27f3aa4",
+      "replay_report_schema_version": 2,
+      "retrieval_config_version": "fixture-local-structural-v2",
+      "unexpected_count": 0,
+      "unexpected_emissions": []
+    },
+    {
+      "budget": {
+        "estimated_tokens_used": 205,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 1,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 7795,
+        "token_budget": 8000
+      },
+      "context_hash": "636e3990bf2afcc255f7bfb2cbefe28cbf1c66f75ef883a5ac96d874a197d6fb",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 7
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 7
+        }
+      },
+      "expected_finding_outcomes": [
+        {
+          "cited_span_hashes": [
+            "5f476b921266081a89a0cc3f3450d06eeb949964ae108636cd34dde0a4f13681"
+          ],
+          "decision_id": "d-6709af51c94c",
+          "finding_class": "contradicts-prior-decision",
+          "finding_id": "f-retry-policy",
+          "grade": "matched",
+          "matched_finding_class": null,
+          "omitted_at_stage": null
+        }
+      ],
+      "fixture_hash": "60b9e3d2e1280f50d33541f13f0206b0a569878e768aa9fad70bf9482d40c376",
+      "fixture_id": "simlab-clean-shop-retry-fixed-delay-001",
+      "graph_snapshot_hash": "e0af4a4c2adca594d23ac0694a93d26e0d9d998bb6463c96289eea2f9ace3a38",
+      "input_hash": "3c7b5795d5a11678e261adbbd769848483db9bb0ff53dc9dbe4e3414c655adf8",
+      "matched_count": 1,
+      "matched_with_class_difference_count": 0,
+      "missed_count": 0,
+      "missed_shadow_count": 0,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "c67040c613d75a14a0ff9fb0917a2aa96f5e64af31d9664e4f2170ad68357abc",
+      "replay_report_schema_version": 2,
+      "retrieval_config_version": "fixture-local-structural-v2",
+      "unexpected_count": 0,
+      "unexpected_emissions": []
+    },
+    {
+      "budget": {
+        "estimated_tokens_used": 0,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 0,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 8000,
+        "token_budget": 8000
+      },
+      "context_hash": "238dcc422c4623f0d1f16700b2bd7b2cbccfca88a9d4464445df4f1615c2ecde",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 8
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 8
+        }
+      },
+      "expected_finding_outcomes": [],
+      "fixture_hash": "d54cdacf2a470ee88081a13190822ff50fc2129bf5458f19b1e0259f1f81c29e",
+      "fixture_id": "simlab-clean-shop-unrelated-docs-001",
+      "graph_snapshot_hash": "39289c1339771857070d3925156a9f2414d98ef28990c3d0c9787741c95d3ff4",
+      "input_hash": "febd69cb2b8a5c6d1310ca7f568df9d16243432ca4ca05e78965fe26e1fbe3f4",
+      "matched_count": 0,
+      "matched_with_class_difference_count": 0,
+      "missed_count": 0,
+      "missed_shadow_count": 0,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "6a44f91e1de71d499d934078cbf0d27e6ec53a67a3387384a61bc507d0b72c9c",
+      "replay_report_schema_version": 2,
+      "retrieval_config_version": "fixture-local-structural-v2",
+      "unexpected_count": 0,
+      "unexpected_emissions": []
+    },
+    {
+      "budget": {
+        "estimated_tokens_used": 208,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 1,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 7792,
+        "token_budget": 8000
+      },
+      "context_hash": "051211336042f92948dd42c6bc35d98fc20e22cf0f9715ae7fae54af75940dba",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 13
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 13
+        }
+      },
+      "expected_finding_outcomes": [
+        {
+          "cited_span_hashes": [
+            "875c9f9f41b810b8278d190258e4b2d4ccd0f8640cd019e9ff99a01fbb97071e"
+          ],
+          "decision_id": "d-2f7edf12b2bf",
+          "finding_class": "cites-missing-path",
+          "finding_id": "f-stale-runbook",
+          "grade": "matched_with_class_difference",
+          "matched_finding_class": "contradicts-prior-decision",
+          "omitted_at_stage": null
+        }
+      ],
+      "fixture_hash": "773f64c82c78bc93e0602e42a6f5090cb94e61864b6413dfca8e3f4d19a59d6f",
+      "fixture_id": "simlab-legacy-migration-runbook-anchor-001",
+      "graph_snapshot_hash": "342f779fb0baefa9429791828f3b328cadc1208aa991ca56712207d38cc6e217",
+      "input_hash": "3c489d25b6dfa44c69000342592c8cebd923fde62d8fc056665a3875da1182f2",
+      "matched_count": 0,
+      "matched_with_class_difference_count": 1,
+      "missed_count": 0,
+      "missed_shadow_count": 0,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "036eb2b3ac74880a90233fa16db9acc9492d4c19f06a74e8b1fd5c7d65d1142b",
+      "replay_report_schema_version": 2,
+      "retrieval_config_version": "fixture-local-structural-v2",
+      "unexpected_count": 0,
+      "unexpected_emissions": []
+    },
+    {
+      "budget": {
+        "estimated_tokens_used": 361,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 1,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 7639,
+        "token_budget": 8000
+      },
+      "context_hash": "e4ec70662d903e05dad6beb78bba54e9620ece4ae3d7dead1b3e2fc0b03e875b",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        }
+      },
+      "expected_finding_outcomes": [
+        {
+          "cited_span_hashes": [
+            "70e32623ebd58ff4158d9574441e8ba510a70ff67f378c9d4e283e6b0c29a36f",
+            "8d4f5b3db90bc0ea85fe21e683578ffc1c2eb0c350e9df9d3e715b393b9f59ed"
+          ],
+          "decision_id": "spec-version-declared",
+          "finding_class": "omitted-load-bearing-constraint",
+          "finding_id": "finding-spec-version-stale",
+          "grade": "matched_with_class_difference",
+          "matched_finding_class": "contradicts-prior-decision",
+          "omitted_at_stage": null
+        }
+      ],
+      "fixture_hash": "2e2f939c1f00fa2a0120543f21c6dc729a5c344193dee67883d5845b84dabdf8",
+      "fixture_id": "spec-version-drift-001",
+      "graph_snapshot_hash": "1409aad96285d880471774b37ce9bba042210d97bc865ad50726ee6ca59e32fa",
+      "input_hash": "ad94fae3436d47c74d1f0a06f5b7b39060e972329b93085e2e41e58ee029c112",
+      "matched_count": 0,
+      "matched_with_class_difference_count": 1,
+      "missed_count": 0,
+      "missed_shadow_count": 0,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "c77f8e5fcec136de37b9c623bcdcc041c80dca9d53380a24b1cc0d78859cfc31",
+      "replay_report_schema_version": 2,
+      "retrieval_config_version": "fixture-local-structural-v2",
+      "unexpected_count": 0,
+      "unexpected_emissions": []
+    },
+    {
+      "budget": {
+        "estimated_tokens_used": 256,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 1,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 7744,
+        "token_budget": 8000
+      },
+      "context_hash": "ee111c728c5c908eb81f50376f23d48b695ccb305c2c6e43d3ea857471d44fbe",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        }
+      },
+      "expected_finding_outcomes": [],
+      "fixture_hash": "0f2e4b60b5b9e252fb9dc5c256c134caf803bcd443d3679ddf9c89126e725008",
+      "fixture_id": "standalone-boundary-respected-001",
+      "graph_snapshot_hash": "cbe4a44ca39a47e71cf120978aeade7393f5421a9d9454c6cc440491fd840618",
+      "input_hash": "7f0c984ee31c3deb6d75db5e4f31636444b4edf5030c4bb6a08b7d26156c9a35",
+      "matched_count": 0,
+      "matched_with_class_difference_count": 0,
+      "missed_count": 0,
+      "missed_shadow_count": 0,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "e62f80103808c35dab165e03f4fa2a15f0c598e293116a98f047a8617a49df6c",
+      "replay_report_schema_version": 2,
+      "retrieval_config_version": "fixture-local-structural-v2",
+      "unexpected_count": 0,
+      "unexpected_emissions": []
+    },
+    {
+      "budget": {
+        "estimated_tokens_used": 256,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 1,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 7744,
+        "token_budget": 8000
+      },
+      "context_hash": "10e2525aa922a289e927826409144131093193c82cd4ee5a2e6933a7152c4661",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        }
+      },
+      "expected_finding_outcomes": [
+        {
+          "cited_span_hashes": [
+            "c12d2e495956ba34f043d4493d05d8a4138c460a5abddb2fa98c100dc7219227"
+          ],
+          "decision_id": "standalone-boundary-doctrine-0002",
+          "finding_class": "contradicts-prior-decision",
+          "finding_id": "finding-quartet-import",
+          "grade": "matched",
+          "matched_finding_class": null,
+          "omitted_at_stage": null
+        }
+      ],
+      "fixture_hash": "2bfcabce0f8e8881fec9641d910d9bf5c5fb5bd7ccdf7c4b80dba4cd3a64afbf",
+      "fixture_id": "standalone-boundary-violation-synthetic-001",
+      "graph_snapshot_hash": "339160eeca8e5d396cc74fb20052ab066eb8b37babf9698b456ce06e2ccbb425",
+      "input_hash": "ce0cedccd4ee0a8afdc76fe8107b36a34ccf189f8d27fac81a55760799902641",
+      "matched_count": 1,
+      "matched_with_class_difference_count": 0,
+      "missed_count": 0,
+      "missed_shadow_count": 0,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "6c2f2d59e03547aa28c48dbbe82724e177d02cf6993d63bb1c78bc8ea51f4809",
+      "replay_report_schema_version": 2,
+      "retrieval_config_version": "fixture-local-structural-v2",
+      "unexpected_count": 0,
+      "unexpected_emissions": []
+    },
+    {
+      "budget": {
+        "estimated_tokens_used": 219,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 1,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 7781,
+        "token_budget": 8000
+      },
+      "context_hash": "21714be649a7977bedc2fd2592217e66734f73155795283ec9f71911b94dc0af",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        }
+      },
+      "expected_finding_outcomes": [],
+      "fixture_hash": "a9e3e18028fa139b8e093d280a1361c7aea7d25f3b48f0e103b35ed57909b49f",
+      "fixture_id": "touchstone-managed-principles-001",
+      "graph_snapshot_hash": "f14a9ea403e6e4c7c9c8a2d382a928fb5bde7a35c41d7a0ca56209bc9ad021a3",
+      "input_hash": "b67a5f3ef3dcde95c833f494b7bba5c9b8630273bad32a4bbf7861a2cf1a8678",
+      "matched_count": 0,
+      "matched_with_class_difference_count": 0,
+      "missed_count": 0,
+      "missed_shadow_count": 0,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "ec4e1f84287841d2fb680b120a9c8b41e27920775517d6e6e3bdf0b3b8cb6584",
+      "replay_report_schema_version": 2,
+      "retrieval_config_version": "fixture-local-structural-v2",
+      "unexpected_count": 1,
+      "unexpected_emissions": [
+        {
+          "cited_span_hashes": [
+            "b2b9c2569e35a977e58f2e8f727cf0bc8063a6129e2ff1b34d874cf181c35b19"
+          ],
+          "decision_id": "principles-touchstone-managed",
+          "decision_node_id": "32d6a0d4-1e14-74bd-e426-ac295701e88e",
+          "finding_class": "contradicts-prior-decision",
+          "reason": "no_matching_expected_finding",
+          "summary": "The diff hand-edits four files under principles/ in this repo (modifies principles/README.md and principles/git-workflow.md, adds principles/agent-swarms.md and principles/file-upstream-bugs.md), conflicting with the confirmed decision that principles/ and scripts/ are Touchstone-managed and change only via touchstone update sync. Nothing in the diff indicates it is the output of a touchstone sync; new content also cross-references scripts/spawn-worktree.sh and scripts/setup-worktree-local.sh, which are likewise Touchstone-owned surfaces."
+        }
+      ]
+    },
+    {
+      "budget": {
+        "estimated_tokens_used": 461,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 1,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 7539,
+        "token_budget": 8000
+      },
+      "context_hash": "f7573b0e69a78dce619f76fe7e26cf1a500f1d523713ad246ce549b449bc617d",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        }
+      },
+      "expected_finding_outcomes": [],
+      "fixture_hash": "beecdaade6ab1d13ceea61c62da2af2e78157e1b6b29e17e81c9127859a84d78",
+      "fixture_id": "vanguard-portfolio-boundary-respected-001",
+      "graph_snapshot_hash": "4e2d18a15097b91bc8b9bac22d97434bcb3a9ebb37c27e843627f88669943cd2",
+      "input_hash": "9404645052f3c93520165ace2984bdf684e8a22ad4b844f4e7a655cd452d4356",
+      "matched_count": 0,
+      "matched_with_class_difference_count": 0,
+      "missed_count": 0,
+      "missed_shadow_count": 0,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "2d1e24152a0dd60761dc742dd30635d04f92411fc2980799bb164975848b1468",
+      "replay_report_schema_version": 2,
+      "retrieval_config_version": "fixture-local-structural-v2",
+      "unexpected_count": 0,
+      "unexpected_emissions": []
+    },
+    {
+      "budget": {
+        "estimated_tokens_used": 573,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 1,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 7427,
+        "token_budget": 8000
+      },
+      "context_hash": "e491848fc846c04f0ef19bdf1accf942a41de4db652f4accde09f18eb36d9971",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        }
+      },
+      "expected_finding_outcomes": [
+        {
+          "cited_span_hashes": [
+            "e8ab0abbc8f0d502c89b00bb63ee43d07ad417e7c33d6caae28634167feb21f9"
+          ],
+          "decision_id": "vesper-design-system-tokens",
+          "finding_class": "contradicts-prior-decision",
+          "finding_id": "finding-sf-symbols-vocabulary",
+          "grade": "missed",
+          "matched_finding_class": null,
+          "omitted_at_stage": null
+        }
+      ],
+      "fixture_hash": "64324ec6be9e93ac2440936faa4b02a458c41b64e4d29b6d12d6b1bba03cedcf",
+      "fixture_id": "vesper-lucide-icon-vocabulary-001",
+      "graph_snapshot_hash": "3f82411e476289e5dae8e344e86cf0918938c3d58541d9636e22eca50bcf1975",
+      "input_hash": "c7a13405a86ea09c501b33327bb0b81775c4d2af9456581bebdacf48603c4858",
+      "matched_count": 0,
+      "matched_with_class_difference_count": 0,
+      "missed_count": 1,
+      "missed_shadow_count": 0,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "0c40812fc0efe08f325c9c21fa428b8ea8fd54c4620183510f7cc384d6f205cc",
+      "replay_report_schema_version": 2,
+      "retrieval_config_version": "fixture-local-structural-v2",
+      "unexpected_count": 1,
+      "unexpected_emissions": [
+        {
+          "cited_span_hashes": [
+            "a3b88afd060662952576a9c1f0e26d7ee25a82dc06d1337e59ee3e21b5067719",
+            "c50ec309ee35c99c3f9cf0696f4d35cabaa7adcda4e193992240449acb4b8049",
+            "e8ab0abbc8f0d502c89b00bb63ee43d07ad417e7c33d6caae28634167feb21f9"
+          ],
+          "decision_id": "vesper-design-system-tokens",
+          "decision_node_id": "99c22083-640e-c482-8850-a78d7fa73b9a",
+          "finding_class": "contradicts-prior-decision",
+          "reason": "no_matching_expected_finding",
+          "summary": "The confirmed decision requires all icons to go through LucideImage/LucideLabel and explicitly forbids Image(systemName:) — SF Symbols are not part of the icon vocabulary. The diff replaces LucideImage with Image(systemName:) at multiple sites (info.circle, checkmark, plus.diamond, wifi.slash, cursorarrow, chevron.left.forwardslash.chevron.right in AIInvitePopover.swift and WindowWatchButton.swift) and adds a test ('AI picker generic chrome uses SF Symbols') that locks in the violation. It also moves AIInviteRow off the ButtonStyles.swift helper (vesperPopoverRowStyle) onto raw .buttonStyle(.borderless), bypassing the decision that button styles come from ButtonStyles.swift."
+        }
+      ]
+    },
+    {
+      "budget": {
+        "estimated_tokens_used": 561,
+        "estimator_version": "chars-per-token-v1",
+        "included_candidate_count": 1,
+        "omitted_for_budget": 0,
+        "remaining_tokens": 7439,
+        "token_budget": 8000
+      },
+      "context_hash": "ecf9dbe488866ae0b3c686a9c93146c7c298decf7e49817a040a12719144a673",
+      "diagnostics": {
+        "context_omitted_for_budget": 0,
+        "evaluator_degraded_reasons": [],
+        "evaluator_reported_omitted_decisions": 0,
+        "impossible_expected_findings": [],
+        "pack_omitted_counts": {
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        },
+        "total_omitted": {
+          "over_budget": 0,
+          "over_limit": 0,
+          "status_filtered": 0,
+          "suppressed_below_floor": 0
+        }
+      },
+      "expected_finding_outcomes": [],
+      "fixture_hash": "0ae92f466b69fb7cc14d2693b24e584bc507d3215b266ea67e030900dba07b1e",
+      "fixture_id": "vesper-workspace-sheet-tokens-respected-001",
+      "graph_snapshot_hash": "116a0fece6681f1b986793f1a3f945fa25fddc263d989034816bbf423344ed56",
+      "input_hash": "211a59412bf45821cd066008a05642037202cede48b3da1ba5890121102dc653",
+      "matched_count": 0,
+      "matched_with_class_difference_count": 0,
+      "missed_count": 0,
+      "missed_shadow_count": 0,
+      "model_id": "anthropic/claude-cli",
+      "needs_manual_review": false,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee",
+      "query_hash": "101c9e232bdbf5cd8b846a50f99db9752a9e84479f67bfe59ecadff0e2717e12",
+      "replay_report_schema_version": 2,
+      "retrieval_config_version": "fixture-local-structural-v2",
+      "unexpected_count": 1,
+      "unexpected_emissions": [
+        {
+          "cited_span_hashes": [
+            "618da352f3e89ebd5516a580dba704fa7cf35e4455f6d6d78503b9879df70b38",
+            "85db7d2e206e9b415e176b7eaa8982333382452db009343dfd0e2162b337398c",
+            "89600dfd0293959ce922b89ad1c1a22b22c755f07d597a5df191e5fe59e398f3"
+          ],
+          "decision_id": "vesper-design-system-tokens",
+          "decision_node_id": "99c22083-640e-c482-8850-a78d7fa73b9a",
+          "finding_class": "contradicts-prior-decision",
+          "reason": "no_matching_expected_finding",
+          "summary": "NewWorkspaceSheet.swift adds Cancel and Create buttons using plain SwiftUI Button with default styling instead of the button styles from ButtonStyles.swift required by the design-system decision; the adjacent Choose button correctly applies .vesperGhostButtonStyle(), making the omission on Cancel/Create inconsistent with the confirmed rule that all Vesper UI uses ButtonStyles.swift. Icon usage complies (LucideImage/LucideLabel only, no Image(systemName:)) and spacing/typography/theme tokens come from DesignSystem.swift."
+        }
+      ]
+    }
+  ],
+  "unexpected_total": 5
+}
