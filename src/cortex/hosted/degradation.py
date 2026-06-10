@@ -55,6 +55,7 @@ from cortex.hosted.eval_fixtures import FixtureValidationError
 from cortex.hosted.evaluator import EvaluatorValidationError, UncitedFindingError
 from cortex.hosted.event_ordering import EventOrderingError
 from cortex.hosted.extractors import ExtractorError
+from cortex.hosted.finding_render import FindingRenderError
 from cortex.hosted.graph_rebuild import GraphRebuildError
 from cortex.hosted.graph_snapshot import GraphSnapshotValidationError
 from cortex.hosted.graph_writes import GraphWriteValidationError
@@ -156,6 +157,11 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # extraction or write; recognized-but-noisy material is not an error at
     # all (it becomes DroppedChatter with a reason code).
     ExtractorError: DegradationMode.INVALID_INPUT_REJECTED,
+    # A finding block whose cited span hash is absent from the span index is
+    # refused rendering (cortex#376) — an advisory surface never renders a
+    # citation a reader cannot verify, mirroring the evaluator's citation
+    # boundary.
+    FindingRenderError: DegradationMode.FAIL_CLOSED_REFUSAL,
     FixtureValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     # GraphRebuildError refuses a replay whose log material cannot fold into
     # a valid projection (missing contract keys, unknown nodes, key/hash

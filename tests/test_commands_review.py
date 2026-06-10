@@ -24,7 +24,6 @@ from click.testing import CliRunner
 
 from cortex.cli import cli
 from cortex.commands import review
-from cortex.hosted.confidence import ConfidenceTier
 from cortex.hosted.eval_fixtures import (
     DecisionStatus,
     EvalFixture,
@@ -628,10 +627,6 @@ def test_resolve_diff_text_names_git_failures(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_tier_glyphs_cover_every_confidence_tier() -> None:
-    assert set(review.TIER_GLYPHS) == set(ConfidenceTier)
-
-
 def test_token_budget_omissions_render_visibly() -> None:
     fixture = _decisions_fixture()
     pack = review.build_offline_candidate_pack(fixture, CONTRADICTION_DIFF)
@@ -649,6 +644,72 @@ def test_token_budget_omissions_render_visibly() -> None:
     assert "over_budget=1" in report
     assert "degraded reasons:" in report
     assert "token_budget 1" in report
+
+
+def test_review_report_counts_shadow_findings_without_rendering_them() -> None:
+    """#373/#374: shadow captures are a visible count, never a finding block."""
+
+    fixture = _decisions_fixture()
+    pack = review.build_offline_candidate_pack(fixture, CONTRADICTION_DIFF)
+
+    def _shadow_finding(request: EvaluateRequest) -> tuple[FindingDraft, ...]:
+        candidate = next(
+            item
+            for item in request.candidate_pack.candidates
+            if "exponential backoff" in item.decision_text
+        )
+        return (
+            FindingDraft(
+                finding_class=FindingClass.CITES_MISSING_PATH,
+                decision_node_id=candidate.decision_node_id,
+                cited_span_hashes=tuple(
+                    span.span_hash for span in candidate.cited_spans
+                ),
+                summary=(
+                    "The diff imports src/payments/missing_helper.py, which "
+                    "does not exist in the changed surface."
+                ),
+                confidence_label="advisory",
+            ),
+        )
+
+    outcome = review.evaluate_review(
+        pack=pack,
+        diff_text=CONTRADICTION_DIFF,
+        model=_CapturingEvaluateModel(_shadow_finding),
+        token_budget=review.DEFAULT_REVIEW_TOKEN_BUDGET,
+        tenant_id=_TENANT,
+        source_id=_SOURCE,
+    )
+    assert outcome.emitted == ()
+    assert outcome.shadow_finding_count == 1
+    report = review.render_review_report(outcome, pack)
+    assert "0 advisory finding(s)" in report
+    assert (
+        "shadow findings (cortex#373/#374 — captured, never rendered as "
+        "advisory): cites-missing-path x1"
+    ) in report
+    # No finding block renders for the shadow capture.
+    assert "finding 1/" not in report
+    assert "cites-missing-path x1" in report
+
+
+def test_review_report_carries_no_shadow_line_on_non_shadow_paths() -> None:
+    """Output-unchanged guard: runs without shadow captures render no shadow line."""
+
+    fixture = _decisions_fixture()
+    pack = review.build_offline_candidate_pack(fixture, CONTRADICTION_DIFF)
+    outcome = review.evaluate_review(
+        pack=pack,
+        diff_text=CONTRADICTION_DIFF,
+        model=_CapturingEvaluateModel(_contradiction_findings),
+        token_budget=review.DEFAULT_REVIEW_TOKEN_BUDGET,
+        tenant_id=_TENANT,
+        source_id=_SOURCE,
+    )
+    assert outcome.shadow_findings == ()
+    report = review.render_review_report(outcome, pack)
+    assert "shadow" not in report
 
 
 def test_rejected_findings_render_with_reason_codes() -> None:

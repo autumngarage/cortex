@@ -812,7 +812,15 @@ def _derive_prompt(request: DeriveRequest) -> str:
 
 
 def _evaluate_prompt(request: EvaluateRequest) -> str:
-    """Render the evaluate task as a strict-JSON instruction prompt."""
+    """Render the evaluate task as a strict-JSON instruction prompt.
+
+    The finding-class vocabulary comes from the canonical Stage 0 registry
+    (``evaluator.evaluate_prompt_guidance``): the two live classes plus the
+    cortex#373/#374 shadow classes. Shadow-class findings are asked for so
+    their precision can be measured, but the evaluator captures them in
+    ``EvaluationOutcome.shadow_findings`` — they never emit, ladder, or
+    render until graduation.
+    """
 
     pack = request.candidate_pack
     task = {

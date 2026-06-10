@@ -266,6 +266,10 @@ mode skip citation or visibility boundaries.
   span hash the pack never offered) is refused emission outright — the
   citation boundary holds (cortex#377), mirroring `ask_ledger`'s
   `no_cited_support` refusal.
+- `finding_render.FindingRenderError` -> `fail_closed_refusal`: a finding
+  block whose cited span hash is absent from the span index is refused
+  rendering (cortex#376) — an advisory surface never renders a citation a
+  reader cannot verify; the render-side mirror of the cortex#377 boundary.
 
 ### Graph-hardening registrations (2026-06-10, cortex#318/#319/#320)
 
