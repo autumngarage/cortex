@@ -239,3 +239,5 @@ mode skip citation or visibility boundaries.
   `quality_series.QualitySeriesValidationError` classify as
   `invalid_input_rejected` — policy/composition/series material rejected
   before any decision or rate is produced.
+- `route_comparison.RouteComparisonValidationError` classifies as
+  `invalid_input_rejected`.

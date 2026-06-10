@@ -57,6 +57,7 @@ from cortex.hosted.model_registry import RegistryValidationError
 from cortex.hosted.provenance import ProvenanceValidationError
 from cortex.hosted.quality_series import QualitySeriesValidationError
 from cortex.hosted.recorded_responses import RecordedResponseError
+from cortex.hosted.route_comparison import RouteComparisonValidationError
 from cortex.hosted.routing import (
     ClaudeCliOutputError,
     ClaudeCliUnavailableError,
@@ -109,6 +110,7 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     BankingValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     CascadeValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     QualitySeriesValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    RouteComparisonValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     ConfidenceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     DecisionsForDiffValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     # DeriveStoreError's marquee failure is the same-idempotency-key /
