@@ -1,0 +1,65 @@
+{
+  "decisions": [
+    {
+      "decision_id": "journal-append-only",
+      "decision_text": "The Journal is append-only (protocol.md section 4.1): entries are never edited in place or deleted; corrections happen via new entries that cite and revise the old ones.",
+      "scopes": [
+        {
+          "normalized_value": ".cortex/journal/**",
+          "scope_type": "glob",
+          "value": ".cortex/journal/**"
+        }
+      ],
+      "source_timestamp": "2026-05-25T15:37:34-04:00",
+      "spans": [
+        {
+          "end_offset": 13917,
+          "excerpt": "Never edit an existing Journal entry in place. New entry per event. If new information changes an old conclusion, write a new entry that cites and revises the old one; the old one stays unchanged.",
+          "permalink": "https://github.com/autumngarage/cortex/blob/cf5bf9f9cbc29db89576d00e97de358c1d5999dd/.cortex/protocol.md",
+          "source_document_hash": "5634cc85efffbccca38b9afe3dd374a30f5e9ff239cd1afc6723cacd43bbd03b",
+          "span_hash": "aa880ac6fad9d8877342b1b469af630fd1c8214aef1d4430fb123103eadacc0c",
+          "start_offset": 13721
+        }
+      ],
+      "status": "confirmed"
+    }
+  ],
+  "diff": {
+    "base_sha": "cf5bf9f9cbc29db89576d00e97de358c1d5999dd",
+    "changed_paths": [
+      ".cortex/journal/2026-06-09-pr-merged-pr493.md"
+    ],
+    "config_keys": [],
+    "head_sha": "28d3bbcd3755544008f886e2bdee2fd2574bfaf1",
+    "issue_refs": [],
+    "patch": "diff --git a/.cortex/journal/2026-06-09-pr-merged-pr493.md b/.cortex/journal/2026-06-09-pr-merged-pr493.md\ndeleted file mode 100644\nindex bc9bfce..0000000\n--- a/.cortex/journal/2026-06-09-pr-merged-pr493.md\n+++ /dev/null\n@@ -1,40 +0,0 @@\n-# PR #493 merged — docs(plan): refine hosted-decision-reviewer roadmap\n-\n-**Date:** 2026-06-09\n-**Type:** pr-merged\n-**Trigger:** T1.9 (post-merge hook reported `installed cortex lacks 'journal post-merge'`; entry written by the merging agent)\n-**Cites:** plans/hosted-decision-reviewer.md, journal/2026-06-09-roadmap-refinement-and-issue-hygiene\n-**Merge-commit:** 2bf1ada\n-**Branch:** docs/roadmap-refinement\n-\n-> The roadmap-refinement PR landed: the active plan now carries wave\n-> ordering for all four stages, per-stage exit gates lifted from the\n-> canonical master plan, the corrected issue span (#306-#475), and a pickup\n-> pointer; T1.9 backfill entries cover the unjournaled 2026-05-25 →\n-> 2026-06-09 merge window; `.cortex/SPEC_VERSION` bumped 0.5.0 → 1.1.0.\n-\n-## What shipped\n-\n-- `plans/hosted-decision-reviewer.md` rewritten as the wave-ordered,\n-  exit-gated repo-operational roadmap (milestones are the stage authority).\n-- 14 per-PR `pr-merged` backfill entries (#298-#300, #303-#305, #476,\n-  #477-#483) with singular `Merge-commit:` fields the T1.9 audit matcher\n-  can pair exactly.\n-- Decision entry `journal/2026-06-09-roadmap-refinement-and-issue-hygiene`\n-  recording the milestone-authority decision, the 12 evidence-based issue\n-  closes, and the alchemist-skip dispatch gate.\n-- Historical plans (`cortex-v1`, `context-integrity-production`,\n-  `phase-b-walking-skeleton`) annotated with park pointers; `map.md` stub\n-  re-dated; `state.md` regenerated with the corrected hand block.\n-\n-## Review trail\n-\n-Four merge-gate rounds; each caught one real consistency finding (stale\n-state Sources-hash, stale `map.md` Spec pin, then the consolidated-backfill\n-audit-matcher gap, fixed by the per-PR split). Clean review on round 4.\n-\n-## Triggers fired\n-\n-- T1.9 (this entry)\n-- T1.1 fired on the branch (diff touched `.cortex/plans/`) — satisfied by\n-  `journal/2026-06-09-roadmap-refinement-and-issue-hygiene`.\n",
+    "repo_name": "cortex",
+    "repo_owner": "autumngarage",
+    "symbols": []
+  },
+  "expected_findings": [
+    {
+      "cited_span_hashes": [
+        "aa880ac6fad9d8877342b1b469af630fd1c8214aef1d4430fb123103eadacc0c"
+      ],
+      "decision_id": "journal-append-only",
+      "finding_class": "contradicts-prior-decision",
+      "finding_id": "finding-journal-entry-deleted",
+      "suggested_repair": "Merge or rebase onto current main so existing Journal entries are preserved; never ship a diff that removes a Journal entry.",
+      "summary": "Relative to the merge-time base, the diff deletes .cortex/journal/2026-06-09-pr-merged-pr493.md — a Journal entry deletion the append-only invariant forbids. The deletion was a stale-branch artifact (the branch forked before PR #494 landed the entry) that the review on PR #495 flagged."
+    }
+  ],
+  "fixture_id": "journal-entry-deletion-001",
+  "fixture_schema_version": 1,
+  "labels": [],
+  "metadata": {
+    "notes": "Real stale-base artifact: PR #495's commit 28d3bbc predates PR #494's merge (cf5bf9f), so the review diff showed the pr493 journal entry as deleted. Resolved by merging main (3c846e0) before squash-merge.",
+    "patch_paths": [
+      ".cortex/journal/"
+    ],
+    "pr_number": 495,
+    "repo": "autumngarage/cortex",
+    "scenario": "stale-base-journal-entry-deletion",
+    "source": "real-history"
+  }
+}

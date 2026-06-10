@@ -59,6 +59,9 @@ a declared boundary.
 - `storage.validate_canonical_store` raises `StoreBoundaryError` when hosted
   code tries to use a store other than Postgres for product semantics
   (`src/cortex/hosted/storage.py`).
+- `replay_runner.run_fixture` raises `ReplayError` naming the fixture id when
+  a recorded evaluate response is missing — replay refuses to fall back to a
+  live model call (`src/cortex/hosted/replay_runner.py`, cortex#336).
 
 **What the user sees.** An explicit refusal with the reason: "no decision
 in the ledger supports an answer to this", or an authorization error naming
@@ -228,6 +231,13 @@ mode skip citation or visibility boundaries.
   recording never falls back to a live call).
 - `recorded_responses.RecordedResponseError` -> `drift_detected` (hash or
   schema-version mismatch in recorded material).
+
+### Eval corpus builder registration (2026-06-10)
+
+- `corpus_builder.CorpusBuilderError` -> `invalid_input_rejected`: corpus
+  material that cannot be frozen into a replayable fixture (unmerged PR,
+  empty diff, ambiguous citation excerpt, non-canonical fixture bytes) is
+  rejected before anything is written.
 - `context_assembly/citation_check/candidate_metrics/graph_snapshot/
   event_ordering` validation errors -> `invalid_input_rejected`.
 - `extractors.ExtractorError` (cortex#351-#353) classifies as
@@ -235,3 +245,55 @@ mode skip citation or visibility boundaries.
   rejected before any extraction or write. Recognized-but-noisy material is
   not a failure at all — it surfaces as `DroppedChatter` with a reason code
   (the write-side `bounded_omission` behavior above).
+- `banking.BankingValidationError`, `cascade.CascadeValidationError`, and
+  `quality_series.QualitySeriesValidationError` classify as
+  `invalid_input_rejected` — policy/composition/series material rejected
+  before any decision or rate is produced.
+- `route_comparison.RouteComparisonValidationError` classifies as
+  `invalid_input_rejected`.
+
+### Wave 5 evaluator registrations (2026-06-10)
+
+- `advisory_ladder.AdvisoryLadderError` -> `invalid_input_rejected`: an
+  unknown confidence label or ladder-vocabulary violation is rejected before
+  the finding can be placed on the ladder (cortex#375).
+- `evaluator.EvaluatorValidationError` -> `invalid_input_rejected`:
+  evaluator material that violates the soft-evaluator contract (finding-class
+  evidence, registry shape, outcome arithmetic) is rejected before any
+  emission or ledger draft exists (cortex#370-#372).
+- `evaluator.UncitedFindingError` -> `fail_closed_refusal`: a finding whose
+  provenance is absent from the candidate pack (unresolvable decision ref or
+  span hash the pack never offered) is refused emission outright — the
+  citation boundary holds (cortex#377), mirroring `ask_ledger`'s
+  `no_cited_support` refusal.
+
+### Graph-hardening registrations (2026-06-10, cortex#318/#319/#320)
+
+- `candidate_dedup.CandidateDedupError` -> `invalid_input_rejected`:
+  malformed identity material or a non-`candidate.proposed` event is refused
+  before any dedup fold or graph write — nothing partial is produced.
+- `graph_rebuild.GraphRebuildError` -> `invalid_input_rejected`: a replay
+  whose event log cannot fold into a valid projection (missing replay-contract
+  payload keys, unknown node references, same-idempotency-key/different-hash
+  content) is refused outright; no partial rebuilt graph is ever returned.
+
+### Read-value surface registrations (2026-06-10, cortex#381/#382)
+
+- `ask_surface.AskSurfaceValidationError` -> `invalid_input_rejected`:
+  malformed answer material (an uncited answer line, a no-answer carrying
+  lines) is refused at construction before any rendering.
+- `ask_surface.BrowseIndexRefusedError` -> `fail_closed_refusal`: a
+  browse-shaped or empty question is refused to hold the no-browsable-index
+  boundary (cortex#382) — the corpus is never enumerated to make a query
+  succeed.
+
+### Executable-path registrations (2026-06-09, cortex#472)
+
+- `db.HostedDbError` classifies as `fail_closed_refusal`: a connection that
+  cannot satisfy the hosted policy (missing driver, invalid URL, unreachable
+  host, auth failure) is refused with a named reason before any partial
+  state exists.
+- `migrations.HostedMigrationError` classifies as `fail_closed_refusal`: a
+  missing extension, a newer-than-this-build recorded schema version, or an
+  unverifiable `schema_migrations` record blocks the migration visibly and
+  rolls back — the runner never reports a success it cannot read back.

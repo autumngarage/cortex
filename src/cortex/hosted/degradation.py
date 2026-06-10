@@ -32,28 +32,41 @@ import importlib.util
 from dataclasses import dataclass
 from enum import StrEnum
 
+from cortex.hosted.advisory_ladder import AdvisoryLadderError
 from cortex.hosted.ask_ledger import AnswerState, AskLedgerValidationError
+from cortex.hosted.ask_surface import AskSurfaceValidationError, BrowseIndexRefusedError
+from cortex.hosted.banking import BankingValidationError
+from cortex.hosted.candidate_dedup import CandidateDedupError
 from cortex.hosted.candidate_metrics import CandidateMetricsValidationError
+from cortex.hosted.cascade import CascadeValidationError
 from cortex.hosted.citation_check import CitationCheckError
 from cortex.hosted.confidence import ConfidenceValidationError
 from cortex.hosted.context_assembly import ContextAssemblyValidationError
+from cortex.hosted.corpus_builder import CorpusBuilderError
 from cortex.hosted.cost import BudgetExceededError, CostValidationError
+from cortex.hosted.db import HostedDbError
 from cortex.hosted.decisions_for_diff import DecisionsForDiffValidationError
 from cortex.hosted.derive_store import DeriveStoreError
 from cortex.hosted.diff_surface import DiffSurfaceValidationError
 from cortex.hosted.embeddings import HostedEmbeddingValidationError
 from cortex.hosted.eval_fixtures import FixtureValidationError
+from cortex.hosted.evaluator import EvaluatorValidationError, UncitedFindingError
 from cortex.hosted.event_ordering import EventOrderingError
 from cortex.hosted.extractors import ExtractorError
+from cortex.hosted.graph_rebuild import GraphRebuildError
 from cortex.hosted.graph_snapshot import GraphSnapshotValidationError
 from cortex.hosted.graph_writes import GraphWriteValidationError
 from cortex.hosted.labeling import LabelingError
 from cortex.hosted.lane_assignment import LaneAssignmentError
 from cortex.hosted.lanes import LanePolicyValidationError
 from cortex.hosted.ledger_events import LedgerEventValidationError
+from cortex.hosted.migrations import HostedMigrationError
 from cortex.hosted.model_registry import RegistryValidationError
 from cortex.hosted.provenance import ProvenanceValidationError
+from cortex.hosted.quality_series import QualitySeriesValidationError
 from cortex.hosted.recorded_responses import RecordedResponseError
+from cortex.hosted.replay_runner import ReplayError
+from cortex.hosted.route_comparison import RouteComparisonValidationError
 from cortex.hosted.routing import (
     ClaudeCliOutputError,
     ClaudeCliUnavailableError,
@@ -90,12 +103,19 @@ class DegradationMode(StrEnum):
 # mode would silently mislabel that refinement. Unknown types therefore
 # raise in classify_failure instead of falling back to anything.
 _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
+    # An unknown confidence label or ladder-vocabulary violation is rejected
+    # before any finding can be placed on the ladder (cortex#375).
+    AdvisoryLadderError: DegradationMode.INVALID_INPUT_REJECTED,
     BudgetExceededError: DegradationMode.FAIL_CLOSED_REFUSAL,
     CandidateMetricsValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     CitationCheckError: DegradationMode.INVALID_INPUT_REJECTED,
     ClaudeCliOutputError: DegradationMode.FAIL_CLOSED_REFUSAL,
     ClaudeCliUnavailableError: DegradationMode.DEGRADED_CAPABILITY,
     ContextAssemblyValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # Corpus material that cannot be frozen into a replayable fixture (unmerged
+    # PR, empty diff, ambiguous citation excerpt, non-canonical bytes) is
+    # rejected before anything is written — same family as fixture validation.
+    CorpusBuilderError: DegradationMode.INVALID_INPUT_REJECTED,
     CostValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     EventOrderingError: DegradationMode.INVALID_INPUT_REJECTED,
     GraphSnapshotValidationError: DegradationMode.INVALID_INPUT_REJECTED,
@@ -103,6 +123,20 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     RecordedResponseMissingError: DegradationMode.FAIL_CLOSED_REFUSAL,
     RoutingError: DegradationMode.INVALID_INPUT_REJECTED,
     AskLedgerValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    BankingValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    CascadeValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    QualitySeriesValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    RouteComparisonValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # CandidateDedupError fires before any graph write: malformed identity
+    # material or a non-candidate event is refused, nothing partial folds.
+    CandidateDedupError: DegradationMode.INVALID_INPUT_REJECTED,
+    # Malformed answer material (e.g. an uncited answer line) is refused at
+    # construction, before any rendering — nothing partial reaches the user.
+    AskSurfaceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # A browse-shaped question is refused to hold the no-browsable-index
+    # boundary (cortex#382): the corpus is never enumerated to make a query
+    # succeed, same family as the visibility deny-by-default refusal.
+    BrowseIndexRefusedError: DegradationMode.FAIL_CLOSED_REFUSAL,
     ConfidenceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     DecisionsForDiffValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     # DeriveStoreError's marquee failure is the same-idempotency-key /
@@ -110,13 +144,29 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # re-derivation is drift, not bad input.
     DeriveStoreError: DegradationMode.DRIFT_DETECTED,
     DiffSurfaceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # Evaluator material that violates the soft-evaluator contract (class
+    # evidence, registry shape, outcome arithmetic) is rejected before any
+    # emission or ledger draft exists (cortex#370-#372).
+    EvaluatorValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     # An unrecognized or malformed derive source is rejected before any
     # extraction or write; recognized-but-noisy material is not an error at
     # all (it becomes DroppedChatter with a reason code).
     ExtractorError: DegradationMode.INVALID_INPUT_REJECTED,
     FixtureValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # GraphRebuildError refuses a replay whose log material cannot fold into
+    # a valid projection (missing contract keys, unknown nodes, key/hash
+    # drift); no partial graph is ever returned.
+    GraphRebuildError: DegradationMode.INVALID_INPUT_REJECTED,
     GraphWriteValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # HostedDbError refuses a connection that cannot satisfy the policy
+    # (missing driver, invalid URL, unreachable host, auth failure) before
+    # any partial state exists — refusal, boundary held.
+    HostedDbError: DegradationMode.FAIL_CLOSED_REFUSAL,
     HostedEmbeddingValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # HostedMigrationError blocks a migration that cannot be verified
+    # (missing extension, unrecorded schema_migrations version) and rolls
+    # back — refusal, boundary held.
+    HostedMigrationError: DegradationMode.FAIL_CLOSED_REFUSAL,
     LabelingError: DegradationMode.INVALID_INPUT_REJECTED,
     # LaneAssignmentError fires before any model call or write — dropped
     # material attempting graph entry, laundered backfill flags, forged lane
@@ -126,8 +176,15 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     LedgerEventValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     ProvenanceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     RegistryValidationError: DegradationMode.DRIFT_DETECTED,
+    # ReplayError's marquee failure is a missing recorded response: the replay
+    # runner refuses to fall back to a live model call (cortex#336).
+    ReplayError: DegradationMode.FAIL_CLOSED_REFUSAL,
     ScopeValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     StoreBoundaryError: DegradationMode.FAIL_CLOSED_REFUSAL,
+    # A finding whose provenance is absent from the candidate pack is refused
+    # emission outright — the citation boundary holds (cortex#377), mirroring
+    # ask_ledger's no_cited_support refusal.
+    UncitedFindingError: DegradationMode.FAIL_CLOSED_REFUSAL,
     VisibilityBoundaryValidationError: DegradationMode.FAIL_CLOSED_REFUSAL,
 }
 

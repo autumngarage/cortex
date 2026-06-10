@@ -7,10 +7,12 @@ pluggable extractor → validated `LedgerEvent` (`EVENT_SCHEMA_VERSION`,
 `CANDIDATE_PROPOSED`) → local SQLite replay-export store — is the #350
 scaffold; the default extractor is now the deterministic repo-native
 dispatcher in `cortex.hosted.extractors` (CLAUDE.md/AGENTS.md rules, ADRs
-near-verbatim, CODEOWNERS ownership signals). Further extractors (#354-#357)
-plug in through the same `CandidateExtractor` callable type; derive defines
-no event shape of its own. `empty_extractor` remains available for callers
-that want the walk without extraction.
+near-verbatim, CODEOWNERS ownership signals, and — gathered via `--commits`/
+`--prs` — commit messages, PR descriptions, and PR review comments,
+issues #354-#356). Further extractors (#357) plug in through the same
+`CandidateExtractor` callable type; derive defines no event shape of its
+own. `empty_extractor` remains available for callers that want the walk
+without extraction.
 
 Identity defaults (documented contract):
 
@@ -45,7 +47,13 @@ from cortex.hosted.derive_store import (
     DeriveStoreError,
     derive_store_path,
 )
-from cortex.hosted.extractors import ExtractorError, RepoNativeExtractor
+from cortex.hosted.extractors import (
+    DroppedSourceChatter,
+    ExtractorError,
+    RepoNativeExtractor,
+    gather_commit_message_documents,
+    gather_pr_documents,
+)
 from cortex.hosted.ledger_events import (
     EVENT_SCHEMA_VERSION,
     LedgerEvent,
@@ -98,6 +106,7 @@ class DeriveRunResult:
     inserted: int
     ignored: int
     db_path: Path
+    documents: tuple[SourceDocument, ...] = ()
 
 
 def empty_extractor(document: SourceDocument) -> tuple[LedgerEvent, ...]:
@@ -168,8 +177,14 @@ def run_derive(
     source_id: str,
     extractor: CandidateExtractor,
     db_path: Path | None = None,
+    documents: Sequence[SourceDocument] = (),
 ) -> DeriveRunResult:
     """Run the derive pipeline: snapshot, extract, validate, then persist.
+
+    ``documents`` are pre-built snapshots from the gathering helpers
+    (commit messages, PR descriptions, PR review comments — issues
+    #354-#356); they run through the same extract/validate path as walked
+    files, after them, labeled by their ``external_id``.
 
     Validation is fail-closed and complete before any write: if any source
     fails, a `DeriveSourceError` aggregating every failure (one line per
@@ -194,6 +209,19 @@ def run_derive(
             )
         except DeriveSourceError as exc:
             errors.append(str(exc))
+    for document in documents:
+        try:
+            events.extend(
+                _extract_document_events(
+                    document,
+                    label=document.external_id,
+                    tenant_id=tenant_id,
+                    source_id=source_id,
+                    extractor=extractor,
+                )
+            )
+        except DeriveSourceError as exc:
+            errors.append(str(exc))
     if errors:
         raise DeriveSourceError("\n".join(errors))
 
@@ -205,6 +233,7 @@ def run_derive(
         inserted=outcome.inserted,
         ignored=outcome.ignored,
         db_path=target_db,
+        documents=tuple(documents),
     )
 
 
@@ -220,14 +249,31 @@ def _extract_candidates(
     document = _load_source_document(
         path, rel=rel, tenant_id=tenant_id, source_id=source_id
     )
+    return _extract_document_events(
+        document,
+        label=str(rel),
+        tenant_id=tenant_id,
+        source_id=source_id,
+        extractor=extractor,
+    )
+
+
+def _extract_document_events(
+    document: SourceDocument,
+    *,
+    label: str,
+    tenant_id: str,
+    source_id: str,
+    extractor: CandidateExtractor,
+) -> tuple[LedgerEvent, ...]:
     try:
         extracted = tuple(extractor(document))
     except LedgerEventValidationError as exc:
-        raise DeriveSourceError(f"{rel}: candidate event failed envelope validation: {exc}") from exc
+        raise DeriveSourceError(f"{label}: candidate event failed envelope validation: {exc}") from exc
     except ExtractorError as exc:
-        raise DeriveSourceError(f"{rel}: {exc}") from exc
+        raise DeriveSourceError(f"{label}: {exc}") from exc
     for event in extracted:
-        _require_candidate_event(event, rel=rel, tenant_id=tenant_id, source_id=source_id)
+        _require_candidate_event(event, rel=label, tenant_id=tenant_id, source_id=source_id)
     return extracted
 
 
@@ -273,7 +319,7 @@ def _load_source_document(
 def _require_candidate_event(
     event: LedgerEvent,
     *,
-    rel: Path,
+    rel: Path | str,
     tenant_id: str,
     source_id: str,
 ) -> None:
@@ -351,6 +397,26 @@ def _validated_uuid_option(value: str | None, *, option_name: str) -> str | None
     ),
 )
 @click.option(
+    "--commits",
+    type=click.IntRange(min=0),
+    default=0,
+    show_default=True,
+    help=(
+        "Also ingest the last N commit messages from `git log` as "
+        "commit_message documents (0 disables; requires a git history)."
+    ),
+)
+@click.option(
+    "--prs",
+    type=click.IntRange(min=0),
+    default=0,
+    show_default=True,
+    help=(
+        "Also ingest the N most recently merged pull requests (description + "
+        "review comments) via the `gh` CLI (0 disables; requires `gh` auth)."
+    ),
+)
+@click.option(
     "--path",
     "project_root",
     type=click.Path(file_okay=False, dir_okay=True, exists=True, path_type=Path),
@@ -363,19 +429,22 @@ def derive_command(
     sources: tuple[Path, ...],
     tenant_id: str | None,
     source_id: str | None,
+    commits: int,
+    prs: int,
     project_root: Path,
 ) -> None:
     """Walk local sources and emit candidate decisions as ledger events.
 
     The pipeline (issue #350) reads each source into an immutable snapshot,
-    runs the deterministic repo-native extractors (issues #351-#353:
+    runs the deterministic repo-native extractors (issues #351-#356:
     CLAUDE.md/AGENTS.md rules, ADRs near-verbatim, CODEOWNERS ownership
-    signals — no model calls), validates every event against the hosted
-    ledger envelope, and persists to the local replay-export store at
-    ``.cortex/.index/derive-events.sqlite``. Source material that does not
-    become a candidate is reported as dropped chatter with reason codes.
-    Re-running over unchanged inputs is a no-op; deleting the store and
-    re-running reproduces it exactly.
+    signals, and — with --commits/--prs — commit messages, PR descriptions,
+    and PR review comments; no model calls), validates every event against
+    the hosted ledger envelope, and persists to the local replay-export
+    store at ``.cortex/.index/derive-events.sqlite``. Source material that
+    does not become a candidate is reported as dropped chatter with reason
+    codes. Re-running over unchanged inputs is a no-op; deleting the store
+    and re-running reproduces it exactly.
     """
 
     root = Path(project_root).resolve()
@@ -397,6 +466,25 @@ def derive_command(
         defaults = ", ".join(DEFAULT_SOURCE_RELATIVE_PATHS)
         click.echo(f"derive: no default sources found (looked for: {defaults})")
 
+    documents: tuple[SourceDocument, ...] = ()
+    gathered_dropped: tuple[DroppedSourceChatter, ...] = ()
+    try:
+        if commits:
+            gathered = gather_commit_message_documents(
+                root, tenant_id=tenant, source_id=source, limit=commits
+            )
+            documents += gathered.documents
+            gathered_dropped += gathered.dropped
+        if prs:
+            gathered = gather_pr_documents(
+                root, tenant_id=tenant, source_id=source, limit=prs
+            )
+            documents += gathered.documents
+            gathered_dropped += gathered.dropped
+    except ExtractorError as exc:
+        click.echo(f"error: {exc}", err=True)
+        sys.exit(1)
+
     extractor = RepoNativeExtractor()
     try:
         result = run_derive(
@@ -405,6 +493,7 @@ def derive_command(
             tenant_id=tenant,
             source_id=source,
             extractor=extractor,
+            documents=documents,
         )
     except (DeriveSourceError, DeriveStoreError) as exc:
         for line in str(exc).splitlines():
@@ -413,15 +502,18 @@ def derive_command(
 
     click.echo(
         f"derive: {len(result.source_files)} source file(s), "
+        f"{len(result.documents)} gathered document(s), "
         f"{len(result.events)} candidate event(s) "
         f"({result.inserted} inserted, {result.ignored} duplicate)"
     )
     # Dropped chatter is visible by contract (bounded_omission): every
-    # non-candidate block carries a reason code, never a silent skip.
-    if extractor.dropped:
-        reason_counts = Counter(record.chatter.reason_code for record in extractor.dropped)
+    # non-candidate block — and every gathered source that could not become
+    # a document — carries a reason code, never a silent skip.
+    all_dropped = (*gathered_dropped, *extractor.dropped)
+    if all_dropped:
+        reason_counts = Counter(record.chatter.reason_code for record in all_dropped)
         summary = ", ".join(
             f"{reason} x{count}" for reason, count in sorted(reason_counts.items())
         )
-        click.echo(f"dropped: {len(extractor.dropped)} chatter record(s) ({summary})")
+        click.echo(f"dropped: {len(all_dropped)} chatter record(s) ({summary})")
     click.echo(f"store: {result.db_path}")

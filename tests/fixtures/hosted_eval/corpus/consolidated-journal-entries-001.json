@@ -1,0 +1,76 @@
+{
+  "decisions": [
+    {
+      "decision_id": "pr-merged-entry-per-merge",
+      "decision_text": "Each default-branch merge gets exactly one pr-merged Journal entry whose header names that single PR and carries a singular Merge-commit sha; consolidated entries that batch several merges do not fit the template.",
+      "scopes": [
+        {
+          "normalized_value": ".cortex/journal/**",
+          "scope_type": "glob",
+          "value": ".cortex/journal/**"
+        }
+      ],
+      "source_timestamp": "2026-04-25T20:33:09-07:00",
+      "spans": [
+        {
+          "end_offset": 42,
+          "excerpt": "# PR #{{ nnn }} merged — {{ short title }}",
+          "permalink": "https://github.com/autumngarage/cortex/blob/17f23e3b55dd2f8eead711c962a905c1422f365a/.cortex/templates/journal/pr-merged.md",
+          "source_document_hash": "54c7db7d1a7a9e5833436825c542d746d9dc96270388e76910cef2bd91b20e64",
+          "span_hash": "c87b35b88990960a895e9280e488601e6ccfa53d950499ce00a6dc067a60fe72",
+          "start_offset": 0
+        },
+        {
+          "end_offset": 230,
+          "excerpt": "**Merge-commit:** {{ full sha }}",
+          "permalink": "https://github.com/autumngarage/cortex/blob/17f23e3b55dd2f8eead711c962a905c1422f365a/.cortex/templates/journal/pr-merged.md",
+          "source_document_hash": "54c7db7d1a7a9e5833436825c542d746d9dc96270388e76910cef2bd91b20e64",
+          "span_hash": "505736c66e5b3c61a228e8ff5c7992f5229f177bfe9d2a65ca67a38bf8ddb672",
+          "start_offset": 198
+        }
+      ],
+      "status": "confirmed"
+    }
+  ],
+  "diff": {
+    "base_sha": "17f23e3b55dd2f8eead711c962a905c1422f365a",
+    "changed_paths": [
+      ".cortex/journal/2026-06-09-pr-merged-backfill-may26-jun08.md",
+      ".cortex/journal/2026-06-09-pr-merged-hosted-substrate-wave.md"
+    ],
+    "config_keys": [],
+    "head_sha": "bf0e32f7e8fce86e020d6e3f0fa454db3eea6d0f",
+    "issue_refs": [],
+    "patch": "diff --git a/.cortex/journal/2026-06-09-pr-merged-backfill-may26-jun08.md b/.cortex/journal/2026-06-09-pr-merged-backfill-may26-jun08.md\nnew file mode 100644\nindex 0000000..d8b2dbb\n--- /dev/null\n+++ b/.cortex/journal/2026-06-09-pr-merged-backfill-may26-jun08.md\n@@ -0,0 +1,45 @@\n+# PRs #296-#305, #476 merged — maintenance window backfill (2026-05-25 → 2026-06-09)\n+\n+**Date:** 2026-06-09\n+**Type:** pr-merged\n+**Trigger:** T1.9 (consolidated backfill — the post-merge hook did not fire for these merges; gap detected 2026-06-09 during the roadmap review)\n+**Cites:** journal/2026-06-09-roadmap-refinement-and-issue-hygiene\n+**Merge-commits:** 10d5ae4 (#296), e602921 (#298), 54a9f4e (#299), 9077357 (#300), d91241f (#303), 9308fb7 (#304), 2bb6e0f (#305), 3bea226 (#476)\n+\n+> Eight maintenance and docs merges landed between 2026-05-25 and 2026-06-09\n+> with no T1.9 journal record. This consolidated entry closes the gap so\n+> state regeneration can see the period.\n+\n+## What shipped\n+\n+- **#296** — auto-draft pr-merged entry for #295 (journal hygiene; itself\n+  exempt from T1.9 per the recursion guard, listed for completeness).\n+- **#298, #299, #300** — conductor integration refreshes to v0.10.32-34\n+  (vendored integration sync, no Cortex behavior change).\n+- **#303** — fix: restore post-merge hook after touchstone 2.11.43 sync\n+  (closed #297, #301, #302). The hook outage this fixed is the proximate\n+  cause of the missing T1.9 entries in this window.\n+- **#304** — fix: restore staging wiring after touchstone sync and honor\n+  config opt-out.\n+- **#305** — docs: clarify hosted credit pricing (`docs/HOSTED-PRICING.md`).\n+- **#476** — docs: align cortex memory with hosted plan — adopted\n+  `plans/hosted-decision-reviewer.md` as the active plan (see\n+  `journal/2026-06-09-hosted-decision-reviewer-plan-adopted`).\n+\n+## Closes / advances\n+\n+- **Issues:** #297, #301, #302 closed by #303.\n+- **Plans:** #476 activated `plans/hosted-decision-reviewer` and superseded\n+  `plans/cortex-v1` / `plans/context-integrity-production` as active tracks.\n+\n+## Lesson\n+\n+The post-merge hook was broken by a touchstone sync (restored in #303) and\n+the gap went unnoticed for two weeks while the repo's own protocol requires\n+T1.9 entries — the memory product's repo drifted on its own memory protocol.\n+The roadmap review (2026-06-09) added the gap check to its punch list; a\n+recurring `cortex doctor --audit` run would have surfaced it within a day.\n+\n+## Triggers fired\n+\n+- T1.9 (x8, consolidated here as backfill)\ndiff --git a/.cortex/journal/2026-06-09-pr-merged-hosted-substrate-wave.md b/.cortex/journal/2026-06-09-pr-merged-hosted-substrate-wave.md\nnew file mode 100644\nindex 0000000..32ce7f7\n--- /dev/null\n+++ b/.cortex/journal/2026-06-09-pr-merged-hosted-substrate-wave.md\n@@ -0,0 +1,44 @@\n+# PRs #477-#483 merged — hosted decision-ledger substrate wave (backfill)\n+\n+**Date:** 2026-06-09\n+**Type:** pr-merged\n+**Trigger:** T1.9 (consolidated backfill — written 2026-06-09T17:40 for seven merges earlier the same day; the post-merge hook did not fire on this wave)\n+**Cites:** plans/hosted-decision-reviewer.md, journal/2026-06-09-hosted-decision-reviewer-plan-adopted\n+**Merge-commits:** 8f1f1ce (#477), 4c01d87 (#478), f1e52b2 (#479), 3cf4054 (#480), 300daf3 (#481), 4599cff (#482), 17f23e3 (#483)\n+\n+> Seven PRs landed the Stage 0 Postgres-shaped substrate for the hosted\n+> decision reviewer in a single wave, closing issues #460-#466 and #468.\n+> This consolidated entry backfills the missing per-merge T1.9 records.\n+\n+## What shipped\n+\n+| PR | Closed | Substance |\n+|---|---|---|\n+| #477 | #460, #461 | `src/cortex/hosted/schema.py`, `ledger_events.py`, `storage.py` — Postgres as canonical store; append-only `ledger_events` with no-update/no-delete triggers, idempotency keys, event-hash chaining; decision graph tables (`HOSTED_SCHEMA_VERSION = 6`); fail-closed `FINDING_EMITTED` replay material |\n+| #478 | #462 | `provenance.py` — `SourceDocument`/`SourceSpan` with content/document/span hashes, `source_event_id` FKs, immutability triggers |\n+| #479 | #463 | `scopes.py` — 9-type scope model + `decision_scopes` index + 5 indexes |\n+| #480 | #464 | `ask_ledger.py` — hybrid cited retrieval; `AnswerState.NO_ANSWER` / `no_cited_support` fail-closed answer packs |\n+| #481 | #465 | `decisions_for_diff.py` — structural scope candidates + bounded hybrid RRF fusion capped at 30 with omitted counts |\n+| #482 | #466 | `embeddings.py` — pgvector projection keyed by model + epoch, recall checks |\n+| #483 | #468 | `visibility.py` — tenant/source visibility deny flags enforced in retrieval |\n+\n+## Caveat recorded for the roadmap\n+\n+The substrate is non-executing: SQL strings and dataclasses with\n+string-assertion tests (86 of them); no Postgres driver, migration runner, or\n+CLI wiring. The first executable SQL path is issue #472 (Stage 1); #467 and\n+#484 require it for full closure.\n+\n+## Closes / advances\n+\n+- **Plans:** advances `plans/hosted-decision-reviewer` — the \"Stage 0\n+  substrate\" work item is now ticked with this wave as evidence.\n+- **Issues:** closed #460-#466, #468 at merge time; ten further issues were\n+  closed 2026-06-09 as shipped-by-this-wave after review (#306, #311, #312,\n+  #317, #321, #324, #364, #365, #366, #383 — see\n+  `journal/2026-06-09-roadmap-refinement-and-issue-hygiene`).\n+\n+## Triggers fired\n+\n+- T1.9 (x7, consolidated here as backfill)\n+- T1.5 fired on none (no dependency manifest changes in the wave)\n",
+    "repo_name": "cortex",
+    "repo_owner": "autumngarage",
+    "symbols": []
+  },
+  "expected_findings": [
+    {
+      "cited_span_hashes": [
+        "c87b35b88990960a895e9280e488601e6ccfa53d950499ce00a6dc067a60fe72",
+        "505736c66e5b3c61a228e8ff5c7992f5229f177bfe9d2a65ca67a38bf8ddb672"
+      ],
+      "decision_id": "pr-merged-entry-per-merge",
+      "finding_class": "contradicts-prior-decision",
+      "finding_id": "finding-consolidated-pr-merged-entries",
+      "suggested_repair": "Split the consolidated entries into one pr-merged entry per merge, each with its own Merge-commit sha (the shape PR #493's final version shipped).",
+      "summary": "The diff adds two consolidated pr-merged entries — a May 26-Jun 08 backfill and a hosted-substrate wave entry — each covering many merges instead of one entry per merged PR with a singular Merge-commit sha."
+    }
+  ],
+  "fixture_id": "consolidated-journal-entries-001",
+  "fixture_schema_version": 1,
+  "labels": [],
+  "metadata": {
+    "notes": "Intermediate head of PR #493 before commit 6af6ed5 split the consolidated T1.9 backfill into per-PR entries with singular Merge-commit lines.",
+    "patch_paths": [
+      ".cortex/journal/2026-06-09-pr-merged-backfill-may26-jun08.md",
+      ".cortex/journal/2026-06-09-pr-merged-hosted-substrate-wave.md"
+    ],
+    "pr_number": 493,
+    "repo": "autumngarage/cortex",
+    "scenario": "consolidated-pr-merged-journal-entries",
+    "source": "real-history"
+  }
+}
