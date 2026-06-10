@@ -10,13 +10,15 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Homebrew](https://img.shields.io/badge/brew-autumngarage%2Fcortex-orange)](https://github.com/autumngarage/homebrew-cortex)
 
-> **Git-native context build system for AI agents.**
+> **The decision ledger plus the reviewer that enforces it.**
 >
 > *The spine* of the **[Autumn Garage](https://github.com/autumngarage/autumn-garage)** quartet, alongside [Touchstone](https://github.com/autumngarage/touchstone) · [Sentinel](https://github.com/autumngarage/sentinel) · [Conductor](https://github.com/autumngarage/conductor).
 
 # Cortex
 
-Cortex treats project memory as source code. Primary facts live in structured Markdown under `.cortex/`, generated context surfaces declare their inputs, and `cortex doctor` verifies the invariants before stale or uncited context quietly steers an agent. No new database, no daemon, no mandatory vector index — the memory store stays grepable, diffable, and auditable with existing tools.
+An AI agent changed code in a way that contradicted something your team had already decided. The diff looked plausible; code review checks the code and CI checks the build, but nothing checks the *context the agent reasoned from*. Cortex is the decision ledger plus the reviewer that enforces it: a cited, provenance-first record of what the team decided, and a soft evaluator that flags new changes contradicting it — advisory findings with citations, never uncited vibes. The local loop is real today (derive → confirm → cited answer → the first real contradiction caught; transcript in [`docs/walkthrough-pe0.md`](./docs/walkthrough-pe0.md)); the hosted GitHub/Slack product is pre-launch.
+
+The open local foundation underneath is the `.cortex/` file protocol and this reference CLI: project memory as source code. Primary facts live in structured Markdown under `.cortex/`, generated context surfaces declare their inputs, and `cortex doctor` verifies the invariants before stale or uncited context quietly steers an agent. No new database, no daemon, no mandatory vector index — the memory store stays grepable, diffable, and auditable with existing tools.
 
 **New here?** Start with [`docs/PITCH.md`](./docs/PITCH.md) — plain-language one-liner, vision, and day-in-the-life walkthrough. For "where are we now" and "what's next," read [`.cortex/state.md`](./.cortex/state.md) and [`.cortex/plans/`](./.cortex/plans/) — those are the canonical sources, kept current by Cortex itself.
 
@@ -159,7 +161,9 @@ Monthly, `cortex` proposes a Journal digest — a summary of the period's key de
 
 ## What Cortex is not
 
-Cortex is deliberately **not** a database, a knowledge graph, a portfolio tool, an agent framework, a replacement for `AGENTS.md` / `CLAUDE.md`, or cloud-hosted. On vector storage specifically: the canonical store stays markdown + git + grep — no embeddings live inside `.cortex/` content — but Cortex owns an opt-in retrieval interface (`cortex retrieve`) over a gitignored derived index for projects whose corpora outgrow recency-by-grep. See [Doctrine 0006](./.cortex/doctrine/0006-scope-boundaries-v3.md).
+The canonical scope and anti-goals for the reviewer product live in [`docs/product/scope-and-anti-goals.md`](./docs/product/scope-and-anti-goals.md) — **broad inputs, narrow output** is the named invariant there, and cortex#441 tracks its enforcement. In brief: Cortex is deliberately **not** a general chat agent, a code generator, a wiki or dashboard, a per-surface second memory system, an autonomous agent, or a source of uncited output.
+
+The file layer is likewise **not** a database, a knowledge graph, a portfolio tool, an agent framework, or a replacement for `AGENTS.md` / `CLAUDE.md`. On vector storage specifically: the canonical store stays markdown + git + grep — no embeddings live inside `.cortex/` content — but Cortex owns an opt-in retrieval interface (`cortex retrieve`) over a gitignored derived index for projects whose corpora outgrow recency-by-grep. See [Doctrine 0006](./.cortex/doctrine/0006-scope-boundaries-v3.md).
 
 ## The quartet
 
@@ -177,6 +181,8 @@ Each tool installs independently and composes through **file contracts, never co
 - **With Sentinel.** Sentinel reads `.cortex/` (Doctrine + active Plans + recent Journal + digests) for cycle context. End-of-cycle writes a Journal entry. Next cycle reads the previous cycle's Journal. The loop closes.
 
 Solo Cortex is *good notes with conventions*. Triad Cortex is *enforced institutional memory*. Both are useful; the triad is where the loop closes. See [autumn-garage](https://github.com/autumngarage/autumn-garage) for the coordination repo.
+
+**Portfolio note (2026-06-09).** Conductor, Sentinel, and Touchstone are frozen as product bets; Cortex-the-reviewer is the primary product bet. All three remain maintained dev-tooling and keep composing with Cortex exactly as described above — by file contract, never code imports. That boundary is enforced rather than aspirational: the standalone-boundary guardrail (`tests/test_standalone_boundary.py`, cortex#503) asserts no quartet imports, no required subprocess coupling, and no quartet packaging dependencies in Cortex. The decision record lives in [`docs/product/scope-and-anti-goals.md`](./docs/product/scope-and-anti-goals.md) `## Portfolio decision`.
 
 ## Status
 
