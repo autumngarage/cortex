@@ -297,3 +297,13 @@ mode skip citation or visibility boundaries.
   missing extension, a newer-than-this-build recorded schema version, or an
   unverifiable `schema_migrations` record blocks the migration visibly and
   rolls back — the runner never reports a success it cannot read back.
+
+### Push registration (2026-06-10, cortex#513)
+
+- `push.HostedPushError` -> `drift_detected`: its marquee failure is a
+  derive-export row whose recomputed event hash, or a working-tree file
+  whose content-keyed document hash, no longer matches what the export
+  recorded — `cortex push` refuses to replay content that disagrees with
+  its recorded identity, naming both sides. (Span drift on a file-backed
+  candidate is not an error at all: the candidate is excluded as a counted,
+  path-naming skip — the write-side `bounded_omission` behavior.)
