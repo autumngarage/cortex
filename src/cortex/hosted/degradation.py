@@ -54,6 +54,7 @@ from cortex.hosted.ledger_events import LedgerEventValidationError
 from cortex.hosted.model_registry import RegistryValidationError
 from cortex.hosted.provenance import ProvenanceValidationError
 from cortex.hosted.recorded_responses import RecordedResponseError
+from cortex.hosted.replay_runner import ReplayError
 from cortex.hosted.routing import (
     ClaudeCliOutputError,
     ClaudeCliUnavailableError,
@@ -126,6 +127,9 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     LedgerEventValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     ProvenanceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     RegistryValidationError: DegradationMode.DRIFT_DETECTED,
+    # ReplayError's marquee failure is a missing recorded response: the replay
+    # runner refuses to fall back to a live model call (cortex#336).
+    ReplayError: DegradationMode.FAIL_CLOSED_REFUSAL,
     ScopeValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     StoreBoundaryError: DegradationMode.FAIL_CLOSED_REFUSAL,
     VisibilityBoundaryValidationError: DegradationMode.FAIL_CLOSED_REFUSAL,

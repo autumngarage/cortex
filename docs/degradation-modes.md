@@ -59,6 +59,9 @@ a declared boundary.
 - `storage.validate_canonical_store` raises `StoreBoundaryError` when hosted
   code tries to use a store other than Postgres for product semantics
   (`src/cortex/hosted/storage.py`).
+- `replay_runner.run_fixture` raises `ReplayError` naming the fixture id when
+  a recorded evaluate response is missing — replay refuses to fall back to a
+  live model call (`src/cortex/hosted/replay_runner.py`, cortex#336).
 
 **What the user sees.** An explicit refusal with the reason: "no decision
 in the ledger supports an answer to this", or an authorization error naming
