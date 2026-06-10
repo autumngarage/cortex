@@ -1,10 +1,10 @@
 ---
-Generated: 2026-06-09T20:15:44-04:00
+Generated: 2026-06-09T22:03:56-04:00
 Generator: cortex refresh-state v1.6.4
 Sources:
-  - HEAD sha: 2bf1adae817a9d4f5e069847a936b9d102e12a8b
+  - HEAD sha: b2fbc58fe9ecaa1f374564ac5b8961c340a84d14
   - .cortex/plans/*.md (12 files)
-  - .cortex/journal/*.md (130 entries, 2026-04-17..2026-06-09)
+  - .cortex/journal/*.md (136 entries, 2026-04-17..2026-06-09)
   - .cortex/doctrine/*.md (11 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
@@ -151,6 +151,12 @@ Sources-hash:
   .cortex/journal/2026-06-09-pr-merged-pr482.md: 7ef175d521d23d7d1be169078aac16791d4cab7ee97b9d6c6a29ee400c6edc74
   .cortex/journal/2026-06-09-pr-merged-pr483.md: 1e4173adbf59a5e8c8fc6579b8c9da8ca2dbcb53fc7f945dea533fce6b446470
   .cortex/journal/2026-06-09-pr-merged-pr493.md: 24f86d94bc40ee0955a824ba7e5b7de3c12010290270cdf7ff2db57d5751dbc7
+  .cortex/journal/2026-06-09-pr-merged-pr494.md: d645009c7b04d1f8058d3c3da22c76f91354af2695178f92836786357433e6c6
+  .cortex/journal/2026-06-09-pr-merged-pr495.md: 1c75b005055be0b5813ddfeed77c6beb5524252fcb2cc4395cba09d21ee66d3d
+  .cortex/journal/2026-06-09-pr-merged-pr496.md: 9606756e804ed59d450bf86d32ebe52f7badf1245bcb2e63540fbf92128b4696
+  .cortex/journal/2026-06-09-pr-merged-pr497.md: 398c4c63b435d56752fbe32a2b89c660a1223561cf35e6d24efea5cdcb5df61d
+  .cortex/journal/2026-06-09-pr-merged-pr498.md: fd929f2a3223614e7c9adf85877c0e1f0cb1165b723991848a670dc8ab09938d
+  .cortex/journal/2026-06-09-pr-merged-pr505.md: de01afd951c9fd7cf8b480e46b9d1d2a21c29fb1c66e6f4aa8711dba8b831c38
   .cortex/journal/2026-06-09-roadmap-refinement-and-issue-hygiene.md: fc39e5f234f3e76c49a0f7672c7156802eb320da237d1865c43082a9b907c11f
   .cortex/plans/context-integrity-production.md: 131441fcd1a50d92e82f4ba8f64c3d667412bf23dc91efc501502f42f70a5197
   .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
@@ -177,7 +183,7 @@ Sources-hash:
   .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476
   .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44
   docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c
-Corpus: 130 Journal entries, 12 Plans, 11 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 136 Journal entries, 12 Plans, 11 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -297,6 +303,12 @@ This file (`.cortex/state.md`) and [`plans/hosted-decision-reviewer.md`](./plans
 - **2026-06-09** — PR #482 merged — feat: add hosted embedding projection checks (`.cortex/journal/2026-06-09-pr-merged-pr482.md`, Type: pr-merged)
 - **2026-06-09** — PR #483 merged — Enforce hosted source visibility boundaries (`.cortex/journal/2026-06-09-pr-merged-pr483.md`, Type: pr-merged)
 - **2026-06-09** — PR #493 merged — docs(plan): refine hosted-decision-reviewer roadmap (`.cortex/journal/2026-06-09-pr-merged-pr493.md`, Type: pr-merged)
+- **2026-06-09** — PR #494 merged — docs(architecture): as-built Stage 0/hosted brief + foundation backlog reconciliation (`.cortex/journal/2026-06-09-pr-merged-pr494.md`, Type: pr-merged)
+- **2026-06-09** — PR #495 merged — feat(eval): frozen fixture format + label taxonomy for the Stage 0 harness (`.cortex/journal/2026-06-09-pr-merged-pr495.md`, Type: pr-merged)
+- **2026-06-09** — PR #496 merged — feat(model): append-only prompt/model version registry (`.cortex/journal/2026-06-09-pr-merged-pr496.md`, Type: pr-merged)
+- **2026-06-09** — PR #497 merged — feat(gating): deterministic diff-to-changed-surface extractor (`.cortex/journal/2026-06-09-pr-merged-pr497.md`, Type: pr-merged)
+- **2026-06-09** — PR #498 merged — feat(model): narrow derive/evaluate interface boundary (`.cortex/journal/2026-06-09-pr-merged-pr498.md`, Type: pr-merged)
+- **2026-06-09** — PR #505 merged — Stage 0 wave bundle (derive scaffold, labeling+report, degradation, lanes+confidence, guards, guardrail) (`.cortex/journal/2026-06-09-pr-merged-pr505.md`, Type: pr-merged)
 
 ## Stale-now / handle-later
 
