@@ -70,6 +70,40 @@ instead of overwriting the old one. Source spans are derived from a document
 content hash plus offsets and excerpt hash, so existing citations survive
 re-derivation and source drift can be detected explicitly.
 
+## Executable path: driver, migrations, integration tests
+
+The Postgres driver is an optional extra so the core CLI install stays
+driver-free: `pip install 'cortex[hosted]'` (or `uv sync --extra hosted`).
+`cortex.hosted.db.connect` owns the connection policy — explicit connect
+timeout, `application_name=cortex-hosted`, a session `statement_timeout`,
+and Railway-style `?sslmode=require` URLs passed through verbatim, never
+stripped. Connection failures raise `HostedDbError` naming what failed
+(no driver, bad URL, unreachable, auth).
+
+`cortex.hosted.migrations.apply_schema` is the single migration path for
+local Postgres and Railway alike (deploy/predeploy release steps call the
+same runner — there is no second path). It verifies pgcrypto/pg_trgm/vector
+availability *before* executing the shipped `create_schema_sql()` DDL,
+records into `cortex_hosted.schema_migrations`, and reports
+applied/already-current with the version number. A missing extension fails
+the migration visibly; it never degrades silently.
+
+Run the gated integration tests against a real Postgres:
+
+```bash
+DATABASE_URL='postgresql://user:pass@host:5432/db?sslmode=require' \
+    uv run --extra hosted pytest tests/test_hosted_db_integration.py -q
+```
+
+Without `DATABASE_URL` the suite skips with a message naming this setup.
+
+Railway note (compass project): the target Postgres image must ship the
+`pgcrypto`, `pg_trgm`, and `vector` extensions — use a pgvector-enabled
+Postgres image/template; `verify_extensions` raises before apply when any
+is missing. Full closure of #467 (retrieval traces) and #484 (glob scope
+matching) rides on this executable path: their SQL exists as strings and is
+proven only when these integration tests run against a live database.
+
 ## Stage 0 issue map
 
 - `#460` fixes the canonical storage boundary.

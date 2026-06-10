@@ -17,6 +17,7 @@ from cortex.hosted.ask_ledger import (
     AskLedgerValidationError,
     build_cited_context_pack,
 )
+from cortex.hosted.db import HostedDbError
 from cortex.hosted.decisions_for_diff import DecisionsForDiffValidationError
 from cortex.hosted.degradation import (
     OPTIONAL_FAILURE_SOURCES,
@@ -31,6 +32,7 @@ from cortex.hosted.diff_surface import DiffSurfaceValidationError
 from cortex.hosted.embeddings import HostedEmbeddingValidationError
 from cortex.hosted.eval_fixtures import FixtureValidationError
 from cortex.hosted.ledger_events import LedgerEventValidationError
+from cortex.hosted.migrations import HostedMigrationError
 from cortex.hosted.model_registry import RegistryValidationError
 from cortex.hosted.provenance import ProvenanceValidationError
 from cortex.hosted.scopes import ScopeValidationError
@@ -45,7 +47,9 @@ EXPECTED_CLASSIFICATIONS: tuple[tuple[type[Exception], DegradationMode], ...] = 
     (DecisionsForDiffValidationError, DegradationMode.INVALID_INPUT_REJECTED),
     (DiffSurfaceValidationError, DegradationMode.INVALID_INPUT_REJECTED),
     (FixtureValidationError, DegradationMode.INVALID_INPUT_REJECTED),
+    (HostedDbError, DegradationMode.FAIL_CLOSED_REFUSAL),
     (HostedEmbeddingValidationError, DegradationMode.INVALID_INPUT_REJECTED),
+    (HostedMigrationError, DegradationMode.FAIL_CLOSED_REFUSAL),
     (LedgerEventValidationError, DegradationMode.INVALID_INPUT_REJECTED),
     (ProvenanceValidationError, DegradationMode.INVALID_INPUT_REJECTED),
     (RegistryValidationError, DegradationMode.DRIFT_DETECTED),
