@@ -1,0 +1,75 @@
+{
+  "recorded_response_schema_version": 1,
+  "responses": [
+    {
+      "input_hash": "3fc1083053117cc4be5049a027ade7abb81d8faa76fe3f8968014e90fbd3aaad",
+      "model_id": "anthropic/claude-fable-5",
+      "prompt_version": "derive-repo-native/v1+71eeb5d30086",
+      "recorded_at": "2026-06-09T12:00:00+00:00",
+      "result": {
+        "candidates": [
+          {
+            "decision_text": "Webhook retries use exponential backoff with jitter.",
+            "proposed_scopes": [
+              {
+                "normalized_value": "src/payments/webhook_client.py",
+                "scope_type": "path",
+                "value": "src/payments/webhook_client.py"
+              }
+            ],
+            "spans": [
+              {
+                "end_offset": 59,
+                "excerpt": "We use exponential backoff with jitter for webhook retries.",
+                "permalink": "https://github.com/acme/payments/blob/main/docs/adr/0007-retry-policy.md",
+                "source_document_hash": "7ad0a46566f68d3ca933a5f0d4d32dbea08f91aaecc7826df5167c81fdb3c491",
+                "span_hash": "f13e6e367c681b08173703f17209f99e34978a7e0e7a95a09814fdc6f4304d66",
+                "start_offset": 0,
+                "tenant_id": "0b6f9f3e-3a2f-4f2e-9c8d-1a2b3c4d5e6f"
+              }
+            ]
+          }
+        ],
+        "degraded_reasons": [
+          "comment-thread-truncated-at-200-items"
+        ],
+        "dropped": [
+          {
+            "excerpt_hash": "79727d73d793724d243d0a762322bcf46252d5ecd7de8fa49ba2494709aaeae3",
+            "reason_code": "smalltalk"
+          }
+        ],
+        "input_hash": "3fc1083053117cc4be5049a027ade7abb81d8faa76fe3f8968014e90fbd3aaad",
+        "model_id": "anthropic/claude-fable-5",
+        "prompt_version": "derive-repo-native/v1+71eeb5d30086"
+      },
+      "task": "derive"
+    },
+    {
+      "input_hash": "b37a3a5856f7202c5b6a217e218cb3e94ac5e310604f6efffc6974ecf148f63a",
+      "model_id": "anthropic/claude-fable-5",
+      "prompt_version": "evaluate-contradiction/v1+bf190dc67c5e",
+      "recorded_at": "2026-06-09T12:00:00+00:00",
+      "result": {
+        "degraded_reasons": [],
+        "findings": [
+          {
+            "cited_span_hashes": [
+              "37a0025aa1f2e29f9f88f59f961e44a320849dfc79a85ef3c02654d50d2e7480"
+            ],
+            "confidence_label": "advisory",
+            "decision_node_id": "3d9e8f7a-5b4c-4d6e-9f80-3c4d5e6f7a81",
+            "finding_class": "contradicts-prior-decision",
+            "suggested_repair": "Restore backoff_with_jitter(attempt) (see cited ADR span).",
+            "summary": "Fixed 5s retry contradicts the confirmed backoff decision."
+          }
+        ],
+        "input_hash": "b37a3a5856f7202c5b6a217e218cb3e94ac5e310604f6efffc6974ecf148f63a",
+        "model_id": "anthropic/claude-fable-5",
+        "omitted_decision_count": 2,
+        "prompt_version": "evaluate-contradiction/v1+bf190dc67c5e"
+      },
+      "task": "evaluate"
+    }
+  ]
+}
