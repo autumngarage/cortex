@@ -289,6 +289,7 @@ EXPECTED_REMEDIATIONS: tuple[tuple[str, str], ...] = (
     ("derive_store_missing", "cortex derive"),
     ("cortex_dir_missing", "cortex init"),
     ("derive_no_sources", "--source"),
+    ("model_api_key_missing", "ANTHROPIC_API_KEY"),
 )
 
 

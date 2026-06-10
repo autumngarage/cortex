@@ -37,6 +37,11 @@ from types import MappingProxyType
 from cortex.hosted.advisory_ladder import AdvisoryLadderError
 from cortex.hosted.api.config import ServiceConfigError
 from cortex.hosted.api.webhooks import WebhookValidationError
+from cortex.hosted.api_transport import (
+    API_KEY_REMEDIATION,
+    ApiHttpOutputError,
+    ApiKeyMissingError,
+)
 from cortex.hosted.ask_ledger import AnswerState, AskLedgerValidationError
 from cortex.hosted.ask_surface import AskSurfaceValidationError, BrowseIndexRefusedError
 from cortex.hosted.banking import BankingValidationError
@@ -114,6 +119,13 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # An unknown confidence label or ladder-vocabulary violation is rejected
     # before any finding can be placed on the ladder (cortex#375).
     AdvisoryLadderError: DegradationMode.INVALID_INPUT_REJECTED,
+    # The api-http server transport mirrors the claude-CLI classifications
+    # (cortex#517): an unset API-key env var is a named reduced capability
+    # (the refusal names the variable and carries the model_api_key_missing
+    # remediation), and transport/contract violations are refused outright,
+    # never fabricated.
+    ApiHttpOutputError: DegradationMode.FAIL_CLOSED_REFUSAL,
+    ApiKeyMissingError: DegradationMode.DEGRADED_CAPABILITY,
     BudgetExceededError: DegradationMode.FAIL_CLOSED_REFUSAL,
     CandidateMetricsValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     CitationCheckError: DegradationMode.INVALID_INPUT_REJECTED,
@@ -346,6 +358,11 @@ REMEDIATION_BY_REASON: Mapping[str, str] = MappingProxyType(
         "derive_no_sources": (
             "pass `--source FILE` to point cortex derive at decision sources"
         ),
+        # The api-http transport's configured API-key env var is unset or
+        # blank in the service environment (cortex#517). The canonical hint
+        # string lives next to the adapter so the refusal message and this
+        # table can never drift apart.
+        "model_api_key_missing": API_KEY_REMEDIATION,
     }
 )
 
