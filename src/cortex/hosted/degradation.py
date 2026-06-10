@@ -40,6 +40,7 @@ from cortex.hosted.diff_surface import DiffSurfaceValidationError
 from cortex.hosted.embeddings import HostedEmbeddingValidationError
 from cortex.hosted.eval_fixtures import FixtureValidationError
 from cortex.hosted.labeling import LabelingError
+from cortex.hosted.lane_assignment import LaneAssignmentError
 from cortex.hosted.lanes import LanePolicyValidationError
 from cortex.hosted.ledger_events import LedgerEventValidationError
 from cortex.hosted.model_registry import RegistryValidationError
@@ -85,6 +86,10 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     FixtureValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     HostedEmbeddingValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     LabelingError: DegradationMode.INVALID_INPUT_REJECTED,
+    # LaneAssignmentError fires before any model call or write — dropped
+    # material attempting graph entry, laundered backfill flags, forged lane
+    # claims — so the operation never starts, same family as the lane policy.
+    LaneAssignmentError: DegradationMode.INVALID_INPUT_REJECTED,
     LanePolicyValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     LedgerEventValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     ProvenanceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
