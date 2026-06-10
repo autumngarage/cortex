@@ -121,7 +121,7 @@ def _connect(dsn: str) -> Any:
     single seam to replace with the shared connector.
     """
 
-    import psycopg  # type: ignore[import-not-found] # lazy: the hosted extra is optional
+    import psycopg  # lazy: the hosted extra is optional
 
     try:
         return psycopg.connect(dsn)
