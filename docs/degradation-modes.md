@@ -287,6 +287,12 @@ mode skip citation or visibility boundaries.
   boundary (cortex#382) — the corpus is never enumerated to make a query
   succeed.
 
+### Retrieval question-normalization registration (2026-06-10, cortex#512)
+
+- `question_normalization.QuestionNormalizationError` ->
+  `invalid_input_rejected`: an empty question is rejected before any
+  boilerplate stripping or retrieval — nothing partial reaches the FTS leg.
+
 ### Executable-path registrations (2026-06-09, cortex#472)
 
 - `db.HostedDbError` classifies as `fail_closed_refusal`: a connection that
