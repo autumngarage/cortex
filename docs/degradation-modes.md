@@ -202,3 +202,12 @@ mode skip citation or visibility boundaries.
   grep a PR comment back to the code path that degraded.
 - **cortex#331 (Wave 7)** owns the omitted-decision diagnostic surfacing
   that makes `bounded_omission` legible in replay reports.
+
+### Cross-module registrations added at bundle integration (2026-06-09)
+
+- `lanes.LanePolicyValidationError`, `confidence.ConfidenceValidationError`,
+  and `labeling.LabelingError` classify as `invalid_input_rejected` —
+  policy/evidence/label material rejected before any state change.
+- `derive_store.DeriveStoreError` classifies as `drift_detected`: its
+  marquee failure is a same-idempotency-key / different-event-hash
+  collision, i.e. recorded state disagreeing with a re-derivation.

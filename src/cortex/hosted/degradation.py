@@ -33,10 +33,14 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from cortex.hosted.ask_ledger import AnswerState, AskLedgerValidationError
+from cortex.hosted.confidence import ConfidenceValidationError
 from cortex.hosted.decisions_for_diff import DecisionsForDiffValidationError
+from cortex.hosted.derive_store import DeriveStoreError
 from cortex.hosted.diff_surface import DiffSurfaceValidationError
 from cortex.hosted.embeddings import HostedEmbeddingValidationError
 from cortex.hosted.eval_fixtures import FixtureValidationError
+from cortex.hosted.labeling import LabelingError
+from cortex.hosted.lanes import LanePolicyValidationError
 from cortex.hosted.ledger_events import LedgerEventValidationError
 from cortex.hosted.model_registry import RegistryValidationError
 from cortex.hosted.provenance import ProvenanceValidationError
@@ -71,10 +75,17 @@ class DegradationMode(StrEnum):
 # raise in classify_failure instead of falling back to anything.
 _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     AskLedgerValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    ConfidenceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     DecisionsForDiffValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # DeriveStoreError's marquee failure is the same-idempotency-key /
+    # different-event-hash collision — recorded state disagreeing with a
+    # re-derivation is drift, not bad input.
+    DeriveStoreError: DegradationMode.DRIFT_DETECTED,
     DiffSurfaceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     FixtureValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     HostedEmbeddingValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    LabelingError: DegradationMode.INVALID_INPUT_REJECTED,
+    LanePolicyValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     LedgerEventValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     ProvenanceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     RegistryValidationError: DegradationMode.DRIFT_DETECTED,
