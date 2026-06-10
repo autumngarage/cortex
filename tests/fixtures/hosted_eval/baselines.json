@@ -1,15 +1,16 @@
 {
-  "aggregate_presence_rate": 0.5,
+  "aggregate_presence_rate": 1.0,
   "baseline_schema_version": 1,
   "history": [
-    "2026-06-10: initial baselines from the 6-fixture real-history corpus (cortex#338); presence computed via the model-free fixture-local retrieval emulation"
+    "2026-06-10: initial baselines from the 6-fixture real-history corpus (cortex#338); presence computed via the model-free fixture-local retrieval emulation",
+    "2026-06-10: glob-granularity structural matching (cortex#484, fixture-local-structural-v2) lifts consolidated-journal-entries-001, journal-entry-deletion-001, and standalone-boundary-violation-synthetic-001 into presence; aggregate 0.5 -> 1.0"
   ],
   "presence_by_fixture": {
-    "consolidated-journal-entries-001": false,
-    "journal-entry-deletion-001": false,
+    "consolidated-journal-entries-001": true,
+    "journal-entry-deletion-001": true,
     "spec-version-drift-001": true,
     "standalone-boundary-respected-001": true,
-    "standalone-boundary-violation-synthetic-001": false,
+    "standalone-boundary-violation-synthetic-001": true,
     "touchstone-managed-principles-001": true
   }
 }

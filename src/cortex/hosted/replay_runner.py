@@ -35,13 +35,36 @@ candidates for budget, the report carries ``needs_manual_review=True``
 full budget arithmetic — the master plan's manual-review signal for
 over-budget PRs.
 
-Evaluator seam: the dedicated evaluator module (``evaluator.py``,
-soft-evaluator-core branch) has not merged as of this module's authoring,
-so the runner speaks directly to the ``EvaluateModel`` protocol from
-``model_interfaces.py`` and grades the ``FindingDraft`` outcomes it
-returns. When ``evaluator.py`` lands, ``run_fixture`` should accept its
-evaluator as just another ``EvaluateModel`` implementation — the seam is
-the protocol, not this module.
+**Grading vocabulary (cortex#525).** Each expected finding grades into
+exactly one :class:`ExpectedFindingGrade`:
+
+- ``matched`` — an emission matched on (finding_class, decision, cited
+  span set). For shadow-registered classes (cortex#373/#374) this is the
+  shadow-capture match: the evaluator's shadow lane captures (never emits)
+  validated findings of those classes into
+  ``EvaluationOutcome.shadow_findings``, so in replay the model's
+  shadow-class emissions stand in for the captures.
+- ``matched_with_class_difference`` — an emission matched on (decision,
+  cited span set) but named a different class. Substance-correct,
+  classification-divergent: its own category and counters, in neither
+  missed nor unexpected (the first live #450 replay double-penalized this
+  shape as missed + unexpected).
+- ``missed`` — a live-class expectation no emission satisfied.
+- ``missed_shadow`` — a shadow-class expectation no shadow capture
+  satisfied; its own counter, because a shadow miss is a measurement about
+  an unreleased lane, not advisory quality.
+
+Report schema v2 carries the two new counters; v1 reports (for example the
+dated record at docs/eval/replay-450-2026-06-10.json) remain history and
+are refused by ``ensure_replay_report_payload_version`` rather than
+silently reinterpreted.
+
+Evaluator seam: the runner speaks directly to the ``EvaluateModel``
+protocol from ``model_interfaces.py`` and grades the ``FindingDraft``
+outcomes it returns; the canonical Stage 0 finding-class registry
+(``evaluator.STAGE0_FINDING_CLASS_REGISTRY``) supplies which classes are
+shadow-registered. Any evaluator that satisfies the protocol replays — the
+seam is the protocol, not this module.
 """
 
 from __future__ import annotations
@@ -77,6 +100,7 @@ from cortex.hosted.eval_fixtures import (
     FixtureDecision,
     FixtureValidationError,
 )
+from cortex.hosted.evaluator import STAGE0_FINDING_CLASS_REGISTRY
 from cortex.hosted.model_interfaces import (
     EvaluateModel,
     EvaluateRequest,
@@ -85,14 +109,40 @@ from cortex.hosted.model_interfaces import (
 )
 from cortex.hosted.recorded_responses import RecordedResponseError
 from cortex.hosted.routing import RecordedResponseMissingError
+from cortex.hosted.scopes import (
+    STRUCTURAL_SCOPE_WEIGHTS,
+    ScopeType,
+    glob_matches_path,
+    scope_reason_code,
+)
 
-REPLAY_REPORT_SCHEMA_VERSION = 1
+# v2 (cortex#525): shadow-aware grading + matched_with_class_difference; the
+# per-outcome `matched` boolean became `grade`, and the result/report
+# payloads carry `missed_shadow` / `matched_with_class_difference` counters.
+# v1 reports remain dated history (docs/eval/replay-450-2026-06-10.json) and
+# are refused, never silently reinterpreted.
+REPLAY_REPORT_SCHEMA_VERSION = 2
 
 # Names the fixture-local emulation regime. Distinct from the live
 # `DECISIONS_FOR_DIFF_RETRIEVAL_CONFIG_VERSION` on purpose: results produced
 # under different retrieval regimes are a versioned data boundary, never
 # silently comparable (real retrieval replay arrives with cortex#472).
-FIXTURE_LOCAL_RETRIEVAL_CONFIG_VERSION = "fixture-local-structural-v1"
+# v2 (cortex#484): glob-granularity structural matching — a decision scoped
+# 'src/api/**' now matches changed path 'src/api/handlers/foo.py', mirroring
+# the reversed-LIKE mechanism the hosted SQL surfaces ship.
+FIXTURE_LOCAL_RETRIEVAL_CONFIG_VERSION = "fixture-local-structural-v2"
+
+# The classes the canonical Stage 0 registry marks shadow (cortex#373/#374):
+# asked for so precision is measurable, captured instead of emitted. The
+# grader matches shadow-class expectations against these captures and
+# reports a non-captured shadow expectation as `missed_shadow` (cortex#525).
+# Corpus authors: check this set at fixture-write time — an expectation in a
+# shadow class can only ever grade matched/missed_shadow, never missed.
+SHADOW_FINDING_CLASSES: frozenset[FindingClass] = frozenset(
+    finding_class
+    for finding_class, spec in STAGE0_FINDING_CLASS_REGISTRY.items()
+    if spec.shadow
+)
 
 # Mirrors the `node.status = ANY(statuses)` filter in the shipped
 # decisions_for_diff SQL: only these statuses reach the evaluator.
@@ -176,16 +226,41 @@ class FixtureRetrievalEmulation:
         object.__setattr__(self, "omission_stage_by_decision_id", MappingProxyType(stages))
 
 
+class ExpectedFindingGrade(StrEnum):
+    """The four mutually exclusive grades an expected finding can earn.
+
+    See the module docstring's "Grading vocabulary (cortex#525)" section.
+    Every counter on :class:`ReplayResult` / :class:`CorpusReplayReport` is
+    derived from these grades, so a grade can never be double-counted.
+    """
+
+    MATCHED = "matched"
+    MATCHED_WITH_CLASS_DIFFERENCE = "matched_with_class_difference"
+    MISSED = "missed"
+    MISSED_SHADOW = "missed_shadow"
+
+
+_MATCHED_GRADES = frozenset(
+    {ExpectedFindingGrade.MATCHED, ExpectedFindingGrade.MATCHED_WITH_CLASS_DIFFERENCE}
+)
+
+
 @dataclass(frozen=True)
 class ExpectedFindingOutcome:
-    """One expected finding graded against the replayed evaluator output."""
+    """One expected finding graded against the replayed evaluator output.
+
+    ``matched_finding_class`` is set exactly when the grade is
+    ``matched_with_class_difference``: it names the class the model emitted
+    for the (decision, cited span set) the expectation described.
+    """
 
     finding_id: str
     finding_class: FindingClass
     decision_id: str
     cited_span_hashes: tuple[str, ...]
-    matched: bool
+    grade: ExpectedFindingGrade
     omitted_at_stage: OmissionStage | None
+    matched_finding_class: FindingClass | None = None
 
     def __post_init__(self) -> None:
         _require_non_empty("finding_id", self.finding_id)
@@ -194,11 +269,45 @@ class ExpectedFindingOutcome:
             raise ReplayError("expected finding outcomes require cited span hashes")
         if tuple(sorted(self.cited_span_hashes)) != self.cited_span_hashes:
             raise ReplayError("cited_span_hashes must be sorted for deterministic output")
-        if self.matched and self.omitted_at_stage is not None:
+        if self.grade in _MATCHED_GRADES and self.omitted_at_stage is not None:
             raise ReplayError(
                 "a finding cannot both match and have its decision omitted; "
                 "the grader produced contradictory attribution"
             )
+        if self.grade is ExpectedFindingGrade.MATCHED_WITH_CLASS_DIFFERENCE:
+            if self.matched_finding_class is None:
+                raise ReplayError(
+                    "matched_with_class_difference outcomes must name the "
+                    "emitted finding class"
+                )
+            if self.matched_finding_class is self.finding_class:
+                raise ReplayError(
+                    "matched_with_class_difference requires the emitted class "
+                    "to differ from the expected class"
+                )
+        elif self.matched_finding_class is not None:
+            raise ReplayError(
+                "matched_finding_class is only meaningful for "
+                "matched_with_class_difference outcomes"
+            )
+        # Invariant: the shadow registry decides which miss counter applies.
+        is_shadow = self.finding_class in SHADOW_FINDING_CLASSES
+        if self.grade is ExpectedFindingGrade.MISSED_SHADOW and not is_shadow:
+            raise ReplayError(
+                f"{self.finding_class.value} is not shadow-registered; a live "
+                "expectation misses as 'missed', never 'missed_shadow'"
+            )
+        if self.grade is ExpectedFindingGrade.MISSED and is_shadow:
+            raise ReplayError(
+                f"{self.finding_class.value} is shadow-registered; a shadow "
+                "expectation misses as 'missed_shadow', never 'missed'"
+            )
+
+    @property
+    def matched(self) -> bool:
+        """True only for the exact (class, decision, span set) match grade."""
+
+        return self.grade is ExpectedFindingGrade.MATCHED
 
     def as_payload(self) -> dict[str, Any]:
         return {
@@ -206,7 +315,10 @@ class ExpectedFindingOutcome:
             "decision_id": self.decision_id,
             "finding_class": self.finding_class.value,
             "finding_id": self.finding_id,
-            "matched": self.matched,
+            "grade": self.grade.value,
+            "matched_finding_class": None
+            if self.matched_finding_class is None
+            else self.matched_finding_class.value,
             "omitted_at_stage": None
             if self.omitted_at_stage is None
             else self.omitted_at_stage.value,
@@ -386,13 +498,30 @@ class ReplayResult:
         _require_non_empty("prompt_version", self.prompt_version)
         _ensure_supported_version(self.report_schema_version)
 
+    def _grade_count(self, grade: ExpectedFindingGrade) -> int:
+        return sum(
+            1 for outcome in self.expected_finding_outcomes if outcome.grade is grade
+        )
+
     @property
     def matched_count(self) -> int:
-        return sum(1 for outcome in self.expected_finding_outcomes if outcome.matched)
+        return self._grade_count(ExpectedFindingGrade.MATCHED)
+
+    @property
+    def matched_with_class_difference_count(self) -> int:
+        """Substance-correct, classification-divergent matches (cortex#525)."""
+
+        return self._grade_count(ExpectedFindingGrade.MATCHED_WITH_CLASS_DIFFERENCE)
 
     @property
     def missed_count(self) -> int:
-        return sum(1 for outcome in self.expected_finding_outcomes if not outcome.matched)
+        return self._grade_count(ExpectedFindingGrade.MISSED)
+
+    @property
+    def missed_shadow_count(self) -> int:
+        """Shadow-class expectations no shadow capture satisfied (cortex#525)."""
+
+        return self._grade_count(ExpectedFindingGrade.MISSED_SHADOW)
 
     @property
     def unexpected_count(self) -> int:
@@ -421,7 +550,9 @@ class ReplayResult:
             "graph_snapshot_hash": self.graph_snapshot_hash,
             "input_hash": self.input_hash,
             "matched_count": self.matched_count,
+            "matched_with_class_difference_count": self.matched_with_class_difference_count,
             "missed_count": self.missed_count,
+            "missed_shadow_count": self.missed_shadow_count,
             "model_id": self.model_id,
             "needs_manual_review": self.needs_manual_review,
             "prompt_version": self.prompt_version,
@@ -473,8 +604,18 @@ class CorpusReplayReport:
         return sum(result.matched_count for result in self.results)
 
     @property
+    def matched_with_class_difference_total(self) -> int:
+        return sum(
+            result.matched_with_class_difference_count for result in self.results
+        )
+
+    @property
     def missed_total(self) -> int:
         return sum(result.missed_count for result in self.results)
+
+    @property
+    def missed_shadow_total(self) -> int:
+        return sum(result.missed_shadow_count for result in self.results)
 
     @property
     def unexpected_total(self) -> int:
@@ -488,6 +629,8 @@ class CorpusReplayReport:
         return {
             "fixtures_run": self.fixtures_run,
             "matched_total": self.matched_total,
+            "matched_with_class_difference_total": self.matched_with_class_difference_total,
+            "missed_shadow_total": self.missed_shadow_total,
             "missed_total": self.missed_total,
             "needs_manual_review_count": self.needs_manual_review_count,
             "replay_report_schema_version": self.report_schema_version,
@@ -538,9 +681,17 @@ def build_fixture_candidate_pack(
     1. Decisions whose status is not reviewable (mirroring the SQL
        ``statuses`` filter) are omitted at stage ``status_filtered``.
     2. Each remaining decision is scored by structural match: the sum of
-       structural scope weights for every decision scope whose normalized
-       ``(scope_type, value)`` appears in the changed surface extracted from
-       the fixture's patch via ``diff_surface.extract_changed_surface``.
+       structural scope weights for every decision scope that matches the
+       changed surface extracted from the fixture's patch via
+       ``diff_surface.extract_changed_surface``. A decision scope matches
+       exactly when its normalized ``(scope_type, value)`` appears in the
+       surface, contributing the surface scope's weight — or at glob
+       granularity (cortex#484) when a ``glob`` scope like ``src/api/**``
+       covers a changed path, contributing the GLOB weight with reason code
+       ``scope:glob:<glob>``. Glob semantics mirror the hosted SQL surfaces
+       exactly (``scopes.glob_matches_path``), and exact path (100) outranks
+       glob (98) via STRUCTURAL_SCOPE_WEIGHTS — the same precedence the SQL
+       fragments encode.
     3. Decisions scoring at or below ``score_floor`` are omitted at stage
        ``suppressed_below_floor`` — structurally unmatched decisions are
        exactly what live retrieval would not have returned.
@@ -566,10 +717,16 @@ def build_fixture_candidate_pack(
             f"fixture {fixture.fixture_id!r}: diff patch cannot be parsed into a "
             f"changed surface: {exc}"
         ) from exc
+    surface_scopes = surface.query_scopes()
     surface_index = {
-        (scope.scope_type, scope.normalized_value): scope
-        for scope in surface.query_scopes()
+        (scope.scope_type, scope.normalized_value): scope for scope in surface_scopes
     }
+    surface_paths = tuple(
+        scope.normalized_value
+        for scope in surface_scopes
+        if scope.scope_type is ScopeType.PATH
+    )
+    glob_weight = STRUCTURAL_SCOPE_WEIGHTS[ScopeType.GLOB]
 
     node_by_decision: dict[str, str] = {}
     omission_stage: dict[str, OmissionStage] = {}
@@ -583,17 +740,27 @@ def build_fixture_candidate_pack(
             omission_stage[decision.decision_id] = OmissionStage.STATUS_FILTERED
             continue
         eligible_count += 1
-        matched = [
-            surface_index[key]
-            for scope in decision.scopes
-            if (key := (scope.scope_type, scope.normalized_value)) in surface_index
-        ]
-        score = float(sum(scope.structural_weight for scope in matched))
+        matched_weights: list[int] = []
+        reasons: set[str] = set()
+        for scope in decision.scopes:
+            exact = surface_index.get((scope.scope_type, scope.normalized_value))
+            if exact is not None:
+                matched_weights.append(exact.structural_weight)
+                reasons.add(exact.reason_code)
+                continue
+            # Glob granularity (cortex#484): same semantics as the SQL
+            # surfaces' reversed-LIKE branch; exact path outranks glob.
+            if scope.scope_type is ScopeType.GLOB and any(
+                glob_matches_path(scope.normalized_value, path)
+                for path in surface_paths
+            ):
+                matched_weights.append(glob_weight)
+                reasons.add(scope_reason_code(ScopeType.GLOB, scope.normalized_value))
+        score = float(sum(matched_weights))
         if score <= score_floor:
             omission_stage[decision.decision_id] = OmissionStage.SUPPRESSED_BELOW_FLOOR
             continue
-        reason_codes = tuple(sorted({scope.reason_code for scope in matched}))
-        scored.append((score, decision, reason_codes))
+        scored.append((score, decision, tuple(sorted(reasons))))
 
     scored.sort(key=lambda item: (-item[0], item[1].decision_id))
     pool_size = len(scored)
@@ -807,7 +974,24 @@ def _grade_findings(
     visible_decision_ids: set[str],
     omission_stage: Mapping[str, OmissionStage],
 ) -> tuple[tuple[ExpectedFindingOutcome, ...], tuple[UnexpectedEmission, ...]]:
-    """Match emissions to expected findings on (class, decision, span set).
+    """Grade expected findings against emissions in two deterministic passes.
+
+    Pass 1 — exact: an emission matching on (finding_class, decision, cited
+    span set). Shadow-registered expected classes (cortex#373/#374) match
+    here against the model's shadow-class emissions — the replay-side
+    stand-in for ``EvaluationOutcome.shadow_findings``, since the
+    evaluator's shadow lane captures (never emits) validated findings of
+    those classes.
+
+    Pass 2 — class-divergent (cortex#525): an emission matching on
+    (decision, cited span set) but naming a different class grades as
+    ``matched_with_class_difference`` — its own category, in neither missed
+    nor unexpected. Exact matches are all assigned before any
+    class-divergent match may consume an emission, so a divergent match can
+    never steal an emission another expectation matches exactly.
+
+    Everything still unmatched grades ``missed`` (live classes) or
+    ``missed_shadow`` (shadow classes: the expected capture never happened).
 
     Matching is one-to-one and order-deterministic: expected findings are
     walked in fixture order, emissions in result order, and each emission
@@ -832,30 +1016,71 @@ def _grade_findings(
             )
         )
 
-    outcomes: list[ExpectedFindingOutcome] = []
-    for expected in fixture.expected_findings:
-        stage = omission_stage.get(expected.decision_id)
-        expected_key = (
+    expected_keys = [
+        (
             expected.finding_class,
             expected.decision_id,
             tuple(sorted(set(expected.cited_span_hashes))),
         )
-        matched_index: int | None = None
-        if stage is None:
-            for index, key in enumerate(emission_keys):
-                if not consumed[index] and key == expected_key:
-                    matched_index = index
-                    break
-        if matched_index is not None:
-            consumed[matched_index] = True
+        for expected in fixture.expected_findings
+    ]
+
+    # Pass 1: exact (class, decision, span set) matches, fixture order.
+    exact_match_by_expected: dict[int, int] = {}
+    for expected_index, expected in enumerate(fixture.expected_findings):
+        if omission_stage.get(expected.decision_id) is not None:
+            continue
+        expected_key = expected_keys[expected_index]
+        for index, key in enumerate(emission_keys):
+            if not consumed[index] and key == expected_key:
+                consumed[index] = True
+                exact_match_by_expected[expected_index] = index
+                break
+
+    # Pass 2: class-divergent (decision, span set) matches (cortex#525).
+    divergent_match_by_expected: dict[int, int] = {}
+    for expected_index, expected in enumerate(fixture.expected_findings):
+        if expected_index in exact_match_by_expected:
+            continue
+        if omission_stage.get(expected.decision_id) is not None:
+            continue
+        _, expected_decision, expected_spans = expected_keys[expected_index]
+        for index, key in enumerate(emission_keys):
+            if consumed[index] or key is None:
+                continue
+            emitted_class, emitted_decision, emitted_spans = key
+            if (
+                emitted_decision == expected_decision
+                and emitted_spans == expected_spans
+                and emitted_class is not expected.finding_class
+            ):
+                consumed[index] = True
+                divergent_match_by_expected[expected_index] = index
+                break
+
+    outcomes: list[ExpectedFindingOutcome] = []
+    for expected_index, expected in enumerate(fixture.expected_findings):
+        stage = omission_stage.get(expected.decision_id)
+        matched_finding_class: FindingClass | None = None
+        if expected_index in exact_match_by_expected:
+            grade = ExpectedFindingGrade.MATCHED
+        elif expected_index in divergent_match_by_expected:
+            grade = ExpectedFindingGrade.MATCHED_WITH_CLASS_DIFFERENCE
+            emitted = result.findings[divergent_match_by_expected[expected_index]]
+            matched_finding_class = emitted.finding_class
+        elif expected.finding_class in SHADOW_FINDING_CLASSES:
+            grade = ExpectedFindingGrade.MISSED_SHADOW
+        else:
+            grade = ExpectedFindingGrade.MISSED
         outcomes.append(
             ExpectedFindingOutcome(
                 finding_id=expected.finding_id,
                 finding_class=expected.finding_class,
                 decision_id=expected.decision_id,
                 cited_span_hashes=tuple(sorted(set(expected.cited_span_hashes))),
-                matched=matched_index is not None,
+                grade=grade,
                 omitted_at_stage=stage,
+                matched_finding_class=matched_finding_class,
             )
         )
 

@@ -39,7 +39,9 @@ from cortex.hosted.recorded_responses import (
 from cortex.hosted.replay_runner import (
     FIXTURE_LOCAL_RETRIEVAL_CONFIG_VERSION,
     REPLAY_REPORT_SCHEMA_VERSION,
+    SHADOW_FINDING_CLASSES,
     CorpusReplayReport,
+    ExpectedFindingGrade,
     OmissionStage,
     ReplayError,
     ReplayResult,
@@ -48,7 +50,9 @@ from cortex.hosted.replay_runner import (
     run_corpus_directory,
     run_fixture,
 )
-from cortex.hosted.scopes import ScopeType
+from cortex.hosted.scopes import STRUCTURAL_SCOPE_WEIGHTS, ScopeType
+
+CORPUS_DIR = Path(__file__).parent / "fixtures" / "hosted_eval" / "corpus"
 
 EVAL_PROMPT = RegisteredPrompt(
     prompt_id="evaluate-replay",
@@ -320,6 +324,61 @@ def test_pack_construction_is_deterministic() -> None:
         UUID(node_id)
 
 
+def test_pack_matches_glob_scope_at_directory_granularity() -> None:
+    # cortex#484: a decision scoped 'src/payments/**' matches the changed
+    # path 'src/payments/retry.py' — same reversed-LIKE semantics the hosted
+    # SQL surfaces ship, mirrored by scopes.glob_matches_path.
+    glob_decision = _decision(
+        "payments-dir-rule",
+        scopes=(FixtureScope(scope_type=ScopeType.GLOB, value="src/payments/**"),),
+    )
+    fixture = _fixture(decisions=(glob_decision,), expected_findings=())
+    emulation = build_fixture_candidate_pack(fixture)
+    assert len(emulation.pack.candidates) == 1
+    candidate = emulation.pack.candidates[0]
+    assert candidate.score == float(STRUCTURAL_SCOPE_WEIGHTS[ScopeType.GLOB])
+    assert candidate.reason_codes == ("scope:glob:src/payments/**",)
+    assert emulation.omission_stage_by_decision_id == {}
+
+
+def test_pack_glob_scope_does_not_match_outside_its_directory() -> None:
+    # Negative case: 'docs/**' governs nothing the diff touches, and the
+    # anchored LIKE translation cannot prefix-bleed into 'src/payments/...'.
+    glob_decision = _decision(
+        "docs-dir-rule",
+        scopes=(FixtureScope(scope_type=ScopeType.GLOB, value="docs/**"),),
+    )
+    fixture = _fixture(decisions=(glob_decision,), expected_findings=())
+    emulation = build_fixture_candidate_pack(fixture)
+    assert emulation.pack.candidates == ()
+    assert (
+        emulation.omission_stage_by_decision_id["docs-dir-rule"]
+        is OmissionStage.SUPPRESSED_BELOW_FLOOR
+    )
+
+
+def test_exact_path_match_outranks_glob_match() -> None:
+    # cortex#484 precedence: exact path (PATH weight 100) outranks a glob
+    # covering the same path (GLOB weight 98) via STRUCTURAL_SCOPE_WEIGHTS.
+    exact_decision = _decision(
+        "exact-rule",
+        scopes=(FixtureScope(scope_type=ScopeType.PATH, value="src/payments/retry.py"),),
+    )
+    glob_decision = _decision(
+        "glob-rule",
+        scopes=(FixtureScope(scope_type=ScopeType.GLOB, value="src/payments/**"),),
+    )
+    fixture = _fixture(
+        decisions=(glob_decision, exact_decision), expected_findings=()
+    )
+    emulation = build_fixture_candidate_pack(fixture)
+    ordered = [
+        (emulation.decision_id_by_node_id[c.decision_node_id], c.score)
+        for c in emulation.pack.candidates
+    ]
+    assert ordered == [("exact-rule", 100.0), ("glob-rule", 98.0)]
+
+
 def test_unparseable_patch_fails_naming_the_fixture() -> None:
     fixture = _fixture(patch="this is not a unified diff\n", expected_findings=())
     with pytest.raises(ReplayError, match="replay-fixture"):
@@ -386,7 +445,10 @@ def test_match_requires_identical_cited_span_set() -> None:
     assert result.unexpected_count == 1
 
 
-def test_match_requires_same_finding_class() -> None:
+def test_class_divergent_emission_grades_matched_with_class_difference() -> None:
+    # cortex#525: same decision, same cited span set, different class — the
+    # first live #450 replay double-penalized this shape as missed +
+    # unexpected; it is substance-correct, classification-divergent.
     fixture = _fixture()
     wrong_class = _finding_for(
         fixture,
@@ -395,7 +457,127 @@ def test_match_requires_same_finding_class() -> None:
     )
     result = _run(fixture, _ScriptedEvaluateModel((wrong_class,)))
     assert result.matched_count == 0
-    assert result.unexpected_count == 1
+    assert result.matched_with_class_difference_count == 1
+    assert result.missed_count == 0
+    assert result.missed_shadow_count == 0
+    assert result.unexpected_count == 0
+    outcome = result.expected_finding_outcomes[0]
+    assert outcome.grade is ExpectedFindingGrade.MATCHED_WITH_CLASS_DIFFERENCE
+    assert outcome.matched is False
+    assert outcome.matched_finding_class is FindingClass.REVERSES_SUPERSEDED_PATTERN
+    payload = outcome.as_payload()
+    assert payload["grade"] == "matched_with_class_difference"
+    assert payload["matched_finding_class"] == "reverses-superseded-pattern"
+    result_payload = result.as_payload()
+    assert result_payload["matched_with_class_difference_count"] == 1
+    assert result_payload["missed_count"] == 0
+
+
+def test_exact_matches_are_assigned_before_class_divergent_matches() -> None:
+    # One emission, two expectations on the same (decision, span set): the
+    # exact-class expectation must win even though the divergent expectation
+    # comes first in fixture order — pass 1 runs to completion before pass 2.
+    ef_divergent = ExpectedFinding(
+        finding_id="f-reverses-first",
+        finding_class=FindingClass.REVERSES_SUPERSEDED_PATTERN,
+        decision_id="use-exponential-backoff",
+        cited_span_hashes=D_BACKOFF.span_hashes,
+        summary="Listed first so a greedy single pass would steal the emission.",
+    )
+    fixture = _fixture(expected_findings=(ef_divergent, EF_BACKOFF))
+    emission = _finding_for(fixture, "use-exponential-backoff")
+    result = _run(fixture, _ScriptedEvaluateModel((emission,)))
+    by_id = {outcome.finding_id: outcome for outcome in result.expected_finding_outcomes}
+    assert by_id["f-contradicts-backoff"].grade is ExpectedFindingGrade.MATCHED
+    assert by_id["f-reverses-first"].grade is ExpectedFindingGrade.MISSED
+    assert result.matched_with_class_difference_count == 0
+    assert result.unexpected_count == 0
+
+
+def test_shadow_class_expectation_matches_shadow_capture() -> None:
+    # cortex#525 (a): shadow-registered expected classes match against the
+    # model's shadow-class emissions — the replay stand-in for
+    # EvaluationOutcome.shadow_findings (the shadow lane captures, never emits).
+    assert FindingClass.CITES_MISSING_PATH in SHADOW_FINDING_CLASSES
+    ef_shadow = ExpectedFinding(
+        finding_id="f-shadow-capture",
+        finding_class=FindingClass.CITES_MISSING_PATH,
+        decision_id="use-exponential-backoff",
+        cited_span_hashes=D_BACKOFF.span_hashes,
+        summary="The diff relies on docs/runbook.md, which no longer exists.",
+    )
+    fixture = _fixture(expected_findings=(ef_shadow,))
+    capture = _finding_for(
+        fixture,
+        "use-exponential-backoff",
+        finding_class=FindingClass.CITES_MISSING_PATH,
+    )
+    result = _run(fixture, _ScriptedEvaluateModel((capture,)))
+    assert result.matched_count == 1
+    assert result.missed_shadow_count == 0
+    assert result.unexpected_count == 0
+    assert result.expected_finding_outcomes[0].grade is ExpectedFindingGrade.MATCHED
+
+
+def test_non_captured_shadow_expectation_reports_missed_shadow() -> None:
+    # cortex#525 (a): a shadow expectation with no capture is missed_shadow —
+    # its own counter, never folded into missed (a shadow miss measures an
+    # unreleased lane, not advisory quality).
+    ef_shadow = ExpectedFinding(
+        finding_id="f-shadow-uncaptured",
+        finding_class=FindingClass.CITES_MISSING_PATH,
+        decision_id="use-exponential-backoff",
+        cited_span_hashes=D_BACKOFF.span_hashes,
+        summary="The diff relies on docs/runbook.md, which no longer exists.",
+    )
+    fixture = _fixture(expected_findings=(ef_shadow,))
+    result = _run(fixture, _ScriptedEvaluateModel())
+    assert result.matched_count == 0
+    assert result.missed_count == 0
+    assert result.missed_shadow_count == 1
+    outcome = result.expected_finding_outcomes[0]
+    assert outcome.grade is ExpectedFindingGrade.MISSED_SHADOW
+    # The decision was visible: a genuine shadow miss, not an omission.
+    assert outcome.omitted_at_stage is None
+    assert outcome.as_payload()["grade"] == "missed_shadow"
+    assert result.as_payload()["missed_shadow_count"] == 1
+
+
+def test_spec_version_drift_corpus_fixture_replays_as_class_divergent() -> None:
+    # cortex#525 acceptance: the committed spec-version-drift-001 fixture
+    # expects shadow class omitted-load-bearing-constraint; the live #450 run
+    # emitted contradicts-prior-decision against the SAME decision with the
+    # SAME cited spans. That replays as matched_with_class_difference — in
+    # neither missed nor unexpected.
+    fixture = EvalFixture.from_json(
+        (CORPUS_DIR / "spec-version-drift-001.json").read_text(encoding="utf-8")
+    )
+    expected = fixture.expected_findings[0]
+    # Corpus authoring note made executable: this expectation's class is
+    # shadow-registered at fixture-write time.
+    assert expected.finding_class in SHADOW_FINDING_CLASSES
+    emulation = build_fixture_candidate_pack(fixture)
+    emission = FindingDraft(
+        finding_class=FindingClass.CONTRADICTS_PRIOR_DECISION,
+        decision_node_id=emulation.decision_node_id_by_decision_id[
+            expected.decision_id
+        ],
+        cited_span_hashes=tuple(sorted(expected.cited_span_hashes)),
+        summary=(
+            "The diff finalizes SPEC.md at 1.1.0 but leaves .cortex/SPEC_VERSION "
+            "declaring 0.5.0."
+        ),
+        confidence_label="high",
+    )
+    result = _run(fixture, _ScriptedEvaluateModel((emission,)))
+    assert result.matched_with_class_difference_count == 1
+    assert result.matched_count == 0
+    assert result.missed_count == 0
+    assert result.missed_shadow_count == 0
+    assert result.unexpected_count == 0
+    outcome = result.expected_finding_outcomes[0]
+    assert outcome.grade is ExpectedFindingGrade.MATCHED_WITH_CLASS_DIFFERENCE
+    assert outcome.matched_finding_class is FindingClass.CONTRADICTS_PRIOR_DECISION
 
 
 def test_matching_is_one_to_one() -> None:
@@ -721,9 +903,12 @@ def test_corpus_runner_rejects_duplicate_fixture_ids(tmp_path: Path) -> None:
 
 
 def test_replay_result_rejects_unknown_schema_version() -> None:
+    # v1 is the pre-cortex#525 grading schema: the dated record at
+    # docs/eval/replay-450-2026-06-10.json stays committed as history, and
+    # this runner refuses it rather than silently reinterpreting it.
     result = _run(_fixture(), _ScriptedEvaluateModel())
     with pytest.raises(ReplayError, match="unknown replay_report_schema_version"):
-        dataclasses.replace(result, report_schema_version=2)
+        dataclasses.replace(result, report_schema_version=1)
 
 
 def test_corpus_report_rejects_unknown_schema_version() -> None:
@@ -736,9 +921,10 @@ def test_payload_version_gate() -> None:
     result = _run(_fixture(), _ScriptedEvaluateModel())
     payload = result.as_payload()
     assert payload["replay_report_schema_version"] == REPLAY_REPORT_SCHEMA_VERSION
+    assert REPLAY_REPORT_SCHEMA_VERSION == 2
     ensure_replay_report_payload_version(payload)
     with pytest.raises(ReplayError, match="unknown replay_report_schema_version"):
-        ensure_replay_report_payload_version({"replay_report_schema_version": 2})
+        ensure_replay_report_payload_version({"replay_report_schema_version": 1})
     with pytest.raises(ReplayError, match="must be an integer"):
         ensure_replay_report_payload_version({})
     with pytest.raises(ReplayError, match="must be an integer"):

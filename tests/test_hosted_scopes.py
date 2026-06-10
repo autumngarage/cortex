@@ -11,8 +11,13 @@ from cortex.hosted.scopes import (
     ScopeValidationError,
     decision_scope_insert_sql,
     decisions_for_diff_scope_sql,
+    glob_like_pattern_sql,
+    glob_matches_path,
     normalize_scope_value,
     query_scope_parameters,
+    scope_match_reason_sql,
+    scope_match_weight_sql,
+    scope_structural_match_sql,
 )
 
 TENANT_ID = "11111111-1111-4111-8111-111111111111"
@@ -133,3 +138,80 @@ def test_decisions_for_diff_scope_sql_returns_structural_reason_codes() -> None:
 def test_scope_sql_rejects_unsafe_schema_identifier() -> None:
     with pytest.raises(ScopeValidationError, match="invalid SQL identifier"):
         decisions_for_diff_scope_sql("bad;drop")
+
+
+# ---------------------------------------------------------------------------
+# Glob/directory-granularity matching (cortex#484)
+# ---------------------------------------------------------------------------
+
+
+def test_glob_matches_path_at_directory_granularity() -> None:
+    # The cortex#484 acceptance shape: a decision scoped 'src/api/**'
+    # matches a diff touching 'src/api/handlers/foo.py'.
+    assert glob_matches_path("src/api/**", "src/api/handlers/foo.py")
+    assert glob_matches_path("src/api/**", "src/api/foo.py")
+    assert glob_matches_path(".cortex/journal/**", ".cortex/journal/2026-06-09-x.md")
+
+
+def test_glob_match_is_anchored_and_never_prefix_bleeds() -> None:
+    # LIKE is anchored at both ends: no sibling-directory or mid-path bleed.
+    assert not glob_matches_path("src/api/**", "src/apiX/handlers/foo.py")
+    assert not glob_matches_path("src/api/**", "lib/src/api/foo.py")
+    # '<dir>/**' covers paths strictly under the directory, not the bare dir.
+    assert not glob_matches_path("src/api/**", "src/api")
+
+
+def test_glob_match_treats_non_doublestar_characters_literally() -> None:
+    # Only '**' is a wildcard: underscores (LIKE '_') and lone '*' match
+    # themselves — the documented v1 mechanism, mirrored by the SQL escaping.
+    assert glob_matches_path("src/a_b/**", "src/a_b/c.py")
+    assert not glob_matches_path("src/a_b/**", "src/axb/c.py")
+    assert not glob_matches_path("src/*.py", "src/x.py")
+    assert glob_matches_path("src/*.py", "src/*.py")
+    # Exact value with no wildcard degrades to literal equality.
+    assert glob_matches_path("src/api/foo.py", "src/api/foo.py")
+    assert not glob_matches_path("src/api/foo.py", "src/api/foo_py")
+
+
+def test_glob_like_pattern_sql_escapes_like_metacharacters() -> None:
+    pattern = glob_like_pattern_sql("scope.normalized_value")
+    # Escape order: backslash, percent, underscore — then '**' -> '%'.
+    assert pattern == (
+        "replace(replace(replace(replace(scope.normalized_value, "
+        "'\\', '\\\\'), '%', '\\%'), '_', '\\_'), '**', '%')"
+    )
+
+
+def test_scope_match_fragments_encode_glob_branch_and_precedence() -> None:
+    condition = scope_structural_match_sql()
+    assert "scope.scope_type = q.scope_type" in condition
+    assert "scope.scope_type = 'glob' AND q.scope_type = 'path'" in condition
+    assert "q.normalized_value LIKE" in condition
+
+    weight = scope_match_weight_sql()
+    glob_weight = STRUCTURAL_SCOPE_WEIGHTS[ScopeType.GLOB]
+    assert f"ELSE {glob_weight} END" in weight
+    assert "THEN q.structural_weight" in weight
+    # Precedence: exact path keeps the PATH weight, which outranks GLOB.
+    assert STRUCTURAL_SCOPE_WEIGHTS[ScopeType.PATH] > glob_weight
+
+    reason = scope_match_reason_sql()
+    assert "'scope:glob:' || scope.normalized_value" in reason
+    assert "THEN q.reason_code" in reason
+
+
+def test_both_structural_sql_surfaces_embed_the_same_match_fragments() -> None:
+    # Guardrail: the standalone matcher and the scope_candidates CTE in the
+    # hybrid retrieval SQL must carry the SAME glob-matching fragments, so
+    # the two surfaces (and the Python mirror) cannot drift apart silently.
+    from cortex.hosted.decisions_for_diff import decisions_for_diff_retrieval_sql
+
+    standalone = decisions_for_diff_scope_sql()
+    retrieval = decisions_for_diff_retrieval_sql()
+    for fragment in (
+        scope_structural_match_sql(),
+        scope_match_weight_sql(),
+        scope_match_reason_sql(),
+    ):
+        assert fragment in standalone
+        assert fragment in retrieval

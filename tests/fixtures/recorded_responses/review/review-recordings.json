@@ -4,7 +4,7 @@
     {
       "degraded_reasons": [],
       "findings": [],
-      "input_hash": "61792c73cf3849dbb503c8de438b80dc88501890964254a409c4b06dddf3e6ab",
+      "input_hash": "2d20aff284505aa0b578572d1ad099c1f4d6a4631d1d91b64d4e64e6fff2cbaa",
       "model_id": "anthropic/claude-fable-5",
       "omitted_decision_count": 0,
       "prompt_version": "review-evaluate/v1+13046b32c6ee"
@@ -23,7 +23,7 @@
           "summary": "The diff replaces exponential backoff with a fixed 0.5s delay."
         }
       ],
-      "input_hash": "d3b7d1e35c957f9c362d3279ad2897bea5509daca1a4f17eea7c868a37f47119",
+      "input_hash": "42768afe5a1cfbdf490bc4b4086c5084ed99fcb1fe42a65d2bcdacc3ea8f4791",
       "model_id": "anthropic/claude-fable-5",
       "omitted_decision_count": 0,
       "prompt_version": "review-evaluate/v1+13046b32c6ee"
