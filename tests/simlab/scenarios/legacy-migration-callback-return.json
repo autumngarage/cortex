@@ -1,0 +1,55 @@
+{
+  "archetype_id": "legacy-migration",
+  "confirm": [
+    "must use promises with"
+  ],
+  "demo_notes": "The superseded chain working as designed: ADR 0001 (callbacks) is status-filtered out of the evaluator's sight, and the catch comes from confirmed ADR 0003 — plus the commit-body decision that recorded the migration.",
+  "diff_base_sha": "2323232",
+  "diff_head_sha": "4545454",
+  "expected": {
+    "matched": 2,
+    "missed": 1,
+    "needs_manual_review": false,
+    "over_budget": 0,
+    "pack_omitted": {
+      "over_limit": 0,
+      "status_filtered": 1,
+      "suppressed_below_floor": 11
+    },
+    "unexpected": 0
+  },
+  "expected_findings": [
+    {
+      "decision": "must use promises with",
+      "finding_class": "reverses-superseded-pattern",
+      "finding_id": "f-promise-scheduling",
+      "suggested_repair": "Keep schedule() promise-based; wrap the legacy mailer in a promise adapter instead of reintroducing callbacks.",
+      "summary": "The diff reintroduces callback-style continuation passing in lib/jobs/scheduler.js — the exact pattern ADR 0003 superseded when it mandated promise-based scheduling."
+    },
+    {
+      "decision": "no longer accepts callback continuations",
+      "finding_class": "contradicts-prior-decision",
+      "finding_id": "f-migration-commit",
+      "summary": "The diff contradicts the recorded migration decision: the scheduler no longer accepts callback continuations."
+    },
+    {
+      "decision": "passes continuation callbacks",
+      "finding_class": "reverses-superseded-pattern",
+      "finding_id": "f-superseded-callbacks",
+      "impossible_at": "status_filtered",
+      "summary": "ADR 0001 describes the callback pattern itself, but it is superseded and never reaches the evaluator; the catch must come from the current decision."
+    }
+  ],
+  "kind": "scenario",
+  "patch": "diff --git a/lib/jobs/scheduler.js b/lib/jobs/scheduler.js\nindex 2323232..4545454 100644\n--- a/lib/jobs/scheduler.js\n+++ b/lib/jobs/scheduler.js\n@@ -1,7 +1,9 @@\n-// Job scheduler (promise style, per ADR 0003).\n-async function schedule(job) {\n-  await job();\n+// Job scheduler: callback fast-path for the legacy mailer.\n+function schedule(job, done) {\n+  job(function (err) {\n+    done(err);\n+  });\n }\n\n async function scheduleAll(jobs) {\n",
+  "scenario_id": "legacy-migration-callback-return",
+  "simlab_spec_schema_version": 1,
+  "supersede": [
+    {
+      "by": "must use promises with",
+      "decision": "passes continuation callbacks"
+    }
+  ],
+  "title": "Reintroducing a superseded pattern is caught by the current decision",
+  "token_budget": 8000
+}

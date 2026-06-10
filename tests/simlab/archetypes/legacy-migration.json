@@ -1,0 +1,77 @@
+{
+  "archetype_id": "legacy-migration",
+  "commits": [
+    {
+      "author_email": "sam@simlab.test",
+      "author_name": "Sam Okafor",
+      "authored_at": "2026-01-12T09:00:00+00:00",
+      "files": {
+        "CLAUDE.md": "# ledgerd — Agent Instructions\n\nA long-lived node service mid-migration away from callbacks and MySQL.\n\n## Hard requirements\n\n- Database access goes through `lib/db/pool.js`; direct driver connections are forbidden.\n- Whenever `scripts/deploy.sh` changes, update `docs/legacy/runbook.md` in the same change; deploy steps must never drift from the runbook.\n",
+        "CODEOWNERS": "# Ownership.\nlib/db/ @simlab/storage\nlib/jobs/ @simlab/platform\ndocs/legacy/runbook.md @simlab/ops\nthis-line-is-not-an-owner\n",
+        "README.md": "# ledgerd\n\nSynthetic simlab legacy-migration archetype.\n",
+        "docs/legacy/runbook.md": "# Runbook\n\n1. Run `scripts/deploy.sh`.\n",
+        "lib/db/pool.js": "// Shared DB pool (MySQL era).\nconst mysql = require(\"mysql2\");\n\nfunction pool() {\n  return mysql.createPool({ host: \"db\" });\n}\n\nmodule.exports = { pool };\n",
+        "lib/jobs/scheduler.js": "// Job scheduler (callback style).\nfunction schedule(job, done) {\n  job(function (err) {\n    done(err);\n  });\n}\n\nmodule.exports = { schedule };\n",
+        "scripts/deploy.sh": "#!/bin/sh\nset -eu\necho deploying ledgerd\n"
+      },
+      "message": "chore: import ledgerd from the old monorepo"
+    },
+    {
+      "author_email": "sam@simlab.test",
+      "author_name": "Sam Okafor",
+      "authored_at": "2026-01-13T09:00:00+00:00",
+      "files": {
+        "docs/adr/0001-callback-continuations.md": "# 0001 — Callback-style continuations for job scheduling\n\nStatus: Superseded by ADR 0003\n\n## Context\n\nThe original scheduler predates promise support in our runtime.\n\n## Decision\n\nJob scheduling in `lib/jobs/scheduler.js` passes continuation callbacks;\neach job invokes `done(err)` when it completes.\n",
+        "docs/adr/0002-mysql-storage.md": "# 0002 — MySQL as the ledger store\n\nStatus: Superseded by ADR 0004\n\n## Context\n\nMySQL was the only managed database our first host offered.\n\n## Decision\n\nThe ledger persists to MySQL through the shared pool in `lib/db/pool.js`.\n",
+        "docs/adr/0003-promise-based-scheduling.md": "# 0003 — Promise-based job scheduling\n\nStatus: Accepted\n\n## Context\n\nCallback-style continuations in the scheduler produced unrecoverable nested\nerror handling; ADR 0001 is superseded by this decision.\n\n## Decision\n\nAll job scheduling in `lib/jobs/scheduler.js` must use promises with\nasync/await; callback-style continuation passing must not be reintroduced.\n",
+        "docs/adr/0004-postgres-ledger-store.md": "# 0004 — Postgres as the ledger store\n\nStatus: Accepted\n\n## Context\n\nThe MySQL ledger (ADR 0002) lacked transactional DDL and is superseded by\nthis decision.\n\n## Decision\n\nThe ledger persists to Postgres; `lib/db/pool.js` must open connections\nthrough the `pg` pool only, and the `mysql2` driver must not be\nreintroduced.\n"
+      },
+      "message": "docs(adr): backfill scheduling and storage decision records"
+    },
+    {
+      "author_email": "sam@simlab.test",
+      "author_name": "Sam Okafor",
+      "authored_at": "2026-01-20T10:00:00+00:00",
+      "files": {
+        "lib/jobs/scheduler.js": "// Job scheduler (promise style, per ADR 0003).\nasync function schedule(job) {\n  await job();\n}\n\nmodule.exports = { schedule };\n"
+      },
+      "message": "refactor: promise-based scheduler (removes callback continuations)\n\nThe scheduler in `lib/jobs/scheduler.js` no longer accepts callback continuations; jobs must return promises."
+    },
+    {
+      "author_email": "robin@simlab.test",
+      "author_name": "Robin Vale",
+      "authored_at": "2026-01-22T09:00:00+00:00",
+      "deleted": [
+        "docs/legacy/runbook.md"
+      ],
+      "files": {
+        "docs/legacy/README.md": "Runbook archived to the ops wiki.\n"
+      },
+      "message": "chore: archive legacy runbook\n\nThe legacy runbook moved to the ops wiki; deploy notes live there."
+    },
+    {
+      "author_email": "sam@simlab.test",
+      "author_name": "Sam Okafor",
+      "authored_at": "2026-01-25T09:00:00+00:00",
+      "files": {
+        "lib/db/pool.js": "// Shared DB pool (Postgres, per ADR 0004).\nconst { Pool } = require(\"pg\");\n\nfunction pool() {\n  return new Pool({ host: \"db\" });\n}\n\nmodule.exports = { pool };\n"
+      },
+      "message": "feat: migrate ledger store to postgres (replaces mysql driver)\n\nSwitched to the `pg` pool in `lib/db/pool.js` instead of `mysql2`."
+    },
+    {
+      "author_email": "robin@simlab.test",
+      "author_name": "Robin Vale",
+      "authored_at": "2026-01-27T09:00:00+00:00",
+      "files": {
+        "lib/jobs/scheduler.js": "// Job scheduler (promise style, per ADR 0003).\nasync function schedule(job) {\n  await job();\n}\n\nasync function scheduleAll(jobs) {\n  for (const job of jobs) {\n    await schedule(job);\n  }\n}\n\nmodule.exports = { schedule, scheduleAll };\n"
+      },
+      "message": "fix: scheduler regression after promise migration\n\nRestores job retry order broken by the promise migration."
+    }
+  ],
+  "description": "A long-lived service mid-migration: superseded ADR chains (callbacks → promises, MySQL → Postgres) and a stale runbook anchor.",
+  "kind": "archetype",
+  "pr_fixtures": [],
+  "simlab_spec_schema_version": 1,
+  "source_id": "e5f70921-4a6c-5d8e-0b1c-2d4f6a8c0e26",
+  "tenant_id": "7e9f1b3d-5c7a-5e9c-1d3f-4a6c8e0a2c44"
+}

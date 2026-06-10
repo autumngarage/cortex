@@ -1,0 +1,64 @@
+{
+  "archetype_id": "clean-shop",
+  "commits": [
+    {
+      "author_email": "avery@simlab.test",
+      "author_name": "Avery Chen",
+      "authored_at": "2026-02-02T09:00:00+00:00",
+      "files": {
+        ".github/CODEOWNERS": "# Ownership map for the payments service.\nsrc/payments/ @simlab/payments-team\ndocs/adr/ @simlab/architecture\n",
+        "CLAUDE.md": "# payments-service — Agent Instructions\n\nSynthetic clean-shop archetype: a tidy payments service with rich ADRs and\nquiet, conventional commit history.\n\n## Engineering rules\n\n- **Retry policy.** Webhook retries in `src/payments/retry.py` must use exponential backoff with jitter; fixed delays are forbidden.\n- **Persistence boundary.** All durable writes go through `src/payments/store.py` and must target Postgres only; embedded database engines are forbidden.\n- **API transport.** The public API in `src/api/server.py` must stay REST over HTTP; do not expose gRPC endpoints.\n\n## Background\n\nThis service processes webhook deliveries for merchants and settles\npayment intents in nightly batches.\n",
+        "README.md": "# payments-service\n\nSynthetic simlab clean-shop archetype.\n",
+        "src/api/server.py": "\"\"\"Public REST API.\"\"\"\n\n\ndef routes() -> list[str]:\n    return [\"/v1/intents\", \"/v1/webhooks\"]\n",
+        "src/payments/audit_log.py": "\"\"\"Structured JSON event logging for the payment path.\"\"\"\n\nimport json\nimport sys\n\n\ndef log_event(event: dict) -> None:\n    sys.stdout.write(json.dumps(event, sort_keys=True) + \"\\n\")\n",
+        "src/payments/retry.py": "\"\"\"Webhook retry policy: exponential backoff with jitter (ADR-adjacent).\"\"\"\n\nimport random\n\nBASE_DELAY_SECONDS = 0.5\n\n\ndef next_delay(attempt: int) -> float:\n    jitter = random.uniform(0.0, 0.25)\n    return BASE_DELAY_SECONDS * (2 ** attempt) + jitter\n",
+        "src/payments/store.py": "\"\"\"Persistence boundary: every durable write goes through this module.\"\"\"\n\nimport psycopg\n\n\ndef connect(dsn: str) -> psycopg.Connection:\n    return psycopg.connect(dsn)\n"
+      },
+      "message": "chore: scaffold payments service"
+    },
+    {
+      "author_email": "avery@simlab.test",
+      "author_name": "Avery Chen",
+      "authored_at": "2026-02-03T10:00:00+00:00",
+      "files": {
+        "docs/adr/0001-postgres-only-persistence.md": "# 0001 — Postgres is the only persistence engine\n\nStatus: Accepted\n\n## Context\n\nEarly prototypes wrote settlement state to ad-hoc SQLite files, which\ncorrupted twice during deploys and could not be queried in production.\n\n## Decision\n\nAll durable state lives in Postgres. `src/payments/store.py` is the only\nmodule that opens database connections, and embedded engines such as SQLite\nmust not be introduced anywhere in the service.\n",
+        "docs/adr/0002-rest-over-grpc.md": "# 0002 — REST over gRPC for the public API\n\nStatus: Accepted\n\n## Context\n\nMerchant integrators asked for curl-able endpoints; gRPC tooling support\nwas uneven across their stacks.\n\n## Decision\n\nThe public API stays REST over HTTP with JSON bodies, served from\n`src/api/server.py`. We do not expose gRPC services to merchants.\n",
+        "docs/adr/0003-structured-event-logging.md": "# 0003 — Structured JSON event logging\n\nStatus: Accepted\n\n## Context\n\nPlain-text logs made settlement incidents slow to reconstruct.\n\n## Decision\n\nEvery payment event is logged as a single structured JSON line through\n`src/payments/audit_log.py`; printf-style logging is forbidden in the\npayment path.\n"
+      },
+      "message": "docs(adr): record persistence, transport, and logging decisions"
+    },
+    {
+      "author_email": "priya@simlab.test",
+      "author_name": "Priya Natarajan",
+      "authored_at": "2026-02-05T11:00:00+00:00",
+      "files": {
+        "src/payments/settlement.py": "\"\"\"Nightly settlement batches.\"\"\"\n\n\ndef settle(intents: list[str]) -> int:\n    return len(intents)\n"
+      },
+      "message": "feat: settle payment intents in nightly batches"
+    },
+    {
+      "author_email": "avery@simlab.test",
+      "author_name": "Avery Chen",
+      "authored_at": "2026-02-06T09:30:00+00:00",
+      "files": {
+        "src/payments/retry.py": "\"\"\"Webhook retry policy: exponential backoff with jitter (ADR-adjacent).\"\"\"\n\nimport random\n\nBASE_DELAY_SECONDS = 0.5\n\n\ndef next_delay(attempt: int) -> float:\n    jitter = random.uniform(0.0, 0.25)\n    return BASE_DELAY_SECONDS * (2 ** attempt) + jitter\n\n\ndef should_retry(payload: bytes) -> bool:\n    return bool(payload)\n"
+      },
+      "message": "fix: skip retries for empty webhook payloads"
+    },
+    {
+      "author_email": "priya@simlab.test",
+      "author_name": "Priya Natarajan",
+      "authored_at": "2026-02-07T15:00:00+00:00",
+      "files": {
+        "tests/test_settlement.py": "from src.payments.settlement import settle\n\n\ndef test_settle_counts():\n    assert settle([]) == 0\n"
+      },
+      "message": "test: settlement edge cases"
+    }
+  ],
+  "description": "A tidy payments service: rich accepted ADR set, crisp CLAUDE.md rules, CODEOWNERS, low-chatter conventional commits.",
+  "kind": "archetype",
+  "pr_fixtures": [],
+  "simlab_spec_schema_version": 1,
+  "source_id": "a3c5e7f9-1b2d-5c4e-8f0a-6d8b0c2e4f60",
+  "tenant_id": "5f9d1a52-7c4e-5b8a-9f3d-2e6c8a0b4d1e"
+}

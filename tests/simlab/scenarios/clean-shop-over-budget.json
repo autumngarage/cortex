@@ -1,0 +1,43 @@
+{
+  "archetype_id": "clean-shop",
+  "confirm": [
+    "exponential backoff with jitter",
+    "module that opens database connections"
+  ],
+  "demo_notes": "Over-budget honesty: two decisions match the diff, the budget admits one, the omitted expected finding is reported as impossible at the over_budget stage and the run is flagged for manual review.",
+  "diff_base_sha": "1111111",
+  "diff_head_sha": "7777777",
+  "expected": {
+    "matched": 1,
+    "missed": 1,
+    "needs_manual_review": true,
+    "over_budget": 2,
+    "pack_omitted": {
+      "over_limit": 0,
+      "status_filtered": 0,
+      "suppressed_below_floor": 5
+    },
+    "unexpected": 0
+  },
+  "expected_findings": [
+    {
+      "decision": "exponential backoff with jitter",
+      "finding_class": "contradicts-prior-decision",
+      "finding_id": "f-included",
+      "summary": "The diff replaces exponential backoff with a fixed delay in src/payments/retry.py."
+    },
+    {
+      "decision": "module that opens database connections",
+      "finding_class": "contradicts-prior-decision",
+      "finding_id": "f-omitted",
+      "impossible_at": "over_budget",
+      "summary": "The diff introduces an embedded sqlite3 cache in src/payments/store.py, contradicting ADR 0001."
+    }
+  ],
+  "kind": "scenario",
+  "patch": "diff --git a/src/payments/retry.py b/src/payments/retry.py\nindex 1111111..7777777 100644\n--- a/src/payments/retry.py\n+++ b/src/payments/retry.py\n@@ -7,5 +7,5 @@\n\n def next_delay(attempt: int) -> float:\n-    jitter = random.uniform(0.0, 0.25)\n-    return BASE_DELAY_SECONDS * (2 ** attempt) + jitter\n+    # fixed delay keeps the math simple\n+    return BASE_DELAY_SECONDS\ndiff --git a/src/payments/store.py b/src/payments/store.py\nindex 4444444..8888888 100644\n--- a/src/payments/store.py\n+++ b/src/payments/store.py\n@@ -1,7 +1,12 @@\n \"\"\"Persistence boundary: every durable write goes through this module.\"\"\"\n\n import psycopg\n+import sqlite3\n\n\n def connect(dsn: str) -> psycopg.Connection:\n     return psycopg.connect(dsn)\n+\n+\n+def local_cache() -> sqlite3.Connection:\n+    return sqlite3.connect(\"settlement-cache.db\")\n",
+  "scenario_id": "clean-shop-over-budget",
+  "simlab_spec_schema_version": 1,
+  "title": "A tiny context budget surfaces the manual-review signal",
+  "token_budget": 220
+}

@@ -1,0 +1,34 @@
+{
+  "archetype_id": "legacy-migration",
+  "confirm": [
+    "through the `pg` pool only"
+  ],
+  "demo_notes": "True negative on a superseded chain: pool tuning on the Postgres pool conflicts with nothing current, and superseded ADR 0002 (MySQL) is provably status-filtered.",
+  "diff_base_sha": "6767676",
+  "diff_head_sha": "8989898",
+  "expected": {
+    "matched": 0,
+    "missed": 0,
+    "needs_manual_review": false,
+    "over_budget": 0,
+    "pack_omitted": {
+      "over_limit": 0,
+      "status_filtered": 1,
+      "suppressed_below_floor": 10
+    },
+    "unexpected": 0
+  },
+  "expected_findings": [],
+  "kind": "scenario",
+  "patch": "diff --git a/lib/db/pool.js b/lib/db/pool.js\nindex 6767676..8989898 100644\n--- a/lib/db/pool.js\n+++ b/lib/db/pool.js\n@@ -2,7 +2,7 @@\n const { Pool } = require(\"pg\");\n\n function pool() {\n-  return new Pool({ host: \"db\" });\n+  return new Pool({ host: \"db\", max: 20 });\n }\n\n module.exports = { pool };\n",
+  "scenario_id": "legacy-migration-pool-tuning",
+  "simlab_spec_schema_version": 1,
+  "supersede": [
+    {
+      "by": "through the `pg` pool only",
+      "decision": "persists to MySQL"
+    }
+  ],
+  "title": "Superseded storage decisions never speak; compliant tuning stays clean",
+  "token_budget": 8000
+}

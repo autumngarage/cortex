@@ -1,0 +1,31 @@
+{
+  "archetype_id": "legacy-migration",
+  "demo_notes": "Span-drift honesty: ADR 0004 was rewritten after derive, so its citation spans no longer match the document; the decision is excluded with a named skip instead of rendering a stale citation.",
+  "diff_base_sha": "6767676",
+  "diff_head_sha": "0101010",
+  "expected": {
+    "matched": 0,
+    "missed": 0,
+    "needs_manual_review": false,
+    "over_budget": 0,
+    "pack_omitted": {
+      "over_limit": 0,
+      "status_filtered": 0,
+      "suppressed_below_floor": 10
+    },
+    "span_drift_skips": [
+      "Postgres as the ledger store"
+    ],
+    "unexpected": 0
+  },
+  "expected_findings": [],
+  "kind": "scenario",
+  "patch": "diff --git a/lib/db/pool.js b/lib/db/pool.js\nindex 6767676..0101010 100644\n--- a/lib/db/pool.js\n+++ b/lib/db/pool.js\n@@ -1,8 +1,8 @@\n-// Shared DB pool (Postgres, per ADR 0004).\n-const { Pool } = require(\"pg\");\n+// Shared DB pool: back to mysql2 while the postgres migration bakes.\n+const mysql = require(\"mysql2\");\n\n function pool() {\n-  return new Pool({ host: \"db\" });\n+  return mysql.createPool({ host: \"db\" });\n }\n\n module.exports = { pool };\n",
+  "post_derive_edits": {
+    "docs/adr/0004-postgres-ledger-store.md": "# 0004 — Postgres as the ledger store\n\nStatus: Accepted\n\n## Context\n\nThe MySQL ledger (ADR 0002) lacked transactional DDL and is superseded by\nthis decision.\n\n## Decision\n\nThe ledger persists to Postgres. Connection policy is being rewritten as\npart of the pooling overhaul; see the ops wiki for the current driver\nguidance while this section is under review.\n"
+  },
+  "scenario_id": "legacy-migration-span-drift",
+  "simlab_spec_schema_version": 1,
+  "title": "A drifted source document is excluded, never mis-cited",
+  "token_budget": 8000
+}
