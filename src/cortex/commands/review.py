@@ -328,7 +328,7 @@ def build_live_candidate_pack(
         visible_source_ids=(source_id,),
     )
     connection = connect(dsn)
-    import psycopg  # type: ignore[import-not-found] # lazy: db.connect proved it imports
+    import psycopg
 
     try:
         try:
