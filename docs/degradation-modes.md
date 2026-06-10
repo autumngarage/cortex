@@ -235,3 +235,13 @@ mode skip citation or visibility boundaries.
   rejected before any extraction or write. Recognized-but-noisy material is
   not a failure at all — it surfaces as `DroppedChatter` with a reason code
   (the write-side `bounded_omission` behavior above).
+
+### Read-value surface registrations (2026-06-10, cortex#381/#382)
+
+- `ask_surface.AskSurfaceValidationError` -> `invalid_input_rejected`:
+  malformed answer material (an uncited answer line, a no-answer carrying
+  lines) is refused at construction before any rendering.
+- `ask_surface.BrowseIndexRefusedError` -> `fail_closed_refusal`: a
+  browse-shaped or empty question is refused to hold the no-browsable-index
+  boundary (cortex#382) — the corpus is never enumerated to make a query
+  succeed.

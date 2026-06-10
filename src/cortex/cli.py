@@ -15,7 +15,9 @@ from cortex.commands._auto_sync import (
     maybe_auto_sync_stale_inputs,
     project_root_from_path_override,
 )
+from cortex.commands.ask import ask_command
 from cortex.commands.check_triggers import check_triggers_command
+from cortex.commands.confirm import candidates_group
 from cortex.commands.derive import derive_command
 from cortex.commands.doctor import doctor_command
 from cortex.commands.fleet import fleet_group
@@ -147,6 +149,8 @@ def version_command() -> None:
 
 
 cli.add_command(init_command)
+cli.add_command(ask_command)
+cli.add_command(candidates_group)
 cli.add_command(install_brief_command)
 cli.add_command(check_triggers_command)
 cli.add_command(derive_command)
