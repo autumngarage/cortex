@@ -1,0 +1,63 @@
+{
+  "decisions": [
+    {
+      "decision_id": "standalone-boundary-doctrine-0002",
+      "decision_text": "Cortex composes with Touchstone and Sentinel exclusively through the .cortex/ filesystem layout; it never imports sibling quartet code and never subprocesses into their CLIs for functional output (Doctrine 0002).",
+      "scopes": [
+        {
+          "normalized_value": "src/cortex/**",
+          "scope_type": "glob",
+          "value": "src/cortex/**"
+        }
+      ],
+      "source_timestamp": "2026-04-17T14:15:14-07:00",
+      "spans": [
+        {
+          "end_offset": 1504,
+          "excerpt": "Cortex does not import Sentinel or Touchstone Python/bash code; it does not subprocess into their CLIs for functional output.",
+          "permalink": "https://github.com/autumngarage/cortex/blob/a1f72f9b06e6cf3af43b1048082324041c4c52be/.cortex/doctrine/0002-compose-by-file-contract-not-code.md",
+          "source_document_hash": "2063446ef8eaf51db05712759124cb21ce26557179607fe59c4ff126f0e4edf3",
+          "span_hash": "c12d2e495956ba34f043d4493d05d8a4138c460a5abddb2fa98c100dc7219227",
+          "start_offset": 1379
+        }
+      ],
+      "status": "confirmed"
+    }
+  ],
+  "diff": {
+    "base_sha": "a1f72f9b06e6cf3af43b1048082324041c4c52be",
+    "changed_paths": [
+      "src/cortex/hosted/derive_worker.py"
+    ],
+    "config_keys": [],
+    "head_sha": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    "issue_refs": [],
+    "patch": "diff --git a/src/cortex/hosted/derive_worker.py b/src/cortex/hosted/derive_worker.py\nnew file mode 100644\nindex 0000000..1111111\n--- /dev/null\n+++ b/src/cortex/hosted/derive_worker.py\n@@ -0,0 +1,11 @@\n+\"\"\"Derive worker that reuses Sentinel's provider abstraction.\"\"\"\n+\n+from sentinel.providers import ProviderRouter\n+from touchstone.hooks import run_pre_merge\n+\n+\n+def synthesize_decision_summary(prompt: str) -> str:\n+    router = ProviderRouter.from_env()\n+    run_pre_merge(\"cortex-derive\")\n+    return router.complete(prompt)\n",
+    "repo_name": "cortex",
+    "repo_owner": "autumngarage",
+    "symbols": [
+      "ProviderRouter",
+      "run_pre_merge"
+    ]
+  },
+  "expected_findings": [
+    {
+      "cited_span_hashes": [
+        "c12d2e495956ba34f043d4493d05d8a4138c460a5abddb2fa98c100dc7219227"
+      ],
+      "decision_id": "standalone-boundary-doctrine-0002",
+      "finding_class": "contradicts-prior-decision",
+      "finding_id": "finding-quartet-import",
+      "suggested_repair": "Drop the quartet imports; shell out to `claude -p` directly for synthesis and integrate with siblings through .cortex/ file contracts.",
+      "summary": "The diff imports sentinel.providers and touchstone.hooks into a Cortex module, coupling Cortex to sibling quartet code in direct contradiction of Doctrine 0002's compose-by-file-contract boundary."
+    }
+  ],
+  "fixture_id": "standalone-boundary-violation-synthetic-001",
+  "fixture_schema_version": 1,
+  "labels": [],
+  "metadata": {
+    "notes": "Synthetic diff (head sha is a placeholder; the patch never existed in history) because no real cortex PR has violated Doctrine 0002. The cited decision spans are real Doctrine 0002 content.",
+    "scenario": "hypothetical-quartet-import",
+    "source": "synthetic"
+  }
+}

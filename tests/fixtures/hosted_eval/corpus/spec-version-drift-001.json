@@ -1,0 +1,79 @@
+{
+  "decisions": [
+    {
+      "decision_id": "spec-version-declared",
+      "decision_text": "Generated .cortex/ scaffolds declare the spec version they conform to: .cortex/SPEC_VERSION is the single-line declaration tools check, so it must track the released SPEC.md version whenever the spec version changes.",
+      "scopes": [
+        {
+          "normalized_value": ".cortex/SPEC_VERSION",
+          "scope_type": "path",
+          "value": ".cortex/SPEC_VERSION"
+        },
+        {
+          "normalized_value": "SPEC.md",
+          "scope_type": "path",
+          "value": "SPEC.md"
+        }
+      ],
+      "source_timestamp": "2026-05-06T18:31:18-04:00",
+      "spans": [
+        {
+          "end_offset": 2733,
+          "excerpt": "SPEC_VERSION              # the Cortex spec version the project conforms to",
+          "permalink": "https://github.com/autumngarage/cortex/blob/fd62709f23e515cc7359fdcf1dc5321277e24715/SPEC.md",
+          "source_document_hash": "6b8db29f4b10362d7ebaccd90f13a656c4dded87829fef8ecffa7d943dc5d26c",
+          "span_hash": "70e32623ebd58ff4158d9574441e8ba510a70ff67f378c9d4e283e6b0c29a36f",
+          "start_offset": 2658
+        },
+        {
+          "end_offset": 4145,
+          "excerpt": "**`SPEC_VERSION`** — a single line, e.g. `0.3.1-dev`. Tools that read `.cortex/` must check this and bail or warn on unknown major versions.",
+          "permalink": "https://github.com/autumngarage/cortex/blob/fd62709f23e515cc7359fdcf1dc5321277e24715/SPEC.md",
+          "source_document_hash": "6b8db29f4b10362d7ebaccd90f13a656c4dded87829fef8ecffa7d943dc5d26c",
+          "span_hash": "8d4f5b3db90bc0ea85fe21e683578ffc1c2eb0c350e9df9d3e715b393b9f59ed",
+          "start_offset": 4005
+        }
+      ],
+      "status": "confirmed"
+    }
+  ],
+  "diff": {
+    "base_sha": "fd62709f23e515cc7359fdcf1dc5321277e24715",
+    "changed_paths": [
+      ".cortex/state.md",
+      "SPEC.md",
+      "src/cortex/__init__.py"
+    ],
+    "config_keys": [],
+    "head_sha": "7aeca595180a8b70d511cb0f0e0988a60252ceab",
+    "issue_refs": [],
+    "patch": "diff --git a/.cortex/state.md b/.cortex/state.md\nindex f656194..4a910ce 100644\n--- a/.cortex/state.md\n+++ b/.cortex/state.md\n@@ -1,10 +1,10 @@\n ---\n-Generated: 2026-05-06T19:17:27-04:00\n+Generated: 2026-05-06T20:34:14-04:00\n Generator: cortex refresh-state v1.1.0\n Sources:\n-  - HEAD sha: 5cd020e54e81197db56c831f65aaf2053e049b90\n+  - HEAD sha: fd62709f23e515cc7359fdcf1dc5321277e24715\n   - .cortex/plans/*.md (10 files)\n-  - .cortex/journal/*.md (77 entries, 2026-04-17..2026-05-07)\n+  - .cortex/journal/*.md (81 entries, 2026-04-17..2026-05-07)\n   - .cortex/doctrine/*.md (7 entries)\n   - .cortex/templates/**/*.md (12 templates)\n   - docs/case-studies/*.md (1 case studies)\n@@ -90,6 +90,10 @@ Sources-hash:\n   .cortex/journal/2026-05-06-pr-merged-1831.md: e9709f093edef6c184bd82d1e07c8998186d502a9152959cfb35db83ae0cf10b\n   .cortex/journal/2026-05-06-pr-merged-1846.md: e896213d3436a46cf2bc219e7eb7df976a69adb2b2d3064cbf8594c3c6833a9b\n   .cortex/journal/2026-05-06-pr-merged-1913.md: 7b8c4e753ec24f81400547b7e88ac73bbb86f98154b64be18c4d300b3379322a\n+  .cortex/journal/2026-05-06-pr-merged-1919.md: 93c2e69847ebb60e81e2ac7146a4914929852be6b3d8442e6f4921c9e4504b7c\n+  .cortex/journal/2026-05-06-pr-merged-1952.md: 008bf6eb7a2929805d6cafcba8b2ae08bec6749f868c27034ab367feabce61dc\n+  .cortex/journal/2026-05-06-pr-merged-2015.md: b2127d11510be4ec4d0e2b1502a63278cd0fdd83c8b2b8644550d5c92f1e6502\n+  .cortex/journal/2026-05-06-pr-merged-install-followup-plan.md: bdb85320c2ad27bf5bab17eea3b566a53366c520ed4040511fc1cab6834396ab\n   .cortex/journal/2026-05-06-pre-10-compatibility-audit-v03-and-v05-forward-com.md: 677ee49aad6c9c09f58f5842d10ead7578b01f4e559b94b75816aaa66b063613\n   .cortex/journal/2026-05-06-v090-behavioral-exit-bar-review-gate-exit-declared.md: 45866242b9c2e95316bd3b325a45ed181228200d184dda09f110b859d6a5e655\n   .cortex/journal/2026-05-06-v090-dogfood-retrieval-validation-across-three-tar.md: 9864bb736576da17152b2068a905af9264c5f3e3f000fc349dc7387fa54b181f\n@@ -118,7 +122,7 @@ Sources-hash:\n   .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476\n   .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44\n   docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c\n-Corpus: 77 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies\n+Corpus: 81 Journal entries, 10 Plans, 7 Doctrine entries, 12 Templates, 1 Case studies\n Omitted:\n   []\n Incomplete:\n@@ -196,6 +200,10 @@ This file (`.cortex/state.md`) and [`plans/cortex-v1.md`](./plans/cortex-v1.md)\n - **2026-05-06** — PR #178 merged — feat(state): hash-based source tracking replaces mtime for staleness check (closes cortex#171) (`.cortex/journal/2026-05-06-pr-merged-1831.md`, Type: pr-merged)\n - **2026-05-06** — PR #177 merged — feat(doctor,install-brief): enforce issue-closing trailer convention via doctor audit + brief prefill (closes cortex#173) (`.cortex/journal/2026-05-06-pr-merged-1846.md`, Type: pr-merged)\n - **2026-05-06** — PR #179 merged — chore(state): refresh state.md ahead of v1.1.0 release (`.cortex/journal/2026-05-06-pr-merged-1913.md`, Type: pr-merged)\n+- **2026-05-06** — PR #180 merged — docs(journal): record v1.1.0 release — root-cause fixes (`.cortex/journal/2026-05-06-pr-merged-1919.md`, Type: pr-merged)\n+- **2026-05-06** — PR #184 merged — feat(doctor): warn on Generator-version drift between derived layers and current CLI (closes cortex#183) (`.cortex/journal/2026-05-06-pr-merged-1952.md`, Type: pr-merged)\n+- **2026-05-06** — PR #187 merged — feat(doctor): cross-reference [ ] #N checkboxes with GitHub issue state (closes cortex#181) (`.cortex/journal/2026-05-06-pr-merged-2015.md`, Type: pr-merged)\n+- **2026-05-06** — PR #185 merged — feat(install-brief): dual-artifact follow-up plan (`.cortex/journal/2026-05-06-pr-merged-install-followup-plan.md`, Type: pr-merged)\n \n ## Stale-now / handle-later\n \ndiff --git a/SPEC.md b/SPEC.md\nindex 7dd7d98..e71d7a2 100644\n--- a/SPEC.md\n+++ b/SPEC.md\n@@ -2,7 +2,7 @@\n \n > **Cortex is a file-format protocol for project memory.** Six layers of documents per project, each with a mechanical, authoring, and retrieval contract. Consumed by humans and AI coding agents. The CLI named `cortex` is one implementation; other tools (Sentinel, Touchstone, Claude Code sessions, humans) read and write the same files by the same rules.\n \n-**Spec version:** 1.1.0-dev\n+**Spec version:** 1.1.0\n **Status:** Active\n **Protocol companion:** [`.cortex/protocol.md`](./.cortex/protocol.md) defines when and how agents write; SPEC.md defines what the files look like.\n \n@@ -446,7 +446,7 @@ Tools must declare which spec major versions they support. Readers encountering\n \n **v1.0.0 is the spec freeze.** The strict major-for-breaking rule (above) now applies. No `0.x`-era changes in this release — 1.0.0 is identical to the 0.5.0-dev draft except: (1) the `-dev` suffix is dropped, (2) `Spec:` is added to the § 4.5 required-fields enumeration as the eighth metadata field (it was already emitted by the reference implementation and present in the § 3.2 / § 3.3 example headers; the omission from § 4.5 was a documentation gap). Tools that conform to 0.5.0-dev conform to 1.0.0; no migration is required.\n \n-**v1.1.0-dev adds `superseded` to the Plan status enum.** A plan is `superseded` when a newer plan replaces its entire purpose — semantically distinct from `cancelled` (abandoned without completion) and `shipped` (done). Superseded plans are terminal: omitted from `cortex next` P0/P1 output (same treatment as `shipped`/`cancelled`) and eligible for archive after 30 days. A prior `Status: superseded` on a plan was flagged as an error by `cortex doctor`; it now validates clean. Additive change — existing readers that do not enumerate statuses are unaffected; readers that validate the enum should accept the new value. Bumped as a minor because it expands the allowed value set for an existing field.\n+**v1.1.0 adds `superseded` to the Plan status enum and `Sources-hash:` to derived-layer provenance.** `superseded` is a new terminal Plan status (semantically distinct from `cancelled` / `shipped`); see § 3.4. `Sources-hash:` is an optional frontmatter block on derived layers (state.md, map.md) that records SHA-256 per consumed source; consuming tools can use it to detect content drift independent of filesystem mtime; see § 4.3. A plan is `superseded` when a newer plan replaces its entire purpose — semantically distinct from `cancelled` (abandoned without completion) and `shipped` (done). Superseded plans are terminal: omitted from `cortex next` P0/P1 output (same treatment as `shipped`/`cancelled`) and eligible for archive after 30 days. A prior `Status: superseded` on a plan was flagged as an error by `cortex doctor`; it now validates clean. Additive change — existing readers that do not enumerate statuses are unaffected; readers that validate the enum should accept the new value. Bumped as a minor because it expands the allowed value set for an existing field.\n \n **Protocol version relationship.** [`.cortex/protocol.md`](./.cortex/protocol.md) carries its own version. A Protocol version is compatible with one or more SPEC.md versions, declared in the Protocol's header. A major SPEC bump always requires a Protocol review; a minor SPEC bump may or may not trigger a Protocol bump depending on whether new triggers are needed.\n \ndiff --git a/src/cortex/__init__.py b/src/cortex/__init__.py\nindex 503d5ef..b9180c0 100644\n--- a/src/cortex/__init__.py\n+++ b/src/cortex/__init__.py\n@@ -1,9 +1,9 @@\n \"\"\"Cortex — a file-format protocol for per-project memory, and the reference CLI.\"\"\"\n \n __version__ = \"1.1.0\"\n-SPEC_VERSION_LITERAL = \"1.0.0\"\n+SPEC_VERSION_LITERAL = \"1.1.0\"\n \n-SUPPORTED_SPEC_VERSIONS: tuple[str, ...] = (\"0.3\", \"0.4\", \"0.5\", \"1.0\")\n+SUPPORTED_SPEC_VERSIONS: tuple[str, ...] = (\"0.3\", \"0.4\", \"0.5\", \"1.0\", \"1.1\")\n SUPPORTED_PROTOCOL_VERSIONS: tuple[str, ...] = (\"0.2\", \"0.3\")\n \n __all__ = [\n",
+    "repo_name": "cortex",
+    "repo_owner": "autumngarage",
+    "symbols": []
+  },
+  "expected_findings": [
+    {
+      "cited_span_hashes": [
+        "70e32623ebd58ff4158d9574441e8ba510a70ff67f378c9d4e283e6b0c29a36f",
+        "8d4f5b3db90bc0ea85fe21e683578ffc1c2eb0c350e9df9d3e715b393b9f59ed"
+      ],
+      "decision_id": "spec-version-declared",
+      "finding_class": "omitted-load-bearing-constraint",
+      "finding_id": "finding-spec-version-stale",
+      "suggested_repair": "Bump .cortex/SPEC_VERSION to 1.1.0 in the same diff that finalizes the spec version.",
+      "summary": "The diff finalizes SPEC.md at 1.1.0 and extends SUPPORTED_SPEC_VERSIONS, but omits the matching .cortex/SPEC_VERSION bump, leaving the repo's own scaffold declaring 0.5.0 — the drift persisted until PR #493."
+    }
+  ],
+  "fixture_id": "spec-version-drift-001",
+  "fixture_schema_version": 1,
+  "labels": [],
+  "metadata": {
+    "merged_at": "2026-05-07T00:36:08Z",
+    "notes": "Real staleness case: .cortex/SPEC_VERSION stayed at 0.5.0 from this merge (2026-05-07) until PR #493 corrected it to 1.1.0 (2026-06-09).",
+    "pr_number": 188,
+    "repo": "autumngarage/cortex",
+    "scenario": "spec-finalized-without-scaffold-version-bump",
+    "source": "real-history"
+  }
+}
