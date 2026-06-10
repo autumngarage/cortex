@@ -761,6 +761,22 @@ def test_claude_evaluate_accepts_pack_cited_findings(monkeypatch: pytest.MonkeyP
     assert result.input_hash == request.input_hash
 
 
+def test_claude_evaluate_prompt_uses_stage0_finding_registry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model_payload = {"findings": [], "omitted_decision_count": 0}
+    envelope = {"is_error": False, "result": json.dumps(model_payload)}
+    calls = _fake_claude(monkeypatch, stdout=json.dumps(envelope))
+
+    _claude_router().evaluate(_evaluate_request())
+    prompt = calls["kwargs"]["input"]
+
+    assert FindingClass.CONTRADICTS_PRIOR_DECISION.value in prompt
+    assert FindingClass.REVERSES_SUPERSEDED_PATTERN.value in prompt
+    assert FindingClass.CITES_MISSING_PATH.value not in prompt
+    assert FindingClass.OMITTED_LOAD_BEARING_CONSTRAINT.value not in prompt
+
+
 # --- budget integration ---------------------------------------------------------
 
 
