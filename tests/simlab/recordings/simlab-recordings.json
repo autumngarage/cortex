@@ -2,24 +2,24 @@
   "recorded_response_schema_version": 1,
   "responses": [
     {
-      "input_hash": "4591878263fb2acb642957f9c3702b4e79a4c7f73b3bbbe863bb70ddb73c14f9",
+      "input_hash": "3130cd92c28a2c496abb1a183081bb4096cd29398df168362640d49ec348da72",
       "model_id": "simlab/scripted-evaluate",
-      "prompt_version": "simlab-evaluate/v1+2f71b553e500",
+      "prompt_version": "simlab-evaluate/v1+3591f555d171",
       "recorded_at": "2026-06-10T00:00:00+00:00",
       "result": {
         "degraded_reasons": [],
         "findings": [],
-        "input_hash": "4591878263fb2acb642957f9c3702b4e79a4c7f73b3bbbe863bb70ddb73c14f9",
+        "input_hash": "3130cd92c28a2c496abb1a183081bb4096cd29398df168362640d49ec348da72",
         "model_id": "simlab/scripted-evaluate",
         "omitted_decision_count": 0,
-        "prompt_version": "simlab-evaluate/v1+2f71b553e500"
+        "prompt_version": "simlab-evaluate/v1+3591f555d171"
       },
       "task": "evaluate"
     },
     {
-      "input_hash": "4c119442f5a874b35415cbfcb840f69d3c95f0b9b72f61cc6930f843f49c3cb7",
+      "input_hash": "4026dd30b64c1cf75e6fd2b7ca5d151fe282fb26359572f5411363843b0a9fa8",
       "model_id": "simlab/scripted-evaluate",
-      "prompt_version": "simlab-evaluate/v1+2f71b553e500",
+      "prompt_version": "simlab-evaluate/v1+3591f555d171",
       "recorded_at": "2026-06-10T00:00:00+00:00",
       "result": {
         "degraded_reasons": [],
@@ -35,75 +35,17 @@
             "summary": "scripts/deploy.sh changed and the confirmed rule requires a matching docs/legacy/runbook.md update, but that runbook no longer exists in the tree — the decision anchors to a missing path."
           }
         ],
-        "input_hash": "4c119442f5a874b35415cbfcb840f69d3c95f0b9b72f61cc6930f843f49c3cb7",
+        "input_hash": "4026dd30b64c1cf75e6fd2b7ca5d151fe282fb26359572f5411363843b0a9fa8",
         "model_id": "simlab/scripted-evaluate",
         "omitted_decision_count": 0,
-        "prompt_version": "simlab-evaluate/v1+2f71b553e500"
+        "prompt_version": "simlab-evaluate/v1+3591f555d171"
       },
       "task": "evaluate"
     },
     {
-      "input_hash": "51b48da807ebc9c696781faf2eb5475954ecc843960ead1a5ac28369658d6efe",
+      "input_hash": "4347416eab6af080a9889d86f226186928e2b5328df2880078e39b69239035ac",
       "model_id": "simlab/scripted-evaluate",
-      "prompt_version": "simlab-evaluate/v1+2f71b553e500",
-      "recorded_at": "2026-06-10T00:00:00+00:00",
-      "result": {
-        "degraded_reasons": [
-          "The PR-thread decision 'PAN redaction mandatory in src/worker/logging.py' also conflicts with this diff, but its status is 'candidate', so no finding was emitted for it (unconfirmed-twin disclosure)."
-        ],
-        "findings": [
-          {
-            "cited_span_hashes": [
-              "20218520614d18c483feed6938263fb5b75eca4fdce0c03a457c28bb6aa0e121"
-            ],
-            "confidence_label": "advisory",
-            "decision_node_id": "c78519ba-61a7-f048-f59b-1351670b7794",
-            "finding_class": "contradicts-prior-decision",
-            "suggested_repair": "Keep redaction in place; replay failed charges from the redacted stream instead of logging raw card numbers.",
-            "summary": "The diff logs the raw line and returns it unredacted in src/worker/logging.py, contradicting the confirmed PAN redaction decision."
-          }
-        ],
-        "input_hash": "51b48da807ebc9c696781faf2eb5475954ecc843960ead1a5ac28369658d6efe",
-        "model_id": "simlab/scripted-evaluate",
-        "omitted_decision_count": 1,
-        "prompt_version": "simlab-evaluate/v1+2f71b553e500"
-      },
-      "task": "evaluate"
-    },
-    {
-      "input_hash": "555132223496f36b70edf8244a164203f07b736d4e97a550b9cbe01de6f54a98",
-      "model_id": "simlab/scripted-evaluate",
-      "prompt_version": "simlab-evaluate/v1+2f71b553e500",
-      "recorded_at": "2026-06-10T00:00:00+00:00",
-      "result": {
-        "degraded_reasons": [],
-        "findings": [],
-        "input_hash": "555132223496f36b70edf8244a164203f07b736d4e97a550b9cbe01de6f54a98",
-        "model_id": "simlab/scripted-evaluate",
-        "omitted_decision_count": 0,
-        "prompt_version": "simlab-evaluate/v1+2f71b553e500"
-      },
-      "task": "evaluate"
-    },
-    {
-      "input_hash": "62defaf83a267c97ff73595b3af451a35bf7c4d15b4a48e589509e3dd5042cd3",
-      "model_id": "simlab/scripted-evaluate",
-      "prompt_version": "simlab-evaluate/v1+2f71b553e500",
-      "recorded_at": "2026-06-10T00:00:00+00:00",
-      "result": {
-        "degraded_reasons": [],
-        "findings": [],
-        "input_hash": "62defaf83a267c97ff73595b3af451a35bf7c4d15b4a48e589509e3dd5042cd3",
-        "model_id": "simlab/scripted-evaluate",
-        "omitted_decision_count": 0,
-        "prompt_version": "simlab-evaluate/v1+2f71b553e500"
-      },
-      "task": "evaluate"
-    },
-    {
-      "input_hash": "7f1e530e6f6d6f895e6535d23f84e5a4e22bdb7013dcc60a4b434a4448e45542",
-      "model_id": "simlab/scripted-evaluate",
-      "prompt_version": "simlab-evaluate/v1+2f71b553e500",
+      "prompt_version": "simlab-evaluate/v1+3591f555d171",
       "recorded_at": "2026-06-10T00:00:00+00:00",
       "result": {
         "degraded_reasons": [],
@@ -118,80 +60,17 @@
             "summary": "The diff replaces exponential backoff with a fixed delay in src/payments/retry.py."
           }
         ],
-        "input_hash": "7f1e530e6f6d6f895e6535d23f84e5a4e22bdb7013dcc60a4b434a4448e45542",
+        "input_hash": "4347416eab6af080a9889d86f226186928e2b5328df2880078e39b69239035ac",
         "model_id": "simlab/scripted-evaluate",
         "omitted_decision_count": 0,
-        "prompt_version": "simlab-evaluate/v1+2f71b553e500"
+        "prompt_version": "simlab-evaluate/v1+3591f555d171"
       },
       "task": "evaluate"
     },
     {
-      "input_hash": "7f876dc035c291ed36cf9dd8b1ce236776cba549ac93136ba90e5bf7e5e5f2ba",
+      "input_hash": "521ee42d87ff46e33bd49ace76ad94645aa5b4d1a7fd8c6a2781c33b03a08621",
       "model_id": "simlab/scripted-evaluate",
-      "prompt_version": "simlab-evaluate/v1+2f71b553e500",
-      "recorded_at": "2026-06-10T00:00:00+00:00",
-      "result": {
-        "degraded_reasons": [],
-        "findings": [
-          {
-            "cited_span_hashes": [
-              "1c005866abf14f61bcf357c32cbe61bd308d420fb0425a543dc7afdecbec421a",
-              "406b6d15dc5235c062c5c4b634a2a756081ff643840a8ae63d27715028982746",
-              "d4ccc77f1561da5b4190cfc741aed58e1f6d023dcbd349b4f8a679a43cd1900e"
-            ],
-            "confidence_label": "advisory",
-            "decision_node_id": "7254d907-8102-8a13-ec59-eb537dc08173",
-            "finding_class": "reverses-superseded-pattern",
-            "suggested_repair": "Keep schedule() promise-based; wrap the legacy mailer in a promise adapter instead of reintroducing callbacks.",
-            "summary": "The diff reintroduces callback-style continuation passing in lib/jobs/scheduler.js — the exact pattern ADR 0003 superseded when it mandated promise-based scheduling."
-          },
-          {
-            "cited_span_hashes": [
-              "32fc2624d2e32cce949ab69a020a6288bbaa695e9f280a608d225ae60d94e0e3"
-            ],
-            "confidence_label": "advisory",
-            "decision_node_id": "800df59f-0f0a-cce3-ea88-0c869ac52e42",
-            "finding_class": "contradicts-prior-decision",
-            "summary": "The diff contradicts the recorded migration decision: the scheduler no longer accepts callback continuations."
-          }
-        ],
-        "input_hash": "7f876dc035c291ed36cf9dd8b1ce236776cba549ac93136ba90e5bf7e5e5f2ba",
-        "model_id": "simlab/scripted-evaluate",
-        "omitted_decision_count": 0,
-        "prompt_version": "simlab-evaluate/v1+2f71b553e500"
-      },
-      "task": "evaluate"
-    },
-    {
-      "input_hash": "bc9d3d5a277658d97fb41a803ecadc74558caa884ab952a155e4133326e92149",
-      "model_id": "simlab/scripted-evaluate",
-      "prompt_version": "simlab-evaluate/v1+2f71b553e500",
-      "recorded_at": "2026-06-10T00:00:00+00:00",
-      "result": {
-        "degraded_reasons": [],
-        "findings": [
-          {
-            "cited_span_hashes": [
-              "d8899df900c984336a043499404f3e35ed74ab355a09d1a105b83d768fb95be2"
-            ],
-            "confidence_label": "advisory",
-            "decision_node_id": "eb083521-e66b-4f63-b307-5561f1c89664",
-            "finding_class": "contradicts-prior-decision",
-            "suggested_repair": "Keep the worker single threaded, or confirm a superseding decision after making the queue client thread safe.",
-            "summary": "The diff adds a ThreadPoolExecutor to src/worker/run.py, contradicting the confirmed decision to keep the worker single threaded (queue client is not thread safe)."
-          }
-        ],
-        "input_hash": "bc9d3d5a277658d97fb41a803ecadc74558caa884ab952a155e4133326e92149",
-        "model_id": "simlab/scripted-evaluate",
-        "omitted_decision_count": 0,
-        "prompt_version": "simlab-evaluate/v1+2f71b553e500"
-      },
-      "task": "evaluate"
-    },
-    {
-      "input_hash": "c50e8a095f991d2d0520c848329cf50715feb5442278d7b829adafaed4800b11",
-      "model_id": "simlab/scripted-evaluate",
-      "prompt_version": "simlab-evaluate/v1+2f71b553e500",
+      "prompt_version": "simlab-evaluate/v1+3591f555d171",
       "recorded_at": "2026-06-10T00:00:00+00:00",
       "result": {
         "degraded_reasons": [],
@@ -219,32 +98,168 @@
             "summary": "The diff adds a non-Postgres durable write path in src/payments/store.py, contradicting the confirmed persistence-boundary rule."
           }
         ],
-        "input_hash": "c50e8a095f991d2d0520c848329cf50715feb5442278d7b829adafaed4800b11",
+        "input_hash": "521ee42d87ff46e33bd49ace76ad94645aa5b4d1a7fd8c6a2781c33b03a08621",
         "model_id": "simlab/scripted-evaluate",
         "omitted_decision_count": 0,
-        "prompt_version": "simlab-evaluate/v1+2f71b553e500"
+        "prompt_version": "simlab-evaluate/v1+3591f555d171"
       },
       "task": "evaluate"
     },
     {
-      "input_hash": "cce452d211b97e53734e64cff89c26527d685d79207398d1c1d01c082a54bbb4",
+      "input_hash": "584ffbb0bca7d92154aab61d8568687eab2703b691854d57ae06a191252cd811",
       "model_id": "simlab/scripted-evaluate",
-      "prompt_version": "simlab-evaluate/v1+2f71b553e500",
+      "prompt_version": "simlab-evaluate/v1+3591f555d171",
+      "recorded_at": "2026-06-10T00:00:00+00:00",
+      "result": {
+        "degraded_reasons": [],
+        "findings": [
+          {
+            "cited_span_hashes": [
+              "1c005866abf14f61bcf357c32cbe61bd308d420fb0425a543dc7afdecbec421a",
+              "406b6d15dc5235c062c5c4b634a2a756081ff643840a8ae63d27715028982746",
+              "d4ccc77f1561da5b4190cfc741aed58e1f6d023dcbd349b4f8a679a43cd1900e"
+            ],
+            "confidence_label": "advisory",
+            "decision_node_id": "7254d907-8102-8a13-ec59-eb537dc08173",
+            "finding_class": "reverses-superseded-pattern",
+            "suggested_repair": "Keep schedule() promise-based; wrap the legacy mailer in a promise adapter instead of reintroducing callbacks.",
+            "summary": "The diff reintroduces callback-style continuation passing in lib/jobs/scheduler.js — the exact pattern ADR 0003 superseded when it mandated promise-based scheduling."
+          },
+          {
+            "cited_span_hashes": [
+              "32fc2624d2e32cce949ab69a020a6288bbaa695e9f280a608d225ae60d94e0e3"
+            ],
+            "confidence_label": "advisory",
+            "decision_node_id": "800df59f-0f0a-cce3-ea88-0c869ac52e42",
+            "finding_class": "contradicts-prior-decision",
+            "summary": "The diff contradicts the recorded migration decision: the scheduler no longer accepts callback continuations."
+          }
+        ],
+        "input_hash": "584ffbb0bca7d92154aab61d8568687eab2703b691854d57ae06a191252cd811",
+        "model_id": "simlab/scripted-evaluate",
+        "omitted_decision_count": 0,
+        "prompt_version": "simlab-evaluate/v1+3591f555d171"
+      },
+      "task": "evaluate"
+    },
+    {
+      "input_hash": "635523a88054e88321025cb805bea69a691b45f330c0b1bd5c2a925e78c7f064",
+      "model_id": "simlab/scripted-evaluate",
+      "prompt_version": "simlab-evaluate/v1+3591f555d171",
       "recorded_at": "2026-06-10T00:00:00+00:00",
       "result": {
         "degraded_reasons": [],
         "findings": [],
-        "input_hash": "cce452d211b97e53734e64cff89c26527d685d79207398d1c1d01c082a54bbb4",
+        "input_hash": "635523a88054e88321025cb805bea69a691b45f330c0b1bd5c2a925e78c7f064",
         "model_id": "simlab/scripted-evaluate",
         "omitted_decision_count": 0,
-        "prompt_version": "simlab-evaluate/v1+2f71b553e500"
+        "prompt_version": "simlab-evaluate/v1+3591f555d171"
       },
       "task": "evaluate"
     },
     {
-      "input_hash": "e8536885ab4674f05acb1b3c91fd653f8f494d108a37b8d358320c995ba50efe",
+      "input_hash": "6581783a38a9d361096c08bc38ac2212e145b744d8770c2bb97d039ee189e24d",
       "model_id": "simlab/scripted-evaluate",
-      "prompt_version": "simlab-evaluate/v1+2f71b553e500",
+      "prompt_version": "simlab-evaluate/v1+3591f555d171",
+      "recorded_at": "2026-06-10T00:00:00+00:00",
+      "result": {
+        "degraded_reasons": [],
+        "findings": [],
+        "input_hash": "6581783a38a9d361096c08bc38ac2212e145b744d8770c2bb97d039ee189e24d",
+        "model_id": "simlab/scripted-evaluate",
+        "omitted_decision_count": 0,
+        "prompt_version": "simlab-evaluate/v1+3591f555d171"
+      },
+      "task": "evaluate"
+    },
+    {
+      "input_hash": "8c8af96e4bd8606b3cf00c2b7089f1a4de61d79659f182f9349f5310085cb8c0",
+      "model_id": "simlab/scripted-evaluate",
+      "prompt_version": "simlab-evaluate/v1+3591f555d171",
+      "recorded_at": "2026-06-10T00:00:00+00:00",
+      "result": {
+        "degraded_reasons": [
+          "The PR-thread decision 'PAN redaction mandatory in src/worker/logging.py' also conflicts with this diff, but its status is 'candidate', so no finding was emitted for it (unconfirmed-twin disclosure)."
+        ],
+        "findings": [
+          {
+            "cited_span_hashes": [
+              "20218520614d18c483feed6938263fb5b75eca4fdce0c03a457c28bb6aa0e121"
+            ],
+            "confidence_label": "advisory",
+            "decision_node_id": "c78519ba-61a7-f048-f59b-1351670b7794",
+            "finding_class": "contradicts-prior-decision",
+            "suggested_repair": "Keep redaction in place; replay failed charges from the redacted stream instead of logging raw card numbers.",
+            "summary": "The diff logs the raw line and returns it unredacted in src/worker/logging.py, contradicting the confirmed PAN redaction decision."
+          }
+        ],
+        "input_hash": "8c8af96e4bd8606b3cf00c2b7089f1a4de61d79659f182f9349f5310085cb8c0",
+        "model_id": "simlab/scripted-evaluate",
+        "omitted_decision_count": 1,
+        "prompt_version": "simlab-evaluate/v1+3591f555d171"
+      },
+      "task": "evaluate"
+    },
+    {
+      "input_hash": "a8a28300397d94d03cc3a542aca0ef96e7453ca76fc8cdb67bdad141dd7c73f6",
+      "model_id": "simlab/scripted-evaluate",
+      "prompt_version": "simlab-evaluate/v1+3591f555d171",
+      "recorded_at": "2026-06-10T00:00:00+00:00",
+      "result": {
+        "degraded_reasons": [],
+        "findings": [],
+        "input_hash": "a8a28300397d94d03cc3a542aca0ef96e7453ca76fc8cdb67bdad141dd7c73f6",
+        "model_id": "simlab/scripted-evaluate",
+        "omitted_decision_count": 0,
+        "prompt_version": "simlab-evaluate/v1+3591f555d171"
+      },
+      "task": "evaluate"
+    },
+    {
+      "input_hash": "df16d00313142f488b21d4547f61f7cc3ef38b9071e989ea0bc880a982eca51d",
+      "model_id": "simlab/scripted-evaluate",
+      "prompt_version": "simlab-evaluate/v1+3591f555d171",
+      "recorded_at": "2026-06-10T00:00:00+00:00",
+      "result": {
+        "degraded_reasons": [],
+        "findings": [],
+        "input_hash": "df16d00313142f488b21d4547f61f7cc3ef38b9071e989ea0bc880a982eca51d",
+        "model_id": "simlab/scripted-evaluate",
+        "omitted_decision_count": 0,
+        "prompt_version": "simlab-evaluate/v1+3591f555d171"
+      },
+      "task": "evaluate"
+    },
+    {
+      "input_hash": "fc9f99f0a151a92e4c107b741986b14d5de823e5975c306c9f0fa1eebb9e10ad",
+      "model_id": "simlab/scripted-evaluate",
+      "prompt_version": "simlab-evaluate/v1+3591f555d171",
+      "recorded_at": "2026-06-10T00:00:00+00:00",
+      "result": {
+        "degraded_reasons": [],
+        "findings": [
+          {
+            "cited_span_hashes": [
+              "d8899df900c984336a043499404f3e35ed74ab355a09d1a105b83d768fb95be2"
+            ],
+            "confidence_label": "advisory",
+            "decision_node_id": "eb083521-e66b-4f63-b307-5561f1c89664",
+            "finding_class": "contradicts-prior-decision",
+            "suggested_repair": "Keep the worker single threaded, or confirm a superseding decision after making the queue client thread safe.",
+            "summary": "The diff adds a ThreadPoolExecutor to src/worker/run.py, contradicting the confirmed decision to keep the worker single threaded (queue client is not thread safe)."
+          }
+        ],
+        "input_hash": "fc9f99f0a151a92e4c107b741986b14d5de823e5975c306c9f0fa1eebb9e10ad",
+        "model_id": "simlab/scripted-evaluate",
+        "omitted_decision_count": 0,
+        "prompt_version": "simlab-evaluate/v1+3591f555d171"
+      },
+      "task": "evaluate"
+    },
+    {
+      "input_hash": "fda8c0c24c17b86a50e67cbc277107d5f597770cbfdaf894181249fc63eea01f",
+      "model_id": "simlab/scripted-evaluate",
+      "prompt_version": "simlab-evaluate/v1+3591f555d171",
       "recorded_at": "2026-06-10T00:00:00+00:00",
       "result": {
         "degraded_reasons": [],
@@ -260,25 +275,10 @@
             "summary": "The diff replaces exponential backoff with jitter with a fixed 0.5s delay in src/payments/retry.py, reversing the confirmed retry-policy decision."
           }
         ],
-        "input_hash": "e8536885ab4674f05acb1b3c91fd653f8f494d108a37b8d358320c995ba50efe",
+        "input_hash": "fda8c0c24c17b86a50e67cbc277107d5f597770cbfdaf894181249fc63eea01f",
         "model_id": "simlab/scripted-evaluate",
         "omitted_decision_count": 0,
-        "prompt_version": "simlab-evaluate/v1+2f71b553e500"
-      },
-      "task": "evaluate"
-    },
-    {
-      "input_hash": "eee9a6690110e000bc82180c6d900ef35655bbe097a3b8ca93edabbe67deff73",
-      "model_id": "simlab/scripted-evaluate",
-      "prompt_version": "simlab-evaluate/v1+2f71b553e500",
-      "recorded_at": "2026-06-10T00:00:00+00:00",
-      "result": {
-        "degraded_reasons": [],
-        "findings": [],
-        "input_hash": "eee9a6690110e000bc82180c6d900ef35655bbe097a3b8ca93edabbe67deff73",
-        "model_id": "simlab/scripted-evaluate",
-        "omitted_decision_count": 0,
-        "prompt_version": "simlab-evaluate/v1+2f71b553e500"
+        "prompt_version": "simlab-evaluate/v1+3591f555d171"
       },
       "task": "evaluate"
     }
