@@ -44,6 +44,7 @@ from cortex.hosted.confidence import ConfidenceValidationError
 from cortex.hosted.context_assembly import ContextAssemblyValidationError
 from cortex.hosted.corpus_builder import CorpusBuilderError
 from cortex.hosted.cost import BudgetExceededError, CostValidationError
+from cortex.hosted.db import HostedDbError
 from cortex.hosted.decisions_for_diff import DecisionsForDiffValidationError
 from cortex.hosted.derive_store import DeriveStoreError
 from cortex.hosted.diff_surface import DiffSurfaceValidationError
@@ -59,6 +60,7 @@ from cortex.hosted.labeling import LabelingError
 from cortex.hosted.lane_assignment import LaneAssignmentError
 from cortex.hosted.lanes import LanePolicyValidationError
 from cortex.hosted.ledger_events import LedgerEventValidationError
+from cortex.hosted.migrations import HostedMigrationError
 from cortex.hosted.model_registry import RegistryValidationError
 from cortex.hosted.provenance import ProvenanceValidationError
 from cortex.hosted.quality_series import QualitySeriesValidationError
@@ -156,7 +158,15 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # drift); no partial graph is ever returned.
     GraphRebuildError: DegradationMode.INVALID_INPUT_REJECTED,
     GraphWriteValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # HostedDbError refuses a connection that cannot satisfy the policy
+    # (missing driver, invalid URL, unreachable host, auth failure) before
+    # any partial state exists — refusal, boundary held.
+    HostedDbError: DegradationMode.FAIL_CLOSED_REFUSAL,
     HostedEmbeddingValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # HostedMigrationError blocks a migration that cannot be verified
+    # (missing extension, unrecorded schema_migrations version) and rolls
+    # back — refusal, boundary held.
+    HostedMigrationError: DegradationMode.FAIL_CLOSED_REFUSAL,
     LabelingError: DegradationMode.INVALID_INPUT_REJECTED,
     # LaneAssignmentError fires before any model call or write — dropped
     # material attempting graph entry, laundered backfill flags, forged lane

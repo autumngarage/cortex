@@ -286,3 +286,14 @@ mode skip citation or visibility boundaries.
   browse-shaped or empty question is refused to hold the no-browsable-index
   boundary (cortex#382) — the corpus is never enumerated to make a query
   succeed.
+
+### Executable-path registrations (2026-06-09, cortex#472)
+
+- `db.HostedDbError` classifies as `fail_closed_refusal`: a connection that
+  cannot satisfy the hosted policy (missing driver, invalid URL, unreachable
+  host, auth failure) is refused with a named reason before any partial
+  state exists.
+- `migrations.HostedMigrationError` classifies as `fail_closed_refusal`: a
+  missing extension, a newer-than-this-build recorded schema version, or an
+  unverifiable `schema_migrations` record blocks the migration visibly and
+  rolls back — the runner never reports a success it cannot read back.

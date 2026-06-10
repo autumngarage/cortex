@@ -45,6 +45,15 @@ semantic = [
     "fastembed>=0.4,<0.8",
 ]
 
+# Hosted Postgres driver for the cortex.hosted executable path (cortex#472).
+# Optional by design: the core CLI install stays driver-free per the
+# standalone-boundary rule, and the brew formula stays dependency-light.
+# cortex.hosted.db imports psycopg lazily and raises a visible HostedDbError
+# naming `pip install 'cortex[hosted]'` when the driver is absent.
+hosted = [
+    "psycopg[binary]>=3.1,<4",
+]
+
 [project.scripts]
 cortex = "cortex.cli:cli"
 
