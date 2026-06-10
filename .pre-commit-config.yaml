@@ -56,6 +56,20 @@ repos:
         always_run: true
         pass_filenames: false
 
+  # ── Cortex sources-hash guard (cortex#501) ─────────────────────────────
+  # Fails the commit when staged .cortex/ sources drift from state.md's
+  # recorded Sources-hash entries (stale provenance). Remediation:
+  # run 'cortex update' and restage.
+  - repo: local
+    hooks:
+      - id: cortex-sources-hash
+        name: Cortex state.md Sources-hash guard
+        entry: uv run cortex doctor --check sources-hash
+        language: system
+        files: ^\.cortex/
+        pass_filenames: false
+        stages: [pre-commit]
+
   # ── AI default-branch push review ──────────────────────────────────────
   - repo: local
     hooks:

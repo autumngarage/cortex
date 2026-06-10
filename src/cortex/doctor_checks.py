@@ -53,6 +53,11 @@ DOCTRINE_0007_URL = (
 DEFAULT_FALLBACK_DOCTRINE_THRESHOLD = 20
 DEFAULT_FALLBACK_JOURNAL_THRESHOLD = 100
 DEFAULT_DELETION_LINE_THRESHOLD = 100
+# Exact remediation line the cortex#501 pre-commit guard prints on drift.
+SOURCES_HASH_REMEDIATION = "run 'cortex update' and restage"
+# Annotation marking an intentional Spec: pin on a generated layer (cortex#500),
+# e.g. `Spec: 0.3.1 (pinned: corpus frozen for the dogfood replay)`.
+SPEC_PIN_MARKER = "(pinned:"
 DEFAULT_GENERATED_FRESHNESS_DAYS = 7
 DEFAULT_RETENTION_DAYS = 30
 DEFAULT_JOURNAL_WARM_MAX = 200
@@ -122,6 +127,7 @@ def run_plain_checks(project_root: Path) -> list[Issue]:
         check_cli_less_fallback,
         check_generated_layers,
         check_generator_version_drift,
+        check_spec_version_drift,
         check_canonical_ownership,
         check_semantic_retrieval_runtime,
         check_stale_plan_checkboxes,
@@ -703,6 +709,88 @@ def _check_by_hash(
     return []
 
 
+@dataclass(frozen=True)
+class FastCheckResult:
+    """Outcome of one exit-code-clean `cortex doctor --check <name>` run.
+
+    ``ok`` drives the exit code. ``skipped`` marks a visible degrade — missing
+    inputs must not fail a pre-commit hook on scaffolds that never recorded the
+    contract being checked, but the skip must still be printed (no silence).
+    """
+
+    ok: bool
+    skipped: bool
+    lines: tuple[str, ...]
+
+
+def check_sources_hash_drift(project_root: Path) -> FastCheckResult:
+    """Fast pre-commit guard: working-tree sources vs state.md's Sources-hash.
+
+    Evidence class (cortex#501): a `.cortex/` source edited after the last
+    `cortex update` and before commit silently invalidates state.md's recorded
+    Sources-hash claims. Compares every recorded path against current file
+    content; drift means state.md's provenance is stale, and the fix is
+    regenerating state.md — never hand-editing the hash block.
+
+    Speed contract: no banner, no git subprocesses, one SHA-256 pass over the
+    recorded sources — well under a second on a ~130-file corpus. Files on
+    disk but absent from the hash block are out of scope here; the full
+    `cortex doctor` staleness pass already warns on those by mtime.
+    """
+    state_path = project_root / ".cortex" / "state.md"
+    state_rel = ".cortex/state.md"
+    if not state_path.exists():
+        return FastCheckResult(
+            ok=True,
+            skipped=True,
+            lines=(f"sources-hash: skipped — {state_rel} not found",),
+        )
+    try:
+        state_text = state_path.read_text()
+    except OSError as exc:
+        return FastCheckResult(
+            ok=False,
+            skipped=False,
+            lines=(f"sources-hash: {state_rel} unreadable: {exc}",),
+        )
+    sources_hash = _parse_sources_hash(state_text)
+    if sources_hash is None:
+        return FastCheckResult(
+            ok=True,
+            skipped=True,
+            lines=(
+                f"sources-hash: skipped — {state_rel} has no Sources-hash: block "
+                "(pre-v1.1 scaffold); run `cortex update` to record one",
+            ),
+        )
+    offending: list[str] = []
+    for src_rel, expected_hash in sorted(sources_hash.items()):
+        src_path = project_root / src_rel
+        if not src_path.exists():
+            offending.append(f"{src_rel} (recorded in {state_rel} but missing on disk)")
+            continue
+        try:
+            actual = _sha256_file(src_path)
+        except OSError as exc:
+            offending.append(f"{src_rel} (unreadable: {exc})")
+            continue
+        if actual != expected_hash:
+            offending.append(src_rel)
+    if offending:
+        lines = [
+            f"sources-hash: {len(offending)} source(s) drifted from the "
+            f"Sources-hash entries recorded in {state_rel}:"
+        ]
+        lines.extend(f"  {entry}" for entry in offending)
+        lines.append(SOURCES_HASH_REMEDIATION)
+        return FastCheckResult(ok=False, skipped=False, lines=tuple(lines))
+    return FastCheckResult(
+        ok=True,
+        skipped=False,
+        lines=(f"sources-hash: OK ({len(sources_hash)} recorded sources match {state_rel})",),
+    )
+
+
 def check_config_toml_schema(project_root: Path) -> list[Issue]:
     path = project_root / ".cortex" / "config.toml"
     if not path.exists():
@@ -1225,6 +1313,53 @@ def check_generator_version_drift(project_root: Path) -> list[Issue]:
                     f"{remediation.capitalize()}.",
                 )
             )
+    return issues
+
+
+def check_spec_version_drift(project_root: Path) -> list[Issue]:
+    """Warn when a generated layer's `Spec:` frontmatter mismatches `.cortex/SPEC_VERSION`.
+
+    Evidence class (cortex#500): SPEC_VERSION was bumped 0.5.0 -> 1.1.0 while
+    map.md kept declaring `Spec: 0.3.1`; only the probabilistic merge reviewer
+    caught it. A `(pinned: <reason>)` annotation on the value declares an
+    intentional pin and stays silent. Layers without a `Spec:` field are silent
+    (compat with scaffolds that predate the field; it is not one of the seven
+    provenance fields).
+    """
+    spec_version_file = project_root / ".cortex" / "SPEC_VERSION"
+    try:
+        current = spec_version_file.read_text().strip()
+    except OSError:
+        # Missing/unreadable SPEC_VERSION is already an ERROR in check_scaffold.
+        return []
+    if not current:
+        return []
+
+    issues: list[Issue] = []
+    for layer_path in _generated_layer_paths(project_root):
+        rel = _rel(layer_path, project_root)
+        try:
+            frontmatter, _body = parse_frontmatter(layer_path.read_text())
+        except OSError:
+            # Unreadable layers are already reported by check_generated_layers.
+            continue
+        if not frontmatter:
+            continue
+        declared = _field_str(frontmatter, "Spec")
+        if declared is None or SPEC_PIN_MARKER in declared:
+            continue
+        declared_version = declared.split()[0]
+        if declared_version == current:
+            continue
+        issues.append(
+            Issue(
+                Severity.WARNING,
+                rel,
+                f"{rel} declares Spec: {declared_version} but .cortex/SPEC_VERSION "
+                f"is {current}; regenerate the layer, or declare an intentional pin: "
+                f"`Spec: {declared_version} (pinned: <reason>)`",
+            )
+        )
     return issues
 
 
