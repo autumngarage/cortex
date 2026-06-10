@@ -16,11 +16,11 @@ Cites: journal/2026-06-09-hosted-decision-reviewer-plan-adopted, journal/2026-06
 
 ## Pickup pointer
 
-- **Current wave — Stage 0 Wave 1 (contracts + the missing gating input):**
-  #310 (as-built architecture brief; the fan-out gate), #332 (fixture format),
-  #344 (derive/evaluate interface), #327 (prompt/model version registry),
-  #363 (diff → changed-surface extractor).
-- **Parallel docs track (no code dependencies):** #307, #309, #308, #443, #437.
+- **Current wave — Stage 0 Wave 8/9 tail + gate:** #322/#326/#338/#367/
+  #368/#373/#374/#376/#339, then #450 batch replay -> #378 hand-grading ->
+  #337 verdict.
+- **Stage 1 frontier:** #470 API shell, #471 worker, #473/#474 ops, #469/#475
+  env docs, #517 server transport.
 - **Stage 0 tracker:** [cortex#445](https://github.com/autumngarage/cortex/issues/445).
   Master tracker: [cortex#444](https://github.com/autumngarage/cortex/issues/444).
 - **Dispatch rule:** every open product issue carries `alchemist-skip` (applied
