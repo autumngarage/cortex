@@ -34,9 +34,9 @@ from enum import StrEnum
 
 from cortex.hosted.advisory_ladder import AdvisoryLadderError
 from cortex.hosted.ask_ledger import AnswerState, AskLedgerValidationError
+from cortex.hosted.ask_surface import AskSurfaceValidationError, BrowseIndexRefusedError
 from cortex.hosted.banking import BankingValidationError
 from cortex.hosted.candidate_dedup import CandidateDedupError
-from cortex.hosted.ask_surface import AskSurfaceValidationError, BrowseIndexRefusedError
 from cortex.hosted.candidate_metrics import CandidateMetricsValidationError
 from cortex.hosted.cascade import CascadeValidationError
 from cortex.hosted.citation_check import CitationCheckError
@@ -65,8 +65,8 @@ from cortex.hosted.model_registry import RegistryValidationError
 from cortex.hosted.provenance import ProvenanceValidationError
 from cortex.hosted.quality_series import QualitySeriesValidationError
 from cortex.hosted.recorded_responses import RecordedResponseError
-from cortex.hosted.route_comparison import RouteComparisonValidationError
 from cortex.hosted.replay_runner import ReplayError
+from cortex.hosted.route_comparison import RouteComparisonValidationError
 from cortex.hosted.routing import (
     ClaudeCliOutputError,
     ClaudeCliUnavailableError,
