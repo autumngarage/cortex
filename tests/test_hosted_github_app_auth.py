@@ -29,6 +29,7 @@ from cortex.hosted.github_app_auth import (
     GITHUB_APP_PRIVATE_KEY_ENV,
     JWT_TTL_SECONDS,
     ChangedFile,
+    DirectoryEntry,
     GithubApiError,
     GithubAppConfig,
     GithubAuthConfigError,
@@ -494,6 +495,73 @@ def test_get_file_contents_directory_response_refused(config: GithubAppConfig) -
     )
     with pytest.raises(GithubApiError, match="not a base64-encoded file"):
         client.get_file_contents("o", "r", "adir", "main")
+
+
+# ---------------------------------------------------------------------------
+# 4b. list_directory: array -> entries, 404 -> (), file response refused
+# ---------------------------------------------------------------------------
+
+
+def test_list_directory_returns_entries(config: GithubAppConfig) -> None:
+    clock = _FrozenClock(datetime(2026, 6, 10, 12, 0, 0, tzinfo=UTC))
+    opener = _ScriptedOpener()
+    client = _client_with_token(config, opener, clock)
+    opener.enqueue(
+        "GET",
+        "/repos/autumngarage/cortex/contents/.cortex/doctrine",
+        _CannedResponse(
+            body=json.dumps(
+                [
+                    {"path": ".cortex/doctrine/0001-a.md", "type": "file"},
+                    {"path": ".cortex/doctrine/sub", "type": "dir"},
+                ]
+            ).encode()
+        ),
+    )
+    entries = client.list_directory("autumngarage", "cortex", ".cortex/doctrine", "main")
+    assert entries == (
+        DirectoryEntry(path=".cortex/doctrine/0001-a.md", type="file"),
+        DirectoryEntry(path=".cortex/doctrine/sub", type="dir"),
+    )
+    assert "ref=main" in urllib.parse.urlsplit(opener.requests[-1].full_url).query
+
+
+def test_list_directory_404_returns_empty(config: GithubAppConfig) -> None:
+    clock = _FrozenClock(datetime(2026, 6, 10, 12, 0, 0, tzinfo=UTC))
+    opener = _ScriptedOpener()
+    client = _client_with_token(config, opener, clock)
+    opener.enqueue(
+        "GET",
+        "/repos/o/r/contents/.cortex/doctrine",
+        _CannedResponse(status=404, body=b'{"message":"Not Found"}', http_error=True),
+    )
+    assert client.list_directory("o", "r", ".cortex/doctrine", "main") == ()
+
+
+def test_list_directory_file_response_refused(config: GithubAppConfig) -> None:
+    clock = _FrozenClock(datetime(2026, 6, 10, 12, 0, 0, tzinfo=UTC))
+    opener = _ScriptedOpener()
+    client = _client_with_token(config, opener, clock)
+    opener.enqueue(
+        "GET",
+        "/repos/o/r/contents/CLAUDE.md",
+        _CannedResponse(body=json.dumps({"encoding": "base64", "content": ""}).encode()),
+    )
+    with pytest.raises(GithubApiError, match="not a directory listing"):
+        client.list_directory("o", "r", "CLAUDE.md", "main")
+
+
+def test_list_directory_rejects_entry_missing_path(config: GithubAppConfig) -> None:
+    clock = _FrozenClock(datetime(2026, 6, 10, 12, 0, 0, tzinfo=UTC))
+    opener = _ScriptedOpener()
+    client = _client_with_token(config, opener, clock)
+    opener.enqueue(
+        "GET",
+        "/repos/o/r/contents/d",
+        _CannedResponse(body=json.dumps([{"type": "file"}]).encode()),
+    )
+    with pytest.raises(GithubApiError, match="missing a string 'path'"):
+        client.list_directory("o", "r", "d", "main")
 
 
 # ---------------------------------------------------------------------------
