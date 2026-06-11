@@ -504,9 +504,9 @@ def test_handler_sets_a_socket_read_timeout() -> None:
 
     server = build_server(_config(host="127.0.0.1", port=0), _deps(FakeJobDb()))
     try:
-        handler_cls = server.RequestHandlerClass
-        assert handler_cls.timeout == SOCKET_READ_TIMEOUT_SECONDS
-        assert handler_cls.timeout is not None
+        timeout = getattr(server.RequestHandlerClass, "timeout", None)
+        assert timeout == SOCKET_READ_TIMEOUT_SECONDS
+        assert timeout is not None
     finally:
         server.server_close()
 
