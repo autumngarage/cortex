@@ -81,6 +81,7 @@ from cortex.hosted.lanes import LanePolicyValidationError
 from cortex.hosted.ledger_events import LedgerEventValidationError
 from cortex.hosted.migrations import HostedMigrationError
 from cortex.hosted.model_registry import RegistryValidationError
+from cortex.hosted.ops_metrics import OpsMetricsError
 from cortex.hosted.provenance import ProvenanceValidationError
 from cortex.hosted.push import HostedPushError
 from cortex.hosted.quality_series import QualitySeriesValidationError
@@ -88,6 +89,7 @@ from cortex.hosted.question_normalization import QuestionNormalizationError
 from cortex.hosted.recorded_responses import RecordedResponseError
 from cortex.hosted.replay_runner import ReplayError
 from cortex.hosted.review_cost import ReviewCostError
+from cortex.hosted.review_feedback import ReviewFeedbackError
 from cortex.hosted.route_comparison import RouteComparisonValidationError
 from cortex.hosted.routing import (
     ClaudeCliOutputError,
@@ -246,6 +248,12 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     LaneAssignmentError: DegradationMode.INVALID_INPUT_REJECTED,
     LanePolicyValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     LedgerEventValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # A malformed operator-internal ops-telemetry row (unknown job status,
+    # negative attempts, a finished_at preceding enqueued_at, blank model id) is
+    # rejected before any metric is computed (cortex#565) — the read-only ops
+    # report refuses to aggregate untrustworthy rows rather than emit a number
+    # it cannot stand behind, the same before-any-output rejection family.
+    OpsMetricsError: DegradationMode.INVALID_INPUT_REJECTED,
     ProvenanceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     # An empty question is rejected before any normalization or retrieval —
     # nothing partial reaches the FTS leg (cortex#512).
@@ -259,6 +267,13 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # the internal cost ledger (cortex#547) — nothing partial is persisted, the
     # same before-any-write rejection family as the other validation errors.
     ReviewCostError: DegradationMode.INVALID_INPUT_REJECTED,
+    # A malformed human-feedback event (bad tenant UUID, a reaction carrying a
+    # reply excerpt, a reply pre-labeled with a sentiment, an over-bound
+    # excerpt) is rejected before any row enters the ground-truth corpus
+    # (cortex#394) — the same before-any-write rejection family as the other
+    # validation errors. This keeps the absence-is-never-approval and
+    # human-ground-truth-only invariants enforceable at construction.
+    ReviewFeedbackError: DegradationMode.INVALID_INPUT_REJECTED,
     ScopeValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     # A github.pull_request webhook body missing the installation/repo/PR
     # fields the stateless reviewer needs to fetch and cite a review is

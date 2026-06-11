@@ -29,6 +29,7 @@ from cortex.hosted.github_app_auth import (
     GITHUB_APP_PRIVATE_KEY_ENV,
     JWT_TTL_SECONDS,
     ChangedFile,
+    CommentReaction,
     DirectoryEntry,
     GithubApiError,
     GithubAppConfig,
@@ -725,6 +726,79 @@ def test_list_issue_comments_paginates(config: GithubAppConfig) -> None:
     )
     comments = client.list_issue_comments("o", "r", 7)
     assert [c["id"] for c in comments] == [1, 2]
+
+
+def test_list_comment_reactions_parses_content_and_login(config: GithubAppConfig) -> None:
+    clock = _FrozenClock(datetime(2026, 6, 10, 12, 0, 0, tzinfo=UTC))
+    opener = _ScriptedOpener()
+    client = _client_with_token(config, opener, clock)
+    opener.enqueue(
+        "GET",
+        "/repos/o/r/issues/comments/999/reactions",
+        _CannedResponse(
+            body=json.dumps(
+                [
+                    {"content": "+1", "user": {"login": "alice"}},
+                    {"content": "confused", "user": {"login": "bob"}},
+                ]
+            ).encode()
+        ),
+    )
+    reactions = client.list_comment_reactions("o", "r", 999)
+    assert reactions == (
+        CommentReaction(content="+1", user_login="alice"),
+        CommentReaction(content="confused", user_login="bob"),
+    )
+
+
+def test_list_comment_reactions_follows_pagination(config: GithubAppConfig) -> None:
+    clock = _FrozenClock(datetime(2026, 6, 10, 12, 0, 0, tzinfo=UTC))
+    opener = _ScriptedOpener()
+    client = _client_with_token(config, opener, clock)
+    next_url = f"{DEFAULT_API_ROOT}/repos/o/r/issues/comments/999/reactions?per_page=100&page=2"
+    opener.enqueue(
+        "GET",
+        "/repos/o/r/issues/comments/999/reactions",
+        _CannedResponse(
+            body=json.dumps([{"content": "+1", "user": {"login": "alice"}}]).encode(),
+            headers={"Link": f'<{next_url}>; rel="next"'},
+        ),
+    )
+    opener.enqueue(
+        "GET",
+        "/repos/o/r/issues/comments/999/reactions",
+        _CannedResponse(body=json.dumps([{"content": "-1", "user": {"login": "bob"}}]).encode()),
+    )
+    reactions = client.list_comment_reactions("o", "r", 999)
+    assert [r.user_login for r in reactions] == ["alice", "bob"]
+    reaction_requests = [r for r in opener.requests if "/reactions" in r.full_url]
+    assert len(reaction_requests) == 2
+
+
+def test_list_comment_reactions_404_returns_empty(config: GithubAppConfig) -> None:
+    clock = _FrozenClock(datetime(2026, 6, 10, 12, 0, 0, tzinfo=UTC))
+    opener = _ScriptedOpener()
+    client = _client_with_token(config, opener, clock)
+    opener.enqueue(
+        "GET",
+        "/repos/o/r/issues/comments/999/reactions",
+        _CannedResponse(status=404, body=b'{"message":"Not Found"}', http_error=True),
+    )
+    # A deleted comment carries no feedback — soft miss, not a crash.
+    assert client.list_comment_reactions("o", "r", 999) == ()
+
+
+def test_list_comment_reactions_rejects_entry_missing_login(config: GithubAppConfig) -> None:
+    clock = _FrozenClock(datetime(2026, 6, 10, 12, 0, 0, tzinfo=UTC))
+    opener = _ScriptedOpener()
+    client = _client_with_token(config, opener, clock)
+    opener.enqueue(
+        "GET",
+        "/repos/o/r/issues/comments/999/reactions",
+        _CannedResponse(body=json.dumps([{"content": "+1", "user": {}}]).encode()),
+    )
+    with pytest.raises(GithubApiError, match="login"):
+        client.list_comment_reactions("o", "r", 999)
 
 
 def test_update_issue_comment_rejects_bad_comment_id(config: GithubAppConfig) -> None:
