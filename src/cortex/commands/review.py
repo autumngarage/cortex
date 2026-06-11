@@ -123,6 +123,14 @@ CLAUDE_ADAPTER_ID = "claude-cli"
 # transport so replay keys distinguish it from recorded playback.
 REVIEW_CLAUDE_MODEL_ID = "anthropic/claude-cli"
 
+# Server-side evaluate route (#517): when there is no claude CLI (a headless
+# worker) but an API key is configured, evaluate over the HTTP transport.
+# The model is the judge — the high-stakes role — so it defaults to a
+# capable model and is overridable per deployment via CORTEX_REVIEW_MODEL
+# (a config edit, no redeploy), per cheapest-model-that-holds-quality.
+REVIEW_API_MODEL_ENV = "CORTEX_REVIEW_MODEL"
+DEFAULT_REVIEW_API_MODEL = "claude-sonnet-4-6"
+
 # The evaluate prompt contract this verb stamps. The template embeds the
 # canonical Stage 0 class guidance (evaluator.evaluate_prompt_guidance), so
 # the self-certifying prompt_version drifts the moment the registered class
@@ -439,13 +447,29 @@ def resolve_evaluate_route(fixtures_dir: Path | None) -> EvaluateRoute:
         return EvaluateRoute(
             adapter=adapter, adapter_id=RECORDED_ADAPTER_ID, model_id=model_id
         )
-    if not claude_cli_available():
-        raise ReviewDegradedError(REVIEW_NO_EVALUATE_MODEL_MESSAGE)
-    return EvaluateRoute(
-        adapter=ClaudeCliAdapter(),
-        adapter_id=CLAUDE_ADAPTER_ID,
-        model_id=REVIEW_CLAUDE_MODEL_ID,
+    if claude_cli_available():
+        return EvaluateRoute(
+            adapter=ClaudeCliAdapter(),
+            adapter_id=CLAUDE_ADAPTER_ID,
+            model_id=REVIEW_CLAUDE_MODEL_ID,
+        )
+    # Headless server (no claude CLI): evaluate over the HTTP transport when
+    # an API key is configured. The adapter defaults api_key_env to
+    # ANTHROPIC_API_KEY and api_model to the route model_id (#517).
+    from cortex.hosted.api_transport import (
+        API_HTTP_ADAPTER_ID,
+        DEFAULT_API_KEY_ENV,
+        ApiHttpAdapter,
     )
+
+    if os.environ.get(DEFAULT_API_KEY_ENV, "").strip():
+        model = os.environ.get(REVIEW_API_MODEL_ENV, "").strip() or DEFAULT_REVIEW_API_MODEL
+        return EvaluateRoute(
+            adapter=ApiHttpAdapter(),
+            adapter_id=API_HTTP_ADAPTER_ID,
+            model_id=model,
+        )
+    raise ReviewDegradedError(REVIEW_NO_EVALUATE_MODEL_MESSAGE)
 
 
 def build_review_router(route: EvaluateRoute, *, run_ledger: RunLedger) -> ModelRouter:
