@@ -7,7 +7,7 @@ import re
 from cortex.hosted.ledger_events import LedgerEventType
 from cortex.hosted.scopes import ScopeType
 
-HOSTED_SCHEMA_VERSION = 8
+HOSTED_SCHEMA_VERSION = 9
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -671,6 +671,80 @@ CREATE INDEX IF NOT EXISTS review_cost_records_model_idx
 COMMENT ON TABLE {schema}.review_cost_records IS
     'OPERATOR-INTERNAL review cost ledger (provider dollars, not customer credits). Append-only; one row per successful review keyed by (tenant, repo, pr, head_sha, model). Do not expose to customers.';
 
+-- v9 (cortex#394/#393): the HUMAN-GROUND-TRUTH feedback corpus. One append-only
+-- row per human action (reaction or reply) on a Compass Review advisory
+-- comment, keyed to the REPLAY identity (model_id, prompt_version,
+-- snapshot_hash) + the PR head SHA that produced the reviewed comment, so a
+-- label binds to exactly the regime it judged and a later evaluator
+-- improvement is measured against precisely what the human reacted to. THE
+-- DISCIPLINE: feedback is human ground truth ONLY — the model's own
+-- predictions are never written here, and the ABSENCE of a row is "missing"
+-- feedback, never "approval". Silence is never a positive label. This is NOT a
+-- customer surface and NOT the FEEDBACK_RECORDED graph-ledger event type
+-- (which carries graph-affecting confirm/reject actions inside a tenant's
+-- decision ledger); it is the operator-internal evaluator training corpus. The
+-- unique idempotency key collapses webhook redeliveries (reply) and re-polls
+-- (reaction) to one row. decision_node_id / finding_class are NULL-able: a
+-- reaction targets the whole comment, a thread reply may target the whole
+-- review. raw_excerpt holds a reply's verbatim, content-bounded text and is
+-- NULL for reactions. sentiment defaults to 'unclassified'; the cortex#549
+-- converse-role classifier fills it for replies in a follow-up — no model is
+-- called here.
+CREATE TABLE IF NOT EXISTS {schema}.review_feedback_events (
+    review_feedback_event_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    repo_full_name text NOT NULL,
+    pr_number integer NOT NULL,
+    head_sha text NOT NULL,
+    cortex_comment_id bigint NOT NULL,
+    decision_node_id uuid,
+    finding_class text,
+    model_id text NOT NULL,
+    prompt_version text NOT NULL,
+    snapshot_hash text NOT NULL,
+    feedback_kind text NOT NULL,
+    sentiment text NOT NULL DEFAULT 'unclassified',
+    raw_excerpt text,
+    actor_login text NOT NULL,
+    occurred_at timestamptz NOT NULL,
+    recorded_at timestamptz NOT NULL DEFAULT now(),
+    idempotency_key text NOT NULL,
+    CONSTRAINT review_feedback_events_idempotency_key_unique UNIQUE (idempotency_key),
+    CHECK (repo_full_name <> ''),
+    CHECK (head_sha <> ''),
+    CHECK (model_id <> ''),
+    CHECK (prompt_version <> ''),
+    CHECK (actor_login <> ''),
+    CHECK (idempotency_key <> ''),
+    CHECK (pr_number > 0),
+    CHECK (cortex_comment_id > 0),
+    CHECK (snapshot_hash ~ '^[a-f0-9]{{64}}$'),
+    CHECK (finding_class IS NULL OR finding_class <> ''),
+    CHECK (feedback_kind IN ('reaction_up', 'reaction_down', 'reply')),
+    CHECK (sentiment IN ('positive', 'negative', 'neutral', 'unclassified')),
+    -- A reply carries verbatim text and is classified later (unclassified
+    -- here); a reaction has no text and carries a resolved sentiment. The DB
+    -- enforces the same kind<->shape invariant the dataclass does so a writer
+    -- that bypasses the dataclass cannot corrupt the corpus.
+    CHECK (
+        (feedback_kind = 'reply' AND raw_excerpt IS NOT NULL AND sentiment = 'unclassified')
+        OR (feedback_kind <> 'reply' AND raw_excerpt IS NULL AND sentiment <> 'unclassified')
+    )
+);
+
+CREATE INDEX IF NOT EXISTS review_feedback_events_replay_idx
+    ON {schema}.review_feedback_events (model_id, prompt_version, snapshot_hash);
+
+CREATE INDEX IF NOT EXISTS review_feedback_events_comment_idx
+    ON {schema}.review_feedback_events (cortex_comment_id, occurred_at);
+
+CREATE INDEX IF NOT EXISTS review_feedback_events_classify_pending_idx
+    ON {schema}.review_feedback_events (occurred_at)
+    WHERE feedback_kind = 'reply' AND sentiment = 'unclassified';
+
+COMMENT ON TABLE {schema}.review_feedback_events IS
+    'HUMAN-GROUND-TRUTH evaluator feedback corpus (operator-internal). Append-only; one row per human reaction/reply on a Compass Review comment, keyed to the review replay identity (model_id, prompt_version, snapshot_hash). Absence of a row is missing feedback, never approval. Not a customer surface.';
+
 CREATE INDEX IF NOT EXISTS ledger_events_tenant_time_idx
     ON {schema}.ledger_events (tenant_id, occurred_at, event_id);
 
@@ -834,6 +908,58 @@ DROP TRIGGER IF EXISTS review_cost_records_no_delete ON {schema}.review_cost_rec
 CREATE TRIGGER review_cost_records_no_delete
     BEFORE DELETE ON {schema}.review_cost_records
     FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_review_cost_mutation();
+
+-- v9 (cortex#394): the human-ground-truth feedback corpus is append-only too.
+-- A human's reaction or reply, once recorded, is never rewritten or deleted —
+-- a corrected sentiment is the cortex#549 classifier's UPDATE of the sentiment
+-- column on the SAME row, which the trigger must permit while still blocking
+-- any other mutation. So the guard allows an UPDATE that touches only
+-- sentiment (the classify-later seam) and forbids DELETE and every other
+-- UPDATE. This keeps the raw human action immutable while leaving the one
+-- documented late-classification write path open.
+CREATE OR REPLACE FUNCTION {schema}.prevent_review_feedback_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF TG_OP = 'UPDATE' THEN
+        IF NEW.review_feedback_event_id IS DISTINCT FROM OLD.review_feedback_event_id
+            OR NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
+            OR NEW.repo_full_name IS DISTINCT FROM OLD.repo_full_name
+            OR NEW.pr_number IS DISTINCT FROM OLD.pr_number
+            OR NEW.head_sha IS DISTINCT FROM OLD.head_sha
+            OR NEW.cortex_comment_id IS DISTINCT FROM OLD.cortex_comment_id
+            OR NEW.decision_node_id IS DISTINCT FROM OLD.decision_node_id
+            OR NEW.finding_class IS DISTINCT FROM OLD.finding_class
+            OR NEW.model_id IS DISTINCT FROM OLD.model_id
+            OR NEW.prompt_version IS DISTINCT FROM OLD.prompt_version
+            OR NEW.snapshot_hash IS DISTINCT FROM OLD.snapshot_hash
+            OR NEW.feedback_kind IS DISTINCT FROM OLD.feedback_kind
+            OR NEW.raw_excerpt IS DISTINCT FROM OLD.raw_excerpt
+            OR NEW.actor_login IS DISTINCT FROM OLD.actor_login
+            OR NEW.occurred_at IS DISTINCT FROM OLD.occurred_at
+            OR NEW.idempotency_key IS DISTINCT FROM OLD.idempotency_key
+        THEN
+            RAISE EXCEPTION
+                'review_feedback_events is append-only; only sentiment may be classified later (cortex#549)'
+                USING ERRCODE = '55000';
+        END IF;
+        RETURN NEW;
+    END IF;
+    RAISE EXCEPTION 'review_feedback_events is append-only; attempted %', TG_OP
+        USING ERRCODE = '55000';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS review_feedback_events_no_mutation ON {schema}.review_feedback_events;
+CREATE TRIGGER review_feedback_events_no_mutation
+    BEFORE UPDATE ON {schema}.review_feedback_events
+    FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_review_feedback_mutation();
+
+DROP TRIGGER IF EXISTS review_feedback_events_no_delete ON {schema}.review_feedback_events;
+CREATE TRIGGER review_feedback_events_no_delete
+    BEFORE DELETE ON {schema}.review_feedback_events
+    FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_review_feedback_mutation();
 
 COMMENT ON TABLE {schema}.ledger_events IS
     'Canonical append-only hosted Cortex ledger. Mutations are forbidden; corrections append new events.';

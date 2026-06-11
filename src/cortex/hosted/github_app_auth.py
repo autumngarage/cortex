@@ -226,6 +226,27 @@ class ChangedFile:
 
 
 @dataclass(frozen=True)
+class CommentReaction:
+    """One reaction on an issue/PR comment: the content and who reacted.
+
+    GitHub emits no webhook for reactions, so the feedback poller reads them
+    via the reactions API. The narrow slice the feedback capture needs is the
+    reaction ``content`` (``+1``/``-1``/``heart``/...) and the reacting user's
+    ``login`` — enough to map to a feedback kind and to skip the App's own
+    reactions (the recursion guard).
+    """
+
+    content: str
+    user_login: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.content, str) or not self.content.strip():
+            raise GithubApiError("reaction must carry a non-empty 'content'")
+        if not isinstance(self.user_login, str) or not self.user_login.strip():
+            raise GithubApiError("reaction must carry a non-empty user 'login'")
+
+
+@dataclass(frozen=True)
 class DirectoryEntry:
     """One entry from a "list directory contents" API response.
 
@@ -609,6 +630,37 @@ class GithubInstallationClient:
                 comments.append(dict(entry))
         return tuple(comments)
 
+    def list_comment_reactions(
+        self, owner: str, repo: str, comment_id: int
+    ) -> tuple[CommentReaction, ...]:
+        """Return every reaction on an issue/PR comment, following pagination.
+
+        Reactions have no webhook, so the feedback poller reads them here. Each
+        reaction's ``content`` (👍/👎/...) and reacting user ``login`` are
+        returned; the poller maps content to a feedback kind and skips the
+        App's own reactions. A 404 (comment deleted) returns ``()`` — a missing
+        comment carries no feedback, the same soft-miss policy the file reads
+        hold — rather than crashing the sweep.
+        """
+
+        _require_comment_id(comment_id)
+        base = (
+            f"{self._api_root}/repos/{_segment(owner)}/{_segment(repo)}"
+            f"/issues/comments/{comment_id}/reactions"
+        )
+        reactions: list[CommentReaction] = []
+        try:
+            pages = self._paginate(base)
+        except GithubApiError as exc:
+            if exc.status == _NOT_FOUND_STATUS:
+                return ()
+            raise
+        for page_body in pages:
+            entries = _json_array(page_body, context=f"comment {comment_id} reactions page")
+            for entry in entries:
+                reactions.append(_reaction_from_entry(entry, comment_id=comment_id))
+        return tuple(reactions)
+
     # --- transport internals -----------------------------------------------
 
     def _auth_header(self) -> str:
@@ -875,6 +927,29 @@ def _changed_file_from_entry(entry: Any) -> ChangedFile:
     if patch is not None and not isinstance(patch, str):
         raise GithubApiError(f"PR files entry for {filename!r} has a non-string 'patch'")
     return ChangedFile(filename=filename, status=status, patch=patch)
+
+
+def _reaction_from_entry(entry: Any, *, comment_id: int) -> CommentReaction:
+    if not isinstance(entry, Mapping):
+        raise GithubApiError(
+            f"reactions list for comment {comment_id} contained a non-object entry"
+        )
+    content = entry.get("content")
+    if not isinstance(content, str) or not content:
+        raise GithubApiError(
+            f"reaction on comment {comment_id} is missing a string 'content'"
+        )
+    user = entry.get("user")
+    if not isinstance(user, Mapping):
+        raise GithubApiError(
+            f"reaction on comment {comment_id} is missing a 'user' object"
+        )
+    login = user.get("login")
+    if not isinstance(login, str) or not login:
+        raise GithubApiError(
+            f"reaction on comment {comment_id} is missing a string user 'login'"
+        )
+    return CommentReaction(content=content, user_login=login)
 
 
 def _directory_entry_from(entry: Any, *, path: str, ref: str) -> DirectoryEntry:
