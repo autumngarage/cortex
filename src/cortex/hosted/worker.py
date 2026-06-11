@@ -63,7 +63,22 @@ logger = logging.getLogger("cortex.hosted.worker")
 
 SERVICE_NAME = "cortex-worker"
 
+# When set to a false-y value (0/false/no/off), the stateless review worker
+# posts advisory comments. Unset or any other value keeps it dry-run (safe
+# default): a freshly deployed worker never posts to a customer PR until an
+# operator deliberately flips this.
+REVIEW_DRY_RUN_ENV = "CORTEX_REVIEW_DRY_RUN"
+_FALSE_TOKENS = frozenset({"0", "false", "no", "off"})
+
 JobHandler = Callable[[ClaimedJob], Mapping[str, Any]]
+
+
+def _env_flag(raw: str | None, *, default: bool) -> bool:
+    """Parse a boolean env flag; unset -> ``default``, false-y -> ``False``."""
+
+    if raw is None or not raw.strip():
+        return default
+    return raw.strip().lower() not in _FALSE_TOKENS
 
 
 def _log(event: str, **fields: Any) -> None:
@@ -381,6 +396,7 @@ def build_worker_registry(
         InstallationTokenSource,
     )
     from cortex.hosted.stateless_review import (
+        ReviewHandlerConfig,
         build_review_registry,
         default_model_resolver,
     )
@@ -392,10 +408,21 @@ def build_worker_registry(
     def client_factory(installation_id: str) -> GithubInstallationClient:
         return GithubInstallationClient(token_source, installation_id)
 
-    _log("worker.registry_selected", registry="stateless_review", reason="github_app_configured")
+    # Posting is opt-in and OFF by default: the worker dry-runs (evaluates and
+    # logs the comment it would post) until CORTEX_REVIEW_DRY_RUN is explicitly
+    # set to a false-y value. This keeps a freshly deployed worker safe — it
+    # cannot post to a customer PR until an operator deliberately flips it.
+    dry_run = _env_flag(env.get(REVIEW_DRY_RUN_ENV), default=True)
+    _log(
+        "worker.registry_selected",
+        registry="stateless_review",
+        reason="github_app_configured",
+        dry_run=dry_run,
+    )
     return build_review_registry(
         client_factory=client_factory,
         model_resolver=default_model_resolver(),
+        config=ReviewHandlerConfig(dry_run=dry_run),
     )
 
 
