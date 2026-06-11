@@ -63,6 +63,7 @@ from cortex.hosted.evaluator import EvaluatorValidationError, UncitedFindingErro
 from cortex.hosted.event_ordering import EventOrderingError
 from cortex.hosted.extractors import ExtractorError
 from cortex.hosted.finding_render import FindingRenderError
+from cortex.hosted.github_comment import GitHubCommentRenderError
 from cortex.hosted.graph_rebuild import GraphRebuildError
 from cortex.hosted.graph_snapshot import GraphSnapshotValidationError
 from cortex.hosted.graph_writes import GraphWriteValidationError
@@ -177,6 +178,11 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # citation a reader cannot verify, mirroring the evaluator's citation
     # boundary.
     FindingRenderError: DegradationMode.FAIL_CLOSED_REFUSAL,
+    # The Stage 2 GitHub comment renderer refuses to post an advisory comment
+    # whose cited decision does not resolve to a permalink through the span
+    # index (cortex#390) — same citation boundary as FindingRenderError, one
+    # surface further out toward the PR.
+    GitHubCommentRenderError: DegradationMode.FAIL_CLOSED_REFUSAL,
     FixtureValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     # GraphRebuildError refuses a replay whose log material cannot fold into
     # a valid projection (missing contract keys, unknown nodes, key/hash
