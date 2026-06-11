@@ -218,11 +218,11 @@ This file (`.cortex/state.md`) and [`plans/hosted-decision-reviewer.md`](./plans
 
 **Status by stage:**
 - **Stage 0 — local proof:** the loop is BUILT and PROVEN live (2026-06-10): derive→confirm→push→ask→review all ran against Railway compass, ending in the first real contradicts-prior-decision catch (`docs/walkthrough-pe0.md`). Remaining: the Wave 8/9 tail (#322/#326/#338/#367/#368/#373/#374/#376/#339) and the gate artifacts (#450 → hand-grading #378 → the #337 verdict).
-- **Stage 1 — hosted core:** Postgres half DONE (schema v6 live on compass, extensions verified, append-only trigger proven, driver+migrations merged with passing live integration tests). Remaining: API shell #470, worker #471, ops #473/#474, env docs #469/#475, server transport #517.
-- **Stage 2 — GitHub reviewer:** PR webhook, diff-scoped retrieval, advisory comments, and feedback capture.
+- **Stage 1 — hosted core:** hosted core is LIVE enough for dogfood: Postgres/schema v9 on compass, API shell #470, worker #471, and server transport #517 are operating with live integration evidence. Remaining: ops #473/#474, env docs #469/#475, security #530-#544.
+- **Stage 2 — GitHub reviewer:** LIVE on Railway as Compass Review (2026-06-11): PR webhook, diff-scoped retrieval, advisory comments, and feedback capture have posted on a real PR and captured human feedback. Next: precision-report #395, scheduled reaction polling, sentiment classification #549, real installation→tenant resolution #386, and Touchstone babysit loop touchstone#455.
 - **Stage 3 — Slack ledger console:** `@cortex what did we decide about X?`, `@cortex here is what we decided...`, confirm/reject/merge/supersede/stale.
 
-**Path to first customer (2026-06-10):** P1 close the Stage 0 gate → P2 dogfood-deep (vesper/vanguard/outrider live tenants) → P3 simlab (#520-#522: synthetic projects, scenario regression, demo tenant) → P4 hosted core (Stage 1) → P5 design-partner outreach (App registration + Marketplace filing + outreach pack). Canonical detail: the active plan's `## Path to first customer`.
+**Path to first customer (updated 2026-06-11):** Stage 2 is live for dogfood. Next: flywheel actuators (#395 precision-report, scheduled reaction polling, #549 sentiment classification, #386 installation→tenant resolution, touchstone#455 babysit loop), security tiers #530-#544 before any external tenant, then design-partner outreach. The older P1/P2/P3/P5 bars still apply; P4's hosted-core exit is met for dogfood by the live Compass Review path. Canonical detail: the active plan's `## Pickup pointer`.
 
 **Deferred from the hosted core loop:** blocking checks, passive Slack ingestion, Linear/Granola connectors, MCP supply loop, enterprise/on-prem packaging, and marketplace billing. These stay future work until the explicit local/hosted/GitHub/Slack loop works.
 
