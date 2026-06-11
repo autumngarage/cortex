@@ -270,6 +270,67 @@ do-not-host rule; P5 requires P4 plus the dogfood bar.
   The conversation target is a design partner per Journey 4 in
   docs/product/customer-journeys.md — pilot/LOI, not self-serve.
 
+## Trust & security (added 2026-06-10)
+
+Founder decision 2026-06-10: **stateless-first is the product's headline
+architecture, not a tier among tiers.** "Cortex doesn't host your team's
+memory — your decisions live in your repo; we read them at the gate,
+comment, and forget." This turns the biggest adoption objection (handing a
+vendor your team's decisions) into the differentiator no PR-reviewer
+incumbent can match. Public statement: [docs/security.md](../../docs/security.md).
+Grounded in [Doctrine candidate: the hosted store is a rebuildable
+projection](../doctrine/candidate-hosted-store-is-a-projection.md).
+
+**The architecture IS the compliance strategy.** SOC 2 / DPA scope is the
+set of systems touching customer data; storing almost nothing of theirs by
+default shrinks that scope by construction. Research (2026-06-10) confirms
+SOC 2 is not required for design partners, becomes a real gate at
+mid-market (~$25k ACV), and is mandatory at enterprise — so the plan is a
+*ladder*, not a sprint, and minimization buys down every rung.
+
+### The isolation ladder (build order)
+
+- **TS1 — Stateless reviewer (the default tier, #537):** fetch `.cortex/`
+  + diff via installation token, evaluate in memory, comment, persist
+  nothing but operational rows + content-free feedback labels. Eliminates
+  the cross-tenant-leak class for default-tier customers. Lands in Stage 2
+  (it IS the GitHub reviewer's default path).
+- **TS2 — Data minimization for the shared tier (#532 no stored file
+  content, #533 payload TTL):** when a customer opts into storage, hold
+  excerpts + hashes, not contents; reduce webhook payloads to skeletons.
+- **TS3 — Isolation backstops for the shared tier (#530 RLS reads, #538
+  composite tenant FKs writes):** the audit (2026-06-10) confirmed reads
+  rely on query discipline and writes have no structural cross-tenant
+  guard; both land before any external shared-tier tenant.
+- **TS4 — Dedicated-schema + BYO-store rungs (#536):** per-tenant schema
+  (nearly free — `apply_schema` is already schema-parameterized) and
+  customer-supplied DSN, as packaging configuration, not forks.
+- **TS5 — Lifecycle (#531):** full export (open replayable JSON — the
+  portability promise) and audited offboarding delete.
+
+### Security hardening (audit 2026-06-10, adversarially verified)
+
+- **DONE (live endpoint hotfix):** two HIGH webhook DoS findings —
+  negative-Content-Length unbounded read and slowloris (no socket
+  timeout) — fixed and regression-tested.
+- **#539 edge-proxy invariant + app-layer concurrency cap:** the stdlib
+  server must not be a security boundary; document Railway edge
+  guarantees + bound concurrency.
+- **#540 hardening bundle:** redaction one-path (delete the divergent
+  ask.py connector), healthz schema-leak minimization, worker
+  reconnect-on-drop, tenant-scoped idempotency keys.
+- **#534 content-free logging contract, #535 secret-rotation drill:**
+  the crown-jewel App private key gets a drilled runbook; dev-phase
+  secrets rotated out before the first external tenant.
+
+### Trust collateral (GTM)
+
+The cheap-now trust signals that close design partners without SOC 2:
+[docs/security.md](../../docs/security.md) (done), a subprocessor list, the
+#402 expectations one-pager referencing it, and the #442 legal surfaces.
+At first paying customer: DPA + SOC 2 Type 1 (Vanta/Drata). At scale:
+Type 2 + pen test.
+
 ## Success Criteria
 
 - The active session-start state points to this plan as the master current

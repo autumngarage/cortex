@@ -1,6 +1,6 @@
 {
   "spec": "1.1.0",
-  "generated": "2026-06-10T10:28:34-04:00",
+  "generated": "2026-06-10T20:18:09-04:00",
   "candidates": [
     {
       "id": "2026-04-17-competitive-positioning-and-claude-code-risk",
@@ -284,6 +284,15 @@
     {
       "id": "2026-06-10-pe0-first-product-experience",
       "source": ".cortex/journal/2026-06-10-pe0-first-product-experience.md",
+      "type": "decision",
+      "last_touched": "2026-06-10",
+      "tags": [],
+      "supersedes": null,
+      "promoted_to": null
+    },
+    {
+      "id": "2026-06-10-stage1-jobs-queue-postgres-not-broker",
+      "source": ".cortex/journal/2026-06-10-stage1-jobs-queue-postgres-not-broker.md",
       "type": "decision",
       "last_touched": "2026-06-10",
       "tags": [],

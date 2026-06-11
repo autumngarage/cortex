@@ -1,10 +1,10 @@
 ---
-Generated: 2026-06-10T15:45:51-04:00
+Generated: 2026-06-10T21:19:33-04:00
 Generator: cortex refresh-state v1.6.4
 Sources:
-  - HEAD sha: 061381d431bcd0acfe1cbd4b95dc126dd02bb013
+  - HEAD sha: 9b53e64720d4b341ef39a7dfac7769afbe526de5
   - .cortex/plans/*.md (12 files)
-  - .cortex/journal/*.md (143 entries, 2026-04-17..2026-06-10)
+  - .cortex/journal/*.md (144 entries, 2026-04-17..2026-06-10)
   - .cortex/doctrine/*.md (11 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
@@ -165,11 +165,12 @@ Sources-hash:
   .cortex/journal/2026-06-10-pr-merged-pr510.md: 425ad790cc498cb25adccb72f622f7c088f4dcee5a160cae9da5b57023b1af51
   .cortex/journal/2026-06-10-pr-merged-pr518.md: 35d3c8f353408c429afde10a3aed839b6ea90042de4cbda77acaf5fc288e6f01
   .cortex/journal/2026-06-10-replay-450-first-corpus-run.md: 9ab376d81ba1b0bcd2b47c416155f16134cd0118794396e8be577b8c6433e034
+  .cortex/journal/2026-06-10-stage1-jobs-queue-postgres-not-broker.md: 5f750cce78d8a939e863528e15a697de1b49aa2e2f0252bbe3f64e5565d8f96b
   .cortex/plans/context-integrity-production.md: 131441fcd1a50d92e82f4ba8f64c3d667412bf23dc91efc501502f42f70a5197
   .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
   .cortex/plans/cortex-v0.3.0.md: d78e60537e30ed81d8464575191674253822ed4953a055ca2a14a9626c5f8b6f
   .cortex/plans/cortex-v1.md: 35b18afacd917c6345d450d7f272a8ac37f52efe3af867ffa3f41e4b485f978b
-  .cortex/plans/hosted-decision-reviewer.md: cf2dc7e23def07d6b00f7171d31af4d9bb62ba39c3a3b3e65ed3cc81b24d6c2a
+  .cortex/plans/hosted-decision-reviewer.md: 8139ec57fce8dfa6f980dd1d07d06df907da7a7b5e7a7e6a785b284d02095d04
   .cortex/plans/init-ux-fixes-from-touchstone.md: fdf183f562d2dcde26101ea6b44163bfccf8377affc712cf1318ec16be4ecaee
   .cortex/plans/phase-b-walking-skeleton.md: 4c890ebe0a166b6cf07a0ca150e468614d3130109509e44641cfad216066b0d2
   .cortex/plans/phase-c-authoring-and-state.md: 8ab9a5ac4e593102e16ccab03a8b13248ec68f1afd05cd974c19c0c0e361c3c1
@@ -190,7 +191,7 @@ Sources-hash:
   .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476
   .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44
   docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c
-Corpus: 143 Journal entries, 12 Plans, 11 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 144 Journal entries, 12 Plans, 11 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
