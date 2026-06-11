@@ -78,6 +78,21 @@ _MARKER_RE = re.compile(
 )
 _MARKER_TEMPLATE = "<!-- cortex-review:pr={pr}:head={head} -->"
 
+# A second hidden marker carrying the full REPLAY identity of the review that
+# produced this comment (cortex#394). The visible footer abbreviates the
+# snapshot hash for humans; this marker carries it in full so the feedback
+# capture loop can bind a human reaction/reply to the exact (model_id,
+# prompt_version, snapshot_hash) regime it judged. Hidden (an HTML comment), so
+# a reviewer never sees it, and additive — the existing pr/head marker is
+# unchanged, so older parsers keep working.
+_REPLAY_MARKER_RE = re.compile(
+    r"<!-- cortex-review-replay:model=(?P<model>[^:]+):prompt=(?P<prompt>[^:]+):"
+    r"snapshot=(?P<snapshot>[0-9a-f]{64}) -->"
+)
+_REPLAY_MARKER_TEMPLATE = (
+    "<!-- cortex-review-replay:model={model}:prompt={prompt}:snapshot={snapshot} -->"
+)
+
 
 class GitHubCommentRenderError(ValueError):
     """Raised when an advisory PR comment cannot be rendered verifiably.
@@ -107,6 +122,36 @@ class CommentMarker:
             raise GitHubCommentRenderError(
                 "head_sha must be a hex commit SHA (the head the review ran against)"
             )
+
+
+@dataclass(frozen=True)
+class ReviewReplayMarker:
+    """The full replay identity encoded in a comment's hidden replay marker.
+
+    The durable carrier of the ``(model_id, prompt_version, snapshot_hash)``
+    stamp the feedback loop binds human reactions/replies to. ``model_id`` and
+    ``prompt_version`` must be free of the marker delimiters (``:`` and the
+    closing ``-->``) so the marker round-trips unambiguously; the snapshot hash
+    is a full sha256 hex so the feedback corpus binds to the exact regime, not
+    the human-abbreviated footer value.
+    """
+
+    model_id: str
+    prompt_version: str
+    snapshot_hash: str
+
+    def __post_init__(self) -> None:
+        for name, value in (("model_id", self.model_id), ("prompt_version", self.prompt_version)):
+            if not isinstance(value, str) or not value.strip():
+                raise GitHubCommentRenderError(f"{name} must be a non-empty string")
+            if ":" in value or "-->" in value:
+                raise GitHubCommentRenderError(
+                    f"{name} must not contain ':' or '-->' (it would break the replay marker)"
+                )
+        if not isinstance(self.snapshot_hash, str) or not re.fullmatch(
+            r"[0-9a-f]{64}", self.snapshot_hash
+        ):
+            raise GitHubCommentRenderError("snapshot_hash must be a full sha256 hex string")
 
 
 @dataclass(frozen=True)
@@ -217,6 +262,46 @@ def extract_marker(body: str) -> CommentMarker | None:
     return CommentMarker(pr_number=int(match.group("pr")), head_sha=match.group("head"))
 
 
+def make_replay_marker(
+    *, model_id: str, prompt_version: str, snapshot_hash: str
+) -> str:
+    """The hidden replay marker carrying a review's full replay identity.
+
+    Validates through :class:`ReviewReplayMarker` so a malformed stamp is never
+    embedded; the feedback loop relies on the marker being exact to bind a human
+    judgment to the regime it judged.
+    """
+
+    marker = ReviewReplayMarker(
+        model_id=model_id, prompt_version=prompt_version, snapshot_hash=snapshot_hash
+    )
+    return _REPLAY_MARKER_TEMPLATE.format(
+        model=marker.model_id,
+        prompt=marker.prompt_version,
+        snapshot=marker.snapshot_hash,
+    )
+
+
+def extract_replay_marker(body: str) -> ReviewReplayMarker | None:
+    """Parse the hidden replay marker from a comment body, or ``None`` if absent.
+
+    Returns the full ``(model_id, prompt_version, snapshot_hash)`` identity so
+    the feedback capture loop binds a reaction/reply to exactly what produced
+    the comment. ``None`` means this comment carries no replay stamp (a
+    pre-marker comment, or not a Cortex review comment) — the caller treats that
+    as "cannot bind feedback to a regime", a visible skip, never a guess.
+    """
+
+    match = _REPLAY_MARKER_RE.search(body)
+    if match is None:
+        return None
+    return ReviewReplayMarker(
+        model_id=match.group("model"),
+        prompt_version=match.group("prompt"),
+        snapshot_hash=match.group("snapshot"),
+    )
+
+
 def render_pr_comment(
     findings: Sequence[EmittedFinding],
     *,
@@ -242,6 +327,17 @@ def render_pr_comment(
 
     decision_count = _distinct_decision_count(findings)
     blocks: list[str] = [make_marker(pr_number, head_sha)]
+    # The hidden replay marker carries the full (model, prompt, snapshot)
+    # identity so the feedback loop binds human judgments to exactly this
+    # regime (cortex#394); the visible footer abbreviates the snapshot for
+    # humans, this does not.
+    blocks.append(
+        make_replay_marker(
+            model_id=replay_key.model_id,
+            prompt_version=replay_key.prompt_version,
+            snapshot_hash=replay_key.graph_snapshot_hash,
+        )
+    )
     blocks.append(_render_header(len(findings), decision_count))
     if findings:
         for index, emitted in enumerate(findings, start=1):

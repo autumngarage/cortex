@@ -88,6 +88,7 @@ from cortex.hosted.question_normalization import QuestionNormalizationError
 from cortex.hosted.recorded_responses import RecordedResponseError
 from cortex.hosted.replay_runner import ReplayError
 from cortex.hosted.review_cost import ReviewCostError
+from cortex.hosted.review_feedback import ReviewFeedbackError
 from cortex.hosted.route_comparison import RouteComparisonValidationError
 from cortex.hosted.routing import (
     ClaudeCliOutputError,
@@ -259,6 +260,13 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # the internal cost ledger (cortex#547) — nothing partial is persisted, the
     # same before-any-write rejection family as the other validation errors.
     ReviewCostError: DegradationMode.INVALID_INPUT_REJECTED,
+    # A malformed human-feedback event (bad tenant UUID, a reaction carrying a
+    # reply excerpt, a reply pre-labeled with a sentiment, an over-bound
+    # excerpt) is rejected before any row enters the ground-truth corpus
+    # (cortex#394) — the same before-any-write rejection family as the other
+    # validation errors. This keeps the absence-is-never-approval and
+    # human-ground-truth-only invariants enforceable at construction.
+    ReviewFeedbackError: DegradationMode.INVALID_INPUT_REJECTED,
     ScopeValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     # A github.pull_request webhook body missing the installation/repo/PR
     # fields the stateless reviewer needs to fetch and cite a review is

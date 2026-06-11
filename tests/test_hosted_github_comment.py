@@ -27,8 +27,11 @@ from cortex.hosted.github_comment import (
     CommentMarker,
     GitHubCommentRenderError,
     ReviewAccounting,
+    ReviewReplayMarker,
     extract_marker,
+    extract_replay_marker,
     make_marker,
+    make_replay_marker,
     render_pr_comment,
 )
 from cortex.hosted.model_interfaces import FindingDraft
@@ -281,9 +284,12 @@ def test_footer_has_feedback_affordance_and_abbreviated_provenance() -> None:
     assert "👍" in body and "👎" in body
     assert f"model `{MODEL_ID}`" in body
     assert f"prompt `{PROMPT_VERSION}`" in body
-    # Snapshot hash is abbreviated, not the full 64-hex.
+    # The *visible* footer abbreviates the snapshot hash for humans.
     assert f"snapshot `{GRAPH_SNAPSHOT_HASH[:12]}`" in body
-    assert GRAPH_SNAPSHOT_HASH not in body
+    # The full hash never appears in the visible <sub> footer; it lives only in
+    # the hidden replay marker (cortex#394) so the feedback loop can bind to it.
+    footer = body.split("<sub>", 1)[1]
+    assert GRAPH_SNAPSHOT_HASH not in footer
 
 
 # --- the hidden marker round-trips --------------------------------------------
@@ -305,6 +311,48 @@ def test_extract_marker_from_full_comment_body() -> None:
 
 def test_extract_marker_returns_none_for_unmarked_body() -> None:
     assert extract_marker("Just a regular PR comment with no marker.") is None
+
+
+# --- the hidden replay marker (cortex#394) ------------------------------------
+
+
+def test_make_and_extract_replay_marker_round_trip() -> None:
+    marker = make_replay_marker(
+        model_id=MODEL_ID, prompt_version=PROMPT_VERSION, snapshot_hash=GRAPH_SNAPSHOT_HASH
+    )
+    parsed = extract_replay_marker(marker)
+    assert parsed == ReviewReplayMarker(
+        model_id=MODEL_ID, prompt_version=PROMPT_VERSION, snapshot_hash=GRAPH_SNAPSHOT_HASH
+    )
+
+
+def test_extract_replay_marker_from_full_comment_body() -> None:
+    body = _render((_emitted(),))
+    parsed = extract_replay_marker(body)
+    assert parsed is not None
+    assert parsed.model_id == MODEL_ID
+    assert parsed.prompt_version == PROMPT_VERSION
+    # The full 64-hex snapshot is recoverable from the hidden marker (the
+    # feedback loop binds to it), even though the visible footer abbreviates.
+    assert parsed.snapshot_hash == GRAPH_SNAPSHOT_HASH
+
+
+def test_extract_replay_marker_returns_none_for_unmarked_body() -> None:
+    assert extract_replay_marker("a plain comment") is None
+
+
+def test_replay_marker_rejects_full_64hex_only() -> None:
+    with pytest.raises(GitHubCommentRenderError, match="snapshot_hash"):
+        make_replay_marker(
+            model_id=MODEL_ID, prompt_version=PROMPT_VERSION, snapshot_hash=GRAPH_SNAPSHOT_HASH[:12]
+        )
+
+
+def test_replay_marker_rejects_delimiter_in_model_id() -> None:
+    with pytest.raises(GitHubCommentRenderError, match="model_id"):
+        make_replay_marker(
+            model_id="bad:id", prompt_version=PROMPT_VERSION, snapshot_hash=GRAPH_SNAPSHOT_HASH
+        )
 
 
 def test_marker_distinguishes_review_states_by_head_sha() -> None:
@@ -363,6 +411,9 @@ def test_full_comment_snapshot() -> None:
     )
     assert body == (
         f"<!-- cortex-review:pr={PR_NUMBER}:head={HEAD_SHA} -->\n"
+        "\n"
+        f"<!-- cortex-review-replay:model={MODEL_ID}:prompt={PROMPT_VERSION}:"
+        f"snapshot={GRAPH_SNAPSHOT_HASH} -->\n"
         "\n"
         "### Cortex reviewed this PR against 1 recorded decision\n"
         "\n"

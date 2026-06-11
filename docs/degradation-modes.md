@@ -415,6 +415,32 @@ mode skip citation or visibility boundaries.
   would be worse). A database write error, by contrast, propagates and fails
   the job, because a database that cannot persist is a real failure.
 
+### Human-feedback corpus registration (2026-06-11, cortex#394/#393)
+
+- `review_feedback.ReviewFeedbackError` -> `invalid_input_rejected`: a
+  malformed human-feedback event (non-UUID tenant id, a reaction that carries a
+  reply excerpt, a reply pre-labeled with a sentiment, an over-bound reply
+  excerpt, a blank actor login, a non-sha256 snapshot hash) is rejected at
+  construction, before any row enters the append-only ground-truth corpus
+  (`cortex_hosted.review_feedback_events`). The boundary that matters here is
+  **human ground truth only** (product/technical vision principle 9): the
+  corpus records real human reactions and replies on Compass Review comments,
+  keyed to the review's replay identity (`model_id`, `prompt_version`,
+  `snapshot_hash`). The model's own predictions are never written here, and the
+  *absence* of a reaction is `missing` feedback — never `approval`. Nothing in
+  the capture path synthesizes a positive label from silence. A reply is stored
+  verbatim (content-bounded) as `sentiment=unclassified`; the cortex#549
+  converse-role classifier fills sentiment in a follow-up, so no model is called
+  in the capture path. Note what does *not* raise: in the `github.issue_comment`
+  reply handler, a comment on a PR with no Cortex review, a comment authored by
+  our own App (the recursion guard), a deleted comment, or a blank reply is a
+  visible no-op result naming why (`feedback_recorded=False, reason=...`) — not
+  a job failure and not an exception (the job succeeded; there was nothing to
+  record). A malformed `github.issue_comment` delivery raises `HostedJobError`
+  (already classified) and the worker retries/dead-letters it; a database write
+  error propagates and fails the job, because a database that cannot persist a
+  human judgment is a real failure.
+
 ### Remediation hints (2026-06-10, cortex#516)
 
 Errors are the onboarding surface of a fail-closed product: a refusal that

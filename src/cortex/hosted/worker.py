@@ -533,18 +533,57 @@ def build_worker_registry(
     token_budget = _env_positive_int(
         env.get(REVIEW_TOKEN_BUDGET_ENV), default=DEFAULT_HOSTED_REVIEW_TOKEN_BUDGET
     )
+    # Reply feedback capture (cortex#393/#394) is wired when a tenant is
+    # configured: the issue_comment handler writes ground-truth reply events to
+    # the same connection the worker uses. Without a tenant mapping the
+    # handler cannot key feedback to a tenant, so the issue_comment slot stays
+    # the Stage 1 stub — the gap is named in the log, never silent.
+    issue_comment_handler = _maybe_build_feedback_handler(
+        recorder=recorder, client_factory=client_factory
+    )
     _log(
         "worker.registry_selected",
         registry="stateless_review",
         reason="github_app_configured",
         dry_run=dry_run,
         token_budget=token_budget,
+        feedback_capture=issue_comment_handler is not None,
     )
     return build_review_registry(
         client_factory=client_factory,
         model_resolver=default_model_resolver(),
         config=ReviewHandlerConfig(dry_run=dry_run, token_budget=token_budget),
+        issue_comment_handler=issue_comment_handler,
     )
+
+
+def _maybe_build_feedback_handler(
+    *,
+    recorder: ArrivalRecorder,
+    client_factory: Callable[[str], Any],
+) -> JobHandler | None:
+    """Build the issue_comment reply-feedback handler when a tenant is mapped.
+
+    Returns ``None`` (leaving the Stage 1 stub) when no tenant id is configured
+    — feedback must key to a tenant, and a handler that cannot is worse than the
+    honest stub. The handler shares the worker's connection so a reply event and
+    the job completion commit together.
+    """
+
+    if recorder.tenant_id is None:
+        return None
+
+    from cortex.hosted.review_feedback_capture import handle_issue_comment_feedback
+
+    tenant_id = recorder.tenant_id
+    conn = recorder.conn
+
+    def handle(job: ClaimedJob) -> Mapping[str, Any]:
+        return handle_issue_comment_feedback(
+            job, conn=conn, client_factory=client_factory, tenant_id=tenant_id
+        )
+
+    return handle
 
 
 def install_signal_handlers(stop: threading.Event) -> None:
