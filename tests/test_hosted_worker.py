@@ -430,6 +430,20 @@ def test_default_registry_registers_the_stage1_stubs() -> None:
     assert registry.job_types() == ("github.issue_comment", "github.pull_request")
 
 
+def test_review_dry_run_env_defaults_to_safe_dry_run() -> None:
+    from cortex.hosted.worker import REVIEW_DRY_RUN_ENV, _env_flag
+
+    # Unset and false-y/true tokens, so a deployed worker never posts until
+    # CORTEX_REVIEW_DRY_RUN is deliberately set false-y.
+    assert REVIEW_DRY_RUN_ENV == "CORTEX_REVIEW_DRY_RUN"
+    assert _env_flag(None, default=True) is True
+    assert _env_flag("", default=True) is True
+    assert _env_flag("true", default=True) is True
+    assert _env_flag("1", default=True) is True
+    for falsey in ("0", "false", "no", "off", "False", " OFF "):
+        assert _env_flag(falsey, default=True) is False
+
+
 def test_stub_handler_without_mapping_reports_the_gap_visibly() -> None:
     db = FakeQueueDb()
     recorder = ArrivalRecorder(conn=db, tenant_id=None, source_id=None)
