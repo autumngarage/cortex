@@ -9,9 +9,11 @@ This page is the canonical, customer-facing statement of what Cortex
 stores, where, and how it is protected. It is written to be the answer to
 a security review.
 
-## The default posture: stateless review
+## Target default posture: stateless review
 
-For the GitHub reviewer, the default mode is **stateless**:
+For the GitHub reviewer, the target default mode is **stateless**. This
+is planned work tracked in the active hosted reviewer plan before Cortex
+offers the reviewer to external tenants:
 
 1. A pull request opens.
 2. Cortex fetches your `.cortex/` decision files at the relevant commit
@@ -21,7 +23,7 @@ For the GitHub reviewer, the default mode is **stateless**:
 5. It **forgets** — nothing about your decisions or your code is written
    to Cortex's database.
 
-In stateless mode, the only durable data Cortex holds for you is
+In the planned stateless mode, the only durable data Cortex holds for you is
 operational bookkeeping (which installation, which jobs ran) and
 **content-free feedback labels** — a decision *hash* plus whether a
 reviewer found a comment useful, never the decision text. Your decisions
@@ -38,10 +40,10 @@ less of your data on our infrastructure.
 
 | Tier | Where your decisions live | What Cortex's database holds |
 |---|---|---|
-| **Stateless** (default) | Your repo only | Operational bookkeeping + content-free feedback labels |
+| **Stateless** (planned default) | Your repo only | Operational bookkeeping + content-free feedback labels |
 | **Dedicated schema** | Your repo + an isolated per-tenant schema | Your decision graph, in a schema only your installation can reach |
 | **BYO-store** | Your repo + a database **you** own | Nothing but operational bookkeeping; decisions live in your database |
-| **Shared hosted** | Your repo + our shared store (row-isolated) | Your decision graph, isolated by tenant at the query and database layer |
+| **Shared hosted** (planned) | Your repo + our shared store | Your decision graph, with query scoping and planned database-layer tenant isolation |
 
 The cross-source features (capturing decisions made in Slack or meetings)
 and the feedback-learning loop require a stored graph; those are the
@@ -65,9 +67,10 @@ graph.
 
 - **Transport:** TLS in transit; `sslmode=require` honored on database
   connections.
-- **Tenant isolation:** every data query is scoped by tenant and source
-  visibility (enforced and tested); the shared tier adds database-enforced
-  row-level security and composite tenant foreign keys as backstops.
+- **Tenant isolation:** every data query is designed to be scoped by tenant
+  and source visibility. Before Cortex offers shared-tier hosting to
+  external tenants, the shared tier will add database-enforced row-level
+  security and composite tenant foreign keys as tested backstops.
 - **Least privilege:** the GitHub App requests only Contents (read),
   Pull requests (read/write), and Metadata (read). No access to Actions,
   secrets, administration, or other repositories.
@@ -82,8 +85,9 @@ graph.
 ## Compliance posture
 
 Cortex is pre-launch and engaging design partners. Our compliance approach
-follows the data: because the default tier stores almost nothing of yours,
-the surface a compliance program must cover is small by construction.
+follows the data: because the planned default tier stores almost nothing
+of yours, the surface a compliance program must cover is small by
+construction.
 
 - **Now:** this page, a subprocessor list, a data-handling description, and
   the data-minimization work above.
