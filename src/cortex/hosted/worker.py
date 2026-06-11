@@ -70,6 +70,16 @@ SERVICE_NAME = "cortex-worker"
 REVIEW_DRY_RUN_ENV = "CORTEX_REVIEW_DRY_RUN"
 _FALSE_TOKENS = frozenset({"0", "false", "no", "off"})
 
+# The token budget for one hosted review's decision pack. The local
+# ``cortex review`` default is the manifest session guardrail (8k), but that
+# is a *session* budget, not a per-review judge budget — a frontier model has
+# a far larger context, and a real catch (PR #561) checked only 3 of ~22
+# decisions and disclosed 19 dropped over-budget. The hosted default is
+# raised so a typical repo's full decision set is checked; CORTEX_REVIEW_TOKEN_BUDGET
+# overrides per deployment. Cost stays trivial (~$0.10/review at this size).
+REVIEW_TOKEN_BUDGET_ENV = "CORTEX_REVIEW_TOKEN_BUDGET"
+DEFAULT_HOSTED_REVIEW_TOKEN_BUDGET = 32000
+
 JobHandler = Callable[[ClaimedJob], Mapping[str, Any]]
 
 
@@ -79,6 +89,29 @@ def _env_flag(raw: str | None, *, default: bool) -> bool:
     if raw is None or not raw.strip():
         return default
     return raw.strip().lower() not in _FALSE_TOKENS
+
+
+def _env_positive_int(raw: str | None, *, default: int) -> int:
+    """Parse a positive-int env value; unset/blank -> ``default``.
+
+    A malformed or non-positive value is a visible configuration error, not a
+    silent fallback to the default — a typo'd budget must not quietly shrink
+    every review.
+    """
+
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw.strip())
+    except ValueError as exc:
+        raise ServiceConfigError(
+            f"{REVIEW_TOKEN_BUDGET_ENV} must be a positive integer; got {raw.strip()!r}"
+        ) from exc
+    if value < 1:
+        raise ServiceConfigError(
+            f"{REVIEW_TOKEN_BUDGET_ENV} must be >= 1; got {value}"
+        )
+    return value
 
 
 def _log(event: str, **fields: Any) -> None:
@@ -497,16 +530,20 @@ def build_worker_registry(
     # set to a false-y value. This keeps a freshly deployed worker safe — it
     # cannot post to a customer PR until an operator deliberately flips it.
     dry_run = _env_flag(env.get(REVIEW_DRY_RUN_ENV), default=True)
+    token_budget = _env_positive_int(
+        env.get(REVIEW_TOKEN_BUDGET_ENV), default=DEFAULT_HOSTED_REVIEW_TOKEN_BUDGET
+    )
     _log(
         "worker.registry_selected",
         registry="stateless_review",
         reason="github_app_configured",
         dry_run=dry_run,
+        token_budget=token_budget,
     )
     return build_review_registry(
         client_factory=client_factory,
         model_resolver=default_model_resolver(),
-        config=ReviewHandlerConfig(dry_run=dry_run),
+        config=ReviewHandlerConfig(dry_run=dry_run, token_budget=token_budget),
     )
 
 
