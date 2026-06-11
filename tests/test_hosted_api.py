@@ -473,6 +473,66 @@ def test_built_server_serves_requests_over_a_real_socket() -> None:
             assert response.status == 202
             assert json.loads(response.read())["status"] == "queued"
         assert "github-delivery:socket-guid" in db.jobs
+
+        # A negative Content-Length must not defeat the body cap by turning
+        # the read into read-to-EOF (cortex security audit 2026-06-10, HIGH).
+        # Drive it with a raw socket since urllib forbids negative lengths.
+        import socket as _socket
+
+        raw = (
+            "POST /webhooks/github HTTP/1.1\r\n"
+            f"Host: {host}:{port}\r\n"
+            "Content-Length: -1\r\n"
+            "X-GitHub-Event: pull_request\r\n"
+            "X-GitHub-Delivery: neg-len\r\n"
+            "Connection: close\r\n\r\n"
+        ).encode()
+        with _socket.create_connection((host, port), timeout=5) as sock:
+            sock.sendall(raw)
+            status_line = sock.makefile("rb").readline()
+        assert b"400" in status_line
+        assert "github-delivery:neg-len" not in db.jobs
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_handler_sets_a_socket_read_timeout() -> None:
+    # Slowloris guard: a stalled read must not pin a handler thread forever.
+    from cortex.hosted.api.app import SOCKET_READ_TIMEOUT_SECONDS, build_server
+
+    server = build_server(_config(host="127.0.0.1", port=0), _deps(FakeJobDb()))
+    try:
+        timeout = getattr(server.RequestHandlerClass, "timeout", None)
+        assert timeout == SOCKET_READ_TIMEOUT_SECONDS
+        assert timeout is not None
+    finally:
+        server.server_close()
+
+
+def test_post_without_content_length_is_411() -> None:
+    import socket as _socket
+    import threading
+
+    from cortex.hosted.api.app import build_server
+
+    server = build_server(_config(host="127.0.0.1", port=0), _deps(FakeJobDb()))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    host, port = server.socket.getsockname()[:2]
+    try:
+        raw = (
+            "POST /webhooks/github HTTP/1.1\r\n"
+            f"Host: {host}:{port}\r\n"
+            "X-GitHub-Event: pull_request\r\n"
+            "X-GitHub-Delivery: no-len\r\n"
+            "Connection: close\r\n\r\n"
+        ).encode()
+        with _socket.create_connection((host, port), timeout=5) as sock:
+            sock.sendall(raw)
+            status_line = sock.makefile("rb").readline()
+        assert b"411" in status_line
     finally:
         server.shutdown()
         server.server_close()
