@@ -149,7 +149,8 @@ def test_schema_models_citable_source_spans() -> None:
 def test_schema_records_version() -> None:
     sql = create_schema_sql()
 
-    assert HOSTED_SCHEMA_VERSION == 7
+    # v8 (cortex#547): the operator-internal review cost ledger.
+    assert HOSTED_SCHEMA_VERSION == 8
     assert f"VALUES ({HOSTED_SCHEMA_VERSION})" in sql
 
 

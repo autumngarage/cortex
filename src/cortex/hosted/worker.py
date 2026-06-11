@@ -288,6 +288,12 @@ class Worker:
             self._conn.rollback()
             self._fail(job, error=f"{type(exc).__name__}: {exc}")
             return True
+        # Operator-internal review cost (cortex#547): persist one append-only
+        # row and emit one structured log line for a successful review, in the
+        # SAME transaction as the job completion so a redelivery is atomic. A
+        # DB error here fails the job visibly (it is a real failure); a missing
+        # cost / non-review result is a visible skip, never silent.
+        self._record_review_cost(job, result)
         self._conn.execute(
             complete_job_sql(),
             {
@@ -298,6 +304,84 @@ class Worker:
         self._conn.commit()
         _log("job.succeeded", job_id=job.job_id, job_type=job.job_type, result=dict(result))
         return True
+
+    def _record_review_cost(self, job: ClaimedJob, result: Mapping[str, Any]) -> None:
+        """Persist + log the operator-internal cost of a successful review.
+
+        Operator-INTERNAL only (cortex#547): provider dollars (tokens x list
+        rate), never the customer-facing credits meter, never in the rendered
+        PR comment. Reads the cost the handler attached under the ``cost`` key
+        and the PR identity from the webhook payload, writes one append-only
+        row (``ON CONFLICT DO NOTHING`` — idempotent on redelivery), and emits
+        one ``review.cost`` structured log line.
+
+        A non-review result, a result without a ``cost`` block, or an
+        unparseable PR payload is a visible skip (logged), not a job failure —
+        the review already succeeded, and failing it over cost bookkeeping
+        would be worse than recording the gap. A DB write error, by contrast,
+        propagates and fails the job: a database that cannot persist is a real
+        failure, not a degradation.
+        """
+
+        if result.get("review_mode") != "stateless":
+            return
+        cost = result.get("cost")
+        if not isinstance(cost, Mapping):
+            _log(
+                "review.cost_skipped",
+                job_id=job.job_id,
+                reason="no_cost_in_result",
+            )
+            return
+
+        from cortex.hosted.review_cost import (
+            ReviewCostError,
+            ReviewCostRecord,
+            review_cost_insert_sql,
+        )
+        from cortex.hosted.stateless_review import (
+            StatelessReviewError,
+            parse_pull_request_payload,
+        )
+
+        try:
+            event = parse_pull_request_payload(job.payload)
+            record = ReviewCostRecord(
+                tenant_id=event.tenant_id,
+                repo_full_name=f"{event.owner}/{event.repo}",
+                pr_number=event.pr_number,
+                head_sha=event.head_sha,
+                model_id=str(cost["model"]),
+                input_tokens=int(cost["input_tokens"]),
+                output_tokens=int(cost["output_tokens"]),
+                usd=float(cost["usd"]),
+                occurred_at=datetime.now(UTC),
+            )
+        except (StatelessReviewError, ReviewCostError, KeyError, TypeError, ValueError) as exc:
+            _log(
+                "review.cost_skipped",
+                job_id=job.job_id,
+                reason="unrecordable_cost",
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            return
+
+        row = self._conn.execute(
+            review_cost_insert_sql(), record.as_insert_parameters()
+        ).fetchone()
+        _log(
+            "review.cost",
+            job_id=job.job_id,
+            tenant=record.tenant_id,
+            repo=record.repo_full_name,
+            pr=record.pr_number,
+            head_sha=record.head_sha,
+            model=record.model_id,
+            input_tokens=record.input_tokens,
+            output_tokens=record.output_tokens,
+            usd=record.usd,
+            recorded=row is not None,
+        )
 
     def run(self, stop: threading.Event) -> None:
         """Poll until ``stop`` is set; recover stale claims between polls."""

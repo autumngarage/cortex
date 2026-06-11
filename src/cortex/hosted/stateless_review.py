@@ -276,15 +276,68 @@ class FetchedDecisionSource:
 
 
 @dataclass(frozen=True)
+class ReviewCost:
+    """Operator-INTERNAL cost of one review's model evaluation (cortex#547).
+
+    This is OUR provider dollars (tokens x provider list rate, from the
+    versioned price table), captured so we can understand our costs and price
+    the product to be profitable. It is **never** the customer-facing figure:
+    the customer meter is credits (docs/HOSTED-PRICING.md). It is not in the
+    rendered PR comment and not customer-visible; it surfaces only in the
+    worker's structured log and the internal cost ledger.
+
+    ``usd`` is the known cost when the transport reported tokens. On the
+    recorded-adapter path (offline replay) the live cost is exactly 0 by
+    definition (``CostBasis.RECORDED_PLAYBACK``); a transport that could not
+    report tokens leaves ``usd`` 0 with the token counts also 0 — the shape
+    is honest about what was (not) metered.
+    """
+
+    model: str
+    input_tokens: int
+    output_tokens: int
+    usd: float
+    call_count: int
+
+    def __post_init__(self) -> None:
+        if not self.model.strip():
+            raise StatelessReviewError("ReviewCost.model must not be empty")
+        for name, value in (
+            ("input_tokens", self.input_tokens),
+            ("output_tokens", self.output_tokens),
+            ("call_count", self.call_count),
+        ):
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                raise StatelessReviewError(f"ReviewCost.{name} must be a non-negative integer")
+        if (
+            isinstance(self.usd, bool)
+            or not isinstance(self.usd, int | float)
+            or self.usd < 0
+        ):
+            raise StatelessReviewError("ReviewCost.usd must be a non-negative number")
+
+    def as_payload(self) -> dict[str, Any]:
+        return {
+            "model": self.model,
+            "input_tokens": self.input_tokens,
+            "output_tokens": self.output_tokens,
+            "usd": self.usd,
+            "call_count": self.call_count,
+        }
+
+
+@dataclass(frozen=True)
 class StatelessReviewResult:
     """The advisory outcome of one stateless review — content-free by tier.
 
     ``comment_body`` is the rendered markdown either posted or (dry-run)
     returned for printing. ``finding_count`` and ``decision_count`` make the
     review's shape visible; ``posted`` / ``comment_id`` record whether and
-    where a comment landed. Nothing about the customer's decision *text* is
-    persisted by the stateless path — this object is the in-memory return, not
-    a stored row.
+    where a comment landed. ``cost`` is the operator-internal model cost of
+    this review (cortex#547) — provider dollars, never customer credits, and
+    never part of the rendered comment. Nothing about the customer's decision
+    *text* is persisted by the stateless path — this object is the in-memory
+    return, not a stored row.
     """
 
     comment_body: str
@@ -295,6 +348,7 @@ class StatelessReviewResult:
     no_decisions: bool
     comment_id: int | None = None
     comment_url: str | None = None
+    cost: ReviewCost | None = None
 
     def as_result_mapping(self) -> dict[str, Any]:
         """The JSON-serializable handler result (the worker stores this).
@@ -303,7 +357,9 @@ class StatelessReviewResult:
         deployed worker the result row is operational bookkeeping (job result),
         which docs/security.md names as the only durable stateless write. The
         body is the rendered advisory comment — derived from the customer's
-        public decision files, never their private decision graph.
+        public decision files, never their private decision graph. The ``cost``
+        key carries the operator-internal model cost (cortex#547) — provider
+        dollars for our pricing analysis, not a customer-visible figure.
         """
 
         return {
@@ -317,6 +373,7 @@ class StatelessReviewResult:
             "comment_id": self.comment_id,
             "comment_url": self.comment_url,
             "comment_body": self.comment_body,
+            "cost": None if self.cost is None else self.cost.as_payload(),
         }
 
 
@@ -672,8 +729,13 @@ def run_stateless_review(
         run_ledger=ledger,
         occurred_at=clock(),
     )
+    # Capture the operator-internal model cost from the router's own private
+    # ledger (cortex#547) — provider dollars, never customer credits. The
+    # `ledger` above is the evaluator's draft ledger; the cost of the actual
+    # routed call is recorded on the model router, read here via cost_summary.
+    cost = _capture_review_cost(model)
     body = _render_comment(outcome, pack, event)
-    return _post_or_return(client, event, config, body, outcome)
+    return _post_or_return(client, event, config, body, outcome, cost)
 
 
 def _render_comment(
@@ -691,12 +753,38 @@ def _render_comment(
     )
 
 
+def _capture_review_cost(model: EvaluateModel) -> ReviewCost | None:
+    """Read the operator-internal review cost from the model router (cortex#547).
+
+    The model the handler injects is a ``ModelRouter`` whose private ledger
+    accumulated the routed call's cost; ``cost_summary`` is its read-only
+    surface. A model without that property (a hand-rolled test stub) yields no
+    cost rather than a fabricated zero — the absence is visible, not silently
+    metered. The single review route folds the summary's (one) model id into a
+    single ``ReviewCost``; multiple models join with ``+`` so the row is still
+    attributable.
+    """
+
+    summary = getattr(model, "cost_summary", None)
+    if summary is None:
+        return None
+    model_label = "+".join(summary.model_ids) if summary.model_ids else "unknown"
+    return ReviewCost(
+        model=model_label,
+        input_tokens=summary.reported_input_tokens,
+        output_tokens=summary.reported_output_tokens,
+        usd=summary.known_usd_total,
+        call_count=summary.call_count,
+    )
+
+
 def _post_or_return(
     client: GithubReviewClient,
     event: PullRequestEvent,
     config: ReviewHandlerConfig,
     body: str,
     outcome: EvaluationOutcome,
+    cost: ReviewCost | None,
 ) -> StatelessReviewResult:
     finding_count = len(outcome.emitted)
     decision_count = len({emitted.decision_node_id for emitted in outcome.emitted})
@@ -708,6 +796,7 @@ def _post_or_return(
             dry_run=True,
             posted=False,
             no_decisions=False,
+            cost=cost,
         )
     identity = _upsert_comment(client, event, body)
     return StatelessReviewResult(
@@ -719,6 +808,7 @@ def _post_or_return(
         no_decisions=False,
         comment_id=identity["id"],
         comment_url=identity["html_url"],
+        cost=cost,
     )
 
 

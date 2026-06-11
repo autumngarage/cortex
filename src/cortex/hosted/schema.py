@@ -7,7 +7,7 @@ import re
 from cortex.hosted.ledger_events import LedgerEventType
 from cortex.hosted.scopes import ScopeType
 
-HOSTED_SCHEMA_VERSION = 7
+HOSTED_SCHEMA_VERSION = 8
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -627,6 +627,50 @@ CREATE INDEX IF NOT EXISTS jobs_status_idx
 COMMENT ON TABLE {schema}.jobs IS
     'Canonical hosted job queue (one substrate for every hosted background job type); workers claim via FOR UPDATE SKIP LOCKED.';
 
+-- v8 (cortex#547): OPERATOR-INTERNAL review cost ledger. One append-only row
+-- per successful hosted PR review recording OUR provider dollars (tokens x
+-- provider list rate), so we can understand cost and price to be profitable.
+-- This is NOT a customer surface and NOT the customer-facing credits meter
+-- (docs/HOSTED-PRICING.md) — it is internal pricing data. The unique
+-- idempotency key collapses webhook redeliveries on the same
+-- (tenant, repo, pr, head_sha, model) to one row (cortex.hosted.review_cost
+-- writes ON CONFLICT DO NOTHING). Append-only by construction: a re-price
+-- appends new rows under a new model regime, never rewrites history.
+CREATE TABLE IF NOT EXISTS {schema}.review_cost_records (
+    review_cost_record_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    repo_full_name text NOT NULL,
+    pr_number integer NOT NULL,
+    head_sha text NOT NULL,
+    model_id text NOT NULL,
+    input_tokens integer NOT NULL,
+    output_tokens integer NOT NULL,
+    usd numeric NOT NULL,
+    occurred_at timestamptz NOT NULL,
+    recorded_at timestamptz NOT NULL DEFAULT now(),
+    idempotency_key text NOT NULL,
+    CONSTRAINT review_cost_records_idempotency_key_unique UNIQUE (idempotency_key),
+    CONSTRAINT review_cost_records_tenant_pr_model_unique
+        UNIQUE (tenant_id, repo_full_name, pr_number, head_sha, model_id),
+    CHECK (repo_full_name <> ''),
+    CHECK (head_sha <> ''),
+    CHECK (model_id <> ''),
+    CHECK (pr_number > 0),
+    CHECK (input_tokens >= 0),
+    CHECK (output_tokens >= 0),
+    CHECK (usd >= 0),
+    CHECK (idempotency_key <> '')
+);
+
+CREATE INDEX IF NOT EXISTS review_cost_records_tenant_time_idx
+    ON {schema}.review_cost_records (tenant_id, occurred_at);
+
+CREATE INDEX IF NOT EXISTS review_cost_records_model_idx
+    ON {schema}.review_cost_records (model_id, occurred_at);
+
+COMMENT ON TABLE {schema}.review_cost_records IS
+    'OPERATOR-INTERNAL review cost ledger (provider dollars, not customer credits). Append-only; one row per successful review keyed by (tenant, repo, pr, head_sha, model). Do not expose to customers.';
+
 CREATE INDEX IF NOT EXISTS ledger_events_tenant_time_idx
     ON {schema}.ledger_events (tenant_id, occurred_at, event_id);
 
@@ -768,6 +812,28 @@ DROP TRIGGER IF EXISTS source_spans_no_delete ON {schema}.source_spans;
 CREATE TRIGGER source_spans_no_delete
     BEFORE DELETE ON {schema}.source_spans
     FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_provenance_mutation();
+
+-- v8 (cortex#547): the internal review cost ledger is append-only too — a
+-- re-price appends new rows, never rewrites a recorded cost.
+CREATE OR REPLACE FUNCTION {schema}.prevent_review_cost_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION 'review_cost_records is append-only; attempted %', TG_OP
+        USING ERRCODE = '55000';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS review_cost_records_no_update ON {schema}.review_cost_records;
+CREATE TRIGGER review_cost_records_no_update
+    BEFORE UPDATE ON {schema}.review_cost_records
+    FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_review_cost_mutation();
+
+DROP TRIGGER IF EXISTS review_cost_records_no_delete ON {schema}.review_cost_records;
+CREATE TRIGGER review_cost_records_no_delete
+    BEFORE DELETE ON {schema}.review_cost_records
+    FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_review_cost_mutation();
 
 COMMENT ON TABLE {schema}.ledger_events IS
     'Canonical append-only hosted Cortex ledger. Mutations are forbidden; corrections append new events.';
