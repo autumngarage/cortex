@@ -81,6 +81,7 @@ from cortex.hosted.lanes import LanePolicyValidationError
 from cortex.hosted.ledger_events import LedgerEventValidationError
 from cortex.hosted.migrations import HostedMigrationError
 from cortex.hosted.model_registry import RegistryValidationError
+from cortex.hosted.ops_metrics import OpsMetricsError
 from cortex.hosted.provenance import ProvenanceValidationError
 from cortex.hosted.push import HostedPushError
 from cortex.hosted.quality_series import QualitySeriesValidationError
@@ -246,6 +247,12 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     LaneAssignmentError: DegradationMode.INVALID_INPUT_REJECTED,
     LanePolicyValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     LedgerEventValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # A malformed operator-internal ops-telemetry row (unknown job status,
+    # negative attempts, a finished_at preceding enqueued_at, blank model id) is
+    # rejected before any metric is computed (cortex#565) — the read-only ops
+    # report refuses to aggregate untrustworthy rows rather than emit a number
+    # it cannot stand behind, the same before-any-output rejection family.
+    OpsMetricsError: DegradationMode.INVALID_INPUT_REJECTED,
     ProvenanceValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     # An empty question is rejected before any normalization or retrieval —
     # nothing partial reaches the FTS leg (cortex#512).

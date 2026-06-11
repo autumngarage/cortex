@@ -29,6 +29,7 @@ from cortex.commands.journal import journal_group
 from cortex.commands.manifest import manifest_command
 from cortex.commands.migrate_state import migrate_state_command
 from cortex.commands.next import next_command
+from cortex.commands.ops_report import ops_report_command
 from cortex.commands.plan import plan_group
 from cortex.commands.promote import promote_command
 from cortex.commands.push import push_command
@@ -176,6 +177,7 @@ cli.add_command(update_command)
 cli.add_command(sync_command)
 cli.add_command(usage_command)
 cli.add_command(cost_report_command)
+cli.add_command(ops_report_command)
 
 
 if __name__ == "__main__":
