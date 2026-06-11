@@ -103,6 +103,16 @@ that loop ran end-to-end on 2026-06-10 — derive → confirm → cited answer �
 the first real contradiction caught with citation; the transcript lives in
 [`docs/walkthrough-pe0.md`](./docs/walkthrough-pe0.md).
 
+**Cortex does not host your team's memory.** Your decisions live in your own
+repository, in the open `.cortex/` format you own and can read without us. The
+default hosted mode is *stateless*: when a pull request opens, Cortex fetches
+your `.cortex/` files and the diff, evaluates in memory, posts a cited advisory
+comment, and forgets — nothing about your decisions or your code is persisted on
+our infrastructure. Storing the decision graph (for capturing Slack/meeting
+decisions and the feedback-learning loop) is an opt-in tier, on an isolation
+ladder that runs up to bring-your-own-database. Full statement:
+[`docs/security.md`](./docs/security.md).
+
 The canonical hosted pricing and cost model lives in
 [`docs/HOSTED-PRICING.md`](./docs/HOSTED-PRICING.md). In short: deterministic
 checks are part of the platform entitlement; LLM-backed GitHub and Slack actions
