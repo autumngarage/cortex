@@ -5,7 +5,8 @@
     "2026-06-10: initial baselines from the 6-fixture real-history corpus (cortex#338); presence computed via the model-free fixture-local retrieval emulation",
     "2026-06-10: glob/directory scope matching (cortex#484) lifted the three structural misses; 6-fixture aggregate promoted 0.5 -> 1.0 (fix/grader-and-presence)",
     "2026-06-10: corpus grown 6 -> 14 (4 sibling-repo real-history + 4 simlab promotions, cortex#339); entries added at honestly-measured presence (feat/corpus-growth)",
-    "2026-06-10: bundle merge re-measurement over the union (glob fix x 14 fixtures); this entry's values are the recomputed floor"
+    "2026-06-10: bundle merge re-measurement over the union (glob fix x 14 fixtures); this entry's values are the recomputed floor",
+    "2026-06-11: recall-v3 recall lanes (cortex#556) re-measured over the 14-fixture union — repo-wide (unscoped) inclusion + content-trigger matching are strictly additive, so every previously-present decision stays present; aggregate held at 1.0 (no fixture regressed, none newly available to promote). The lanes lift recall for the live stateless reviewer's repo-wide-rule class, proven by the unit-level touchstone-import regression in test_hosted_replay_runner.py; the strict corpus composition pins (1 synthetic, fixed per-repo counts in test_hosted_eval_corpus.py) keep that synthetic repo-wide case out of this model-free presence corpus."
   ],
   "presence_by_fixture": {
     "consolidated-journal-entries-001": true,

@@ -80,6 +80,10 @@ from types import MappingProxyType
 from typing import Any
 
 from cortex.hosted.ask_ledger import CitedSourceSpan
+from cortex.hosted.content_match import (
+    content_reason_code,
+    shared_content_terms,
+)
 from cortex.hosted.context_assembly import (
     OVER_BUDGET_OMISSION_KEY,
     TokenEstimator,
@@ -130,7 +134,54 @@ REPLAY_REPORT_SCHEMA_VERSION = 2
 # v2 (cortex#484): glob-granularity structural matching — a decision scoped
 # 'src/api/**' now matches changed path 'src/api/handlers/foo.py', mirroring
 # the reversed-LIKE mechanism the hosted SQL surfaces ship.
-FIXTURE_LOCAL_RETRIEVAL_CONFIG_VERSION = "fixture-local-structural-v2"
+# recall-v3 (cortex#556): two recall lanes ADDED on top of the structural
+# lane — repo-wide decisions (no structural scope) always enter the pack at a
+# small base score, and a decision sharing a specific term with the diff's
+# added content matches by content even without a path scope. The version
+# bump is a hard data boundary: presence/ranking under -recall-v3 is never
+# silently comparable with the -structural-v2 regime.
+FIXTURE_LOCAL_RETRIEVAL_CONFIG_VERSION = "fixture-local-recall-v3"
+
+# The deterministic base score a repo-wide decision (no structural scope, or
+# an explicit repo-global marker) earns just for being repo-wide (cortex#556).
+# It is strictly positive so the decision clears the default ``score_floor``
+# (0.0) and is never suppressed, and strictly below the smallest structural
+# weight (CHANNEL_REF = 55, see STRUCTURAL_SCOPE_WEIGHTS) so a structurally
+# on-point decision always outranks a merely-repo-wide one. A repo-wide rule
+# applies to every diff; this score puts it in the pack while keeping it
+# behind on-point matches.
+REPO_GLOBAL_BASE_SCORE = 1.0
+
+# Per-term weight for a content-trigger match (cortex#556). Above the
+# repo-global base (so a content-matched decision outranks a bare repo-wide
+# one) and — bounded by ``MAX_CONTENT_MATCH_TERMS`` — below an exact PATH
+# match (100) so a structurally on-point decision still ranks first.
+CONTENT_MATCH_TERM_WEIGHT = 8.0
+
+# The cap on how many shared terms contribute to a content score. Bounds the
+# content contribution to 5 * 8 = 40 (== scopes.SEMANTIC_MATCH_WEIGHT, well
+# under the PATH/GLOB/SYMBOL structural weights), so content recall never
+# overtakes a structural match no matter how many incidental terms two texts
+# share. Derived from the smallest structural weight; asserted in tests.
+MAX_CONTENT_MATCH_TERMS = 5
+
+# The reason code stamped on a repo-wide (unscoped) decision's inclusion.
+REPO_GLOBAL_REASON_CODE = "scope:repo-global"
+
+# The explicit marker a derive step may attach to declare a decision
+# repo-wide even when it carries an incidental scope: a GLOB scope whose
+# normalized value is the universal pattern ``**`` (matches every path). The
+# repo-wide lane treats such a scope as the repo-global signal AND skips it in
+# the structural lane (a literal ``**`` would otherwise glob-match every
+# changed path and masquerade as a real structural hit). Decisions with no
+# scopes at all are repo-wide implicitly; this marker is the explicit path.
+_REPO_GLOBAL_MARKER_GLOB = "**"
+
+
+def _is_repo_global_marker(scope_type: ScopeType, normalized_value: str) -> bool:
+    """True when a scope is the explicit repo-global marker (cortex#556)."""
+
+    return scope_type is ScopeType.GLOB and normalized_value == _REPO_GLOBAL_MARKER_GLOB
 
 # The classes the canonical Stage 0 registry marks shadow (cortex#373/#374):
 # asked for so precision is measurable, captured instead of emitted. The
@@ -680,21 +731,44 @@ def build_fixture_candidate_pack(
 
     1. Decisions whose status is not reviewable (mirroring the SQL
        ``statuses`` filter) are omitted at stage ``status_filtered``.
-    2. Each remaining decision is scored by structural match: the sum of
-       structural scope weights for every decision scope that matches the
-       changed surface extracted from the fixture's patch via
-       ``diff_surface.extract_changed_surface``. A decision scope matches
-       exactly when its normalized ``(scope_type, value)`` appears in the
-       surface, contributing the surface scope's weight — or at glob
-       granularity (cortex#484) when a ``glob`` scope like ``src/api/**``
-       covers a changed path, contributing the GLOB weight with reason code
-       ``scope:glob:<glob>``. Glob semantics mirror the hosted SQL surfaces
-       exactly (``scopes.glob_matches_path``), and exact path (100) outranks
-       glob (98) via STRUCTURAL_SCOPE_WEIGHTS — the same precedence the SQL
-       fragments encode.
+    2. Each remaining decision is scored by THREE composing lanes (recall-v3,
+       cortex#556 — the two recall lanes ADD to the original structural lane,
+       they never remove a structural match):
+
+       a. **Structural lane** (the original): the sum of structural scope
+          weights for every decision scope that matches the changed surface
+          extracted from the fixture's patch via
+          ``diff_surface.extract_changed_surface``. A decision scope matches
+          exactly when its normalized ``(scope_type, value)`` appears in the
+          surface, contributing the surface scope's weight — or at glob
+          granularity (cortex#484) when a ``glob`` scope like ``src/api/**``
+          covers a changed path, contributing the GLOB weight with reason
+          code ``scope:glob:<glob>``. Glob semantics mirror the hosted SQL
+          surfaces exactly (``scopes.glob_matches_path``), and exact path
+          (100) outranks glob (98) via STRUCTURAL_SCOPE_WEIGHTS.
+       b. **Repo-wide lane** (cortex#556): a decision with NO structural
+          scope (empty after stripping the repo-global marker) is a repo-wide
+          rule — it applies to every diff. It earns ``REPO_GLOBAL_BASE_SCORE``
+          with reason code ``scope:repo-global``, strictly above the floor so
+          it is NEVER suppressed and strictly below any structural match so it
+          ranks after on-point decisions. This is the lane that keeps a
+          CLAUDE.md "never import touchstone" rule in the pack for every diff.
+       c. **Content-trigger lane** (cortex#556): a specific term shared
+          between the diff's ADDED content and the decision text contributes
+          ``CONTENT_MATCH_TERM_WEIGHT`` per term (capped at
+          ``MAX_CONTENT_MATCH_TERMS``) with reason code ``content:<term>``.
+          A diff that adds ``import touchstone`` shares the specific term
+          ``touchstone`` with the touchstone-forbidding decision and retrieves
+          it even without a path scope. The specificity gate
+          (``content_match.is_specific_term``) keeps generic tokens like
+          ``code`` or ``import`` from ever matching.
+
     3. Decisions scoring at or below ``score_floor`` are omitted at stage
-       ``suppressed_below_floor`` — structurally unmatched decisions are
-       exactly what live retrieval would not have returned.
+       ``suppressed_below_floor``. With the repo-wide lane, a repo-wide
+       decision always scores above the default floor (0.0); only a decision
+       that is neither structurally relevant, nor repo-wide, nor
+       content-matched falls below the floor — exactly what live retrieval
+       would not have returned.
     4. Survivors rank by (score desc, decision_id asc — the deterministic
        tiebreak) and the pack keeps the top ``limit``; the rest are omitted
        at stage ``over_limit``.
@@ -728,6 +802,16 @@ def build_fixture_candidate_pack(
     )
     glob_weight = STRUCTURAL_SCOPE_WEIGHTS[ScopeType.GLOB]
 
+    # Content-trigger lane source (cortex#556): the diff's CODE identifiers
+    # only — imported package roots, defined symbols, changed config keys.
+    # NOT raw prose, so a documentation edit cannot content-match by sharing a
+    # common domain word. The decision side matches against decision text.
+    diff_code_identifiers = (
+        *surface.packages,
+        *surface.symbols,
+        *surface.config_keys,
+    )
+
     node_by_decision: dict[str, str] = {}
     omission_stage: dict[str, OmissionStage] = {}
     scored: list[tuple[float, FixtureDecision, tuple[str, ...]]] = []
@@ -740,12 +824,24 @@ def build_fixture_candidate_pack(
             omission_stage[decision.decision_id] = OmissionStage.STATUS_FILTERED
             continue
         eligible_count += 1
-        matched_weights: list[int] = []
+        matched_weights: list[float] = []
         reasons: set[str] = set()
+        # --- Structural lane (original) --------------------------------
+        # Track whether the decision carries any scope the structural lane
+        # could ever match (a non-marker scope). A decision with only the
+        # repo-global marker, or no scopes at all, is repo-wide.
+        has_structural_scope = False
+        explicit_repo_global = False
         for scope in decision.scopes:
+            if _is_repo_global_marker(scope.scope_type, scope.normalized_value):
+                # The explicit marker is not a structural hit; it flags
+                # repo-wide and is skipped so it never glob-matches a path.
+                explicit_repo_global = True
+                continue
+            has_structural_scope = True
             exact = surface_index.get((scope.scope_type, scope.normalized_value))
             if exact is not None:
-                matched_weights.append(exact.structural_weight)
+                matched_weights.append(float(exact.structural_weight))
                 reasons.add(exact.reason_code)
                 continue
             # Glob granularity (cortex#484): same semantics as the SQL
@@ -754,8 +850,32 @@ def build_fixture_candidate_pack(
                 glob_matches_path(scope.normalized_value, path)
                 for path in surface_paths
             ):
-                matched_weights.append(glob_weight)
+                matched_weights.append(float(glob_weight))
                 reasons.add(scope_reason_code(ScopeType.GLOB, scope.normalized_value))
+
+        # --- Repo-wide lane (cortex#556) -------------------------------
+        # A decision with no structural scope (or only the explicit marker)
+        # is a repo-wide rule: it applies to every diff and must always be in
+        # the pack. The small base score keeps it below any structural match
+        # but above the floor so it is never suppressed.
+        is_repo_wide = explicit_repo_global or not has_structural_scope
+        if is_repo_wide:
+            matched_weights.append(REPO_GLOBAL_BASE_SCORE)
+            reasons.add(REPO_GLOBAL_REASON_CODE)
+
+        # --- Content-trigger lane (cortex#556) -------------------------
+        # A specific code identifier the diff introduced (import/symbol/config
+        # key) that the decision text names matches by content even without a
+        # path scope. This is what makes a `+import touchstone` diff retrieve a
+        # touchstone-forbidding decision. The diff side is code identifiers
+        # only (not prose), and the specificity gate inside
+        # `shared_content_terms` keeps generic tokens from spurious matches.
+        for term in shared_content_terms(
+            diff_code_identifiers, decision.decision_text
+        )[:MAX_CONTENT_MATCH_TERMS]:
+            matched_weights.append(CONTENT_MATCH_TERM_WEIGHT)
+            reasons.add(content_reason_code(term))
+
         score = float(sum(matched_weights))
         if score <= score_floor:
             omission_stage[decision.decision_id] = OmissionStage.SUPPRESSED_BELOW_FLOOR

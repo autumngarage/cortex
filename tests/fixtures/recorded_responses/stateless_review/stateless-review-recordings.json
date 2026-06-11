@@ -3,6 +3,22 @@
   "evaluate": [
     {
       "degraded_reasons": [],
+      "findings": [],
+      "input_hash": "17e94261642aca4c64fd976f3c944da8f68b916ec68e46cf8672da1cb4931467",
+      "model_id": "anthropic/claude-fable-5",
+      "omitted_decision_count": 0,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee"
+    },
+    {
+      "degraded_reasons": [],
+      "findings": [],
+      "input_hash": "9bad793714b10d93f021e488f1391a3ae0dcac52fb24735487a0377a446a5a1c",
+      "model_id": "anthropic/claude-fable-5",
+      "omitted_decision_count": 0,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee"
+    },
+    {
+      "degraded_reasons": [],
       "findings": [
         {
           "cited_span_hashes": [
@@ -15,23 +31,7 @@
           "summary": "The diff adds `import sentinel` to src/widgets/core.py, directly reversing the confirmed compose-by-file-contract decision."
         }
       ],
-      "input_hash": "2263a758d59eb98c964a36c39205b509bb6fdb424c3a0d308f29e9b719cbada0",
-      "model_id": "anthropic/claude-fable-5",
-      "omitted_decision_count": 0,
-      "prompt_version": "review-evaluate/v1+13046b32c6ee"
-    },
-    {
-      "degraded_reasons": [],
-      "findings": [],
-      "input_hash": "c2fe0effe604f478a987d1bd6abe4aa0e34a2f8ba307a80692348e02c9cb5ae4",
-      "model_id": "anthropic/claude-fable-5",
-      "omitted_decision_count": 0,
-      "prompt_version": "review-evaluate/v1+13046b32c6ee"
-    },
-    {
-      "degraded_reasons": [],
-      "findings": [],
-      "input_hash": "cd6eae520125524f907339236857d3cc12984782648b595e6f35934a33d70a9e",
+      "input_hash": "c23288fa2ac56682e739ae01182a290670c0801dc993636f348c0af2d69ee2d9",
       "model_id": "anthropic/claude-fable-5",
       "omitted_decision_count": 0,
       "prompt_version": "review-evaluate/v1+13046b32c6ee"
