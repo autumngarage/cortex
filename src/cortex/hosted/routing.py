@@ -268,6 +268,45 @@ class ProviderAdapter(Protocol):
 
 
 @dataclass(frozen=True)
+class RouterCostSummary:
+    """Read-only snapshot of one router's accumulated cost (cortex#547).
+
+    The router holds its :class:`~cortex.hosted.cost.RunLedger` privately so
+    nothing downstream can mutate the in-run accounting; this frozen value
+    object is the narrow read surface a caller needs to surface what a routed
+    pass cost. ``known_usd_total`` excludes unknown-cost calls (the transport
+    could not report tokens) from the sum but counts them visibly in
+    ``unknown_cost_call_count`` — never folding an unknown cost in as zero.
+
+    This is OPERATOR-INTERNAL cost (provider dollars), the same basis the
+    versioned price table owns; it is not a customer-facing credits figure.
+    """
+
+    model_ids: tuple[str, ...]
+    call_count: int
+    reported_input_tokens: int
+    reported_output_tokens: int
+    known_usd_total: float
+    unknown_cost_call_count: int
+
+    def __post_init__(self) -> None:
+        for name, value in (
+            ("call_count", self.call_count),
+            ("reported_input_tokens", self.reported_input_tokens),
+            ("reported_output_tokens", self.reported_output_tokens),
+            ("unknown_cost_call_count", self.unknown_cost_call_count),
+        ):
+            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+                raise RoutingError(f"{name} must be a non-negative integer")
+        if (
+            isinstance(self.known_usd_total, bool)
+            or not isinstance(self.known_usd_total, int | float)
+            or self.known_usd_total < 0
+        ):
+            raise RoutingError("known_usd_total must be a non-negative number")
+
+
+@dataclass(frozen=True)
 class RouteFallbackRecord:
     """Visible record of one fallback: what failed, what ran instead."""
 
@@ -317,6 +356,30 @@ class ModelRouter:
     @property
     def fallback_records(self) -> tuple[RouteFallbackRecord, ...]:
         return tuple(self._fallback_records)
+
+    @property
+    def cost_summary(self) -> RouterCostSummary:
+        """Read-only snapshot of this router's accumulated cost (cortex#547).
+
+        Derived from the private ledger; the mutable ledger itself is never
+        exposed. This is the seam the stateless reviewer reads to surface what
+        a review cost (operator-internal provider dollars, not customer
+        credits).
+        """
+
+        ledger = self._ledger
+        models = sorted({entry.record.model_id for entry in ledger.entries})
+        reported = [
+            entry.record.usage for entry in ledger.entries if entry.record.usage is not None
+        ]
+        return RouterCostSummary(
+            model_ids=tuple(models),
+            call_count=ledger.call_count,
+            reported_input_tokens=sum(usage.input_tokens for usage in reported),
+            reported_output_tokens=sum(usage.output_tokens for usage in reported),
+            known_usd_total=ledger.known_usd_total,
+            unknown_cost_call_count=ledger.unknown_cost_call_count,
+        )
 
     def derive(self, request: DeriveRequest) -> DeriveResult:
         result = self._run(TaskKind.DERIVE, request)

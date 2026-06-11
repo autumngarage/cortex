@@ -222,3 +222,15 @@ Hosted Cortex needs:
 
 The invariant: deterministic Context CI should feel included and predictable;
 semantic AI work should feel deliberately metered, explainable, and capped.
+
+## Internal cost vs. customer credits (cortex#547)
+
+Everything above is the **customer-facing** meter: credits, with margin, what
+the customer sees and pays. Separate from it — and never shown to a customer —
+is our **internal** cost-understanding view: the actual provider dollars each
+review costs us (tokens x provider list rate). The internal tool that reports
+it is `cortex cost-report`, which aggregates the append-only
+`cortex_hosted.review_cost_records` ledger (total reviews, total USD, mean /
+median / p95 USD per review, by model). It exists so we can size cost and set
+credit prices to be profitable; its header states plainly that it is provider
+dollars, not customer credits, and must not be exposed.

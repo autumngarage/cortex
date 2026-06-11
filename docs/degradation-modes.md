@@ -396,6 +396,25 @@ mode skip citation or visibility boundaries.
   (the review is advisory-only, exit-equivalent to success). The stateless
   path touches no database: the repo is the store (`docs/security.md`).
 
+### Internal review cost ledger registration (2026-06-11, cortex#547)
+
+- `review_cost.ReviewCostError` -> `invalid_input_rejected`: a malformed
+  operator-internal review cost record (non-UUID tenant id, non-positive PR
+  number, negative token counts, blank model id, naive `occurred_at`) is
+  rejected at construction, before any row is written to the internal cost
+  ledger (`cortex_hosted.review_cost_records`) — the same before-any-write
+  rejection family as the other validation errors. The boundary that matters
+  here is the internal/customer split: this ledger records OUR provider
+  dollars (tokens x provider list rate, from the versioned price table) so we
+  can understand cost and price to be profitable. It is **operator-internal**:
+  never exposed to a customer surface, never billed, never the customer-facing
+  credits meter (`docs/HOSTED-PRICING.md`). Note what does *not* raise: in the
+  worker, a successful review whose result carries no `cost` block, or whose PR
+  payload cannot be parsed, is a visible `review.cost_skipped` log line — not a
+  job failure (the review already succeeded; failing it over cost bookkeeping
+  would be worse). A database write error, by contrast, propagates and fails
+  the job, because a database that cannot persist is a real failure.
+
 ### Remediation hints (2026-06-10, cortex#516)
 
 Errors are the onboarding surface of a fail-closed product: a refusal that

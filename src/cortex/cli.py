@@ -18,6 +18,7 @@ from cortex.commands._auto_sync import (
 from cortex.commands.ask import ask_command
 from cortex.commands.check_triggers import check_triggers_command
 from cortex.commands.confirm import candidates_group
+from cortex.commands.cost_report import cost_report_command
 from cortex.commands.derive import derive_command
 from cortex.commands.doctor import doctor_command
 from cortex.commands.fleet import fleet_group
@@ -174,6 +175,7 @@ cli.add_command(plan_group)
 cli.add_command(update_command)
 cli.add_command(sync_command)
 cli.add_command(usage_command)
+cli.add_command(cost_report_command)
 
 
 if __name__ == "__main__":

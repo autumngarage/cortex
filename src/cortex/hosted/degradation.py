@@ -87,6 +87,7 @@ from cortex.hosted.quality_series import QualitySeriesValidationError
 from cortex.hosted.question_normalization import QuestionNormalizationError
 from cortex.hosted.recorded_responses import RecordedResponseError
 from cortex.hosted.replay_runner import ReplayError
+from cortex.hosted.review_cost import ReviewCostError
 from cortex.hosted.route_comparison import RouteComparisonValidationError
 from cortex.hosted.routing import (
     ClaudeCliOutputError,
@@ -253,6 +254,11 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # ReplayError's marquee failure is a missing recorded response: the replay
     # runner refuses to fall back to a live model call (cortex#336).
     ReplayError: DegradationMode.FAIL_CLOSED_REFUSAL,
+    # A malformed operator-internal review cost record (bad tenant UUID,
+    # negative tokens, blank model id) is rejected before any row is written to
+    # the internal cost ledger (cortex#547) — nothing partial is persisted, the
+    # same before-any-write rejection family as the other validation errors.
+    ReviewCostError: DegradationMode.INVALID_INPUT_REJECTED,
     ScopeValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     # A github.pull_request webhook body missing the installation/repo/PR
     # fields the stateless reviewer needs to fetch and cite a review is

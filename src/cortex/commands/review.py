@@ -153,17 +153,41 @@ REVIEW_PROMPT_VERSION = REVIEW_EVALUATE_PROMPT.prompt_version
 
 REVIEW_ACTOR = ActorRef(actor_type="cli", actor_id="cortex-review")
 
-# The local claude CLI transport is subscription-authenticated: per-call USD
-# is not metered at this boundary, and pretending otherwise would be silent
-# drift. The version string names that regime; deployments with metered
-# pricing supply their own table (cortex#335 owns the cost unit).
+# INTERNAL cost basis (cortex#547). This price table is OPERATOR-INTERNAL: it
+# prices OUR real provider dollars (tokens x provider list rate) so we can
+# understand cost and price the product to be profitable. It is NOT a customer
+# price and never reaches a customer surface — the customer-facing meter is
+# credits (docs/HOSTED-PRICING.md), a separate concern.
+#
+# Two regimes live in this one table because both transports can serve the
+# evaluate route:
+#   - the local claude CLI transport is subscription-authenticated, so its
+#     per-call USD is not metered at this boundary — priced at $0, and the
+#     version string still says "internal cost" because that $0 is itself a
+#     cost fact about the CLI regime;
+#   - the api-http judge model (DEFAULT_REVIEW_API_MODEL, the headless server
+#     path) IS metered: real Anthropic tokens x published Sonnet list rates.
+# Pricing the CLI but leaving the api model unpriced was the regression
+# (cortex#547): ModelPriceTable.price_for raised "unpriced call" on the server
+# path, so the live worker could not record what its review actually cost.
+# These rates are our internal cost basis, config-driven later (#335/#547) —
+# not a customer price.
+REVIEW_INTERNAL_SONNET_USD_PER_MILLION_INPUT = 3.0
+REVIEW_INTERNAL_SONNET_USD_PER_MILLION_OUTPUT = 15.0
 REVIEW_PRICE_TABLE = ModelPriceTable(
-    version="cortex-review-unmetered-v1",
+    version="cortex-review-internal-cost-v1",
     prices=(
         ModelPrice(
             model_id=REVIEW_CLAUDE_MODEL_ID,
             usd_per_million_input_tokens=0.0,
             usd_per_million_output_tokens=0.0,
+        ),
+        # Our internal cost basis for the api-http judge model (provider list
+        # price). Internal cost, not a customer price — see the comment above.
+        ModelPrice(
+            model_id=f"anthropic/{DEFAULT_REVIEW_API_MODEL}",
+            usd_per_million_input_tokens=REVIEW_INTERNAL_SONNET_USD_PER_MILLION_INPUT,
+            usd_per_million_output_tokens=REVIEW_INTERNAL_SONNET_USD_PER_MILLION_OUTPUT,
         ),
     ),
 )
