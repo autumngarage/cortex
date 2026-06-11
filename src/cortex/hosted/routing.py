@@ -1030,9 +1030,30 @@ def _excerpt(text: str) -> str:
     return cleaned[:_OUTPUT_EXCERPT_CHARS] + "…"
 
 
+def _strip_code_fence(text: str) -> str:
+    """Unwrap a single markdown code fence if the model wrapped its JSON.
+
+    The prompt asks for raw JSON, and the claude CLI obeys, but the Messages
+    API transport sometimes returns a ```json ... ``` fenced block regardless.
+    The contract is the JSON inside the fence, so strip one leading/trailing
+    fence; raw (unfenced) output passes through unchanged.
+    """
+
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return text
+    first_newline = stripped.find("\n")
+    if first_newline == -1:
+        return text
+    inner = stripped[first_newline + 1 :].rstrip()
+    if inner.endswith("```"):
+        inner = inner[:-3].rstrip()
+    return inner
+
+
 def _json_object(text: str, *, context: str) -> Mapping[str, Any]:
     try:
-        parsed = json.loads(text)
+        parsed = json.loads(_strip_code_fence(text))
     except json.JSONDecodeError as exc:
         raise ClaudeCliOutputError(
             f"{context} is not valid JSON ({exc}); first bytes: {_excerpt(text)}"
