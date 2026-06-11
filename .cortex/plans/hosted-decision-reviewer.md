@@ -16,11 +16,24 @@ Cites: journal/2026-06-09-hosted-decision-reviewer-plan-adopted, journal/2026-06
 
 ## Pickup pointer
 
-- **Current wave — Stage 0 Wave 8/9 tail + gate:** #322/#326/#338/#367/
-  #368/#373/#374/#376/#339, then #450 batch replay -> #378 hand-grading ->
-  #337 verdict.
-- **Stage 1 frontier:** #470 API shell, #471 worker, #473/#474 ops, #469/#475
-  env docs, #517 server transport.
+- **STAGE 2 IS LIVE (2026-06-11):** Compass Review (the hosted reviewer, GitHub
+  App id 4023580, installed on 3 orgs) is deployed on Railway and POSTING —
+  caught 3 cited `contradicts-prior-decision` findings on PR #561 as
+  `compass-review[bot]`, and the feedback flywheel turned (👍 + reply captured
+  to the replay-keyed `review_feedback_events` ground-truth corpus). Schema v9
+  on compass. Worker live: dry-run off, token budget 32k, api-http model route
+  (`anthropic/claude-sonnet-4-6` via the `ANTHROPIC_API` shared key). See
+  [`journal/2026-06-11-compass-review-live-and-flywheel.md`](../journal/2026-06-11-compass-review-live-and-flywheel.md).
+- **NEXT — the flywheel actuators:** `cortex precision-report` (#395, success
+  rate from feedback), scheduled reaction polling, sentiment classification
+  (#549), real installation→tenant resolution (#386, the static env mapping is
+  dogfood-only), the Touchstone babysit loop (touchstone#455, now unblocked),
+  then promote/auto-demote by precision (#413/#415), rot alarms (#423), and the
+  security tiers (#530-#544) before any external tenant.
+- **Stage 0 tail (still open, lower priority now):** #322/#326/#338/#367/#368/
+  #373(done via #556)/#374/#376/#339; #450/#378/#337 quality-gate sequence.
+- **Stage 1 done bits:** API shell #470, worker #471, server transport #517 all
+  live; remaining ops #473/#474, env docs #469/#475, security #530-#544.
 - **Stage 0 tracker:** [cortex#445](https://github.com/autumngarage/cortex/issues/445).
   Master tracker: [cortex#444](https://github.com/autumngarage/cortex/issues/444).
 - **Dispatch rule:** every open product issue carries `alchemist-skip` (applied
