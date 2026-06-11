@@ -50,8 +50,18 @@ semantic = [
 # standalone-boundary rule, and the brew formula stays dependency-light.
 # cortex.hosted.db imports psycopg lazily and raises a visible HostedDbError
 # naming `pip install 'cortex[hosted]'` when the driver is absent.
+#
+# pyjwt[crypto] (cortex#386): GitHub App auth REQUIRES an RS256-signed JWT to
+# exchange for installation tokens. RS256 needs RSA signing over the App
+# private key; hand-rolling that against `cryptography` primitives is strictly
+# worse than depending on a vetted, widely audited JWT library. PyJWT is a
+# crypto/auth primitive, NOT a model/vendor SDK, so the cortex#348
+# vendor-boundary discipline (tests/test_vendor_boundary.py) does not apply —
+# it bans LLM provider SDKs, not RS256 signing. Like psycopg, it loads lazily
+# inside github_app_auth so the core CLI install stays dependency-free.
 hosted = [
     "psycopg[binary]>=3.1,<4",
+    "pyjwt[crypto]>=2.8,<3",
 ]
 
 [project.scripts]

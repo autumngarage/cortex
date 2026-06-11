@@ -350,6 +350,25 @@ mode skip citation or visibility boundaries.
   job row exists. Signature mismatches are not raised at all — they are
   answered 401 with no detail about which part failed.
 
+### Stage 2 GitHub App auth registrations (2026-06-10, cortex#386)
+
+- `github_app_auth.GithubAuthConfigError` -> `invalid_input_rejected`: a
+  missing, blank, non-numeric `GITHUB_APP_ID`, or a missing/blank/non-PEM
+  `GITHUB_APP_PRIVATE_KEY` is rejected at `GithubAppConfig` construction —
+  before any App-JWT is signed or any token exchanged. The refusal names the
+  variable and carries the `github_app_credentials_missing` remediation; a
+  half-configured App never mints a token. (Mirrors `ServiceConfigError`: a
+  half-understood environment never serves traffic.)
+- `github_app_auth.GithubApiError` -> `fail_closed_refusal`: a GitHub REST
+  call (installation token exchange, file/diff read, comment post/update/list)
+  that is refused with a non-retryable 4xx, or that exhausts bounded retries
+  on a 403/429 secondary-rate-limit or 5xx, is refused — carrying the HTTP
+  status and a sanitized body excerpt. The installation token (a secret)
+  never appears in any message or log line; the `github_api_request_failed`
+  remediation names the status and the App's Contents:read / PullRequests:write
+  scopes. A 404 on `get_file_contents` is *not* a failure — it is the
+  documented "file absent at this ref" answer and returns `None`.
+
 ### Remediation hints (2026-06-10, cortex#516)
 
 Errors are the onboarding surface of a fail-closed product: a refusal that

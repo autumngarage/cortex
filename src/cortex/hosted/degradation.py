@@ -63,6 +63,13 @@ from cortex.hosted.evaluator import EvaluatorValidationError, UncitedFindingErro
 from cortex.hosted.event_ordering import EventOrderingError
 from cortex.hosted.extractors import ExtractorError
 from cortex.hosted.finding_render import FindingRenderError
+from cortex.hosted.github_app_auth import (
+    GITHUB_API_REMEDIATION,
+    GITHUB_APP_CREDENTIALS_REMEDIATION,
+    GithubApiError,
+    GithubAppAuthError,
+    GithubAuthConfigError,
+)
 from cortex.hosted.graph_rebuild import GraphRebuildError
 from cortex.hosted.graph_snapshot import GraphSnapshotValidationError
 from cortex.hosted.graph_writes import GraphWriteValidationError
@@ -178,6 +185,17 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # boundary.
     FindingRenderError: DegradationMode.FAIL_CLOSED_REFUSAL,
     FixtureValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # GitHub App auth (cortex#386). A missing/blank/non-PEM credential is
+    # rejected before any signing or HTTP call (mirrors ServiceConfigError);
+    # a REST call that fails after bounded retries or a refusing 4xx/5xx is a
+    # fail-closed refusal carrying the status and a sanitized context — the
+    # installation token never appears in either message. The
+    # GithubAppAuthError base is never raised directly (concrete subclasses
+    # carry the behavior), but it is registered as a conservative refusal so
+    # the family is always classifiable and the per-type guardrail holds.
+    GithubAppAuthError: DegradationMode.FAIL_CLOSED_REFUSAL,
+    GithubApiError: DegradationMode.FAIL_CLOSED_REFUSAL,
+    GithubAuthConfigError: DegradationMode.INVALID_INPUT_REJECTED,
     # GraphRebuildError refuses a replay whose log material cannot fold into
     # a valid projection (missing contract keys, unknown nodes, key/hash
     # drift); no partial graph is ever returned.
@@ -363,6 +381,13 @@ REMEDIATION_BY_REASON: Mapping[str, str] = MappingProxyType(
         # string lives next to the adapter so the refusal message and this
         # table can never drift apart.
         "model_api_key_missing": API_KEY_REMEDIATION,
+        # The GitHub App credential env vars are unset/blank/non-PEM
+        # (cortex#386). The canonical hint string lives next to
+        # github_app_auth so the refusal message and this table cannot drift.
+        "github_app_credentials_missing": GITHUB_APP_CREDENTIALS_REMEDIATION,
+        # A GitHub REST call from the installation client was refused or
+        # exhausted bounded retries (cortex#386).
+        "github_api_request_failed": GITHUB_API_REMEDIATION,
     }
 )
 
