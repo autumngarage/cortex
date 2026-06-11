@@ -66,6 +66,11 @@ SERVICE_NAME = "cortex-api"
 # not ours. Anything larger is not a GitHub delivery.
 MAX_WEBHOOK_BODY_BYTES = 25 * 1024 * 1024
 
+# Per-request socket read timeout (seconds). A GitHub delivery completes in
+# well under this; a client that dribbles bytes to hold a thread open
+# (slowloris) is torn down at this bound.
+SOCKET_READ_TIMEOUT_SECONDS = 30
+
 
 @dataclass(frozen=True)
 class ApiResponse:
@@ -286,15 +291,28 @@ def build_server(
         # Avoid leaking the default Python/BaseHTTP server banner.
         server_version = SERVICE_NAME
         sys_version = ""
+        # Tear down stalled reads so a slow/dribbling client (slowloris)
+        # cannot pin a handler thread forever. The stdlib server is still
+        # expected to sit behind Railway's edge proxy in production; this is
+        # defense in depth, not a substitute for that proxy.
+        timeout = SOCKET_READ_TIMEOUT_SECONDS
 
         def do_GET(self) -> None:
             self._respond(b"")
 
         def do_POST(self) -> None:
-            raw_length = self.headers.get("Content-Length", "0")
+            raw_length = self.headers.get("Content-Length")
+            if raw_length is None:
+                self._write(ApiResponse(411, {"error": "Content-Length required"}))
+                return
             try:
                 length = int(raw_length)
             except ValueError:
+                self._write(ApiResponse(400, {"error": "malformed Content-Length"}))
+                return
+            # A negative length passes an upper-bound-only guard and turns
+            # rfile.read(length) into read-to-EOF, defeating the cap entirely.
+            if length < 0:
                 self._write(ApiResponse(400, {"error": "malformed Content-Length"}))
                 return
             if length > MAX_WEBHOOK_BODY_BYTES:
@@ -305,7 +323,9 @@ def build_server(
                     )
                 )
                 return
-            self._respond(self.rfile.read(length))
+            # Read at most the cap regardless of the declared length, so a
+            # mismatched/oversized stream can never buffer past the ceiling.
+            self._respond(self.rfile.read(min(length, MAX_WEBHOOK_BODY_BYTES)))
 
         def _respond(self, body: bytes) -> None:
             response = handle_request(
