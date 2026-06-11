@@ -282,7 +282,8 @@ def _pyjwt_signer(*, payload: Mapping[str, Any], private_key_pem: str) -> str:
             "install the hosted extra with `pip install 'cortex[hosted]'` "
             "(or `uv sync --extra hosted`)"
         ) from exc
-    return jwt.encode(dict(payload), private_key_pem, algorithm=_JWT_ALGORITHM)
+    token: str = jwt.encode(dict(payload), private_key_pem, algorithm=_JWT_ALGORITHM)
+    return token
 
 
 @dataclass(frozen=True)

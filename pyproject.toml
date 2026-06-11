@@ -148,9 +148,10 @@ warn_return_any = true
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-# psycopg ships in the optional "hosted" extra; environments without it must
-# type-check identically to environments with it (no env-dependent ignores).
-module = ["psycopg", "psycopg.*"]
+# psycopg, pyjwt, and cryptography ship in the optional "hosted" extra;
+# environments without it must type-check identically to environments with it
+# (no env-dependent ignores).
+module = ["psycopg", "psycopg.*", "jwt", "jwt.*", "cryptography", "cryptography.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
