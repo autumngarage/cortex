@@ -271,6 +271,17 @@ mode skip citation or visibility boundaries.
   rendering (cortex#376) — an advisory surface never renders a citation a
   reader cannot verify; the render-side mirror of the cortex#377 boundary.
 
+### Stage 2 GitHub comment registration (2026-06-10, cortex#390)
+
+- `github_comment.GitHubCommentRenderError` -> `fail_closed_refusal`: the
+  advisory PR-comment renderer refuses to build a comment whose cited
+  decision does not resolve to a permalink through the span index — one
+  surface further out than `FindingRenderError`, same citation boundary.
+  Remediation: re-run the review against the current candidate pack so the
+  cited spans resolve; a finding that cannot resolve provenance is logged and
+  never posted uncited, so the missing-span render only fires when the pack
+  and the emitted findings drifted apart.
+
 ### Graph-hardening registrations (2026-06-10, cortex#318/#319/#320)
 
 - `candidate_dedup.CandidateDedupError` -> `invalid_input_rejected`:
