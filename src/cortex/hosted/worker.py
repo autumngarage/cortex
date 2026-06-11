@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import signal
 import socket
 import threading
@@ -335,6 +336,69 @@ class Worker:
         )
 
 
+def github_app_credentials_present(environ: Mapping[str, str] | None = None) -> bool:
+    """True when both GitHub App credential env vars are set and non-blank.
+
+    The seam that decides Stage 2 vs Stage 1 wiring without constructing a
+    config (construction validates the PEM and would raise on a half-set
+    environment). Mirrors ``GithubAppConfig.from_env``'s env var names so the
+    chooser and the loader can never disagree about what "configured" means.
+    """
+
+    from cortex.hosted.github_app_auth import (
+        GITHUB_APP_ID_ENV,
+        GITHUB_APP_PRIVATE_KEY_ENV,
+    )
+
+    env = environ if environ is not None else os.environ
+    return bool(env.get(GITHUB_APP_ID_ENV, "").strip()) and bool(
+        env.get(GITHUB_APP_PRIVATE_KEY_ENV, "").strip()
+    )
+
+
+def build_worker_registry(
+    *, recorder: ArrivalRecorder, environ: Mapping[str, str] | None = None
+) -> HandlerRegistry:
+    """Choose the worker's handler registry from the environment.
+
+    When the GitHub App credentials are present, the worker runs the Stage 2
+    stateless review registry (``stateless_review.build_review_registry``): a
+    real ``github.pull_request`` handler that fetches/evaluates/comments and
+    forgets. Without them it falls back to the Stage 1 stub registry
+    (``build_default_registry``), which records arrivals on the ledger. The
+    two paths are a clean either/or, never a silent partial — the chosen
+    registry is logged. ``stateless_review`` is imported lazily here so the
+    worker module stays free of the command-layer import graph it pulls in.
+    """
+
+    if not github_app_credentials_present(environ):
+        _log("worker.registry_selected", registry="default", reason="github_app_unconfigured")
+        return build_default_registry(recorder)
+
+    from cortex.hosted.github_app_auth import (
+        GithubAppConfig,
+        GithubInstallationClient,
+        InstallationTokenSource,
+    )
+    from cortex.hosted.stateless_review import (
+        build_review_registry,
+        default_model_resolver,
+    )
+
+    env = environ if environ is not None else os.environ
+    config = GithubAppConfig.from_env(env)
+    token_source = InstallationTokenSource(config)
+
+    def client_factory(installation_id: str) -> GithubInstallationClient:
+        return GithubInstallationClient(token_source, installation_id)
+
+    _log("worker.registry_selected", registry="stateless_review", reason="github_app_configured")
+    return build_review_registry(
+        client_factory=client_factory,
+        model_resolver=default_model_resolver(),
+    )
+
+
 def install_signal_handlers(stop: threading.Event) -> None:
     """Wire SIGTERM/SIGINT to a graceful stop of the polling loop."""
 
@@ -367,7 +431,7 @@ def main() -> None:
     )
     worker = Worker(
         conn=conn,
-        registry=build_default_registry(recorder),
+        registry=build_worker_registry(recorder=recorder),
         poll_interval_seconds=config.poll_interval_seconds,
         stale_claim_seconds=config.stale_claim_seconds,
     )

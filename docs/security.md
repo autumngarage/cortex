@@ -11,9 +11,10 @@ a security review.
 
 ## Target default posture: stateless review
 
-For the GitHub reviewer, the target default mode is **stateless**. This
-is planned work tracked in the active hosted reviewer plan before Cortex
-offers the reviewer to external tenants:
+For the GitHub reviewer, the default mode is **stateless**. The review
+*handler* is built (`cortex.hosted.stateless_review`); enabling it for
+external tenants is the remaining work tracked in the active hosted
+reviewer plan. The path is:
 
 1. A pull request opens.
 2. Cortex fetches your `.cortex/` decision files at the relevant commit
@@ -23,11 +24,14 @@ offers the reviewer to external tenants:
 5. It **forgets** — nothing about your decisions or your code is written
    to Cortex's database.
 
-In the planned stateless mode, the only durable data Cortex holds for you is
+In stateless mode, the only durable data Cortex holds for you is
 operational bookkeeping (which installation, which jobs ran) and
 **content-free feedback labels** — a decision *hash* plus whether a
 reviewer found a comment useful, never the decision text. Your decisions
-and your code are never persisted on our infrastructure.
+and your code are never persisted on our infrastructure. The stateless
+review path touches no database at all: a regression test booby-traps the
+database connection and asserts a full review still produces its cited
+comment.
 
 This is possible because **your repository is the source of truth.** Git
 and `.cortex/` already hold the canonical record; Cortex is a reader, not

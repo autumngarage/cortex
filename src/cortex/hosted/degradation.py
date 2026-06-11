@@ -95,6 +95,10 @@ from cortex.hosted.routing import (
     RoutingError,
 )
 from cortex.hosted.scopes import ScopeValidationError
+from cortex.hosted.stateless_review import (
+    STATELESS_REVIEW_PAYLOAD_REMEDIATION,
+    StatelessReviewError,
+)
 from cortex.hosted.storage import StoreBoundaryError
 from cortex.hosted.visibility import VisibilityBoundaryValidationError
 
@@ -250,6 +254,11 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # runner refuses to fall back to a live model call (cortex#336).
     ReplayError: DegradationMode.FAIL_CLOSED_REFUSAL,
     ScopeValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # A github.pull_request webhook body missing the installation/repo/PR
+    # fields the stateless reviewer needs to fetch and cite a review is
+    # refused before any GitHub fetch or model call (cortex#537) — the same
+    # before-any-side-effect rejection family as WebhookValidationError.
+    StatelessReviewError: DegradationMode.INVALID_INPUT_REJECTED,
     StoreBoundaryError: DegradationMode.FAIL_CLOSED_REFUSAL,
     # A finding whose provenance is absent from the candidate pack is refused
     # emission outright — the citation boundary holds (cortex#377), mirroring
@@ -394,6 +403,11 @@ REMEDIATION_BY_REASON: Mapping[str, str] = MappingProxyType(
         # A GitHub REST call from the installation client was refused or
         # exhausted bounded retries (cortex#386).
         "github_api_request_failed": GITHUB_API_REMEDIATION,
+        # The stateless reviewer's pull_request webhook body was malformed or
+        # missing the installation/repo/PR fields it needs (cortex#537). The
+        # canonical hint lives next to stateless_review so the refusal message
+        # and this table cannot drift.
+        "stateless_review_payload_malformed": STATELESS_REVIEW_PAYLOAD_REMEDIATION,
     }
 )
 

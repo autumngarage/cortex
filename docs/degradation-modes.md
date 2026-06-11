@@ -380,6 +380,22 @@ mode skip citation or visibility boundaries.
   scopes. A 404 on `get_file_contents` is *not* a failure — it is the
   documented "file absent at this ref" answer and returns `None`.
 
+### Stateless reviewer registration (2026-06-10, cortex#537)
+
+- `stateless_review.StatelessReviewError` -> `invalid_input_rejected`: a
+  `github.pull_request` webhook body missing the installation/repo/PR fields
+  the stateless reviewer needs to fetch and cite a review (installation id,
+  repository owner/name, pull-request number/base.sha/head.sha) is rejected
+  before any GitHub fetch or model call — the same before-any-side-effect
+  rejection family as `WebhookValidationError`. The refusal carries the
+  `stateless_review_payload_malformed` remediation naming the required fields
+  and the App's `pull_request` subscription. Note what does *not* raise here:
+  a repo with no `.cortex/` (or no extractable decisions) is not an error — it
+  degrades to a visible "no recorded decisions for this repo" advisory comment
+  (the absence is posted, never swallowed), and a finding never fails the job
+  (the review is advisory-only, exit-equivalent to success). The stateless
+  path touches no database: the repo is the store (`docs/security.md`).
+
 ### Remediation hints (2026-06-10, cortex#516)
 
 Errors are the onboarding surface of a fail-closed product: a refusal that

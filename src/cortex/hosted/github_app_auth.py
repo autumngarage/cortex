@@ -225,6 +225,27 @@ class ChangedFile:
     patch: str | None = None
 
 
+@dataclass(frozen=True)
+class DirectoryEntry:
+    """One entry from a "list directory contents" API response.
+
+    The contents API returns a JSON array for a directory; each element names
+    a ``path`` (repo-relative) and a ``type`` (``file``, ``dir``, ``symlink``,
+    ``submodule``). The stateless reviewer enumerates ``.cortex/doctrine/``
+    this way to fetch each decision file, so it carries only the narrow slice
+    the enumeration needs.
+    """
+
+    path: str
+    type: str
+
+    def __post_init__(self) -> None:
+        if not self.path.strip():
+            raise GithubApiError("directory entry must carry a non-empty 'path'")
+        if not self.type.strip():
+            raise GithubApiError(f"directory entry {self.path!r} is missing a 'type'")
+
+
 class HttpResponse(Protocol):
     """The slice of an HTTP response this module needs."""
 
@@ -468,6 +489,46 @@ class GithubInstallationClient:
                 context=f"{path}@{ref}",
             )
         return _decode_contents_payload(parsed, path=path, ref=ref)
+
+    def list_directory(
+        self, owner: str, repo: str, path: str, ref: str
+    ) -> tuple[DirectoryEntry, ...]:
+        """List a directory's immediate entries at ``ref``, or ``()`` when absent.
+
+        ``get_file_contents`` refuses a directory listing (it expects a single
+        base64-encoded file); this is its directory-shaped sibling. The
+        contents API returns a JSON *array* for a directory, so a Mapping
+        response means the path is a file and is refused with a message that
+        names the mistake. A 404 (directory absent at this ref) returns ``()``
+        — the same "missing decision source is no source, not a failure" policy
+        ``get_file_contents`` holds, so a repo without ``.cortex/`` degrades
+        visibly instead of crashing.
+        """
+
+        query = urllib.parse.urlencode({"ref": ref})
+        url = (
+            f"{self._api_root}/repos/{_segment(owner)}/{_segment(repo)}"
+            f"/contents/{_path_segment(path)}?{query}"
+        )
+        try:
+            body = self._get(url, accept="application/vnd.github+json")
+        except GithubApiError as exc:
+            if exc.status == _NOT_FOUND_STATUS:
+                return ()
+            raise
+        parsed = _json_loads(body, context=f"directory listing of {path}@{ref}")
+        if isinstance(parsed, Mapping):
+            raise GithubApiError(
+                f"contents response for {path}@{ref} is a single file, not a "
+                "directory listing; use get_file_contents for a file path",
+                context=f"{path}@{ref}",
+            )
+        if not isinstance(parsed, list):
+            raise GithubApiError(
+                f"directory listing of {path}@{ref} was neither a JSON array nor object",
+                context=f"{path}@{ref}",
+            )
+        return tuple(_directory_entry_from(entry, path=path, ref=ref) for entry in parsed)
 
     def get_pull_request_diff(self, owner: str, repo: str, pr_number: int) -> str:
         """Return the PR's unified diff (``Accept: application/vnd.github.v3.diff``)."""
@@ -814,6 +875,24 @@ def _changed_file_from_entry(entry: Any) -> ChangedFile:
     if patch is not None and not isinstance(patch, str):
         raise GithubApiError(f"PR files entry for {filename!r} has a non-string 'patch'")
     return ChangedFile(filename=filename, status=status, patch=patch)
+
+
+def _directory_entry_from(entry: Any, *, path: str, ref: str) -> DirectoryEntry:
+    if not isinstance(entry, Mapping):
+        raise GithubApiError(
+            f"directory listing of {path}@{ref} contained a non-object entry"
+        )
+    entry_path = entry.get("path")
+    entry_type = entry.get("type")
+    if not isinstance(entry_path, str) or not entry_path:
+        raise GithubApiError(
+            f"directory entry under {path}@{ref} is missing a string 'path'"
+        )
+    if not isinstance(entry_type, str) or not entry_type:
+        raise GithubApiError(
+            f"directory entry {entry_path!r} under {ref} is missing a string 'type'"
+        )
+    return DirectoryEntry(path=entry_path, type=entry_type)
 
 
 def _comment_identity(body: bytes, *, context: str) -> Mapping[str, Any]:

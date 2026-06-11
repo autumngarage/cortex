@@ -51,7 +51,7 @@ from dataclasses import dataclass
 
 from cortex.hosted.ask_ledger import CitedSourceSpan
 from cortex.hosted.eval_fixtures import FindingClass
-from cortex.hosted.evaluator import EmittedFinding, EvaluationReplayKey
+from cortex.hosted.evaluator import EmittedFinding, EvaluationOutcome, EvaluationReplayKey
 from cortex.hosted.finding_render import TIER_GLYPHS, one_line_excerpt
 
 # Human-facing labels for each finding class. The render layer never shows a
@@ -159,6 +159,35 @@ class ReviewAccounting:
             or self.omitted_for_budget
             or self.unconfirmed_twin_count
             or self.degraded_reasons
+        )
+
+    @classmethod
+    def from_outcome(cls, outcome: EvaluationOutcome) -> ReviewAccounting:
+        """Project an :class:`EvaluationOutcome` onto the disclosure fields.
+
+        The one mapping from evaluator arithmetic to the comment's disclosure
+        block, so the terminal ``cortex review`` surface and the Stage 2 PR
+        comment can never compute the same disclosure differently. Each field
+        is read from a derived count on the outcome — nothing is recomputed:
+        the suppression floor, the over-budget omission, the shadow captures
+        (the cortex#373/#374 unconfirmed-twin lanes), and every visible
+        degraded reason. The model's own omitted-decision count surfaces as a
+        degraded reason so a "we did not see every decision" signal is never
+        dropped.
+        """
+
+        degraded_reasons = tuple(outcome.degraded_reasons)
+        if outcome.model_omitted_decision_count:
+            degraded_reasons += (
+                f"the evaluate model reported "
+                f"{outcome.model_omitted_decision_count} decision(s) it could not "
+                "fully weigh in the budgeted context",
+            )
+        return cls(
+            suppressed_below_floor=outcome.suppressed_below_floor,
+            omitted_for_budget=outcome.omitted_for_budget,
+            unconfirmed_twin_count=outcome.shadow_finding_count,
+            degraded_reasons=degraded_reasons,
         )
 
 

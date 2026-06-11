@@ -39,6 +39,7 @@ from cortex.hosted.migrations import HostedMigrationError
 from cortex.hosted.model_registry import RegistryValidationError
 from cortex.hosted.provenance import ProvenanceValidationError
 from cortex.hosted.scopes import ScopeValidationError
+from cortex.hosted.stateless_review import StatelessReviewError
 from cortex.hosted.storage import StoreBoundaryError
 from cortex.hosted.visibility import VisibilityBoundaryValidationError
 
@@ -59,6 +60,7 @@ EXPECTED_CLASSIFICATIONS: tuple[tuple[type[Exception], DegradationMode], ...] = 
     (ProvenanceValidationError, DegradationMode.INVALID_INPUT_REJECTED),
     (RegistryValidationError, DegradationMode.DRIFT_DETECTED),
     (ScopeValidationError, DegradationMode.INVALID_INPUT_REJECTED),
+    (StatelessReviewError, DegradationMode.INVALID_INPUT_REJECTED),
     (StoreBoundaryError, DegradationMode.FAIL_CLOSED_REFUSAL),
     (VisibilityBoundaryValidationError, DegradationMode.FAIL_CLOSED_REFUSAL),
 )
@@ -295,6 +297,7 @@ EXPECTED_REMEDIATIONS: tuple[tuple[str, str], ...] = (
     ("model_api_key_missing", "ANTHROPIC_API_KEY"),
     ("github_app_credentials_missing", "GITHUB_APP_ID"),
     ("github_api_request_failed", "GitHub API status"),
+    ("stateless_review_payload_malformed", "github.pull_request webhook body"),
 )
 
 

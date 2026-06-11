@@ -1,0 +1,41 @@
+{
+  "derive": [],
+  "evaluate": [
+    {
+      "degraded_reasons": [],
+      "findings": [
+        {
+          "cited_span_hashes": [
+            "fd4bc5638265f2178cdd937bd0b5b108df6ba56457fcacf5092549c4379c8993"
+          ],
+          "confidence_label": "advisory",
+          "decision_node_id": "e41366d8-3e07-4c7b-cf4c-9743a26787d2",
+          "finding_class": "contradicts-prior-decision",
+          "suggested_repair": "Remove the `import sentinel` dependency and integrate by file contract, or supersede the decision before landing this.",
+          "summary": "The diff adds `import sentinel` to src/widgets/core.py, directly reversing the confirmed compose-by-file-contract decision."
+        }
+      ],
+      "input_hash": "2263a758d59eb98c964a36c39205b509bb6fdb424c3a0d308f29e9b719cbada0",
+      "model_id": "anthropic/claude-fable-5",
+      "omitted_decision_count": 0,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee"
+    },
+    {
+      "degraded_reasons": [],
+      "findings": [],
+      "input_hash": "c2fe0effe604f478a987d1bd6abe4aa0e34a2f8ba307a80692348e02c9cb5ae4",
+      "model_id": "anthropic/claude-fable-5",
+      "omitted_decision_count": 0,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee"
+    },
+    {
+      "degraded_reasons": [],
+      "findings": [],
+      "input_hash": "cd6eae520125524f907339236857d3cc12984782648b595e6f35934a33d70a9e",
+      "model_id": "anthropic/claude-fable-5",
+      "omitted_decision_count": 0,
+      "prompt_version": "review-evaluate/v1+13046b32c6ee"
+    }
+  ],
+  "recorded_responses_schema_version": 1
+}
