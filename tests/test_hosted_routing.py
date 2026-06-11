@@ -811,3 +811,23 @@ def test_usd_overrun_is_marked_then_blocks_the_next_call() -> None:
     with pytest.raises(BudgetExceededError, match=r"\$10"):
         router.derive(_derive_request())
     assert stub.derive_calls == 1
+
+
+def test_json_object_strips_markdown_code_fence() -> None:
+    """The Messages API transport sometimes fences its JSON; the contract is
+    the JSON inside, so a fenced object parses identically to a raw one
+    (cortex PE-2: the live api-http catch returned ```json ... ```)."""
+    from cortex.hosted.routing import _json_object, _strip_code_fence
+
+    raw = '{"findings": [], "omitted_decision_count": 0, "degraded_reasons": []}'
+    fenced = f"```json\n{raw}\n```"
+    bare = f"```\n{raw}\n```"
+
+    assert dict(_json_object(fenced, context="evaluate")) == dict(
+        _json_object(raw, context="evaluate")
+    )
+    assert dict(_json_object(bare, context="evaluate")) == dict(
+        _json_object(raw, context="evaluate")
+    )
+    # Raw (unfenced) output is unchanged by the strip.
+    assert _strip_code_fence(raw) == raw
