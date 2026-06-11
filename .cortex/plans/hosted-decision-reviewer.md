@@ -373,6 +373,66 @@ The cheap-now trust signals that close design partners without SOC 2:
 At first paying customer: DPA + SOC 2 Type 1 (Vanta/Drata). At scale:
 Type 2 + pen test.
 
+## Model roles, cascade economics, and distribution (added 2026-06-10)
+
+Founder session 2026-06-10 locked the model-cost and distribution design.
+Recorded so the build, the pricing, and the GTM stay coherent.
+
+### Two model roles — keep them separate
+
+- **Judge / evaluate** — decides whether a diff contradicts a decision and
+  emits the STRUCTURED, cited verdict. High-stakes, precision-critical.
+- **Converse / phrase (#549)** — natural-language wrapping and dialogue
+  over already-grounded material (PR-thread replies; the Slack
+  `@cortex` console). Lower-stakes, cheaper model, but **grounded-only**:
+  it phrases over cited decisions and can never introduce an uncited one
+  (citations are verified before it runs). Naturalness never breaks
+  *cited, never a vibe*.
+
+The comment/answer **structure and citations are deterministic** (#390);
+the LLM does judgment (cascade) and grounded phrasing (converse), not the
+facts.
+
+### The configurable intelligence cascade (#547) — load-bearing for the economics
+
+Most PRs must cost ~$0; the frontier model fires only on plausible
+conflicts. The cost ladder, cheapest tier first: **Tier 0** deterministic
+structural scope filter (free) → **Tier 1** cheap recall gate (open/small
+model) → **Tier 2** frontier judge (bounded input, rare) → **Tier 3**
+over-budget "review manually" signal (no spend). All of it is
+**configuration, not code** (route table #345): per-tier model,
+per-tier thresholds, per-tenant cascade profiles, BYOK valve, all versioned
+so cost/precision metrics never blend across a config change. The economics
+guardrail (#547) tracks **cost-per-PR** and per-tier escalation-rate with a
+regression gate — the cost analogue of the #338 precision gate — and the
+downward ratchet downgrades a tier's model when a cheaper one holds
+precision on the protected slices.
+
+**OpenRouter bootstrap option (recorded, #547 comment):** one API over many
+models makes per-tier selection a config string and gives a cheap Tier-1
+gate without standing up multiple providers (matches Conductor's routing).
+Trade-off: metered-gateway markup vs direct-provider/BYOK for the frontier
+tier at volume. Decision deferred; routing stays config so switching off
+the gateway is an edit, not a rewrite.
+
+### Onboarding — match CodeRabbit's simplicity (#548)
+
+Bar (studied 2026-06-10): *"Get started in 2 clicks. No credit card
+needed."* Cortex meets it via App-install auto-provisioning + the
+zero-config cold-start backfill (`derive` seeds candidate decisions on
+install, advisory-only #362), so the first PR is reviewed with no setup
+session; curation/config is the optional enhancement. No signup form, no
+dashboard.
+
+### Distribution — the Claude Marketplace (#550)
+
+CodeRabbit is already listed. This is Cortex's supply-side thesis made
+concrete: a reviewer-app listing (the CodeRabbit parallel) and, higher
+leverage, the **MCP context-supply server** (`decisions_for_paths` over
+MCP — agents consult the decision graph at authoring time, pulling a slice
+of the #448 milestone forward as a distribution play). Scope the listing
+requirements before building.
+
 ## Success Criteria
 
 - The active session-start state points to this plan as the master current
