@@ -547,3 +547,22 @@ def _raise_runtime_error(_job: Any) -> Mapping[str, Any]:
 
 def _make_due(db: FakeQueueDb, idempotency_key: str) -> None:
     db.job(idempotency_key)["next_attempt_at"] = datetime.now(UTC) - timedelta(seconds=1)
+
+
+def test_review_token_budget_env_parsing() -> None:
+    from cortex.hosted.worker import (
+        DEFAULT_HOSTED_REVIEW_TOKEN_BUDGET,
+                _env_positive_int,
+    )
+
+    # Unset/blank -> the raised hosted default (not the 8k session guardrail).
+    assert _env_positive_int(None, default=DEFAULT_HOSTED_REVIEW_TOKEN_BUDGET) == 32000
+    assert _env_positive_int("  ", default=DEFAULT_HOSTED_REVIEW_TOKEN_BUDGET) == 32000
+    # Explicit override.
+    assert _env_positive_int("48000", default=DEFAULT_HOSTED_REVIEW_TOKEN_BUDGET) == 48000
+    # Malformed / non-positive fail visibly (no silent shrink).
+    import pytest as _pytest
+
+    for bad in ("eight-thousand", "0", "-5"):
+        with _pytest.raises(ServiceConfigError):
+            _env_positive_int(bad, default=DEFAULT_HOSTED_REVIEW_TOKEN_BUDGET)
