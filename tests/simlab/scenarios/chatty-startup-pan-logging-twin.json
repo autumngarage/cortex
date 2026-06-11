@@ -18,7 +18,7 @@
     "pack_omitted": {
       "over_limit": 0,
       "status_filtered": 0,
-      "suppressed_below_floor": 5
+      "suppressed_below_floor": 1
     },
     "unexpected": 0
   },

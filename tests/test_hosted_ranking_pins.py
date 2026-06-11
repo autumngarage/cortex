@@ -12,9 +12,13 @@ settings so a weight edit cannot land as an unreviewed side effect:
    constants as the Python ``reciprocal_rank_fusion`` (``ask_ledger`` SQL
    inlines literals; ``decisions_for_diff`` SQL interpolates), so the two
    fusion implementations cannot drift apart silently.
-4. The fixture-local Stage 0 regime gates text-only-similar decisions out
-   entirely (suppressed below floor), the strongest form of "decisions,
-   not documents".
+4. The fixture-local Stage 0 regime ranks structure strictly above text.
+   A decision sharing NO specific identifier with the diff (only generic
+   prose) is still gated out entirely (suppressed below floor). Under
+   recall-v3 (cortex#556) a decision that shares a SPECIFIC identifier the
+   diff changed is retrieved by the content lane, but always ranks strictly
+   below any structural match — structure over text holds, while the
+   repo-wide-rule recall gap the PE-2 dogfood exposed is closed.
 
 Changing any pinned value here is a deliberate ranking change: it must
 ship with a protected-slice eval gate run (cortex#338) against the
@@ -273,11 +277,12 @@ def _decision(
     )
 
 
-def test_text_similar_but_structurally_unmatched_decision_is_gated_out() -> None:
-    # "Contradiction detection, not document search" in its strongest form:
-    # the Stage 0 fixture-local regime scores candidates by structural match
-    # only, so a decision whose PROSE resembles the diff but which governs
-    # none of the changed surface never reaches the evaluator at all.
+def test_generic_text_similar_decision_is_gated_out() -> None:
+    # "Contradiction detection, not document search": a decision whose prose
+    # echoes only GENERIC diff tokens (return/float/attempt) and which governs
+    # none of the changed surface never reaches the evaluator. The recall-v3
+    # content lane (cortex#556) is specificity-gated, so generic overlap does
+    # NOT pull this decision in — the strongest form of "decisions, not docs".
     structural = _decision(
         "governs-retry-path",
         decision_text="Retries in src/payments/retry.py use exponential backoff.",
@@ -286,11 +291,11 @@ def test_text_similar_but_structurally_unmatched_decision_is_gated_out() -> None
             FixtureScope(scope_type=ScopeType.SYMBOL, value="retry_with_backoff"),
         ),
     )
-    text_only = _decision(
+    generic_text_only = _decision(
         "prose-about-retries",
         decision_text=(
-            "retry_with_backoff attempt return float retry backoff payments — "
-            "prose echoing the diff text without governing its surface."
+            "attempt return float retry payments — prose echoing only generic "
+            "diff tokens without governing its surface or naming a symbol."
         ),
         scopes=(FixtureScope(scope_type=ScopeType.PATH, value="docs/runbook.md"),),
     )
@@ -303,7 +308,7 @@ def test_text_similar_but_structurally_unmatched_decision_is_gated_out() -> None
             head_sha="def5678",
             patch=_PATCH,
         ),
-        decisions=(structural, text_only),
+        decisions=(structural, generic_text_only),
     )
 
     emulation = build_fixture_candidate_pack(fixture)
@@ -319,3 +324,54 @@ def test_text_similar_but_structurally_unmatched_decision_is_gated_out() -> None
     )
     # PATH (100) + SYMBOL (95): the structural score is the scope-weight sum.
     assert emulation.pack.candidates[0].score == 195.0
+
+
+def test_specific_identifier_match_is_retrieved_but_ranks_below_structure() -> None:
+    # recall-v3 (cortex#556): a decision that shares a SPECIFIC identifier the
+    # diff changed (`retry_with_backoff`) is retrieved by the content lane even
+    # without a matching path scope — the recall the PE-2 dogfood needed. But
+    # structure over text holds: the structural decision still ranks first.
+    structural = _decision(
+        "governs-retry-path",
+        decision_text="Retries in src/payments/retry.py use exponential backoff.",
+        scopes=(
+            FixtureScope(scope_type=ScopeType.PATH, value="src/payments/retry.py"),
+            FixtureScope(scope_type=ScopeType.SYMBOL, value="retry_with_backoff"),
+        ),
+    )
+    names_symbol_off_path = _decision(
+        "rule-naming-the-symbol",
+        decision_text=(
+            "retry_with_backoff must keep exponential backoff; never replace it "
+            "with a fixed delay."
+        ),
+        scopes=(FixtureScope(scope_type=ScopeType.PATH, value="docs/runbook.md"),),
+    )
+    fixture = EvalFixture(
+        fixture_id="ranking-pin-specific-content",
+        diff=FixtureDiff(
+            repo_owner="acme",
+            repo_name="payments",
+            base_sha="abc1234",
+            head_sha="def5678",
+            patch=_PATCH,
+        ),
+        decisions=(structural, names_symbol_off_path),
+    )
+
+    emulation = build_fixture_candidate_pack(fixture)
+
+    ordered = [
+        emulation.decision_id_by_node_id[candidate.decision_node_id]
+        for candidate in emulation.pack.candidates
+    ]
+    assert ordered == ["governs-retry-path", "rule-naming-the-symbol"]
+    # Structural 195 dominates the content match (one specific term, weight 8).
+    by_id = {
+        emulation.decision_id_by_node_id[c.decision_node_id]: c
+        for c in emulation.pack.candidates
+    }
+    assert by_id["governs-retry-path"].score == 195.0
+    assert by_id["rule-naming-the-symbol"].reason_codes == (
+        "content:retry_with_backoff",
+    )

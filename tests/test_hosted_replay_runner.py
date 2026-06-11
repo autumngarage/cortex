@@ -37,8 +37,12 @@ from cortex.hosted.recorded_responses import (
     ResponseRecorder,
 )
 from cortex.hosted.replay_runner import (
+    CONTENT_MATCH_TERM_WEIGHT,
     FIXTURE_LOCAL_RETRIEVAL_CONFIG_VERSION,
+    MAX_CONTENT_MATCH_TERMS,
     REPLAY_REPORT_SCHEMA_VERSION,
+    REPO_GLOBAL_BASE_SCORE,
+    REPO_GLOBAL_REASON_CODE,
     SHADOW_FINDING_CLASSES,
     CorpusReplayReport,
     ExpectedFindingGrade,
@@ -50,7 +54,7 @@ from cortex.hosted.replay_runner import (
     run_corpus_directory,
     run_fixture,
 )
-from cortex.hosted.scopes import STRUCTURAL_SCOPE_WEIGHTS, ScopeType
+from cortex.hosted.scopes import SEMANTIC_MATCH_WEIGHT, STRUCTURAL_SCOPE_WEIGHTS, ScopeType
 
 CORPUS_DIR = Path(__file__).parent / "fixtures" / "hosted_eval" / "corpus"
 
@@ -245,10 +249,15 @@ def test_pack_orders_by_structural_score_then_decision_id() -> None:
         emulation.decision_id_by_node_id[c.decision_node_id]
         for c in emulation.pack.candidates
     ]
-    # path(100) + symbol(95) = 195 beats package(75).
+    # Structural ranking is unchanged by recall-v3 (cortex#556):
+    # use-exponential-backoff scores path(100) + symbol(95) = 195 and still
+    # beats pin-tenacity. pin-tenacity scores package(75) PLUS a content match
+    # on the specific term `tenacity` (the diff adds `import tenacity`, the
+    # decision text names it) = 75 + 8 = 83 — the content lane reinforces an
+    # already-structural match without disturbing the order.
     assert ordered == ["use-exponential-backoff", "pin-tenacity"]
     scores = [c.score for c in emulation.pack.candidates]
-    assert scores == [195.0, 75.0]
+    assert scores == [195.0, 83.0]
 
 
 def test_pack_tie_breaks_on_decision_id() -> None:
@@ -377,6 +386,299 @@ def test_exact_path_match_outranks_glob_match() -> None:
         for c in emulation.pack.candidates
     ]
     assert ordered == [("exact-rule", 100.0), ("glob-rule", 98.0)]
+
+
+# ---------------------------------------------------------------------------
+# Recall lanes: repo-wide inclusion + content-trigger matching (cortex#556)
+#
+# The PE-2 dogfood proved the structural-only lane returned an empty pack for
+# a diff that literally added `import touchstone` against cortex's repo-wide
+# "Compose by file contract, not code" rule — the live reviewer said "no
+# contradictions found". These tests pin the two recall lanes that close the
+# gap. THIS IS THE PE-2 DOGFOOD FIX REGRESSION.
+# ---------------------------------------------------------------------------
+
+# A repo-wide CLAUDE.md rule: no structural scope, names `touchstone` in prose.
+_COMPOSE_DECISION = FixtureDecision(
+    decision_id="compose-by-file-contract",
+    decision_text=(
+        "Cortex does not import Sentinel, Touchstone, or anything they own. "
+        "Compose by file contract, not code."
+    ),
+    status=DecisionStatus.CONFIRMED,
+    source_timestamp="2026-06-01T09:00:00+00:00",
+    spans=(_span("CLAUDE.md", "never import touchstone code"),),
+    scopes=(),
+)
+
+# Another repo-wide rule that shares NO specific term with the touchstone diff.
+_JOURNAL_DECISION = FixtureDecision(
+    decision_id="journal-append-only",
+    decision_text="Journal is append-only; never edit an existing entry in place.",
+    status=DecisionStatus.CONFIRMED,
+    source_timestamp="2026-06-01T09:00:00+00:00",
+    spans=(_span("protocol.md", "append-only journal invariant"),),
+    scopes=(),
+)
+
+# The diff that adds `import touchstone` to an unrelated hosted module — the
+# exact shape that slipped past structural-only scoping in PE-2.
+_TOUCHSTONE_IMPORT_PATCH = """\
+diff --git a/src/cortex/hosted/siblings_bridge.py b/src/cortex/hosted/siblings_bridge.py
+index 1111111..2222222 100644
+--- a/src/cortex/hosted/siblings_bridge.py
++++ b/src/cortex/hosted/siblings_bridge.py
+@@ -1,2 +1,3 @@
++import touchstone
+ def existing() -> int:
+     return 1
+"""
+
+
+def _touchstone_fixture(
+    decisions: tuple[FixtureDecision, ...] = (_COMPOSE_DECISION,),
+) -> EvalFixture:
+    return EvalFixture(
+        fixture_id="pe2-touchstone-import",
+        diff=FixtureDiff(
+            repo_owner="autumngarage",
+            repo_name="cortex",
+            base_sha="a1f72f9",
+            head_sha="deadbee",
+            patch=_TOUCHSTONE_IMPORT_PATCH,
+        ),
+        decisions=decisions,
+        expected_findings=(),
+    )
+
+
+def test_pe2_touchstone_import_retrieves_the_compose_decision() -> None:
+    # THE PE-2 DOGFOOD FIX: the touchstone-import diff against the repo-wide
+    # compose-by-file-contract rule now includes that decision in the pack —
+    # the precondition for the live stateless reviewer's contradicts-prior-
+    # decision catch. Under structural-only scoping this pack was EMPTY.
+    emulation = build_fixture_candidate_pack(_touchstone_fixture())
+    packed_ids = {
+        emulation.decision_id_by_node_id[c.decision_node_id]
+        for c in emulation.pack.candidates
+    }
+    assert "compose-by-file-contract" in packed_ids
+    candidate = emulation.pack.candidates[0]
+    # It is matched BOTH as a repo-wide rule AND by the specific `touchstone`
+    # content term the diff introduced.
+    assert REPO_GLOBAL_REASON_CODE in candidate.reason_codes
+    assert "content:touchstone" in candidate.reason_codes
+    assert candidate.score == REPO_GLOBAL_BASE_SCORE + CONTENT_MATCH_TERM_WEIGHT
+
+
+def test_repo_wide_decision_is_always_present_regardless_of_diff() -> None:
+    # A repo-wide rule applies to every diff. Even a diff that shares no
+    # content term with it (the journal rule vs a touchstone-import diff) keeps
+    # the rule in the pack via the repo-wide lane — never suppressed.
+    emulation = build_fixture_candidate_pack(
+        _touchstone_fixture(decisions=(_JOURNAL_DECISION,))
+    )
+    assert len(emulation.pack.candidates) == 1
+    candidate = emulation.pack.candidates[0]
+    assert (
+        emulation.decision_id_by_node_id[candidate.decision_node_id]
+        == "journal-append-only"
+    )
+    # Repo-wide inclusion ONLY — no spurious content match for an unrelated rule.
+    assert candidate.reason_codes == (REPO_GLOBAL_REASON_CODE,)
+    assert candidate.score == REPO_GLOBAL_BASE_SCORE
+    assert emulation.omission_stage_by_decision_id == {}
+
+
+def test_repo_wide_decision_never_suppressed_below_floor() -> None:
+    # The default score_floor is 0.0; the repo-global base score is strictly
+    # positive, so a repo-wide decision can never fall into suppressed_below_
+    # floor — the exact failure the PE-2 dogfood exposed.
+    emulation = build_fixture_candidate_pack(
+        _touchstone_fixture(decisions=(_JOURNAL_DECISION,))
+    )
+    assert (
+        emulation.pack.omitted_counts[OmissionStage.SUPPRESSED_BELOW_FLOOR.value] == 0
+    )
+
+
+def test_explicit_repo_global_marker_flags_repo_wide() -> None:
+    # A decision can be declared repo-wide explicitly with a `**` glob marker
+    # instead of relying on "no scopes". The marker flags repo-global and is
+    # NOT counted as a structural glob hit (a literal `**` would otherwise
+    # match every path and masquerade as an on-point structural match).
+    marked = FixtureDecision(
+        decision_id="explicit-repo-wide",
+        decision_text="A repo-global constraint with an explicit marker.",
+        status=DecisionStatus.CONFIRMED,
+        source_timestamp="2026-06-01T09:00:00+00:00",
+        spans=(_span("CLAUDE.md", "explicit repo-global marker excerpt"),),
+        scopes=(FixtureScope(scope_type=ScopeType.GLOB, value="**"),),
+    )
+    emulation = build_fixture_candidate_pack(_touchstone_fixture(decisions=(marked,)))
+    assert len(emulation.pack.candidates) == 1
+    candidate = emulation.pack.candidates[0]
+    assert candidate.reason_codes == (REPO_GLOBAL_REASON_CODE,)
+    # Score is the repo-global base only — the marker did not add a glob hit.
+    assert candidate.score == REPO_GLOBAL_BASE_SCORE
+
+
+def test_content_match_on_a_specific_identifier_without_a_path_scope() -> None:
+    # A decision that carries a path scope NOT matching the diff still gets
+    # retrieved when it names a specific term the diff added — content recall
+    # is independent of the structural lane.
+    scoped_but_offpath = FixtureDecision(
+        decision_id="touchstone-rule-elsewhere",
+        decision_text="Modules under hosted must never import touchstone.",
+        status=DecisionStatus.CONFIRMED,
+        source_timestamp="2026-06-01T09:00:00+00:00",
+        spans=(_span("docs/rules.md", "touchstone import ban excerpt"),),
+        scopes=(FixtureScope(scope_type=ScopeType.PATH, value="docs/rules.md"),),
+    )
+    emulation = build_fixture_candidate_pack(
+        _touchstone_fixture(decisions=(scoped_but_offpath,))
+    )
+    assert len(emulation.pack.candidates) == 1
+    candidate = emulation.pack.candidates[0]
+    # It has a structural scope (so NOT repo-wide) but the path does not match
+    # the diff; the only reason it is present is the content term `touchstone`.
+    assert candidate.reason_codes == ("content:touchstone",)
+    assert candidate.score == CONTENT_MATCH_TERM_WEIGHT
+
+
+def test_specificity_gate_rejects_generic_shared_words() -> None:
+    # A decision sharing only generic tokens (import/return/value) with the
+    # diff and carrying a non-matching path scope is NOT content-matched and
+    # is suppressed — the specificity gate stops the false-positive explosion.
+    generic_rule = FixtureDecision(
+        decision_id="generic-style-rule",
+        decision_text="Every function should import dependencies and return a value.",
+        status=DecisionStatus.CONFIRMED,
+        source_timestamp="2026-06-01T09:00:00+00:00",
+        spans=(_span("docs/style.md", "generic style rule excerpt"),),
+        scopes=(FixtureScope(scope_type=ScopeType.PATH, value="docs/style.md"),),
+    )
+    emulation = build_fixture_candidate_pack(
+        _touchstone_fixture(decisions=(generic_rule,))
+    )
+    assert emulation.pack.candidates == ()
+    assert (
+        emulation.omission_stage_by_decision_id["generic-style-rule"]
+        is OmissionStage.SUPPRESSED_BELOW_FLOOR
+    )
+
+
+def test_repo_wide_decision_ranks_below_any_structural_match() -> None:
+    # Recall is additive: a structurally on-point decision must still rank
+    # ahead of a merely-repo-wide one. The compose rule (repo-wide + content
+    # match = 9.0) ranks below a structural package match.
+    structural = FixtureDecision(
+        decision_id="aaa-structural-import-rule",
+        decision_text="Pin the dependency in the manifest.",
+        status=DecisionStatus.CONFIRMED,
+        source_timestamp="2026-06-01T09:00:00+00:00",
+        spans=(_span("docs/deps.md", "dependency pin excerpt"),),
+        scopes=(FixtureScope(scope_type=ScopeType.PACKAGE, value="touchstone"),),
+    )
+    emulation = build_fixture_candidate_pack(
+        _touchstone_fixture(decisions=(_COMPOSE_DECISION, structural))
+    )
+    ordered = [
+        emulation.decision_id_by_node_id[c.decision_node_id]
+        for c in emulation.pack.candidates
+    ]
+    # The package-scoped decision (75 structural + 8 content) outranks the
+    # repo-wide compose rule (1 repo-global + 8 content = 9), even though the
+    # repo-wide decision's id sorts earlier — score dominates the id tiebreak.
+    assert ordered == ["aaa-structural-import-rule", "compose-by-file-contract"]
+
+
+def test_content_score_is_bounded_below_structural_weights() -> None:
+    # Invariant: even a decision sharing many specific terms cannot let the
+    # content lane overtake a real structural match. The cap times the per-
+    # term weight equals the semantic-match weight, which is below every
+    # structural scope weight.
+    assert float(
+        SEMANTIC_MATCH_WEIGHT
+    ) == MAX_CONTENT_MATCH_TERMS * CONTENT_MATCH_TERM_WEIGHT
+    assert min(
+        STRUCTURAL_SCOPE_WEIGHTS.values()
+    ) > MAX_CONTENT_MATCH_TERMS * CONTENT_MATCH_TERM_WEIGHT
+    # And the repo-global base ranks below the smallest structural weight.
+    assert min(STRUCTURAL_SCOPE_WEIGHTS.values()) > REPO_GLOBAL_BASE_SCORE
+
+
+def test_content_lane_caps_the_number_of_contributing_terms() -> None:
+    # A decision sharing MORE than MAX_CONTENT_MATCH_TERMS specific terms with
+    # the diff contributes at most the capped score — bounded recall, never
+    # unbounded accumulation.
+    many_terms_patch = """\
+diff --git a/a.py b/a.py
+index 1..2 100644
+--- a/a.py
++++ b/a.py
+@@ -1 +1,7 @@
++import touchstone
++import sentinel
++import vanguard
++import outrider
++import compass
++import railway
+ body
+"""
+    decision = FixtureDecision(
+        decision_id="many-forbidden-modules",
+        decision_text=(
+            "Never import touchstone, sentinel, vanguard, outrider, compass, "
+            "or railway into this package."
+        ),
+        status=DecisionStatus.CONFIRMED,
+        source_timestamp="2026-06-01T09:00:00+00:00",
+        spans=(_span("CLAUDE.md", "forbidden modules excerpt"),),
+        scopes=(),
+    )
+    fixture = EvalFixture(
+        fixture_id="many-terms",
+        diff=FixtureDiff(
+            repo_owner="autumngarage",
+            repo_name="cortex",
+            base_sha="a1f72f9",
+            head_sha="deadbee",
+            patch=many_terms_patch,
+        ),
+        decisions=(decision,),
+        expected_findings=(),
+    )
+    emulation = build_fixture_candidate_pack(fixture)
+    candidate = emulation.pack.candidates[0]
+    capped = REPO_GLOBAL_BASE_SCORE + MAX_CONTENT_MATCH_TERMS * CONTENT_MATCH_TERM_WEIGHT
+    assert candidate.score == capped
+    # Exactly MAX_CONTENT_MATCH_TERMS content reasons (plus the repo-global one).
+    content_reasons = [r for r in candidate.reason_codes if r.startswith("content:")]
+    assert len(content_reasons) == MAX_CONTENT_MATCH_TERMS
+
+
+def test_recall_lanes_are_deterministic() -> None:
+    # Same fixture + diff -> identical pack bytes, including the new lanes.
+    first = build_fixture_candidate_pack(
+        _touchstone_fixture(decisions=(_COMPOSE_DECISION, _JOURNAL_DECISION))
+    )
+    second = build_fixture_candidate_pack(
+        _touchstone_fixture(decisions=(_COMPOSE_DECISION, _JOURNAL_DECISION))
+    )
+    assert first.pack.candidate_set_hash == second.pack.candidate_set_hash
+    assert [c.reason_codes for c in first.pack.candidates] == [
+        c.reason_codes for c in second.pack.candidates
+    ]
+
+
+def test_recall_config_version_is_bumped_to_v3() -> None:
+    # The ranking/recall change is a versioned data boundary (cortex#556): the
+    # config version names the recall regime so metrics never silently blend
+    # with the prior structural-only regime.
+    assert FIXTURE_LOCAL_RETRIEVAL_CONFIG_VERSION == "fixture-local-recall-v3"
+    emulation = build_fixture_candidate_pack(_touchstone_fixture())
+    assert emulation.pack.retrieval_config_version == "fixture-local-recall-v3"
 
 
 def test_unparseable_patch_fails_naming_the_fixture() -> None:
