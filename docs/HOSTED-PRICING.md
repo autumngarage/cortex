@@ -63,10 +63,69 @@ consume rate-limit budget and hosted compute. They belong in the platform fee,
 not in the AI credit meter, unless a customer asks for a large paid backfill or
 indexing job.
 
+## The three LLM roles (what the model is used for)
+
+Hosted Cortex uses an LLM for exactly three jobs. Two are real code
+protocols (`DeriveModel`, `EvaluateModel` in `model_interfaces.py`); the
+third is the conversational role (cortex#549). Each is a separately
+configurable, separately metered route in the cascade (cortex#547), so the
+cheapest model that holds quality serves each role.
+
+1. **Derive — "is this a binding decision, or just chatter?"** Turns noisy
+   human sources (Slack threads, commit bodies, PR discussion, meeting
+   notes) into candidate decisions. Clean structured sources
+   (CLAUDE.md/AGENTS.md, ADRs, CODEOWNERS) are extracted **deterministically
+   with no LLM**; the model is only the firehose classifier that separates a
+   decision from conversation. High volume, cheapest model tier.
+2. **Evaluate — "does this PR contradict a decision?"** The review itself:
+   judges whether a diff reverses or violates a relevant decision and emits
+   the structured, cited verdict (decision, span, summary, repair). The
+   high-stakes, precision-critical role; the frontier judge, gated by the
+   cascade so it fires only on plausible conflicts.
+3. **Converse — natural language in, natural language out.** The
+   human-facing dialogue: parsing `@cortex what did we decide about X?`,
+   rendering a natural cited answer, handling `@cortex here's what we
+   decided`, and PR-thread replies. Grounded-generation only — it phrases
+   over already-cited decisions and never introduces an uncited one.
+
+The structure and citations of every output are deterministic; the LLM does
+these three judgments/generations. Derive **builds** the memory, Evaluate
+**enforces** it, Converse **talks about** it.
+
+## Usage-based pricing is the core model (decision 2026-06-10)
+
+Cortex charges **per usage** (metered credits over a platform base), not
+flat-rate, because model cost is variable: the cascade keeps it low, but a
+heavy repo or a chatty Slack team spikes it. Usage-based pricing makes
+revenue scale **with** cost — a heavy user can never cost more than they
+pay. Three consequences this decision locks in:
+
+- **The platform holds the model key by default.** To meter-and-markup
+  model usage, Cortex must pay the provider and bill per usage. So the
+  default is: Cortex holds the Anthropic/OpenRouter key, pays the provider,
+  charges credits with margin.
+- **BYOK is the enterprise *exception*, not the default.** A customer who
+  brings their own key pays the provider directly, so Cortex cannot meter
+  that model cost — BYOK trades the usage margin for closing a
+  security-sensitive account, compensated by a higher platform fee.
+- **The cascade turns cost reduction into margin expansion.** Tier-0 PRs
+  cost ~$0 but still count as activity (near-100% margin on the bulk);
+  cheaper models over time (the cortex#547 downward ratchet) drop
+  cost-per-review while price holds — margin grows as the model curve
+  falls. The same `CostRecord` metering (cortex#335) that controls cost is
+  the billing substrate; it must be accurate, per-tenant, and versioned so
+  a pricing/cascade change never retroactively re-bills.
+
+Gateway note: charging per usage *and* routing through OpenRouter stacks
+two markups (gateway + ours). OpenRouter is for bootstrap breadth; the
+high-volume metered tier moves to a direct provider for margin — a config
+change (cortex#345), not a rewrite.
+
 ## What consumes credits
 
 Credits are consumed when hosted Cortex asks an LLM or hosted semantic provider
-to make a judgment, synthesize prose, or build model-derived retrieval data.
+to make a judgment, synthesize prose, or build model-derived retrieval data —
+i.e. any of the three roles above firing.
 
 Examples:
 
