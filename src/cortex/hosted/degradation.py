@@ -35,6 +35,13 @@ from enum import StrEnum
 from types import MappingProxyType
 
 from cortex.hosted.advisory_ladder import AdvisoryLadderError
+from cortex.hosted.api.config import ServiceConfigError
+from cortex.hosted.api.webhooks import WebhookValidationError
+from cortex.hosted.api_transport import (
+    API_KEY_REMEDIATION,
+    ApiHttpOutputError,
+    ApiKeyMissingError,
+)
 from cortex.hosted.ask_ledger import AnswerState, AskLedgerValidationError
 from cortex.hosted.ask_surface import AskSurfaceValidationError, BrowseIndexRefusedError
 from cortex.hosted.banking import BankingValidationError
@@ -59,6 +66,7 @@ from cortex.hosted.finding_render import FindingRenderError
 from cortex.hosted.graph_rebuild import GraphRebuildError
 from cortex.hosted.graph_snapshot import GraphSnapshotValidationError
 from cortex.hosted.graph_writes import GraphWriteValidationError
+from cortex.hosted.jobs import HostedJobError
 from cortex.hosted.labeling import LabelingError
 from cortex.hosted.lane_assignment import LaneAssignmentError
 from cortex.hosted.lanes import LanePolicyValidationError
@@ -111,6 +119,13 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # An unknown confidence label or ladder-vocabulary violation is rejected
     # before any finding can be placed on the ladder (cortex#375).
     AdvisoryLadderError: DegradationMode.INVALID_INPUT_REJECTED,
+    # The api-http server transport mirrors the claude-CLI classifications
+    # (cortex#517): an unset API-key env var is a named reduced capability
+    # (the refusal names the variable and carries the model_api_key_missing
+    # remediation), and transport/contract violations are refused outright,
+    # never fabricated.
+    ApiHttpOutputError: DegradationMode.FAIL_CLOSED_REFUSAL,
+    ApiKeyMissingError: DegradationMode.DEGRADED_CAPABILITY,
     BudgetExceededError: DegradationMode.FAIL_CLOSED_REFUSAL,
     CandidateMetricsValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     CitationCheckError: DegradationMode.INVALID_INPUT_REJECTED,
@@ -182,6 +197,19 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # (missing extension, unrecorded schema_migrations version) and rolls
     # back — refusal, boundary held.
     HostedMigrationError: DegradationMode.FAIL_CLOSED_REFUSAL,
+    # A job that would violate the queue contract (empty type/key, non-JSON
+    # payload, malformed claim row) is rejected before any row is written or
+    # any handler runs (cortex#471).
+    HostedJobError: DegradationMode.INVALID_INPUT_REJECTED,
+    # A malformed service environment (non-integer PORT, non-UUID tenant id,
+    # blank-but-set secret) refuses startup before any request is served —
+    # a half-understood environment never serves traffic (cortex#470).
+    ServiceConfigError: DegradationMode.INVALID_INPUT_REJECTED,
+    # A structurally malformed webhook delivery (bad event-name header,
+    # oversized delivery GUID, non-object JSON body) is rejected before any
+    # job row exists; signature mismatches are answered 401 without raising
+    # (cortex#470).
+    WebhookValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     LabelingError: DegradationMode.INVALID_INPUT_REJECTED,
     # LaneAssignmentError fires before any model call or write — dropped
     # material attempting graph entry, laundered backfill flags, forged lane
@@ -330,6 +358,11 @@ REMEDIATION_BY_REASON: Mapping[str, str] = MappingProxyType(
         "derive_no_sources": (
             "pass `--source FILE` to point cortex derive at decision sources"
         ),
+        # The api-http transport's configured API-key env var is unset or
+        # blank in the service environment (cortex#517). The canonical hint
+        # string lives next to the adapter so the refusal message and this
+        # table can never drift apart.
+        "model_api_key_missing": API_KEY_REMEDIATION,
     }
 )
 

@@ -7,7 +7,7 @@ import re
 from cortex.hosted.ledger_events import LedgerEventType
 from cortex.hosted.scopes import ScopeType
 
-HOSTED_SCHEMA_VERSION = 6
+HOSTED_SCHEMA_VERSION = 7
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -565,6 +565,67 @@ BEGIN
     END IF;
 END;
 $$;
+
+-- v7 (cortex#470/#471): the canonical hosted job queue + ledger event-type
+-- CHECK refresh. The inline column CHECK on ledger_events.event_type was
+-- created from an older LedgerEventType enum on existing databases; drop and
+-- recreate it from the current enum so new event types (source.event_received)
+-- are insertable. Idempotent: the constraint is rebuilt to the same
+-- definition on every run.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'ledger_events_event_type_check'
+          AND conrelid = '{schema}.ledger_events'::regclass
+    ) THEN
+        ALTER TABLE {schema}.ledger_events
+            DROP CONSTRAINT ledger_events_event_type_check;
+    END IF;
+
+    ALTER TABLE {schema}.ledger_events
+        ADD CONSTRAINT ledger_events_event_type_check
+        CHECK (event_type IN ({event_values}));
+END;
+$$;
+
+CREATE TABLE IF NOT EXISTS {schema}.jobs (
+    job_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_type text NOT NULL,
+    idempotency_key text NOT NULL,
+    status text NOT NULL DEFAULT 'queued',
+    payload jsonb NOT NULL,
+    metadata jsonb NOT NULL DEFAULT '{{}}'::jsonb,
+    result jsonb,
+    attempts integer NOT NULL DEFAULT 0,
+    max_attempts integer NOT NULL,
+    enqueued_at timestamptz NOT NULL DEFAULT now(),
+    next_attempt_at timestamptz NOT NULL DEFAULT now(),
+    claimed_at timestamptz,
+    claimed_by text,
+    finished_at timestamptz,
+    last_error text,
+    CONSTRAINT jobs_idempotency_key_unique UNIQUE (idempotency_key),
+    CHECK (job_type <> ''),
+    CHECK (idempotency_key <> ''),
+    CHECK (status IN ('queued', 'running', 'succeeded', 'dead')),
+    CHECK (jsonb_typeof(payload) = 'object'),
+    CHECK (jsonb_typeof(metadata) = 'object'),
+    CHECK (result IS NULL OR jsonb_typeof(result) = 'object'),
+    CHECK (attempts >= 0),
+    CHECK (max_attempts >= 1)
+);
+
+CREATE INDEX IF NOT EXISTS jobs_claim_idx
+    ON {schema}.jobs (next_attempt_at, enqueued_at)
+    WHERE status = 'queued';
+
+CREATE INDEX IF NOT EXISTS jobs_status_idx
+    ON {schema}.jobs (status, enqueued_at);
+
+COMMENT ON TABLE {schema}.jobs IS
+    'Canonical hosted job queue (one substrate for every hosted background job type); workers claim via FOR UPDATE SKIP LOCKED.';
 
 CREATE INDEX IF NOT EXISTS ledger_events_tenant_time_idx
     ON {schema}.ledger_events (tenant_id, occurred_at, event_id);

@@ -56,6 +56,10 @@ hosted = [
 
 [project.scripts]
 cortex = "cortex.cli:cli"
+# Hosted Stage 1 service entrypoints (cortex#470/#471). Stdlib-only HTTP
+# transport; both require the 'hosted' extra at runtime for Postgres access.
+cortex-api = "cortex.hosted.api.app:main"
+cortex-worker = "cortex.hosted.worker:main"
 
 [project.urls]
 Homepage = "https://github.com/autumngarage/cortex"

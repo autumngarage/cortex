@@ -1,0 +1,18 @@
+# Railway deploy config for the hosted Cortex API shell (cortex#470).
+#
+# This file is the canonical config for the `cortex` (API) service on the
+# compass project. Railway applies config-as-code per service; the worker
+# service (cortex#471) deploys from the same repo with its start command
+# overridden to `uv run --frozen --extra hosted cortex-worker` in the
+# service settings. Full topology, environment variables, and the schema
+# migration step: docs/hosted-deploy.md.
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "uv run --frozen --extra hosted cortex-api"
+healthcheckPath = "/healthz"
+healthcheckTimeout = 60
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

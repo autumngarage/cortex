@@ -308,6 +308,21 @@ mode skip citation or visibility boundaries.
   unverifiable `schema_migrations` record blocks the migration visibly and
   rolls back — the runner never reports a success it cannot read back.
 
+### Server transport registrations (2026-06-10, cortex#517)
+
+- `api_transport.ApiKeyMissingError` -> `degraded_capability`: the route's
+  configured API-key environment variable (default `ANTHROPIC_API_KEY`,
+  overridable via the `api_key_env` route param) is unset or blank in the
+  service environment. The refusal names the variable and carries the
+  `model_api_key_missing` remediation hint — never a bare traceback, and
+  never a request sent without credentials.
+- `api_transport.ApiHttpOutputError` -> `fail_closed_refusal`: a transport
+  failure (non-retryable HTTP status, exhausted 429/5xx retries, network
+  error, truncated output) or a response violating the strict-JSON output
+  contract is refused, never fabricated — mirroring `ClaudeCliOutputError`,
+  including carrying reported token usage so the failed call's cost record
+  still accounts for the spend.
+
 ### Push registration (2026-06-10, cortex#513)
 
 - `push.HostedPushError` -> `drift_detected`: its marquee failure is a
@@ -317,6 +332,24 @@ mode skip citation or visibility boundaries.
   its recorded identity, naming both sides. (Span drift on a file-backed
   candidate is not an error at all: the candidate is excluded as a counted,
   path-naming skip — the write-side `bounded_omission` behavior.)
+### Stage 1 service-shell registrations (2026-06-10, cortex#470/#471)
+
+- `jobs.HostedJobError` -> `invalid_input_rejected`: a job that would
+  violate the canonical queue contract (empty job type or idempotency key,
+  non-JSON-object payload, malformed claim row, invalid backoff parameters)
+  is rejected before any row is written or any handler runs.
+- `api.config.ServiceConfigError` -> `invalid_input_rejected`: a malformed
+  service environment (non-integer `PORT`, non-UUID `CORTEX_TENANT_ID`,
+  blank-but-set secret, unpaired tenant/source mapping) refuses startup
+  before any request is served. Missing *optional* variables are not errors
+  — they degrade per endpoint (degraded `/healthz` body, 503 webhook
+  refusal) with the gap named in the response.
+- `api.webhooks.WebhookValidationError` -> `invalid_input_rejected`: a
+  structurally malformed delivery (bad event-name header, oversized
+  delivery GUID, non-object JSON body) is rejected with a 400 before any
+  job row exists. Signature mismatches are not raised at all — they are
+  answered 401 with no detail about which part failed.
+
 ### Remediation hints (2026-06-10, cortex#516)
 
 Errors are the onboarding surface of a fail-closed product: a refusal that
