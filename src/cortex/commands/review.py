@@ -51,7 +51,8 @@ import os
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass, replace
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -208,6 +209,10 @@ class EvaluateRoute:
     adapter: ProviderAdapter
     adapter_id: str
     model_id: str
+    # Adapter-specific route params (cortex#345 RouteConfig.params). Empty for
+    # the CLI/recorded routes; the api-http route carries api_model (the bare
+    # provider model name) since model_id must be provider-qualified.
+    params: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.adapter_id.strip():
@@ -463,11 +468,14 @@ def resolve_evaluate_route(fixtures_dir: Path | None) -> EvaluateRoute:
     )
 
     if os.environ.get(DEFAULT_API_KEY_ENV, "").strip():
-        model = os.environ.get(REVIEW_API_MODEL_ENV, "").strip() or DEFAULT_REVIEW_API_MODEL
+        bare_model = os.environ.get(REVIEW_API_MODEL_ENV, "").strip() or DEFAULT_REVIEW_API_MODEL
+        # The registry requires a provider-qualified model_id; the Anthropic
+        # API expects the bare model name, carried as the api_model param.
         return EvaluateRoute(
             adapter=ApiHttpAdapter(),
             adapter_id=API_HTTP_ADAPTER_ID,
-            model_id=model,
+            model_id=f"anthropic/{bare_model}",
+            params={"api_model": bare_model},
         )
     raise ReviewDegradedError(REVIEW_NO_EVALUATE_MODEL_MESSAGE)
 
@@ -490,6 +498,7 @@ def build_review_router(route: EvaluateRoute, *, run_ledger: RunLedger) -> Model
                 task_kind=TaskKind.EVALUATE,
                 model_id=route.model_id,
                 adapter_id=route.adapter_id,
+                params=route.params,
             ),
         )
     )
