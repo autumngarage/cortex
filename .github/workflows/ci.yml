@@ -20,7 +20,12 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: uv sync --locked
+        # Include the optional "hosted" extra so the hosted reviewer code
+        # (GitHub App auth, the API transport) is actually exercised in CI —
+        # its tests import jwt/cryptography/psycopg at module load, so without
+        # the extra they fail at collection. DATABASE_URL-gated tests still
+        # skip cleanly with no live database.
+        run: uv sync --locked --extra hosted
 
       - name: Lint
         run: uv run ruff check .
