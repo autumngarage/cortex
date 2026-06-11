@@ -271,6 +271,17 @@ mode skip citation or visibility boundaries.
   rendering (cortex#376) — an advisory surface never renders a citation a
   reader cannot verify; the render-side mirror of the cortex#377 boundary.
 
+### Stage 2 GitHub comment registration (2026-06-10, cortex#390)
+
+- `github_comment.GitHubCommentRenderError` -> `fail_closed_refusal`: the
+  advisory PR-comment renderer refuses to build a comment whose cited
+  decision does not resolve to a permalink through the span index — one
+  surface further out than `FindingRenderError`, same citation boundary.
+  Remediation: re-run the review against the current candidate pack so the
+  cited spans resolve; a finding that cannot resolve provenance is logged and
+  never posted uncited, so the missing-span render only fires when the pack
+  and the emitted findings drifted apart.
+
 ### Graph-hardening registrations (2026-06-10, cortex#318/#319/#320)
 
 - `candidate_dedup.CandidateDedupError` -> `invalid_input_rejected`:
@@ -349,6 +360,25 @@ mode skip citation or visibility boundaries.
   delivery GUID, non-object JSON body) is rejected with a 400 before any
   job row exists. Signature mismatches are not raised at all — they are
   answered 401 with no detail about which part failed.
+
+### Stage 2 GitHub App auth registrations (2026-06-10, cortex#386)
+
+- `github_app_auth.GithubAuthConfigError` -> `invalid_input_rejected`: a
+  missing, blank, non-numeric `GITHUB_APP_ID`, or a missing/blank/non-PEM
+  `GITHUB_APP_PRIVATE_KEY` is rejected at `GithubAppConfig` construction —
+  before any App-JWT is signed or any token exchanged. The refusal names the
+  variable and carries the `github_app_credentials_missing` remediation; a
+  half-configured App never mints a token. (Mirrors `ServiceConfigError`: a
+  half-understood environment never serves traffic.)
+- `github_app_auth.GithubApiError` -> `fail_closed_refusal`: a GitHub REST
+  call (installation token exchange, file/diff read, comment post/update/list)
+  that is refused with a non-retryable 4xx, or that exhausts bounded retries
+  on a 403/429 secondary-rate-limit or 5xx, is refused — carrying the HTTP
+  status and a sanitized body excerpt. The installation token (a secret)
+  never appears in any message or log line; the `github_api_request_failed`
+  remediation names the status and the App's Contents:read / PullRequests:write
+  scopes. A 404 on `get_file_contents` is *not* a failure — it is the
+  documented "file absent at this ref" answer and returns `None`.
 
 ### Remediation hints (2026-06-10, cortex#516)
 

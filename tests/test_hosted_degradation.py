@@ -33,6 +33,7 @@ from cortex.hosted.degradation import (
 from cortex.hosted.diff_surface import DiffSurfaceValidationError
 from cortex.hosted.embeddings import HostedEmbeddingValidationError
 from cortex.hosted.eval_fixtures import FixtureValidationError
+from cortex.hosted.github_app_auth import GithubApiError, GithubAuthConfigError
 from cortex.hosted.ledger_events import LedgerEventValidationError
 from cortex.hosted.migrations import HostedMigrationError
 from cortex.hosted.model_registry import RegistryValidationError
@@ -49,6 +50,8 @@ EXPECTED_CLASSIFICATIONS: tuple[tuple[type[Exception], DegradationMode], ...] = 
     (DecisionsForDiffValidationError, DegradationMode.INVALID_INPUT_REJECTED),
     (DiffSurfaceValidationError, DegradationMode.INVALID_INPUT_REJECTED),
     (FixtureValidationError, DegradationMode.INVALID_INPUT_REJECTED),
+    (GithubApiError, DegradationMode.FAIL_CLOSED_REFUSAL),
+    (GithubAuthConfigError, DegradationMode.INVALID_INPUT_REJECTED),
     (HostedDbError, DegradationMode.FAIL_CLOSED_REFUSAL),
     (HostedEmbeddingValidationError, DegradationMode.INVALID_INPUT_REJECTED),
     (HostedMigrationError, DegradationMode.FAIL_CLOSED_REFUSAL),
@@ -290,6 +293,8 @@ EXPECTED_REMEDIATIONS: tuple[tuple[str, str], ...] = (
     ("cortex_dir_missing", "cortex init"),
     ("derive_no_sources", "--source"),
     ("model_api_key_missing", "ANTHROPIC_API_KEY"),
+    ("github_app_credentials_missing", "GITHUB_APP_ID"),
+    ("github_api_request_failed", "GitHub API status"),
 )
 
 
