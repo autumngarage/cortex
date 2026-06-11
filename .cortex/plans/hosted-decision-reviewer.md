@@ -270,6 +270,49 @@ do-not-host rule; P5 requires P4 plus the dogfood bar.
   The conversation target is a design partner per Journey 4 in
   docs/product/customer-journeys.md — pilot/LOI, not self-serve.
 
+## Source provenance — recording where a decision came from (added 2026-06-10)
+
+Founder requirement: every decision must record **where it came from and
+what signaled it** — "a Linear task someone marked done", "a Slack message
+someone posted", not just "a decision exists". This is the load-bearing
+half of *cited, never a vibe*.
+
+**What the substrate already captures (verified 2026-06-10).** The
+provenance model is provenance-ready: `SourceDocument` carries
+`author_ref` (who), `permalink` + `external_id` + `document_type` (where),
+`source_timestamp` (when); ledger events carry `actor_type`/`actor_id`/
+`occurred_at`; `sources.source_type` is open text, so `slack`, `linear`,
+and `granola` are valid source types today, and the visibility flags
+already include `slack_channel_excluded`. A non-repo decision has a place
+to record who/where/when right now.
+
+**The three gaps these scenarios expose:**
+
+- **SP1 — Connectors aren't built (Future milestone).** Only repo-native
+  extraction exists (files, ADRs, commits, PRs). Slack/Linear/Granola
+  ingestion is the connected-sources stage; the source *can* be recorded
+  but nothing feeds it yet. (Tracked under the connected-sources
+  milestone; stays deferred until the explicit local→hosted→GitHub→Slack
+  loop works, per state.md's deferred list.)
+- **SP2 — The triggering action isn't first-class (#543).** "Marked done"
+  (a Linear status→Done transition) and "posted in #eng, ✅-confirmed by
+  two people" (a Slack message + reactions) are the *signals a decision
+  happened*. The model stores the document and author but not a structured
+  `source_action` (action type + payload). #543 makes the originating
+  action first-class so a citation reads "because @lead marked LINEAR-481
+  Done [permalink]", not just "here is a document".
+- **SP3 — Cross-surface identity (#544).** The same person appears as a
+  slack_user_id, a linear_user_id, and a github_login; provenance
+  fragments without a tenant-scoped, reversible identity map (raw surface
+  actor_id always preserved append-only; resolution is a projection). This
+  also feeds the per-person authoritativeness signal the moat depends on.
+
+Sequencing: SP2/SP3 are designed now (the model is ready) but build
+alongside the connectors at the connected-sources stage — the GitHub/Slack
+loop must work first. The point of recording them now is that the
+provenance contract is locked before any connector writes to it, so no
+connector can land source data that loses the action or the actor.
+
 ## Success Criteria
 
 - The active session-start state points to this plan as the master current
