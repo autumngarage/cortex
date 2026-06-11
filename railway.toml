@@ -1,18 +1,20 @@
-# Railway deploy config for the hosted Cortex API shell (cortex#470).
+# Railway deploy config for the hosted Cortex services on the compass project.
 #
-# This file is the canonical config for the `cortex` (API) service on the
-# compass project. Railway applies config-as-code per service; the worker
-# service (cortex#471) deploys from the same repo with its start command
-# overridden to `uv run --frozen --extra hosted cortex-worker` in the
-# service settings. Full topology, environment variables, and the schema
-# migration step: docs/hosted-deploy.md.
+# One config serves BOTH services from the same repo. Railway provides
+# RAILWAY_SERVICE_NAME at runtime, so the start command branches: the
+# `cortex-worker` service runs the queue worker (cortex#471); every other
+# service (the public `cortex` API, cortex#470) runs the API shell. This
+# avoids a per-service dashboard start-command override.
+#
+# The API serves liveness at /healthz for external monitoring; Railway
+# deploy-gating on it is intentionally not set here because the same config
+# also deploys the worker, which has no HTTP server to health-check. Full
+# topology and environment variables: docs/hosted-deploy.md.
 
 [build]
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "uv run --frozen --extra hosted cortex-api"
-healthcheckPath = "/healthz"
-healthcheckTimeout = 60
+startCommand = "if [ \"$RAILWAY_SERVICE_NAME\" = \"cortex-worker\" ]; then exec uv run --frozen --extra hosted cortex-worker; else exec uv run --frozen --extra hosted cortex-api; fi"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5

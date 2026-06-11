@@ -51,7 +51,8 @@ import os
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass, replace
+from collections.abc import Mapping
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -122,6 +123,14 @@ CLAUDE_ADAPTER_ID = "claude-cli"
 # does not surface an exact upstream model name; the route id names the
 # transport so replay keys distinguish it from recorded playback.
 REVIEW_CLAUDE_MODEL_ID = "anthropic/claude-cli"
+
+# Server-side evaluate route (#517): when there is no claude CLI (a headless
+# worker) but an API key is configured, evaluate over the HTTP transport.
+# The model is the judge — the high-stakes role — so it defaults to a
+# capable model and is overridable per deployment via CORTEX_REVIEW_MODEL
+# (a config edit, no redeploy), per cheapest-model-that-holds-quality.
+REVIEW_API_MODEL_ENV = "CORTEX_REVIEW_MODEL"
+DEFAULT_REVIEW_API_MODEL = "claude-sonnet-4-6"
 
 # The evaluate prompt contract this verb stamps. The template embeds the
 # canonical Stage 0 class guidance (evaluator.evaluate_prompt_guidance), so
@@ -200,6 +209,10 @@ class EvaluateRoute:
     adapter: ProviderAdapter
     adapter_id: str
     model_id: str
+    # Adapter-specific route params (cortex#345 RouteConfig.params). Empty for
+    # the CLI/recorded routes; the api-http route carries api_model (the bare
+    # provider model name) since model_id must be provider-qualified.
+    params: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not self.adapter_id.strip():
@@ -439,13 +452,32 @@ def resolve_evaluate_route(fixtures_dir: Path | None) -> EvaluateRoute:
         return EvaluateRoute(
             adapter=adapter, adapter_id=RECORDED_ADAPTER_ID, model_id=model_id
         )
-    if not claude_cli_available():
-        raise ReviewDegradedError(REVIEW_NO_EVALUATE_MODEL_MESSAGE)
-    return EvaluateRoute(
-        adapter=ClaudeCliAdapter(),
-        adapter_id=CLAUDE_ADAPTER_ID,
-        model_id=REVIEW_CLAUDE_MODEL_ID,
+    if claude_cli_available():
+        return EvaluateRoute(
+            adapter=ClaudeCliAdapter(),
+            adapter_id=CLAUDE_ADAPTER_ID,
+            model_id=REVIEW_CLAUDE_MODEL_ID,
+        )
+    # Headless server (no claude CLI): evaluate over the HTTP transport when
+    # an API key is configured. The adapter defaults api_key_env to
+    # ANTHROPIC_API_KEY and api_model to the route model_id (#517).
+    from cortex.hosted.api_transport import (
+        API_HTTP_ADAPTER_ID,
+        DEFAULT_API_KEY_ENV,
+        ApiHttpAdapter,
     )
+
+    if os.environ.get(DEFAULT_API_KEY_ENV, "").strip():
+        bare_model = os.environ.get(REVIEW_API_MODEL_ENV, "").strip() or DEFAULT_REVIEW_API_MODEL
+        # The registry requires a provider-qualified model_id; the Anthropic
+        # API expects the bare model name, carried as the api_model param.
+        return EvaluateRoute(
+            adapter=ApiHttpAdapter(),
+            adapter_id=API_HTTP_ADAPTER_ID,
+            model_id=f"anthropic/{bare_model}",
+            params={"api_model": bare_model},
+        )
+    raise ReviewDegradedError(REVIEW_NO_EVALUATE_MODEL_MESSAGE)
 
 
 def build_review_router(route: EvaluateRoute, *, run_ledger: RunLedger) -> ModelRouter:
@@ -466,6 +498,7 @@ def build_review_router(route: EvaluateRoute, *, run_ledger: RunLedger) -> Model
                 task_kind=TaskKind.EVALUATE,
                 model_id=route.model_id,
                 adapter_id=route.adapter_id,
+                params=route.params,
             ),
         )
     )
