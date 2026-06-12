@@ -1,8 +1,8 @@
 ---
-Generated: 2026-06-12T00:15:05-04:00
+Generated: 2026-06-12T00:23:32-04:00
 Generator: cortex refresh-state v1.6.4
 Sources:
-  - HEAD sha: aad11818fc6cbddab6203ea45e7d70c4cbe8deae
+  - HEAD sha: 94ec809099e06a73dc04c57d7300f1c99195df42
   - .cortex/plans/*.md (12 files)
   - .cortex/journal/*.md (147 entries, 2026-04-17..2026-06-11)
   - .cortex/doctrine/*.md (11 entries)
@@ -168,12 +168,12 @@ Sources-hash:
   .cortex/journal/2026-06-10-stage1-jobs-queue-postgres-not-broker.md: 5f750cce78d8a939e863528e15a697de1b49aa2e2f0252bbe3f64e5565d8f96b
   .cortex/journal/2026-06-11-compass-review-live-and-flywheel.md: b39a2d1602b54ea6e5eb7ec89d7276573be50c27ad07a5a3ce4abcf1770f21d3
   .cortex/journal/2026-06-11-roadmap-coverage-audit-reconciliation.md: 45a6a52ac8bbc65bc20bdcc40db3309dc0817ccd62354506120eeeceafbfd405
-  .cortex/journal/2026-06-11-staged-catches-reclassified-organic-gate.md: cf79184e3b533cc5b58e7919fd0ce1358ca0192744f08d6e174775f2b0d2a151
+  .cortex/journal/2026-06-11-staged-catches-reclassified-organic-gate.md: 860e8c04bd8601a5bcd2a7181580b9a61a0c88360ad5d2ed49e411aafb149a1c
   .cortex/plans/context-integrity-production.md: 131441fcd1a50d92e82f4ba8f64c3d667412bf23dc91efc501502f42f70a5197
   .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
   .cortex/plans/cortex-v0.3.0.md: d78e60537e30ed81d8464575191674253822ed4953a055ca2a14a9626c5f8b6f
   .cortex/plans/cortex-v1.md: 35b18afacd917c6345d450d7f272a8ac37f52efe3af867ffa3f41e4b485f978b
-  .cortex/plans/hosted-decision-reviewer.md: a7229b783fb77b3ec9e87eeca94947831e23e30b9cc86c9547a03f05c31449c2
+  .cortex/plans/hosted-decision-reviewer.md: 79f47001577d271d83b55a33f9a14cea5b06f4e04c18635e6a55752ea490926c
   .cortex/plans/init-ux-fixes-from-touchstone.md: fdf183f562d2dcde26101ea6b44163bfccf8377affc712cf1318ec16be4ecaee
   .cortex/plans/phase-b-walking-skeleton.md: 4c890ebe0a166b6cf07a0ca150e468614d3130109509e44641cfad216066b0d2
   .cortex/plans/phase-c-authoring-and-state.md: 8ab9a5ac4e593102e16ccab03a8b13248ec68f1afd05cd974c19c0c0e361c3c1

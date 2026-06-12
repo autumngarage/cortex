@@ -181,9 +181,11 @@ the sequence and the gates.
   #331, #369.
 - **Wave 8 — hardening, rebuild, CI gates:** #320, #319, #318, #326, #322,
   #328, #338, #349, #360.
-- **Wave 9 — dogfood run + the gate:** #450, #367, #368, #378, #325, #337,
-  #451 (plus the external multi-author repo run).
-- **Wave 10 — gate-dependent tail:** #357, #340; #436 only if the gate
+- **Wave 9 — dogfood run + replay acceptance:** #450, #367, #368, #325
+  (plus the external multi-author repo run). The #378 hand-grading -> #337
+  report -> #451 sign-off sequence now belongs to Stage 2 organic-catch
+  validation, not the Stage 0 local-proof gate.
+- **Wave 10 — gate-dependent tail:** #357, #340; #436 only if the local gate
   passes, #439 only if it fails.
 - **Sequenced research (front-loaded gateway risk):** #456 -> #459 -> #457 ->
   #458, consumed at Stage 3 entry. Default answer is official Slack SDK/Bolt.
@@ -193,12 +195,9 @@ the sequence and the gates.
 citations or honestly says it does not know; `decisions_for_diff` returns
 bounded cited candidates; historical replay separates retrieval failure from
 evaluator failure; every finding carries a replay key; the loop works on
-Cortex **and one external multi-author repo**. Quantitative bar: **>=70% of
-emitted advisory comments correct and useful on a hand-graded sample**, with
-citation/budget/ledger sub-bars. Gate artifact: the #337 report (template
-#343, self-review section #451) deciding proceed / grind / narrow /
-Contextlint fallback (#439). **Do not host or build webhooks before this
-passes.**
+Cortex **and one external multi-author repo**; #325 records replay acceptance.
+The quantitative quality bar now runs in Stage 2 over organic dogfood traffic:
+#378 hand-grading -> #337 report -> #451 sign-off.
 
 ### Stage 1 — hosted core on Railway (milestone m7, tracker #485)
 
@@ -276,14 +275,14 @@ consuming #443 + #337 + #395.
 ## Path to first customer (added 2026-06-10)
 
 Five overlapping phases from PE-0 to the first design-partner
-conversation. P1-P3 run in parallel; P4 follows the P1 gate per the
-do-not-host rule; P5 requires P4 plus the dogfood bar.
+conversation. P1-P4 can run in parallel for dogfood; P5 requires hosted core
+plus the dogfood and organic-validation bars.
 
-- **P1 — Close the Stage 0 gate.** The Wave 8/9 tail (#322, #326, #338,
-  #367, #368, #373, #374, #376, #339), the #450 batch replay over the
-  corpus, LLM-judge pre-grading + founder spot-check against the >=70%
-  bar (#378), and the #337 report verdict. Founder effort: ~20 minutes of
-  grading, one proceed/grind/narrow/fallback call.
+- **P1 — Close the Stage 0 local tail.** Remaining local proof is #322 plus
+  the #325 replay-acceptance umbrella; the already-closed Wave 8/9 tail and
+  #450 batch replay over the corpus are historical evidence. The #378
+  hand-grading and #337 proceed/grind/narrow/fallback report now belong to
+  Stage 2 organic-catch validation.
 - **P2 — Dogfood deep on our own projects.** vesper, vanguard, and
   outrider each get the full live loop (triage → push to their own
   compass tenants → confirm → ask → review on real diffs); cortex runs
@@ -301,8 +300,9 @@ do-not-host rule; P5 requires P4 plus the dogfood bar.
   (#517), env/secret docs (#469/#475), backups + observability drills
   (#473/#474). Exit: the same loop served over HTTP from compass, one
   code path with local.
-- **P5 — First customer conversation.** Prerequisites: P1 verdict =
-  proceed; #452/#453 dogfood-on-cortex-PRs bar met; the App registered
+- **P5 — First customer conversation.** Prerequisites: Stage 2 organic-catch
+  validation verdict = proceed; #452/#453 dogfood-on-cortex-PRs bar met; the
+  App registered
   (docs/setup/github-app.md — owner task) with Marketplace verification
   filed (#384); the outreach pack (#402 expectations one-pager, #442
   legal surfaces, #396 install playbook) and the #437 warm-referral map.

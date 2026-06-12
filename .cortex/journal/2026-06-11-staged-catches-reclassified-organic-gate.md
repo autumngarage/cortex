@@ -44,7 +44,13 @@ root is celebratory language outrunning verification.
 5. **Re-rank the gates:** #378 hand-grading → #337 report → #451 sign-off
    move from "Stage 0 tail, lower priority" to the validation bar, with #378
    grading live Stage 2 traffic. Path-to-first-customer now reads: no
-   design-partner outreach on staged-demo evidence alone.
+   design-partner outreach on staged-demo evidence alone. This explicitly
+   supersedes the plan's original Stage 0 rule "Do not host or build webhooks
+   before this passes" — that rule was already overtaken by events (hosted
+   core and the live reviewer shipped 2026-06-10/11 ahead of any gate
+   verdict); the re-rank records the supersession instead of leaving the
+   dead rule standing. (The merge-gate reviewer caught the dead rule and the
+   Wave 9 / P1 / P5 inconsistencies; its plan fix is adopted in this PR.)
 6. **Guardrail the sibling rot pattern** (#577): scheduled deterministic
    tracker-checklist reconciliation, so the audit's one-time cleanup has a
    standing mechanism.
