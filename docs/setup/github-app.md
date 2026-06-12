@@ -11,11 +11,11 @@ Path: `github.com/organizations/autumngarage/settings/apps` → **New GitHub App
 
 | Field | Value |
 |---|---|
-| GitHub App name | `Cortex Decision Reviewer` |
+| GitHub App name | `Compass Review` (registered name; App id 4023580, posts as `compass-review[bot]` — earlier draft name `Cortex Decision Reviewer` was not used) |
 | Homepage URL | `https://github.com/autumngarage/cortex` (the #508 landing page later) |
 | Webhook URL | `https://cortex-production-61d7.up.railway.app/webhooks/github` (compass service domain, provisioned 2026-06-10) |
 | Webhook secret | generate: `openssl rand -hex 32` → store in 1Password |
-| Webhook Active | **unchecked** until the #470 API shell is deployed (flip on when told) |
+| Webhook Active | **checked** — flipped active with the live Railway deployment (#470 shipped; live and posting as of 2026-06-11) |
 | Repository permissions | Metadata: **Read** · Contents: **Read** · Pull requests: **Read & write** — nothing else (least-privilege per #385: no checks, no admin, no issues write) |
 | Subscribe to events | Pull request · Issue comment · Pull request review · Pull request review comment (feedback capture, #393) |
 | Where can it be installed | **Any account** (design partners + Marketplace) |
