@@ -265,7 +265,8 @@ def test_schema_defines_the_append_only_feedback_table() -> None:
     # The schema comment states the human-ground-truth boundary plainly.
     assert "HUMAN-GROUND-TRUTH" in sql
     assert "never \"approval\"" in sql
-    assert HOSTED_SCHEMA_VERSION == 9
+    # The feedback corpus shipped in v9; the constant only moves forward.
+    assert HOSTED_SCHEMA_VERSION >= 9
 
 
 def test_schema_enforces_kind_shape_invariant_in_the_db() -> None:

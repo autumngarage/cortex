@@ -149,9 +149,27 @@ def test_schema_models_citable_source_spans() -> None:
 def test_schema_records_version() -> None:
     sql = create_schema_sql()
 
-    # v9 (cortex#394/#393): the human-ground-truth review feedback corpus.
-    assert HOSTED_SCHEMA_VERSION == 9
+    # v10 (cortex#575): the staged-traffic registry.
+    assert HOSTED_SCHEMA_VERSION == 10
     assert f"VALUES ({HOSTED_SCHEMA_VERSION})" in sql
+
+
+def test_schema_models_staged_traffic_registry() -> None:
+    sql = create_schema_sql()
+
+    assert "CREATE TABLE IF NOT EXISTS cortex_hosted.review_staged_prs" in sql
+    assert (
+        "CONSTRAINT review_staged_prs_pr_unique\n"
+        "        UNIQUE (tenant_id, repo_full_name, pr_number)"
+    ) in sql
+    assert "CHECK (reason IN ('title-token', 'label', 'operator-backfill'))" in sql
+    assert "BEFORE UPDATE ON cortex_hosted.review_staged_prs" in sql
+    assert "BEFORE DELETE ON cortex_hosted.review_staged_prs" in sql
+    assert "OPERATOR-INTERNAL staged-traffic registry" in sql
+    # The version stamp lands only after the staged registry exists.
+    assert sql.rfind(f"VALUES ({HOSTED_SCHEMA_VERSION})") > sql.rfind(
+        "CREATE TABLE IF NOT EXISTS cortex_hosted.review_staged_prs"
+    )
 
 
 def test_schema_migrates_v1_source_provenance_tables() -> None:

@@ -97,7 +97,7 @@ redeploying the previous build; the v7 objects are inert under v6 code.
 
 1. `curl -s https://<domain>/healthz` → `"status": "ok"` and
    `"schema_version"` equal to the deployed build's `HOSTED_SCHEMA_VERSION`
-   (`src/cortex/hosted/schema.py` — 9 as of 2026-06-11).
+   (`src/cortex/hosted/schema.py` — 10 as of 2026-06-12).
 2. `curl -s https://<domain>/version` → expected package version + commit.
 3. Send a test delivery (GitHub App → Advanced → Redeliver, once the
    webhook is flipped active per
@@ -110,3 +110,33 @@ Worker log lines are single-line JSON (`worker.started`, `job.claimed`,
 `job.succeeded`, `job.retry_scheduled`, `job.dead_lettered`,
 `job.stale_claim_recovered`, `worker.stopped`) — greppable by `event` key
 without exposing payload secrets.
+
+## Staged demo traffic (cortex#575)
+
+Demo fixtures and walkthrough PRs are a different data regime from organic
+work: their findings and feedback must never feed precision metrics, the
+promote/auto-demote gates, or the organic-catch validation verdict (#576).
+The boundary is the `cortex_hosted.review_staged_prs` registry (schema v10):
+
+- **Convention.** A PR is staged when its **title contains `[cortex-demo]`**
+  (case-insensitive) or it carries the **label `cortex-demo-fixture`**. The
+  worker detects this on every `github.pull_request` job and appends one
+  idempotent registry row (`review.staged_pr` log line). The review itself
+  still runs and posts — demos keep working; only the metrics exclude them.
+- **Backfill.** Retroactively staging a PR (e.g. the original demo fixture,
+  cortex PR #561) is one operator INSERT — never an UPDATE to the
+  append-only feedback corpus:
+
+```sql
+INSERT INTO cortex_hosted.review_staged_prs
+    (tenant_id, repo_full_name, pr_number, reason)
+SELECT DISTINCT tenant_id, repo_full_name, pr_number, 'operator-backfill'
+FROM cortex_hosted.review_feedback_events
+WHERE repo_full_name = 'autumngarage/cortex' AND pr_number = 561
+ON CONFLICT ON CONSTRAINT review_staged_prs_pr_unique DO NOTHING;
+```
+
+- **Consumption.** Metric queries exclude members by JOIN on
+  `(tenant_id, repo_full_name, pr_number)` and report the excluded count —
+  exclusion is visible, never silent (`cortex precision-report` does this by
+  default; `--include-staged` opts back in for demo walkthroughs).

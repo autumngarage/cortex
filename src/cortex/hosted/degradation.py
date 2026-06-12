@@ -98,6 +98,7 @@ from cortex.hosted.routing import (
     RoutingError,
 )
 from cortex.hosted.scopes import ScopeValidationError
+from cortex.hosted.staged_pr import StagedPrError
 from cortex.hosted.stateless_review import (
     STATELESS_REVIEW_PAYLOAD_REMEDIATION,
     StatelessReviewError,
@@ -275,6 +276,12 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # human-ground-truth-only invariants enforceable at construction.
     ReviewFeedbackError: DegradationMode.INVALID_INPUT_REJECTED,
     ScopeValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # A malformed staged-PR registry record (bad reason, non-positive PR
+    # number, naive timestamp) is rejected before any row enters the staged
+    # exclusion set (cortex#575) — the same before-any-write rejection family
+    # as the other validation errors. This keeps the staged/organic data
+    # boundary enforceable at construction.
+    StagedPrError: DegradationMode.INVALID_INPUT_REJECTED,
     # A github.pull_request webhook body missing the installation/repo/PR
     # fields the stateless reviewer needs to fetch and cite a review is
     # refused before any GitHub fetch or model call (cortex#537) — the same
