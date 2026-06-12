@@ -59,6 +59,7 @@ types register a handler; no schema change.
 | `CORTEX_API_HOST` | API | no (default `0.0.0.0`) | Bind address. |
 | `CORTEX_TENANT_ID` / `CORTEX_SOURCE_ID` | worker | optional, paired | Static tenant/source mapping for recording raw webhook arrivals as `source.event_received` ledger events. Unset: jobs are still handled; the result names the unrecorded arrival. Dogfood-only: real installation-based resolution is #572 (#386 shipped the installation-auth half; this static mapping is the residual). |
 | `CORTEX_WORKER_POLL_SECONDS` | worker | no (default 2.0) | Idle poll interval. |
+| `CORTEX_REACTION_POLL_SECONDS` | worker | no (default 900) | Seconds between scheduled reaction sweeps over recently-reviewed PRs (cortex#393 — reactions have no webhook). `0` disables the sweep. Requires App credentials + tenant mapping; each missing precondition is logged. |
 | `CORTEX_STALE_CLAIM_SECONDS` | worker | no (default 1800) | Age after which a `running` claim is presumed crashed and recovered. |
 | `CORTEX_APPLY_SCHEMA_ON_START` | worker | no (default false) | When `1`/`true`, the worker runs the migration runner before polling. |
 | `RAILWAY_GIT_COMMIT_SHA` | API | provided by Railway | Surfaced by `/version`. |
