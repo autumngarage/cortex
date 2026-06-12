@@ -6,7 +6,7 @@ Goal-hash: ec1bc286
 Updated-by:
   - 2026-06-09T00:00 codex (created from the Obsidian Cortex master plan and GitHub roadmap issues #444-#475)
   - 2026-06-09T17:30 claude (recorded the #477-#483 substrate merge wave; full-backlog review: wave ordering, per-stage exit gates, issue-range fix #306-#475, milestone/label numbering resolution, hygiene pass across 164 issues)
-  - 2026-06-10T10:30 claude (PE-0 complete: Stage 0 Waves 1-7 + most of 8 built and merged across bundles #505/#507/#509/#518; first live cited answer and first real contradiction catch on Railway compass; pickup pointer moved to the Wave 8/9 tail + Stage 1 frontier)
+  - 2026-06-10T10:30 claude (PE-0 complete: Stage 0 Waves 1-7 + most of 8 built and merged across bundles #505/#507/#509/#518; first live cited answer and first staged contradiction demo on Railway compass; pickup pointer moved to the Wave 8/9 tail + Stage 1 frontier)
   - 2026-06-11T16:10 claude (Stage 2 LIVE capture: Compass Review posting + flywheel turning — body rewritten via PR #567; this provenance line backfilled 2026-06-11 reconciliation)
   - 2026-06-11T18:00 claude (roadmap-coverage audit reconciliation: residual issues #568–#573 filed; tracker checklists #444/#445/#446/#447/#449/#455/#485 synced to live state; Stage 0 tail corrected to verified-open set; #538/#539 citations un-swapped; cascade section repointed #547→#568)
   - 2026-06-11T23:30 claude (validation reflection: both catches to date reclassified as staged demos; organic-catch gate #576 + staged-traffic corpus hygiene #575 + tracker anti-rot #577 filed; quality-gate sequence #378→#337→#451 re-ranked from tail cleanup to the validation bar)

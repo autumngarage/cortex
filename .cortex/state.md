@@ -1,8 +1,8 @@
 ---
-Generated: 2026-06-11T23:13:34-04:00
+Generated: 2026-06-12T00:10:23-04:00
 Generator: cortex refresh-state v1.6.4
 Sources:
-  - HEAD sha: 5fb98621c82b5eca5468b4cd7b9595641e40d247
+  - HEAD sha: 8ccb2ea3b0be10362ca37e5b2941d1c2ce2fc770
   - .cortex/plans/*.md (12 files)
   - .cortex/journal/*.md (147 entries, 2026-04-17..2026-06-11)
   - .cortex/doctrine/*.md (11 entries)
@@ -173,7 +173,7 @@ Sources-hash:
   .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
   .cortex/plans/cortex-v0.3.0.md: d78e60537e30ed81d8464575191674253822ed4953a055ca2a14a9626c5f8b6f
   .cortex/plans/cortex-v1.md: 35b18afacd917c6345d450d7f272a8ac37f52efe3af867ffa3f41e4b485f978b
-  .cortex/plans/hosted-decision-reviewer.md: 978c885ad0ccf27ba47a8c8f645b5eac853703fdb80f547ba0a1cdf2d82b3fa9
+  .cortex/plans/hosted-decision-reviewer.md: 3e31e574bb7458234f8dd3881d30f05e857c0b3af170d42fdd0fd2871ca2760b
   .cortex/plans/init-ux-fixes-from-touchstone.md: fdf183f562d2dcde26101ea6b44163bfccf8377affc712cf1318ec16be4ecaee
   .cortex/plans/phase-b-walking-skeleton.md: 4c890ebe0a166b6cf07a0ca150e468614d3130109509e44641cfad216066b0d2
   .cortex/plans/phase-c-authoring-and-state.md: 8ab9a5ac4e593102e16ccab03a8b13248ec68f1afd05cd974c19c0c0e361c3c1
