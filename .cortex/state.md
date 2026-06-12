@@ -1,10 +1,10 @@
 ---
-Generated: 2026-06-11T22:55:51-04:00
+Generated: 2026-06-11T23:13:34-04:00
 Generator: cortex refresh-state v1.6.4
 Sources:
-  - HEAD sha: 0acc7f12851d0beb577c77844ba38bc127ba328e
+  - HEAD sha: 5fb98621c82b5eca5468b4cd7b9595641e40d247
   - .cortex/plans/*.md (12 files)
-  - .cortex/journal/*.md (146 entries, 2026-04-17..2026-06-11)
+  - .cortex/journal/*.md (147 entries, 2026-04-17..2026-06-11)
   - .cortex/doctrine/*.md (11 entries)
   - .cortex/templates/**/*.md (12 templates)
   - docs/case-studies/*.md (1 case studies)
@@ -168,11 +168,12 @@ Sources-hash:
   .cortex/journal/2026-06-10-stage1-jobs-queue-postgres-not-broker.md: 5f750cce78d8a939e863528e15a697de1b49aa2e2f0252bbe3f64e5565d8f96b
   .cortex/journal/2026-06-11-compass-review-live-and-flywheel.md: b39a2d1602b54ea6e5eb7ec89d7276573be50c27ad07a5a3ce4abcf1770f21d3
   .cortex/journal/2026-06-11-roadmap-coverage-audit-reconciliation.md: 45a6a52ac8bbc65bc20bdcc40db3309dc0817ccd62354506120eeeceafbfd405
+  .cortex/journal/2026-06-11-staged-catches-reclassified-organic-gate.md: cf79184e3b533cc5b58e7919fd0ce1358ca0192744f08d6e174775f2b0d2a151
   .cortex/plans/context-integrity-production.md: 131441fcd1a50d92e82f4ba8f64c3d667412bf23dc91efc501502f42f70a5197
   .cortex/plans/cortex-retrieve.md: 88fe09e7e6145786dcd15f94bff90e5edd5e5b096ff3ac664b0cedb7689a3760
   .cortex/plans/cortex-v0.3.0.md: d78e60537e30ed81d8464575191674253822ed4953a055ca2a14a9626c5f8b6f
   .cortex/plans/cortex-v1.md: 35b18afacd917c6345d450d7f272a8ac37f52efe3af867ffa3f41e4b485f978b
-  .cortex/plans/hosted-decision-reviewer.md: 6e4af41c86af528b0541d7461093b6a8cb6286c786deb76a85bbe8fc3d2598ce
+  .cortex/plans/hosted-decision-reviewer.md: 978c885ad0ccf27ba47a8c8f645b5eac853703fdb80f547ba0a1cdf2d82b3fa9
   .cortex/plans/init-ux-fixes-from-touchstone.md: fdf183f562d2dcde26101ea6b44163bfccf8377affc712cf1318ec16be4ecaee
   .cortex/plans/phase-b-walking-skeleton.md: 4c890ebe0a166b6cf07a0ca150e468614d3130109509e44641cfad216066b0d2
   .cortex/plans/phase-c-authoring-and-state.md: 8ab9a5ac4e593102e16ccab03a8b13248ec68f1afd05cd974c19c0c0e361c3c1
@@ -193,7 +194,7 @@ Sources-hash:
   .cortex/templates/journal/sentinel-cycle.md: 2945e2d94af4ec9848584b4b3e9cea7060d2968dd42e78faf21fb6f859137476
   .cortex/templates/plans/template.md: d8156cfa3b86acd2a1fbb36cff07cae37d99f3adee7f72b14b7b16e645c51b44
   docs/case-studies/2026-04-24-stale-claude-md-steered-agent-wrong.md: 9d4b1efe9de29fe85a3a18b6eb37b406350ea90b00c85fa89a3209db4df9f47c
-Corpus: 146 Journal entries, 12 Plans, 11 Doctrine entries, 12 Templates, 1 Case studies
+Corpus: 147 Journal entries, 12 Plans, 11 Doctrine entries, 12 Templates, 1 Case studies
 Omitted:
   []
 Incomplete:
@@ -218,12 +219,12 @@ Spec: 1.1.0
 This file (`.cortex/state.md`) and [`plans/hosted-decision-reviewer.md`](./plans/hosted-decision-reviewer.md) are the repo-internal answers to "where are we" and "what's next" per [Doctrine 0007](./doctrine/0007-canonical-ownership-of-state-and-plans.md). The external Obsidian `cortex_master_plan.md` owns product strategy; `.cortex` points agents to it and records the repo-operational plan.
 
 **Status by stage:**
-- **Stage 0 — local proof:** the loop is BUILT and PROVEN live (2026-06-10): derive→confirm→push→ask→review all ran against Railway compass, ending in the first real contradicts-prior-decision catch (`docs/walkthrough-pe0.md`). Remaining (verified against live issue state 2026-06-11): #322 decision-version stamping, the #325 replay-acceptance umbrella, and the quality-gate sequence (hand-grading #378 → the #337 report → #451 sign-off). The rest of the Wave 8/9 tail (#326/#338/#339/#367/#368/#373/#374/#376) and the #450 replay CLI closed 2026-06-10.
+- **Stage 0 — local proof:** the loop is BUILT and PROVEN live (2026-06-10): derive→confirm→push→ask→review all ran against Railway compass, ending in the first contradicts-prior-decision catch — a **staged demo** (`contradiction.diff`, `docs/walkthrough-pe0.md` § 7; reclassified per `journal/2026-06-11-staged-catches-reclassified-organic-gate.md`). Remaining (verified against live issue state 2026-06-11): #322 decision-version stamping, the #325 replay-acceptance umbrella, and the quality-gate sequence (hand-grading #378 → the #337 report → #451 sign-off). The rest of the Wave 8/9 tail (#326/#338/#339/#367/#368/#373/#374/#376) and the #450 replay CLI closed 2026-06-10.
 - **Stage 1 — hosted core:** hosted core is LIVE enough for dogfood: Postgres/schema v9 on compass, API shell #470, worker #471, and server transport #517 are operating with live integration evidence. Remaining: ops #473/#474, env docs #469/#475, security #530–#540 + #543/#544, embeddings backfill #570.
-- **Stage 2 — GitHub reviewer:** LIVE on Railway as Compass Review (2026-06-11): PR webhook, diff-scoped retrieval, advisory comments, and feedback capture have posted on a real PR and captured human feedback. Next: precision-report #395, scheduled reaction polling (#393), feedback sentiment/override classification (#380; the converse generation role is #549), real installation→tenant resolution (#572, residual of #386), inline-anchored findings (#569), the cascade economics ladder (#568), and the Touchstone babysit loop touchstone#455.
+- **Stage 2 — GitHub reviewer:** LIVE on Railway as Compass Review (2026-06-11): PR webhook, diff-scoped retrieval, advisory comments, and feedback capture have posted and captured human feedback — on a **staged demo fixture** (PR #561). Mechanism proven; the product idea is unvalidated until an organic catch (#576), with staged traffic excluded from metrics (#575). Next (validation-first): #575 corpus hygiene, precision-report #395, reaction polling (#393), feedback classification (#380; converse role #549), hand-grading #378, installation→tenant resolution (#572), inline anchoring (#569), cascade economics (#568), babysit loop touchstone#455.
 - **Stage 3 — Slack ledger console:** `@cortex what did we decide about X?`, `@cortex here is what we decided...`, confirm/reject/merge/supersede/stale.
 
-**Path to first customer (updated 2026-06-11):** Stage 2 is live for dogfood. Next: flywheel actuators (#395 precision-report, #393 reaction polling, #380 feedback classification, #572 installation→tenant resolution, touchstone#455 babysit loop), audit residuals #568/#569/#570, security tiers #530–#540 + #543/#544 before any external tenant, then design-partner outreach. The older P1/P2/P3/P5 bars still apply; P4's hosted-core exit is met for dogfood by the live Compass Review path. Canonical detail: the active plan's `## Pickup pointer`.
+**Path to first customer (updated 2026-06-11):** Stage 2 is live for dogfood. Next: flywheel actuators (#575 staged-traffic hygiene first, then #395 precision-report, #393 reaction polling, #380 feedback classification, #572 installation→tenant resolution, touchstone#455 babysit loop), audit residuals #568/#569/#570, **the organic-catch validation gate #576 + quality gates #378/#337/#451**, security tiers #530–#540 + #543/#544 before any external tenant, then design-partner outreach. No design-partner outreach on staged-demo evidence alone. The older P1/P2/P3/P5 bars still apply; P4's hosted-core exit is met for dogfood by the live Compass Review path. Canonical detail: the active plan's `## Pickup pointer`.
 
 **Deferred from the hosted core loop:** blocking checks, passive Slack ingestion, Linear/Granola connectors, MCP supply loop, enterprise/on-prem packaging, and marketplace billing. These stay future work until the explicit local/hosted/GitHub/Slack loop works.
 
