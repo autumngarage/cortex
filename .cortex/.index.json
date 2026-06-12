@@ -1,6 +1,6 @@
 {
   "spec": "1.1.0",
-  "generated": "2026-06-11T22:53:10-04:00",
+  "generated": "2026-06-11T23:13:27-04:00",
   "candidates": [
     {
       "id": "2026-04-17-competitive-positioning-and-claude-code-risk",
@@ -302,6 +302,15 @@
     {
       "id": "2026-06-11-roadmap-coverage-audit-reconciliation",
       "source": ".cortex/journal/2026-06-11-roadmap-coverage-audit-reconciliation.md",
+      "type": "decision",
+      "last_touched": "2026-06-11",
+      "tags": [],
+      "supersedes": null,
+      "promoted_to": null
+    },
+    {
+      "id": "2026-06-11-staged-catches-reclassified-organic-gate",
+      "source": ".cortex/journal/2026-06-11-staged-catches-reclassified-organic-gate.md",
       "type": "decision",
       "last_touched": "2026-06-11",
       "tags": [],

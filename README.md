@@ -16,7 +16,7 @@
 
 # Cortex
 
-An AI agent changed code in a way that contradicted something your team had already decided. The diff looked plausible; code review checks the code and CI checks the build, but nothing checks the *context the agent reasoned from*. Cortex is the decision ledger plus the reviewer that enforces it: a cited, provenance-first record of what the team decided, and a soft evaluator that flags new changes contradicting it — advisory findings with citations, never uncited vibes. The local loop is real today (derive → confirm → cited answer → the first real contradiction caught; transcript in [`docs/walkthrough-pe0.md`](./docs/walkthrough-pe0.md)); the hosted GitHub/Slack product is pre-launch.
+An AI agent changed code in a way that contradicted something your team had already decided. The diff looked plausible; code review checks the code and CI checks the build, but nothing checks the *context the agent reasoned from*. Cortex is the decision ledger plus the reviewer that enforces it: a cited, provenance-first record of what the team decided, and a soft evaluator that flags new changes contradicting it — advisory findings with citations, never uncited vibes. The local loop runs today (derive → confirm → cited answer → staged contradiction demo with citations; transcript in [`docs/walkthrough-pe0.md`](./docs/walkthrough-pe0.md)); the hosted GitHub/Slack product is pre-launch and still waiting on an organic catch.
 
 The open local foundation underneath is the `.cortex/` file protocol and this reference CLI: project memory as source code. Primary facts live in structured Markdown under `.cortex/`, generated context surfaces declare their inputs, and `cortex doctor` verifies the invariants before stale or uncited context quietly steers an agent. No new database, no daemon, no mandatory vector index — the memory store stays grepable, diffable, and auditable with existing tools.
 
@@ -99,8 +99,9 @@ generated context locally. The hosted Cortex product is different. GitHub
 PR review and Slack conversations need model-backed semantic judgment to feel
 smart: finding a real disagreement between a diff and Doctrine, verifying the
 evidence, or answering a natural-language project question. The local proof of
-that loop ran end-to-end on 2026-06-10 — derive → confirm → cited answer →
-the first real contradiction caught with citation; the transcript lives in
+that mechanism ran end-to-end on 2026-06-10 — derive → confirm → cited answer →
+a deliberately staged contradiction caught with citation; organic validation is
+still pending. The transcript lives in
 [`docs/walkthrough-pe0.md`](./docs/walkthrough-pe0.md).
 
 **Cortex does not host your team's memory.** Your decisions live in your own

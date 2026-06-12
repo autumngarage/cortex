@@ -6,9 +6,10 @@ Goal-hash: ec1bc286
 Updated-by:
   - 2026-06-09T00:00 codex (created from the Obsidian Cortex master plan and GitHub roadmap issues #444-#475)
   - 2026-06-09T17:30 claude (recorded the #477-#483 substrate merge wave; full-backlog review: wave ordering, per-stage exit gates, issue-range fix #306-#475, milestone/label numbering resolution, hygiene pass across 164 issues)
-  - 2026-06-10T10:30 claude (PE-0 complete: Stage 0 Waves 1-7 + most of 8 built and merged across bundles #505/#507/#509/#518; first live cited answer and first real contradiction catch on Railway compass; pickup pointer moved to the Wave 8/9 tail + Stage 1 frontier)
+  - 2026-06-10T10:30 claude (PE-0 complete: Stage 0 Waves 1-7 + most of 8 built and merged across bundles #505/#507/#509/#518; first live cited answer and first staged contradiction demo on Railway compass; pickup pointer moved to the Wave 8/9 tail + Stage 1 frontier)
   - 2026-06-11T16:10 claude (Stage 2 LIVE capture: Compass Review posting + flywheel turning — body rewritten via PR #567; this provenance line backfilled 2026-06-11 reconciliation)
   - 2026-06-11T18:00 claude (roadmap-coverage audit reconciliation: residual issues #568–#573 filed; tracker checklists #444/#445/#446/#447/#449/#455/#485 synced to live state; Stage 0 tail corrected to verified-open set; #538/#539 citations un-swapped; cascade section repointed #547→#568)
+  - 2026-06-11T23:30 claude (validation reflection: both catches to date reclassified as staged demos; organic-catch gate #576 + staged-traffic corpus hygiene #575 + tracker anti-rot #577 filed; quality-gate sequence #378→#337→#451 re-ranked from tail cleanup to the validation bar)
 Cites: journal/2026-06-09-hosted-decision-reviewer-plan-adopted, journal/2026-06-09-roadmap-refinement-and-issue-hygiene, state.md § Current work, docs/HOSTED-PRICING.md
 ---
 
@@ -26,19 +27,36 @@ Cites: journal/2026-06-09-hosted-decision-reviewer-plan-adopted, journal/2026-06
   on compass. Worker live: dry-run off, token budget 32k, api-http model route
   (`anthropic/claude-sonnet-4-6` via the `ANTHROPIC_API` shared key). See
   [`journal/2026-06-11-compass-review-live-and-flywheel.md`](../journal/2026-06-11-compass-review-live-and-flywheel.md).
-- **NEXT — the flywheel actuators:** `cortex precision-report` (#395, success
-  rate from feedback), scheduled reaction polling (#393), feedback
-  sentiment/override classification (#380; the converse generation role is
-  #549), real installation→tenant resolution (#572 — residual of #386; the
-  static env mapping is dogfood-only), inline-anchored findings (#569,
-  residual of #390), the cascade economics ladder (#568, residual of #547),
-  the Touchstone babysit loop (touchstone#455, now unblocked), then
-  promote/auto-demote by precision (#413/#415), rot alarms (#423), and the
-  security tiers (#530–#540, #543/#544) before any external tenant.
+- **VALIDATION STATUS — mechanism proven, idea NOT yet validated (2026-06-11):**
+  both catches to date were staged (PE-0 ran a hand-built `contradiction.diff`;
+  PR #561 was a DO-NOT-MERGE demo fixture — citations verified accurate, but
+  planted). The product idea validates only on an **organic catch** (#576:
+  a real PR, not built to demo Cortex, contradicting a recorded decision),
+  with staged traffic excluded from precision metrics (#575) so #395 never
+  reports fixture-precision as product-precision. The quality-gate sequence
+  (hand-grading #378 → report #337 → sign-off #451) is the validation bar,
+  not Stage 0 tail cleanup. The falsification window is running: ~4 weeks of
+  live posting across the 6 dogfood repos (recall un-crippled since the #563
+  fix); zero organic catches at the end is a recorded pivot/persevere signal,
+  not a blank. See
+  [`journal/2026-06-11-staged-catches-reclassified-organic-gate.md`](../journal/2026-06-11-staged-catches-reclassified-organic-gate.md).
+- **NEXT — the flywheel actuators (validation-first order):** staged-traffic
+  corpus hygiene (#575 — must land before metrics read the corpus), `cortex
+  precision-report` (#395, success rate from feedback), scheduled reaction
+  polling (#393), feedback sentiment/override classification (#380; the
+  converse generation role is #549), hand-grading live output against the
+  70%-useful bar (#378, now over Stage 2 traffic), real installation→tenant
+  resolution (#572 — residual of #386; the static env mapping is
+  dogfood-only), inline-anchored findings (#569, residual of #390), the
+  cascade economics ladder (#568, residual of #547), the Touchstone babysit
+  loop (touchstone#455, now unblocked), then promote/auto-demote by precision
+  (#413/#415), rot alarms (#423), and the security tiers (#530–#540,
+  #543/#544) before any external tenant.
 - **Stage 0 tail (verified open 2026-06-11):** #322 decision-version stamping;
-  the #325 replay-acceptance umbrella; quality-gate sequence #378 → #337 →
-  #451. (The rest of the Wave 8/9 tail — #326/#338/#339/#367/#368/#373/#374/
-  #376 — and the #450 replay CLI closed 2026-06-10.)
+  the #325 replay-acceptance umbrella. The quality-gate sequence #378 → #337 →
+  #451 moved up to the validation bar (see VALIDATION STATUS above). (The rest
+  of the Wave 8/9 tail — #326/#338/#339/#367/#368/#373/#374/#376 — and the
+  #450 replay CLI closed 2026-06-10.)
 - **Stage 1 done bits:** API shell #470, worker #471, server transport #517 all
   live; remaining ops #473/#474, env docs #469/#475, security #530–#540 +
   #543/#544, embeddings backfill #570.
@@ -163,9 +181,11 @@ the sequence and the gates.
   #331, #369.
 - **Wave 8 — hardening, rebuild, CI gates:** #320, #319, #318, #326, #322,
   #328, #338, #349, #360.
-- **Wave 9 — dogfood run + the gate:** #450, #367, #368, #378, #325, #337,
-  #451 (plus the external multi-author repo run).
-- **Wave 10 — gate-dependent tail:** #357, #340; #436 only if the gate
+- **Wave 9 — dogfood run + replay acceptance:** #450, #367, #368, #325
+  (plus the external multi-author repo run). The #378 hand-grading -> #337
+  report -> #451 sign-off sequence now belongs to Stage 2 organic-catch
+  validation, not the Stage 0 local-proof gate.
+- **Wave 10 — gate-dependent tail:** #357, #340; #436 only if the local gate
   passes, #439 only if it fails.
 - **Sequenced research (front-loaded gateway risk):** #456 -> #459 -> #457 ->
   #458, consumed at Stage 3 entry. Default answer is official Slack SDK/Bolt.
@@ -175,12 +195,9 @@ the sequence and the gates.
 citations or honestly says it does not know; `decisions_for_diff` returns
 bounded cited candidates; historical replay separates retrieval failure from
 evaluator failure; every finding carries a replay key; the loop works on
-Cortex **and one external multi-author repo**. Quantitative bar: **>=70% of
-emitted advisory comments correct and useful on a hand-graded sample**, with
-citation/budget/ledger sub-bars. Gate artifact: the #337 report (template
-#343, self-review section #451) deciding proceed / grind / narrow /
-Contextlint fallback (#439). **Do not host or build webhooks before this
-passes.**
+Cortex **and one external multi-author repo**; #325 records replay acceptance.
+The quantitative quality bar now runs in Stage 2 over organic dogfood traffic:
+#378 hand-grading -> #337 report -> #451 sign-off.
 
 ### Stage 1 — hosted core on Railway (milestone m7, tracker #485)
 
@@ -258,14 +275,14 @@ consuming #443 + #337 + #395.
 ## Path to first customer (added 2026-06-10)
 
 Five overlapping phases from PE-0 to the first design-partner
-conversation. P1-P3 run in parallel; P4 follows the P1 gate per the
-do-not-host rule; P5 requires P4 plus the dogfood bar.
+conversation. P1-P4 can run in parallel for dogfood; P5 requires hosted core
+plus the dogfood and organic-validation bars.
 
-- **P1 — Close the Stage 0 gate.** The Wave 8/9 tail (#322, #326, #338,
-  #367, #368, #373, #374, #376, #339), the #450 batch replay over the
-  corpus, LLM-judge pre-grading + founder spot-check against the >=70%
-  bar (#378), and the #337 report verdict. Founder effort: ~20 minutes of
-  grading, one proceed/grind/narrow/fallback call.
+- **P1 — Close the Stage 0 local tail.** Remaining local proof is #322 plus
+  the #325 replay-acceptance umbrella; the already-closed Wave 8/9 tail and
+  #450 batch replay over the corpus are historical evidence. The #378
+  hand-grading and #337 proceed/grind/narrow/fallback report now belong to
+  Stage 2 organic-catch validation.
 - **P2 — Dogfood deep on our own projects.** vesper, vanguard, and
   outrider each get the full live loop (triage → push to their own
   compass tenants → confirm → ask → review on real diffs); cortex runs
@@ -283,8 +300,9 @@ do-not-host rule; P5 requires P4 plus the dogfood bar.
   (#517), env/secret docs (#469/#475), backups + observability drills
   (#473/#474). Exit: the same loop served over HTTP from compass, one
   code path with local.
-- **P5 — First customer conversation.** Prerequisites: P1 verdict =
-  proceed; #452/#453 dogfood-on-cortex-PRs bar met; the App registered
+- **P5 — First customer conversation.** Prerequisites: Stage 2 organic-catch
+  validation verdict = proceed; #452/#453 dogfood-on-cortex-PRs bar met; the
+  App registered
   (docs/setup/github-app.md — owner task) with Marketplace verification
   filed (#384); the outreach pack (#402 expectations one-pager, #442
   legal surfaces, #396 install playbook) and the #437 warm-referral map.
@@ -464,8 +482,10 @@ requirements before building.
 - GitHub issue #444 links back to the Obsidian master plan and the staged
   issue breakdown is aligned to the four-stage spine via the per-stage
   trackers (#445, #485, #446, #455) — one canonical checklist per stage.
-- Stage 0 local proof passes its exit gate with the #337 report as the
-  artifact (>=70% hand-graded advisory bar; replay keys; cited-or-no-answer).
+- Stage 0 local proof closes its local-mechanism gate with replay keys and
+  cited-or-no-answer behavior on repo-native sources; #322/#325 finish the
+  verified-open tail. The #378 hand-grading -> #337 report -> #451 sign-off
+  sequence is Stage 2 organic-catch validation, not a Stage 0 exit artifact.
 - Hosted Railway core passes its exit gate (API/worker/Postgres, tested
   restore, environment separation, one code path with local).
 - GitHub advisory reviewer dogfoods on Cortex PRs without spam (#452 against
@@ -487,8 +507,11 @@ requirements before building.
 - [ ] Stage 0 local proof — Waves 1-7 and most of 8 SHIPPED (derive with
   six extractors, eval harness, evaluator with both thesis finding classes,
   replay runner, read-value surfaces, push/triage/review verbs; first live
-  catch 2026-06-10 per the walkthrough). Remaining: #322/#326/#338/#367/
-  #368/#373/#374/#376/#339 + gate artifacts #450 → #378 → #337.
+  cited answer plus first staged contradiction demo 2026-06-10 per the
+  walkthrough). Remaining Stage 0 tail: #322 + the #325 replay-acceptance
+  umbrella. The #378 → #337 → #451 quality-gate sequence is Stage 2
+  organic-catch validation, not Stage 0 remaining work; #450 closed
+  2026-06-10.
 - [ ] Stage 1 hosted core: #469-#475 (tracker #485), including the first
   executable SQL path (#472).
 - [ ] Stage 2 GitHub reviewer: #384-#397 build, #452/#453 dogfood,
