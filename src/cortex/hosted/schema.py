@@ -7,7 +7,7 @@ import re
 from cortex.hosted.ledger_events import LedgerEventType
 from cortex.hosted.scopes import ScopeType
 
-HOSTED_SCHEMA_VERSION = 9
+HOSTED_SCHEMA_VERSION = 10
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -745,6 +745,38 @@ CREATE INDEX IF NOT EXISTS review_feedback_events_classify_pending_idx
 COMMENT ON TABLE {schema}.review_feedback_events IS
     'HUMAN-GROUND-TRUTH evaluator feedback corpus (operator-internal). Append-only; one row per human reaction/reply on a Compass Review comment, keyed to the review replay identity (model_id, prompt_version, snapshot_hash). Absence of a row is missing feedback, never approval. Not a customer surface.';
 
+-- v10 (cortex#575): the STAGED-TRAFFIC registry. One append-only row per PR
+-- whose review traffic is a staged demonstration (deliberately planted
+-- contradictions, fixtures, walkthroughs) rather than organic work. Staged
+-- and organic traffic are different data regimes ("Version your data
+-- boundaries"): precision metrics, promote/auto-demote gates (#413/#415),
+-- and the organic-catch validation verdict (#576) must never blend them.
+-- Membership is by PR identity (tenant, repo, pr_number), so every finding
+-- and feedback event on a staged PR is excluded by JOIN — the append-only
+-- feedback corpus itself is never rewritten. Rows are written by the worker
+-- when a PR matches the staged convention (title token '[cortex-demo]' or
+-- label 'cortex-demo-fixture') and by operators for retroactive backfill
+-- (e.g. cortex PR #561, the original demo fixture).
+CREATE TABLE IF NOT EXISTS {schema}.review_staged_prs (
+    staged_pr_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id uuid NOT NULL,
+    repo_full_name text NOT NULL,
+    pr_number integer NOT NULL,
+    reason text NOT NULL,
+    recorded_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT review_staged_prs_pr_unique
+        UNIQUE (tenant_id, repo_full_name, pr_number),
+    CHECK (repo_full_name <> ''),
+    CHECK (pr_number > 0),
+    CHECK (reason IN ('title-token', 'label', 'operator-backfill'))
+);
+
+CREATE INDEX IF NOT EXISTS review_staged_prs_repo_pr_idx
+    ON {schema}.review_staged_prs (repo_full_name, pr_number);
+
+COMMENT ON TABLE {schema}.review_staged_prs IS
+    'OPERATOR-INTERNAL staged-traffic registry. Append-only; one row per demo/fixture PR, keyed by (tenant, repo, pr_number). Precision metrics and quality gates exclude member PRs by JOIN; a mis-tag is corrected by a future supersede mechanism, never UPDATE/DELETE.';
+
 CREATE INDEX IF NOT EXISTS ledger_events_tenant_time_idx
     ON {schema}.ledger_events (tenant_id, occurred_at, event_id);
 
@@ -960,6 +992,30 @@ DROP TRIGGER IF EXISTS review_feedback_events_no_delete ON {schema}.review_feedb
 CREATE TRIGGER review_feedback_events_no_delete
     BEFORE DELETE ON {schema}.review_feedback_events
     FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_review_feedback_mutation();
+
+-- v10 (cortex#575): the staged-traffic registry is append-only too. A wrong
+-- tag is corrected by a future supersede mechanism that appends, never by
+-- rewriting the registry — metric reproducibility depends on the exclusion
+-- set being stable history.
+CREATE OR REPLACE FUNCTION {schema}.prevent_staged_pr_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION 'review_staged_prs is append-only; attempted %', TG_OP
+        USING ERRCODE = '55000';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS review_staged_prs_no_update ON {schema}.review_staged_prs;
+CREATE TRIGGER review_staged_prs_no_update
+    BEFORE UPDATE ON {schema}.review_staged_prs
+    FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_staged_pr_mutation();
+
+DROP TRIGGER IF EXISTS review_staged_prs_no_delete ON {schema}.review_staged_prs;
+CREATE TRIGGER review_staged_prs_no_delete
+    BEFORE DELETE ON {schema}.review_staged_prs
+    FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_staged_pr_mutation();
 
 COMMENT ON TABLE {schema}.ledger_events IS
     'Canonical append-only hosted Cortex ledger. Mutations are forbidden; corrections append new events.';

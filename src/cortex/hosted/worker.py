@@ -327,6 +327,12 @@ class Worker:
         # DB error here fails the job visibly (it is a real failure); a missing
         # cost / non-review result is a visible skip, never silent.
         self._record_review_cost(job, result)
+        # Staged-traffic registry (cortex#575): demo-fixture PRs are a
+        # different data regime from organic work; one idempotent registry row
+        # per staged PR lets precision metrics exclude them by JOIN without
+        # ever rewriting the append-only feedback corpus. Same transaction as
+        # job completion, same atomicity argument as the cost row.
+        self._record_staged_pr(job, result)
         self._conn.execute(
             complete_job_sql(),
             {
@@ -413,6 +419,69 @@ class Worker:
             input_tokens=record.input_tokens,
             output_tokens=record.output_tokens,
             usd=record.usd,
+            recorded=row is not None,
+        )
+
+    def _record_staged_pr(self, job: ClaimedJob, result: Mapping[str, Any]) -> None:
+        """Register a staged demo-fixture PR in the exclusion registry.
+
+        Detection is the documented convention (title token ``[cortex-demo]``
+        or label ``cortex-demo-fixture`` — cortex#575); an organic PR simply
+        produces no row and no log line. A staged PR gets one idempotent
+        registry row (``ON CONFLICT DO NOTHING`` on the PR identity) and one
+        ``review.staged_pr`` structured log line so the exclusion is visible
+        at write time, never silent. An unparseable PR identity on a payload
+        that DID match the staged convention is a visible skip (logged), not
+        a job failure — mirroring the cost-row degradation contract. A DB
+        write error propagates and fails the job: a database that cannot
+        persist is a real failure.
+        """
+
+        if result.get("review_mode") != "stateless":
+            return
+
+        from cortex.hosted.staged_pr import (
+            StagedPrError,
+            StagedPrRecord,
+            detect_staged_reason,
+            staged_pr_insert_sql,
+        )
+        from cortex.hosted.stateless_review import (
+            StatelessReviewError,
+            parse_pull_request_payload,
+        )
+
+        reason = detect_staged_reason(job.payload)
+        if reason is None:
+            return
+        try:
+            event = parse_pull_request_payload(job.payload)
+            record = StagedPrRecord(
+                tenant_id=event.tenant_id,
+                repo_full_name=f"{event.owner}/{event.repo}",
+                pr_number=event.pr_number,
+                reason=reason,
+                recorded_at=datetime.now(UTC),
+            )
+        except (StatelessReviewError, StagedPrError) as exc:
+            _log(
+                "review.staged_pr_skipped",
+                job_id=job.job_id,
+                reason="unrecordable_identity",
+                error=f"{type(exc).__name__}: {exc}",
+            )
+            return
+
+        row = self._conn.execute(
+            staged_pr_insert_sql(), record.as_insert_parameters()
+        ).fetchone()
+        _log(
+            "review.staged_pr",
+            job_id=job.job_id,
+            tenant=record.tenant_id,
+            repo=record.repo_full_name,
+            pr=record.pr_number,
+            staged_reason=record.reason,
             recorded=row is not None,
         )
 
