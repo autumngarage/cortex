@@ -32,6 +32,7 @@ import os
 import signal
 import socket
 import threading
+import time
 import types
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -79,6 +80,14 @@ _FALSE_TOKENS = frozenset({"0", "false", "no", "off"})
 # overrides per deployment. Cost stays trivial (~$0.10/review at this size).
 REVIEW_TOKEN_BUDGET_ENV = "CORTEX_REVIEW_TOKEN_BUDGET"
 DEFAULT_HOSTED_REVIEW_TOKEN_BUDGET = 32000
+
+# Reactions have no webhook (cortex#393): the worker sweeps them on a clock
+# between queue drains. Seconds between sweeps; "0" disables the sweep
+# explicitly. The 15-minute default keeps GitHub API usage trivial (a handful
+# of reads per recently-reviewed PR) while feedback lands the same quarter
+# hour a human reacts.
+REACTION_POLL_SECONDS_ENV = "CORTEX_REACTION_POLL_SECONDS"
+DEFAULT_REACTION_POLL_SECONDS = 900.0
 
 JobHandler = Callable[[ClaimedJob], Mapping[str, Any]]
 
@@ -246,6 +255,9 @@ class Worker:
         retry_base_seconds: float = 30.0,
         retry_cap_seconds: float = 3600.0,
         sleep: Callable[[float], None] | None = None,
+        reaction_sweep: Callable[[], Mapping[str, Any]] | None = None,
+        reaction_sweep_seconds: float = 900.0,
+        monotonic: Callable[[], float] | None = None,
     ) -> None:
         if poll_interval_seconds <= 0:
             raise HostedJobError(
@@ -254,6 +266,10 @@ class Worker:
         if stale_claim_seconds <= 0:
             raise HostedJobError(
                 f"stale_claim_seconds must be positive, got {stale_claim_seconds}"
+            )
+        if reaction_sweep is not None and reaction_sweep_seconds <= 0:
+            raise HostedJobError(
+                f"reaction_sweep_seconds must be positive, got {reaction_sweep_seconds}"
             )
         # Validate the backoff parameters once, up front, instead of on the
         # first failed job.
@@ -266,6 +282,10 @@ class Worker:
         self._retry_base_seconds = retry_base_seconds
         self._retry_cap_seconds = retry_cap_seconds
         self._sleep = sleep if sleep is not None else threading.Event().wait
+        self._reaction_sweep = reaction_sweep
+        self._reaction_sweep_seconds = reaction_sweep_seconds
+        self._monotonic = monotonic if monotonic is not None else time.monotonic
+        self._last_reaction_sweep: float | None = None
 
     def recover_stale_claims(self) -> int:
         """Return stale ``running`` rows to the queue (or the dead letter)."""
@@ -500,8 +520,41 @@ class Worker:
             while processed and not stop.is_set():
                 processed = self.run_once()
             if not stop.is_set():
+                self.maybe_run_reaction_sweep()
+            if not stop.is_set():
                 self._sleep(self._poll_interval_seconds)
         _log("worker.stopped", worker=self._worker_id)
+
+    def maybe_run_reaction_sweep(self) -> bool:
+        """Run the reaction sweep when configured and due; never let it crash
+        the worker.
+
+        Reactions have no webhook (cortex#393), so the worker sweeps them on a
+        clock between queue drains. A sweep failure is a visible degradation
+        (one ``feedback.reaction_sweep_failed`` line) — the queue keeps
+        draining either way, and the next due tick retries. Returns whether a
+        sweep was attempted.
+        """
+
+        if self._reaction_sweep is None:
+            return False
+        now = self._monotonic()
+        if (
+            self._last_reaction_sweep is not None
+            and now - self._last_reaction_sweep < self._reaction_sweep_seconds
+        ):
+            return False
+        self._last_reaction_sweep = now
+        try:
+            self._reaction_sweep()
+        except Exception as exc:
+            self._conn.rollback()
+            _log(
+                "feedback.reaction_sweep_failed",
+                worker=self._worker_id,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+        return True
 
     def _fail(self, job: ClaimedJob, *, error: str) -> None:
         if job.attempts_exhausted:
@@ -655,6 +708,63 @@ def _maybe_build_feedback_handler(
     return handle
 
 
+def build_reaction_sweep(
+    *,
+    recorder: ArrivalRecorder,
+    environ: Mapping[str, str] | None = None,
+) -> tuple[Callable[[], Mapping[str, Any]], float] | None:
+    """Build the scheduled reaction sweep when its preconditions hold.
+
+    Needs the same two things the reply-feedback handler needs — GitHub App
+    credentials (to read comments/reactions) and a configured tenant (to key
+    corpus rows) — plus a non-zero ``CORTEX_REACTION_POLL_SECONDS``. Every
+    missing precondition is named in a log line; ``None`` means "no sweep",
+    visibly, never silently.
+    """
+
+    env = environ if environ is not None else os.environ
+    raw_interval = env.get(REACTION_POLL_SECONDS_ENV, "").strip()
+    interval = DEFAULT_REACTION_POLL_SECONDS
+    if raw_interval:
+        try:
+            interval = float(raw_interval)
+        except ValueError as exc:
+            raise ServiceConfigError(
+                f"{REACTION_POLL_SECONDS_ENV} must be a number of seconds; "
+                f"got {raw_interval!r}"
+            ) from exc
+    if interval <= 0:
+        _log("worker.reaction_sweep_disabled", reason="interval_zero")
+        return None
+    if not github_app_credentials_present(env):
+        _log("worker.reaction_sweep_disabled", reason="github_app_unconfigured")
+        return None
+    if recorder.tenant_id is None:
+        _log("worker.reaction_sweep_disabled", reason="tenant_unconfigured")
+        return None
+
+    from cortex.hosted.github_app_auth import (
+        GithubAppConfig,
+        GithubInstallationClient,
+        InstallationTokenSource,
+    )
+    from cortex.hosted.reaction_sweep import run_reaction_sweep
+
+    token_source = InstallationTokenSource(GithubAppConfig.from_env(env))
+    tenant_id = recorder.tenant_id
+    conn = recorder.conn
+
+    def sweep() -> Mapping[str, Any]:
+        return run_reaction_sweep(
+            conn,
+            lambda installation_id: GithubInstallationClient(token_source, installation_id),
+            tenant_id=tenant_id,
+        )
+
+    _log("worker.reaction_sweep_enabled", interval_seconds=interval)
+    return sweep, interval
+
+
 def install_signal_handlers(stop: threading.Event) -> None:
     """Wire SIGTERM/SIGINT to a graceful stop of the polling loop."""
 
@@ -685,11 +795,14 @@ def main() -> None:
     recorder = ArrivalRecorder(
         conn=conn, tenant_id=config.tenant_id, source_id=config.source_id
     )
+    sweep_config = build_reaction_sweep(recorder=recorder)
     worker = Worker(
         conn=conn,
         registry=build_worker_registry(recorder=recorder),
         poll_interval_seconds=config.poll_interval_seconds,
         stale_claim_seconds=config.stale_claim_seconds,
+        reaction_sweep=sweep_config[0] if sweep_config else None,
+        reaction_sweep_seconds=sweep_config[1] if sweep_config else 900.0,
     )
     stop = threading.Event()
     install_signal_handlers(stop)

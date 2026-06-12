@@ -86,6 +86,7 @@ from cortex.hosted.provenance import ProvenanceValidationError
 from cortex.hosted.push import HostedPushError
 from cortex.hosted.quality_series import QualitySeriesValidationError
 from cortex.hosted.question_normalization import QuestionNormalizationError
+from cortex.hosted.reaction_sweep import ReactionSweepError
 from cortex.hosted.recorded_responses import RecordedResponseError
 from cortex.hosted.replay_runner import ReplayError
 from cortex.hosted.review_cost import ReviewCostError
@@ -259,6 +260,11 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # An empty question is rejected before any normalization or retrieval —
     # nothing partial reaches the FTS leg (cortex#512).
     QuestionNormalizationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # An invalid reaction-sweep configuration (non-positive window/cap,
+    # blank tenant) is rejected before any GitHub read or corpus write
+    # (cortex#393) — the same before-any-side-effect rejection family as
+    # the other validation errors.
+    ReactionSweepError: DegradationMode.INVALID_INPUT_REJECTED,
     RegistryValidationError: DegradationMode.DRIFT_DETECTED,
     # ReplayError's marquee failure is a missing recorded response: the replay
     # runner refuses to fall back to a live model call (cortex#336).
