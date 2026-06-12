@@ -482,8 +482,10 @@ requirements before building.
 - GitHub issue #444 links back to the Obsidian master plan and the staged
   issue breakdown is aligned to the four-stage spine via the per-stage
   trackers (#445, #485, #446, #455) — one canonical checklist per stage.
-- Stage 0 local proof passes its exit gate with the #337 report as the
-  artifact (>=70% hand-graded advisory bar; replay keys; cited-or-no-answer).
+- Stage 0 local proof closes its local-mechanism gate with replay keys and
+  cited-or-no-answer behavior on repo-native sources; #322/#325 finish the
+  verified-open tail. The #378 hand-grading -> #337 report -> #451 sign-off
+  sequence is Stage 2 organic-catch validation, not a Stage 0 exit artifact.
 - Hosted Railway core passes its exit gate (API/worker/Postgres, tested
   restore, environment separation, one code path with local).
 - GitHub advisory reviewer dogfoods on Cortex PRs without spam (#452 against
@@ -505,8 +507,11 @@ requirements before building.
 - [ ] Stage 0 local proof — Waves 1-7 and most of 8 SHIPPED (derive with
   six extractors, eval harness, evaluator with both thesis finding classes,
   replay runner, read-value surfaces, push/triage/review verbs; first live
-  catch 2026-06-10 per the walkthrough). Remaining: #322/#326/#338/#367/
-  #368/#373/#374/#376/#339 + gate artifacts #450 → #378 → #337.
+  cited answer plus first staged contradiction demo 2026-06-10 per the
+  walkthrough). Remaining Stage 0 tail: #322 + the #325 replay-acceptance
+  umbrella. The #378 → #337 → #451 quality-gate sequence is Stage 2
+  organic-catch validation, not Stage 0 remaining work; #450 closed
+  2026-06-10.
 - [ ] Stage 1 hosted core: #469-#475 (tracker #485), including the first
   executable SQL path (#472).
 - [ ] Stage 2 GitHub reviewer: #384-#397 build, #452/#453 dogfood,
