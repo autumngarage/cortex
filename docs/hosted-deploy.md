@@ -57,7 +57,7 @@ types register a handler; no schema change.
 | `GITHUB_WEBHOOK_SECRET` | API | optional (webhook 503s without it) | HMAC-SHA256 secret from the App registration. |
 | `PORT` | API | provided by Railway | Listen port (default 8080). |
 | `CORTEX_API_HOST` | API | no (default `0.0.0.0`) | Bind address. |
-| `CORTEX_TENANT_ID` / `CORTEX_SOURCE_ID` | worker | optional, paired | Static tenant/source mapping for recording raw webhook arrivals as `source.event_received` ledger events. Unset: jobs are still handled; the result names the unrecorded arrival. Replaced by installation-based resolution in Stage 2 (#386). |
+| `CORTEX_TENANT_ID` / `CORTEX_SOURCE_ID` | worker | optional, paired | Static tenant/source mapping for recording raw webhook arrivals as `source.event_received` ledger events. Unset: jobs are still handled; the result names the unrecorded arrival. Dogfood-only: real installation-based resolution is #572 (#386 shipped the installation-auth half; this static mapping is the residual). |
 | `CORTEX_WORKER_POLL_SECONDS` | worker | no (default 2.0) | Idle poll interval. |
 | `CORTEX_STALE_CLAIM_SECONDS` | worker | no (default 1800) | Age after which a `running` claim is presumed crashed and recovered. |
 | `CORTEX_APPLY_SCHEMA_ON_START` | worker | no (default false) | When `1`/`true`, the worker runs the migration runner before polling. |
@@ -68,7 +68,11 @@ Config parsing is fail-closed (`ServiceConfig.from_env`): malformed values
 tenant/source) refuse startup with the variable named. No secret is ever
 committed; values live as Railway service variables (policy: #475).
 
-## Schema migration (v7)
+## Schema migration (v7 — historical; live schema is v9 as of 2026-06-11)
+
+The same append-only migration path later applied v8 (`review_cost_records`
+cost ledger, PR #559) and v9 (`review_feedback_events` ground-truth corpus,
+PR #566); compass runs v9. The v7 step is kept below as the worked example.
 
 Schema v7 adds the `cortex_hosted.jobs` table and refreshes the
 `ledger_events.event_type` CHECK for the new `source.event_received` event
@@ -92,7 +96,8 @@ redeploying the previous build; the v7 objects are inert under v6 code.
 ## Deploy verification
 
 1. `curl -s https://<domain>/healthz` → `"status": "ok"` and
-   `"schema_version": 7`.
+   `"schema_version"` equal to the deployed build's `HOSTED_SCHEMA_VERSION`
+   (`src/cortex/hosted/schema.py` — 9 as of 2026-06-11).
 2. `curl -s https://<domain>/version` → expected package version + commit.
 3. Send a test delivery (GitHub App → Advanced → Redeliver, once the
    webhook is flipped active per

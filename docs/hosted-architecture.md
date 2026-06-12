@@ -23,12 +23,14 @@ Closes cortex#310.
 4. [.cortex/plans/hosted-decision-reviewer.md](../.cortex/plans/hosted-decision-reviewer.md)
    (stage spine, waves, exit gates).
 
-> **The caveat everything below sits under: the substrate is non-executing.**
-> Every module emits SQL as strings and validates dataclasses; there is no
-> Postgres driver, no migration runner, and no CLI wiring. All hosted tests
-> are string/dataclass assertions. The first executable SQL path lands with
-> cortex#472 (Stage 1, psycopg + migration runner). This document describes
-> the contract layer as designed, not a running system.
+> **Historical caveat (as written 2026-06-09; resolved 2026-06-11).** At
+> writing time the substrate was non-executing — SQL strings and dataclass
+> validation only, no Postgres driver, migration runner, or CLI wiring. That
+> is no longer true: cortex#472 shipped the psycopg driver + migration
+> runner, schema v9 is applied on the compass Railway database, and the live
+> API + worker services run against it (see
+> [hosted-deploy.md](./hosted-deploy.md) and the module-map addendum below).
+> The sections below describe the contract layer as designed at writing time.
 
 ---
 
@@ -62,7 +64,7 @@ The substrate is one event log plus rebuildable projections, exactly as
 
 | Module | Role | Load-bearing exports |
 |---|---|---|
-| `schema.py` | Versioned Postgres DDL (`HOSTED_SCHEMA_VERSION = 6`), in-DDL migration blocks, append-only + provenance-immutability triggers, all indexes | `create_schema_sql()` |
+| `schema.py` | Versioned Postgres DDL (`HOSTED_SCHEMA_VERSION = 6` at writing; 9 as of 2026-06-11), in-DDL migration blocks, append-only + provenance-immutability triggers, all indexes | `create_schema_sql()` |
 | `storage.py` | Storage-boundary guardrail: Postgres is the only canonical store; SQLite allowed only under approved roles (`local-replay-export`, `retrieve-index-cache`) | `validate_canonical_store`, `validate_rebuildable_cache_store`, `HOSTED_STORAGE_DECISION` |
 | `ledger_events.py` | The one write envelope: `LedgerEvent` (frozen, validated), 8 event types, per-type required fields, deterministic `event_hash` over `as_immutable_payload()`, retry-safe `derive_idempotency_key` | `LedgerEvent`, `LedgerEventType`, `ledger_event_insert_sql()` |
 | `provenance.py` | Immutable source snapshots + citable spans: `document_hash` keyed by content (re-ingest with drift ⇒ new snapshot), `span_hash` over offsets + excerpt hash so citations survive re-derivation | `SourceDocument`, `SourceSpan`, idempotent insert SQL |
@@ -98,9 +100,10 @@ The substrate is one event log plus rebuildable projections, exactly as
 - **One storage boundary.** `storage.py` makes growing a second product
   substrate a raised error, not a code-review argument.
 
-### 1.4 What does NOT exist yet (so nobody assumes it)
+### 1.4 What did NOT exist yet at writing (since closed where noted)
 
-- No Postgres driver, connection policy, or migration runner (→ #472).
+- No Postgres driver, connection policy, or migration runner (→ #472 —
+  since shipped; the worker runs live against compass).
 - No write-path orchestration: nothing composes a `decision.confirmed` event
   with its `decision_versions` row and `decision_nodes` update in a
   transaction (→ #314).
@@ -109,7 +112,8 @@ The substrate is one event log plus rebuildable projections, exactly as
 - No derive, no evaluator, no eval harness, no CLI surface over any of this
   (→ Waves 1–9 in the plan).
 - Glob scopes never match concrete paths — both structural SQL surfaces join
-  on exact `normalized_value` equality (→ #484, with #472).
+  on exact `normalized_value` equality (→ #484, with #472 — both since
+  shipped).
 
 ---
 

@@ -22,7 +22,7 @@ question is returned unchanged. Degenerate boilerplate-only questions
 ("what did we decide about?") therefore degrade to today's behavior instead
 of producing an unsatisfiable empty query.
 
-Out of scope here (cortex#512 follow-up): populating the embeddings table so
+Out of scope here (tracked as cortex#570): populating the embeddings table so
 the vector leg survives stemming mismatches ("composition" vs "compose").
 This module fixes the FTS leg only.
 """

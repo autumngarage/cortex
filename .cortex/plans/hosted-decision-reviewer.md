@@ -7,6 +7,8 @@ Updated-by:
   - 2026-06-09T00:00 codex (created from the Obsidian Cortex master plan and GitHub roadmap issues #444-#475)
   - 2026-06-09T17:30 claude (recorded the #477-#483 substrate merge wave; full-backlog review: wave ordering, per-stage exit gates, issue-range fix #306-#475, milestone/label numbering resolution, hygiene pass across 164 issues)
   - 2026-06-10T10:30 claude (PE-0 complete: Stage 0 Waves 1-7 + most of 8 built and merged across bundles #505/#507/#509/#518; first live cited answer and first real contradiction catch on Railway compass; pickup pointer moved to the Wave 8/9 tail + Stage 1 frontier)
+  - 2026-06-11T16:10 claude (Stage 2 LIVE capture: Compass Review posting + flywheel turning — body rewritten via PR #567; this provenance line backfilled 2026-06-11 reconciliation)
+  - 2026-06-11T18:00 claude (roadmap-coverage audit reconciliation: residual issues #568–#573 filed; tracker checklists #444/#445/#446/#447/#449/#455/#485 synced to live state; Stage 0 tail corrected to verified-open set; #538/#539 citations un-swapped; cascade section repointed #547→#568)
 Cites: journal/2026-06-09-hosted-decision-reviewer-plan-adopted, journal/2026-06-09-roadmap-refinement-and-issue-hygiene, state.md § Current work, docs/HOSTED-PRICING.md
 ---
 
@@ -25,15 +27,21 @@ Cites: journal/2026-06-09-hosted-decision-reviewer-plan-adopted, journal/2026-06
   (`anthropic/claude-sonnet-4-6` via the `ANTHROPIC_API` shared key). See
   [`journal/2026-06-11-compass-review-live-and-flywheel.md`](../journal/2026-06-11-compass-review-live-and-flywheel.md).
 - **NEXT — the flywheel actuators:** `cortex precision-report` (#395, success
-  rate from feedback), scheduled reaction polling, sentiment classification
-  (#549), real installation→tenant resolution (#386, the static env mapping is
-  dogfood-only), the Touchstone babysit loop (touchstone#455, now unblocked),
-  then promote/auto-demote by precision (#413/#415), rot alarms (#423), and the
-  security tiers (#530-#544) before any external tenant.
-- **Stage 0 tail (still open, lower priority now):** #322/#326/#338/#367/#368/
-  #373(done via #556)/#374/#376/#339; #450/#378/#337 quality-gate sequence.
+  rate from feedback), scheduled reaction polling (#393), feedback
+  sentiment/override classification (#380; the converse generation role is
+  #549), real installation→tenant resolution (#572 — residual of #386; the
+  static env mapping is dogfood-only), inline-anchored findings (#569,
+  residual of #390), the cascade economics ladder (#568, residual of #547),
+  the Touchstone babysit loop (touchstone#455, now unblocked), then
+  promote/auto-demote by precision (#413/#415), rot alarms (#423), and the
+  security tiers (#530–#540, #543/#544) before any external tenant.
+- **Stage 0 tail (verified open 2026-06-11):** #322 decision-version stamping;
+  the #325 replay-acceptance umbrella; quality-gate sequence #378 → #337 →
+  #451. (The rest of the Wave 8/9 tail — #326/#338/#339/#367/#368/#373/#374/
+  #376 — and the #450 replay CLI closed 2026-06-10.)
 - **Stage 1 done bits:** API shell #470, worker #471, server transport #517 all
-  live; remaining ops #473/#474, env docs #469/#475, security #530-#544.
+  live; remaining ops #473/#474, env docs #469/#475, security #530–#540 +
+  #543/#544, embeddings backfill #570.
 - **Stage 0 tracker:** [cortex#445](https://github.com/autumngarage/cortex/issues/445).
   Master tracker: [cortex#444](https://github.com/autumngarage/cortex/issues/444).
 - **Dispatch rule:** every open product issue carries `alchemist-skip` (applied
@@ -353,7 +361,7 @@ mid-market (~$25k ACV), and is mandatory at enterprise — so the plan is a
 - **TS2 — Data minimization for the shared tier (#532 no stored file
   content, #533 payload TTL):** when a customer opts into storage, hold
   excerpts + hashes, not contents; reduce webhook payloads to skeletons.
-- **TS3 — Isolation backstops for the shared tier (#530 RLS reads, #538
+- **TS3 — Isolation backstops for the shared tier (#530 RLS reads, #539
   composite tenant FKs writes):** the audit (2026-06-10) confirmed reads
   rely on query discipline and writes have no structural cross-tenant
   guard; both land before any external shared-tier tenant.
@@ -368,7 +376,7 @@ mid-market (~$25k ACV), and is mandatory at enterprise — so the plan is a
 - **DONE (live endpoint hotfix):** two HIGH webhook DoS findings —
   negative-Content-Length unbounded read and slowloris (no socket
   timeout) — fixed and regression-tested.
-- **#539 edge-proxy invariant + app-layer concurrency cap:** the stdlib
+- **#538 edge-proxy invariant + app-layer concurrency cap:** the stdlib
   server must not be a security boundary; document Railway edge
   guarantees + bound concurrency.
 - **#540 hardening bundle:** redaction one-path (delete the divergent
@@ -406,7 +414,7 @@ The comment/answer **structure and citations are deterministic** (#390);
 the LLM does judgment (cascade) and grounded phrasing (converse), not the
 facts.
 
-### The configurable intelligence cascade (#547) — load-bearing for the economics
+### The configurable intelligence cascade (#568, residual of #547) — load-bearing for the economics
 
 Most PRs must cost ~$0; the frontier model fires only on plausible
 conflicts. The cost ladder, cheapest tier first: **Tier 0** deterministic
@@ -416,7 +424,9 @@ over-budget "review manually" signal (no spend). All of it is
 **configuration, not code** (route table #345): per-tier model,
 per-tier thresholds, per-tenant cascade profiles, BYOK valve, all versioned
 so cost/precision metrics never blend across a config change. The economics
-guardrail (#547) tracks **cost-per-PR** and per-tier escalation-rate with a
+guardrail (#568 — #547 closed via PR #559, which shipped only the cost
+telemetry; the ladder/config/BYOK/regression-gate ACs carry in #568) tracks
+**cost-per-PR** and per-tier escalation-rate with a
 regression gate — the cost analogue of the #338 precision gate — and the
 downward ratchet downgrades a tier's model when a cheaper one holds
 precision on the protected slices.
