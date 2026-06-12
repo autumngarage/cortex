@@ -312,11 +312,18 @@ def test_staged_registry_round_trip_is_append_only_and_idempotent() -> None:
                 "WHERE staged_pr_id = %(id)s",
                 {"id": inserted[0]},
             )
+        # The failed UPDATE poisons the transaction; rolling back also undoes
+        # the INSERT above, so re-insert before probing the DELETE trigger —
+        # a DELETE matching zero rows would never fire it.
         connection.rollback()
+        reinserted = connection.execute(
+            staged_pr_insert_sql(), record.as_insert_parameters()
+        ).fetchone()
+        assert reinserted is not None
         with pytest.raises(psycopg.Error):
             connection.execute(
                 "DELETE FROM cortex_hosted.review_staged_prs WHERE staged_pr_id = %(id)s",
-                {"id": inserted[0]},
+                {"id": reinserted[0]},
             )
     finally:
         connection.rollback()

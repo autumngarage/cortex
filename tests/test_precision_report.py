@@ -172,14 +172,36 @@ def test_payload_is_json_safe_and_round_trips() -> None:
 
 def test_query_joins_staged_registry_and_binds_filters() -> None:
     base = feedback_query_sql()
-    assert "LEFT JOIN cortex_hosted.review_staged_prs" in base
-    assert "(s.staged_pr_id IS NOT NULL) AS staged" in base
+    assert "FROM cortex_hosted.review_staged_prs" in base
+    assert "SELECT DISTINCT repo_full_name, pr_number" in base
+    assert "(s.repo_full_name IS NOT NULL) AS staged" in base
     assert "WHERE" not in base
     filtered = feedback_query_sql(since=True, repo=True)
     assert "f.occurred_at >= %(since)s" in filtered
     assert "f.repo_full_name = %(repo)s" in filtered
     with pytest.raises(Exception, match="identifier"):
         feedback_query_sql("drop table;--")
+
+
+def test_staged_join_does_not_condition_on_tenant_id() -> None:
+    """Regression (cortex#572 gap): feedback rows carry the static env-mapped
+    tenant while staged/cost rows carry the per-repo deterministic tenant, so
+    a tenant-conditioned join silently never matches on live data and staged
+    exclusion fails open. The join must key on (repo_full_name, pr_number)
+    only until #572 unifies tenant identity."""
+
+    sql = feedback_query_sql()
+    assert "s.tenant_id" not in sql
+    assert "s.repo_full_name = f.repo_full_name" in sql
+    assert "s.pr_number = f.pr_number" in sql
+
+
+def test_staged_join_deduplicates_repo_pr_across_tenants() -> None:
+    """Regression: the staged registry is unique by tenant+repo+PR, so a raw
+    tenantless join can duplicate every feedback row for a staged PR."""
+
+    sql = feedback_query_sql()
+    assert "LEFT JOIN (\n    SELECT DISTINCT repo_full_name, pr_number" in sql
 
 
 # ---------------------------------------------------------------------------
@@ -244,17 +266,21 @@ def test_precision_round_trip_excludes_staged_pr_by_default() -> None:
     connection = connect(DATABASE_URL)
     try:
         apply_schema(connection)
-        # PR 1 is staged (the demo fixture); PR 2 is organic.
-        connection.execute(
-            staged_pr_insert_sql(),
-            StagedPrRecord(
-                tenant_id=tenant,
-                repo_full_name=repo,
-                pr_number=1,
-                reason=STAGED_REASON_BACKFILL,
-                recorded_at=datetime.now(UTC),
-            ).as_insert_parameters(),
-        )
+        # PR 1 is staged (the demo fixture); PR 2 is organic. The registry row
+        # deliberately carries a DIFFERENT tenant than the feedback events —
+        # the live shape (static env tenant vs per-repo deterministic tenant,
+        # the #572 gap). Exclusion must still hold via (repo, pr_number).
+        for _ in range(2):
+            connection.execute(
+                staged_pr_insert_sql(),
+                StagedPrRecord(
+                    tenant_id=str(uuid4()),
+                    repo_full_name=repo,
+                    pr_number=1,
+                    reason=STAGED_REASON_BACKFILL,
+                    recorded_at=datetime.now(UTC),
+                ).as_insert_parameters(),
+            )
         for event in (
             _event(pr_number=1, comment_id=101, kind=FeedbackKind.REACTION_UP, sentiment=FeedbackSentiment.POSITIVE),
             _event(pr_number=2, comment_id=202, kind=FeedbackKind.REACTION_UP, sentiment=FeedbackSentiment.POSITIVE),
@@ -266,6 +292,7 @@ def test_precision_round_trip_excludes_staged_pr_by_default() -> None:
         rows = [dict(zip(column_names, row, strict=True)) for row in cursor.fetchall()]
 
         default_report = aggregate_feedback_rows(rows)
+        assert len(rows) == 2
         assert default_report.staged_excluded == 1
         assert default_report.overall.positive == 1  # the organic event only
         included_report = aggregate_feedback_rows(rows, include_staged=True)
