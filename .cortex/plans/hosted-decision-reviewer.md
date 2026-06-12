@@ -10,6 +10,7 @@ Updated-by:
   - 2026-06-11T16:10 claude (Stage 2 LIVE capture: Compass Review posting + flywheel turning — body rewritten via PR #567; this provenance line backfilled 2026-06-11 reconciliation)
   - 2026-06-11T18:00 claude (roadmap-coverage audit reconciliation: residual issues #568–#573 filed; tracker checklists #444/#445/#446/#447/#449/#455/#485 synced to live state; Stage 0 tail corrected to verified-open set; #538/#539 citations un-swapped; cascade section repointed #547→#568)
   - 2026-06-11T23:30 claude (validation reflection: both catches to date reclassified as staged demos; organic-catch gate #576 + staged-traffic corpus hygiene #575 + tracker anti-rot #577 filed; quality-gate sequence #378→#337→#451 re-ranked from tail cleanup to the validation bar)
+  - 2026-06-12T13:00 claude (flywheel instrumentation shipped + live: #575 staged registry/schema v10 (PR #579), #395 precision-report (PRs #580/#581 incl. the tenant-join fix), #393 scheduled reaction sweep (PR #582, closed); compass redeployed both services; GitHub auto-deploys repaired via NIXPACKS_UV_VERSION pin; outrider credit-burn incident attributed + filed outriderintel/outrider#555; merge-gate fix-mode class filed touchstone#463)
 Cites: journal/2026-06-09-hosted-decision-reviewer-plan-adopted, journal/2026-06-09-roadmap-refinement-and-issue-hygiene, state.md § Current work, docs/HOSTED-PRICING.md
 ---
 
@@ -40,18 +41,26 @@ Cites: journal/2026-06-09-hosted-decision-reviewer-plan-adopted, journal/2026-06
   fix); zero organic catches at the end is a recorded pivot/persevere signal,
   not a blank. See
   [`journal/2026-06-11-staged-catches-reclassified-organic-gate.md`](../journal/2026-06-11-staged-catches-reclassified-organic-gate.md).
-- **NEXT — the flywheel actuators (validation-first order):** staged-traffic
-  corpus hygiene (#575 — must land before metrics read the corpus), `cortex
-  precision-report` (#395, success rate from feedback), scheduled reaction
-  polling (#393), feedback sentiment/override classification (#380; the
-  converse generation role is #549), hand-grading live output against the
-  70%-useful bar (#378, now over Stage 2 traffic), real installation→tenant
-  resolution (#572 — residual of #386; the static env mapping is
-  dogfood-only), inline-anchored findings (#569, residual of #390), the
-  cascade economics ladder (#568, residual of #547), the Touchstone babysit
-  loop (touchstone#455, now unblocked), then promote/auto-demote by precision
-  (#413/#415), rot alarms (#423), and the security tiers (#530–#540,
-  #543/#544) before any external tenant.
+- **ACTUATORS LIVE (2026-06-12):** the flywheel's instrumentation half is
+  shipped and operating on compass — staged-traffic registry + #561 backfill
+  (#575, PR #579, schema v10), `cortex precision-report` with staged
+  exclusion (#395, PRs #580/#581 — first live run: 15 unscored organic
+  replies, 2 staged excluded, precision honestly `n/a`), and the scheduled
+  reaction sweep (#393 closed, PR #582 — first live sweep: 26 targets, 10
+  polled, the hand-captured #561 👍 collapsing as a duplicate, 0 errors,
+  every 900s). GitHub auto-deploys repaired (`NIXPACKS_UV_VERSION` pinned —
+  they had been silently failing for days; CLI-only worker still deploys via
+  `railway up --service cortex-worker`).
+- **NEXT — score the corpus (validation-first order):** feedback
+  sentiment/override classification (#380 — 15 unscored replies are its
+  complete input; the converse generation role is #549), hand-grading live
+  output against the 70%-useful bar (#378, over Stage 2 traffic), real
+  installation→tenant resolution (#572 — residual of #386; also unify
+  tenant identity across cost/feedback/staged tables), inline-anchored
+  findings (#569, residual of #390), the cascade economics ladder (#568,
+  residual of #547), the Touchstone babysit loop (touchstone#455), then
+  promote/auto-demote by precision (#413/#415), rot alarms (#423), and the
+  security tiers (#530–#540, #543/#544) before any external tenant.
 - **Stage 0 tail (verified open 2026-06-11):** #322 decision-version stamping;
   the #325 replay-acceptance umbrella. The quality-gate sequence #378 → #337 →
   #451 moved up to the validation bar (see VALIDATION STATUS above). (The rest
