@@ -265,8 +265,11 @@ def feedback_query_sql(
 
     The LEFT JOIN surfaces staged membership as a boolean column so exclusion
     happens in one visible place (the aggregation), never silently in SQL.
-    Filters are bound parameters; only the presence of each WHERE clause
-    varies with the flags.
+    It joins against a distinct staged PR set because the registry is unique
+    on ``(tenant_id, repo_full_name, pr_number)``; multiple tenants can record
+    the same staged repo/PR and must not multiply feedback rows. Filters are
+    bound parameters; only the presence of each WHERE clause varies with the
+    flags.
 
     The join deliberately matches on ``(repo_full_name, pr_number)`` and NOT
     on ``tenant_id``: today the feedback writer keys events to the static
@@ -289,9 +292,12 @@ def feedback_query_sql(
     where = f"\nWHERE {' AND '.join(clauses)}" if clauses else ""
     return (
         "SELECT f.sentiment, f.model_id, f.prompt_version, f.finding_class, "
-        "f.repo_full_name, (s.staged_pr_id IS NOT NULL) AS staged\n"
+        "f.repo_full_name, (s.repo_full_name IS NOT NULL) AS staged\n"
         f"FROM {schema}.review_feedback_events AS f\n"
-        f"LEFT JOIN {schema}.review_staged_prs AS s\n"
+        "LEFT JOIN (\n"
+        "    SELECT DISTINCT repo_full_name, pr_number\n"
+        f"    FROM {schema}.review_staged_prs\n"
+        ") AS s\n"
         "    ON s.repo_full_name = f.repo_full_name\n"
         "    AND s.pr_number = f.pr_number"
         f"{where}\n"
