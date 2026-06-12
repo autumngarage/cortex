@@ -75,8 +75,11 @@ class _Cursor:
 class _SweepDb:
     """Fake DB serving the jobs discovery query and feedback inserts."""
 
-    def __init__(self, payloads: list[Mapping[str, Any]]) -> None:
+    def __init__(
+        self, payloads: list[Mapping[str, Any]], *, fail_feedback_inserts: bool = False
+    ) -> None:
         self._payloads = payloads
+        self._fail_feedback_inserts = fail_feedback_inserts
         self.feedback_keys: set[str] = set()
         self.commits = 0
         self.rollbacks = 0
@@ -86,9 +89,13 @@ class _SweepDb:
         p = dict(params or {})
         if q.startswith("SELECT payload"):
             assert "job_type = 'github.pull_request'" in q
-            cap = int(p["cap"])
-            return _Cursor([(payload,) for payload in self._payloads[:cap]])
+            payloads = self._payloads
+            if "cap" in p:
+                payloads = payloads[: int(p["cap"])]
+            return _Cursor([(payload,) for payload in payloads])
         if q.startswith("INSERT INTO cortex_hosted.review_feedback_events"):
+            if self._fail_feedback_inserts:
+                raise RuntimeError("database insert failed")
             key = str(p["idempotency_key"])
             if key in self.feedback_keys:
                 return _Cursor([])
@@ -159,6 +166,21 @@ def test_discovery_dedupes_to_newest_job_per_pr_and_parses_identity() -> None:
         ("acme/widgets", 8),
     ]
     assert targets[0].installation_id == "424242"
+
+
+def test_discovery_caps_unique_valid_targets_after_dedupe() -> None:
+    db = _SweepDb(
+        [
+            _job_payload(pr=7),  # newest duplicate must not consume target capacity
+            _job_payload(pr=7),
+            _job_payload(pr=8),
+        ]
+    )
+    targets = discover_sweep_targets(db, cap=2, now=datetime.now(UTC))
+    assert [(t.repo_full_name, t.pr_number) for t in targets] == [
+        ("acme/widgets", 7),
+        ("acme/widgets", 8),
+    ]
 
 
 def test_discovery_skips_unparseable_payloads_visibly(
@@ -244,6 +266,25 @@ def test_one_failing_target_never_aborts_the_sweep(
     assert summary["recorded"] == 1  # the healthy PR still swept
     events = [json.loads(rec.message).get("event") for rec in caplog.records]
     assert "feedback.reaction_sweep_target_failed" in events
+
+
+def test_feedback_insert_failure_aborts_sweep_without_commit(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    db = _SweepDb([_job_payload(pr=7)], fail_feedback_inserts=True)
+    client = _SweepClient(
+        comments=(_cortex_comment(pr=7),),
+        reactions=(CommentReaction(content="+1", user_login="alice"),),
+    )
+    with (
+        caplog.at_level(logging.INFO, logger="cortex.hosted.reaction_sweep"),
+        pytest.raises(RuntimeError, match="database insert failed"),
+    ):
+        run_reaction_sweep(db, lambda _installation: client, tenant_id=_TENANT)
+    assert db.commits == 0
+    events = [json.loads(rec.message).get("event") for rec in caplog.records]
+    assert "feedback.reaction_sweep_target_failed" not in events
+    assert "feedback.reaction_sweep" not in events
 
 
 def test_sweep_rejects_blank_tenant() -> None:

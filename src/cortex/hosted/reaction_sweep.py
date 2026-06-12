@@ -12,8 +12,8 @@ The sweep is deliberately bounded and derived from what already exists:
   ``github.pull_request`` jobs carry the installation/owner/repo/PR identity
   in their payloads — exactly the PRs that can have a Compass comment. The
   sweep re-reads those payloads with the same fail-closed parser the
-  reviewer uses, deduplicates to the newest job per PR, and caps the target
-  list (cap exceeded → logged, never silent).
+  reviewer uses, deduplicates to the newest job per PR, and caps unique valid
+  targets (cap exceeded → logged, never silent).
 - **Capture is the existing poll.** Per target it resolves the latest
   Compass comment by marker (:func:`find_cortex_review_comment`) and feeds
   :func:`poll_comment_reactions`, which is idempotent per
@@ -36,6 +36,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from cortex.hosted.db import HostedConnection
+from cortex.hosted.github_app_auth import GithubAppAuthError
 from cortex.hosted.review_feedback_capture import (
     FeedbackGithubClient,
     find_cortex_review_comment,
@@ -78,8 +79,8 @@ def sweep_jobs_query_sql(schema: str = "cortex_hosted") -> str:
     """Return the SELECT for recent succeeded review jobs, newest first.
 
     Bound parameters only: ``since`` (timestamptz lower bound on
-    ``finished_at``) and ``cap`` (LIMIT). Newest-first means the per-PR dedupe
-    in :func:`discover_sweep_targets` keeps the latest job for a PR — the one
+    ``finished_at``). Newest-first means the per-PR dedupe in
+    :func:`discover_sweep_targets` keeps the latest job for a PR — the one
     whose comment marker reflects the current review state.
     """
 
@@ -91,8 +92,7 @@ def sweep_jobs_query_sql(schema: str = "cortex_hosted") -> str:
         "WHERE job_type = 'github.pull_request'\n"
         "  AND status = 'succeeded'\n"
         "  AND finished_at >= %(since)s\n"
-        "ORDER BY finished_at DESC\n"
-        "LIMIT %(cap)s"
+        "ORDER BY finished_at DESC"
     )
 
 
@@ -118,15 +118,16 @@ def discover_sweep_targets(
     when = now or datetime.now(UTC)
     rows = conn.execute(
         sweep_jobs_query_sql(),
-        {"since": when - timedelta(hours=window_hours), "cap": cap},
+        {"since": when - timedelta(hours=window_hours)},
     ).fetchall()
 
     targets: list[SweepTarget] = []
     seen: set[tuple[str, int]] = set()
     skipped_unparseable = 0
+    capped = False
     for (payload,) in rows:
-        body = payload if isinstance(payload, Mapping) else json.loads(payload)
         try:
+            body = payload if isinstance(payload, Mapping) else json.loads(payload)
             event = parse_pull_request_payload(body)
         except (StatelessReviewError, TypeError, ValueError):
             skipped_unparseable += 1
@@ -134,6 +135,9 @@ def discover_sweep_targets(
         key = (f"{event.owner}/{event.repo}", event.pr_number)
         if key in seen:
             continue
+        if len(targets) >= cap:
+            capped = True
+            break
         seen.add(key)
         targets.append(
             SweepTarget(
@@ -145,7 +149,7 @@ def discover_sweep_targets(
         )
     if skipped_unparseable:
         _log("feedback.reaction_sweep_unparseable_jobs", skipped=skipped_unparseable)
-    if len(rows) >= cap:
+    if capped:
         _log(
             "feedback.reaction_sweep_capped",
             cap=cap,
@@ -165,10 +169,11 @@ def run_reaction_sweep(
 ) -> dict[str, Any]:
     """Sweep reactions for every recently-reviewed PR into the corpus.
 
-    Per-target failures are counted and logged, never fatal to the sweep;
-    a PR without a Compass comment is the visible ``no_comment`` outcome.
-    Inserts are committed once at the end — a crashed sweep re-runs cleanly
-    thanks to the per-reaction idempotency keys.
+    Per-target GitHub read failures are counted and logged, never fatal to the
+    sweep; a PR without a Compass comment is the visible ``no_comment``
+    outcome. Inserts are committed once at the end — a crashed sweep re-runs
+    cleanly thanks to the per-reaction idempotency keys. Persistence failures
+    propagate so the worker can roll back the shared transaction and retry.
     """
 
     if not tenant_id.strip():
@@ -194,6 +199,11 @@ def run_reaction_sweep(
             if review is None:
                 summary["no_comment"] += 1
                 continue
+        except Exception as exc:
+            summary["errors"] += 1
+            _log_target_failure(target, exc)
+            continue
+        try:
             outcome = poll_comment_reactions(
                 client,
                 conn=conn,
@@ -205,14 +215,18 @@ def run_reaction_sweep(
             summary["polled"] += 1
             summary["recorded"] += int(outcome.get("recorded", 0))
             summary["duplicates"] += int(outcome.get("duplicates", 0))
-        except Exception as exc:
+        except GithubAppAuthError as exc:
             summary["errors"] += 1
-            _log(
-                "feedback.reaction_sweep_target_failed",
-                repo=target.repo_full_name,
-                pr=target.pr_number,
-                error=f"{type(exc).__name__}: {exc}",
-            )
+            _log_target_failure(target, exc)
     conn.commit()
     _log("feedback.reaction_sweep", **summary)
     return summary
+
+
+def _log_target_failure(target: SweepTarget, exc: Exception) -> None:
+    _log(
+        "feedback.reaction_sweep_target_failed",
+        repo=target.repo_full_name,
+        pr=target.pr_number,
+        error=f"{type(exc).__name__}: {exc}",
+    )
