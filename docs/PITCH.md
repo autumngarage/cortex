@@ -101,13 +101,14 @@ scope contract, including what Cortex will not do even if asked, is
 Honesty section. The claims above split cleanly into shipped and
 pre-launch:
 
-**The local loop is real.** On 2026-06-10 the full loop ran end-to-end
+**The local loop runs, but the catch was staged.** On 2026-06-10 the full loop ran end-to-end
 against live infrastructure: `cortex derive` extracted decision
 candidates from a real repo, a human confirmed two into the ledger,
 `cortex ask` returned cited answers (and correctly refused to answer
-from unconfirmed candidates), and the evaluator caught its first real
-contradicts-prior-decision finding — with the right citation, after
-correctly rejecting an unconfirmed twin. The transcript is
+from unconfirmed candidates), and the evaluator caught a deliberately planted
+contradicts-prior-decision finding — with the right citation, after correctly
+rejecting an unconfirmed twin. That is a mechanism proof, not product
+validation; the organic-catch bar is still open. The transcript is
 [walkthrough-pe0.md](./walkthrough-pe0.md). The refusals in that
 transcript are the product working: no snapshot, no answer; no
 confirmation, no citation; no citation, no finding.
