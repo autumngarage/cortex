@@ -267,6 +267,15 @@ def feedback_query_sql(
     happens in one visible place (the aggregation), never silently in SQL.
     Filters are bound parameters; only the presence of each WHERE clause
     varies with the flags.
+
+    The join deliberately matches on ``(repo_full_name, pr_number)`` and NOT
+    on ``tenant_id``: today the feedback writer keys events to the static
+    env-mapped tenant while the worker's staged/cost writes key to the
+    deterministic per-repo tenant (the cortex#572 unification gap), so a
+    tenant-conditioned join silently never matches on live data and staged
+    exclusion fails open. A GitHub ``repo_full_name`` is globally unique, so
+    repo+PR is unambiguous; re-tighten to tenant-scoped once #572 unifies
+    tenant identity across the three tables.
     """
 
     from cortex.hosted.schema import _validate_sql_identifier
@@ -283,8 +292,7 @@ def feedback_query_sql(
         "f.repo_full_name, (s.staged_pr_id IS NOT NULL) AS staged\n"
         f"FROM {schema}.review_feedback_events AS f\n"
         f"LEFT JOIN {schema}.review_staged_prs AS s\n"
-        "    ON s.tenant_id = f.tenant_id\n"
-        "    AND s.repo_full_name = f.repo_full_name\n"
+        "    ON s.repo_full_name = f.repo_full_name\n"
         "    AND s.pr_number = f.pr_number"
         f"{where}\n"
         "ORDER BY f.occurred_at"
