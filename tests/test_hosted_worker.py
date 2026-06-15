@@ -30,6 +30,7 @@ from cortex.hosted.worker import (
     HandlerRegistry,
     Worker,
     build_default_registry,
+    build_worker_registry,
     install_signal_handlers,
 )
 
@@ -154,9 +155,7 @@ class FakeQueueDb:
                     and job["claimed_at"] is not None
                     and job["claimed_at"] < cutoff
                 ):
-                    job["status"] = (
-                        "dead" if job["attempts"] >= job["max_attempts"] else "queued"
-                    )
+                    job["status"] = "dead" if job["attempts"] >= job["max_attempts"] else "queued"
                     job["last_error"] = str(p["error"])
                     job["claimed_at"] = None
                     job["claimed_by"] = None
@@ -169,6 +168,8 @@ class FakeQueueDb:
             event_id = str(uuid4())
             self.ledger[key] = event_id
             return FakeCursor([(event_id, str(p["event_hash"]))])
+        if q.startswith("SELECT") and "FROM cortex_hosted.review_rollout_events" in q:
+            return FakeCursor([])
         raise AssertionError(f"FakeQueueDb saw unexpected SQL: {q[:80]}")
 
     def commit(self) -> None:
@@ -197,6 +198,33 @@ def _webhook_job_request(
     )
 
 
+def _review_webhook_job_request(delivery: str = "guid-review") -> JobRequest:
+    return JobRequest(
+        job_type="github.pull_request",
+        idempotency_key=f"github-delivery:{delivery}",
+        payload={
+            "event": "pull_request",
+            "delivery": delivery,
+            "received_at": "2026-06-10T12:00:00+00:00",
+            "body": {
+                "action": "opened",
+                "installation": {"id": 424242},
+                "repository": {
+                    "full_name": "autumngarage/cortex",
+                    "name": "cortex",
+                    "owner": {"login": "autumngarage"},
+                },
+                "pull_request": {
+                    "number": 397,
+                    "base": {"sha": "base-sha"},
+                    "head": {"sha": "head-sha"},
+                },
+            },
+        },
+        max_attempts=3,
+    )
+
+
 def _worker(db: FakeQueueDb, registry: HandlerRegistry, **kwargs: Any) -> Worker:
     return Worker(conn=db, registry=registry, worker_id="w-test", **kwargs)
 
@@ -219,9 +247,7 @@ def test_registry_admits_a_new_job_type_without_schema_change() -> None:
     db = FakeQueueDb()
     registry = HandlerRegistry()
     registry.register("evaluate.pr", lambda job: {"evaluated": job.payload["pr"]})
-    db.enqueue(
-        JobRequest(job_type="evaluate.pr", idempotency_key="eval-1", payload={"pr": 99})
-    )
+    db.enqueue(JobRequest(job_type="evaluate.pr", idempotency_key="eval-1", payload={"pr": 99}))
     assert _worker(db, registry).run_once() is True
     job = db.job("eval-1")
     assert job["status"] == "succeeded"
@@ -393,9 +419,7 @@ def test_run_drains_queue_then_stops_when_signalled(
     def stop_on_sleep(_seconds: float) -> None:
         stop.set()
 
-    worker = Worker(
-        conn=db, registry=registry, worker_id="w-test", sleep=stop_on_sleep
-    )
+    worker = Worker(conn=db, registry=registry, worker_id="w-test", sleep=stop_on_sleep)
     with caplog.at_level(logging.INFO, logger="cortex.hosted.worker"):
         worker.run(stop)
     assert db.job("github-delivery:guid-1")["status"] == "succeeded"
@@ -442,6 +466,23 @@ def test_review_dry_run_env_defaults_to_safe_dry_run() -> None:
     assert _env_flag("1", default=True) is True
     for falsey in ("0", "false", "no", "off", "False", " OFF "):
         assert _env_flag(falsey, default=True) is False
+
+
+def test_stateless_worker_defaults_fresh_repo_to_rollout_disabled() -> None:
+    db = FakeQueueDb()
+    recorder = ArrivalRecorder(conn=db, tenant_id=None, source_id=None)
+    fake_pem = "-----BEGIN " + "PLACEHOLDER TEST KEY-----\nnot-a-real-key\n"
+    registry = build_worker_registry(
+        recorder=recorder,
+        environ={"GITHUB_APP_ID": "123", "GITHUB_APP_PRIVATE_KEY": fake_pem},
+    )
+    db.enqueue(_review_webhook_job_request())
+    assert _worker(db, registry).run_once() is True
+    job = db.job("github-delivery:guid-review")
+    assert job["status"] == "succeeded"
+    assert job["result"]["reason"] == "review_rollout_disabled"
+    assert job["result"]["posted"] is False
+    assert "review_mode" not in job["result"]
 
 
 def test_stub_handler_without_mapping_reports_the_gap_visibly() -> None:
@@ -536,9 +577,7 @@ def test_worker_rejects_malformed_intervals_up_front() -> None:
 
 def test_new_service_error_types_classify_in_the_degradation_taxonomy() -> None:
     assert classify_failure(HostedJobError("probe")) is DegradationMode.INVALID_INPUT_REJECTED
-    assert (
-        classify_failure(ServiceConfigError("probe")) is DegradationMode.INVALID_INPUT_REJECTED
-    )
+    assert classify_failure(ServiceConfigError("probe")) is DegradationMode.INVALID_INPUT_REJECTED
 
 
 def _raise_runtime_error(_job: Any) -> Mapping[str, Any]:
@@ -552,7 +591,7 @@ def _make_due(db: FakeQueueDb, idempotency_key: str) -> None:
 def test_review_token_budget_env_parsing() -> None:
     from cortex.hosted.worker import (
         DEFAULT_HOSTED_REVIEW_TOKEN_BUDGET,
-                _env_positive_int,
+        _env_positive_int,
     )
 
     # Unset/blank -> the raised hosted default (not the 8k session guardrail).

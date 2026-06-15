@@ -117,9 +117,7 @@ def _env_positive_int(raw: str | None, *, default: int) -> int:
             f"{REVIEW_TOKEN_BUDGET_ENV} must be a positive integer; got {raw.strip()!r}"
         ) from exc
     if value < 1:
-        raise ServiceConfigError(
-            f"{REVIEW_TOKEN_BUDGET_ENV} must be >= 1; got {value}"
-        )
+        raise ServiceConfigError(f"{REVIEW_TOKEN_BUDGET_ENV} must be >= 1; got {value}")
     return value
 
 
@@ -264,9 +262,7 @@ class Worker:
                 f"poll_interval_seconds must be positive, got {poll_interval_seconds}"
             )
         if stale_claim_seconds <= 0:
-            raise HostedJobError(
-                f"stale_claim_seconds must be positive, got {stale_claim_seconds}"
-            )
+            raise HostedJobError(f"stale_claim_seconds must be positive, got {stale_claim_seconds}")
         if reaction_sweep is not None and reaction_sweep_seconds <= 0:
             raise HostedJobError(
                 f"reaction_sweep_seconds must be positive, got {reaction_sweep_seconds}"
@@ -425,9 +421,7 @@ class Worker:
             )
             return
 
-        row = self._conn.execute(
-            review_cost_insert_sql(), record.as_insert_parameters()
-        ).fetchone()
+        row = self._conn.execute(review_cost_insert_sql(), record.as_insert_parameters()).fetchone()
         _log(
             "review.cost",
             job_id=job.job_id,
@@ -492,9 +486,7 @@ class Worker:
             )
             return
 
-        row = self._conn.execute(
-            staged_pr_insert_sql(), record.as_insert_parameters()
-        ).fetchone()
+        row = self._conn.execute(staged_pr_insert_sql(), record.as_insert_parameters()).fetchone()
         _log(
             "review.staged_pr",
             job_id=job.job_id,
@@ -635,6 +627,7 @@ def build_worker_registry(
         InstallationTokenSource,
     )
     from cortex.hosted.stateless_review import (
+        PullRequestEvent,
         ReviewHandlerConfig,
         build_review_registry,
         default_model_resolver,
@@ -646,6 +639,13 @@ def build_worker_registry(
 
     def client_factory(installation_id: str) -> GithubInstallationClient:
         return GithubInstallationClient(token_source, installation_id)
+
+    from cortex.hosted.review_rollout import ReviewRolloutStore
+
+    rollout_store = ReviewRolloutStore(recorder.conn)
+
+    def rollout_enabled(event: PullRequestEvent) -> bool:
+        return rollout_store.is_enabled(f"{event.owner}/{event.repo}")
 
     # Posting is opt-in and OFF by default: the worker dry-runs (evaluates and
     # logs the comment it would post) until CORTEX_REVIEW_DRY_RUN is explicitly
@@ -676,6 +676,7 @@ def build_worker_registry(
         model_resolver=default_model_resolver(),
         config=ReviewHandlerConfig(dry_run=dry_run, token_budget=token_budget),
         issue_comment_handler=issue_comment_handler,
+        rollout_checker=rollout_enabled,
     )
 
 
@@ -730,8 +731,7 @@ def build_reaction_sweep(
             interval = float(raw_interval)
         except ValueError as exc:
             raise ServiceConfigError(
-                f"{REACTION_POLL_SECONDS_ENV} must be a number of seconds; "
-                f"got {raw_interval!r}"
+                f"{REACTION_POLL_SECONDS_ENV} must be a number of seconds; got {raw_interval!r}"
             ) from exc
     if interval <= 0:
         _log("worker.reaction_sweep_disabled", reason="interval_zero")
@@ -792,9 +792,7 @@ def main() -> None:
     if config.apply_schema_on_start:
         result = apply_schema(conn)
         _log("worker.schema_applied", detail=result.describe())
-    recorder = ArrivalRecorder(
-        conn=conn, tenant_id=config.tenant_id, source_id=config.source_id
-    )
+    recorder = ArrivalRecorder(conn=conn, tenant_id=config.tenant_id, source_id=config.source_id)
     sweep_config = build_reaction_sweep(recorder=recorder)
     worker = Worker(
         conn=conn,

@@ -33,10 +33,7 @@ def test_schema_event_type_check_matches_python_enum() -> None:
 
     event_check = re.search(r"event_type text NOT NULL CHECK \(event_type IN \(([^)]+)\)\)", sql)
     assert event_check is not None
-    ddl_event_types = {
-        value.strip().strip("'")
-        for value in event_check.group(1).split(",")
-    }
+    ddl_event_types = {value.strip().strip("'") for value in event_check.group(1).split(",")}
 
     assert ddl_event_types == {event.value for event in LedgerEventType}
 
@@ -60,10 +57,7 @@ def test_schema_scope_type_check_matches_python_enum() -> None:
     assert scope_check is not None
     scope_values_check = re.search(r"CHECK \(scope_type IN \(([^)]+)\)\)", sql)
     assert scope_values_check is not None
-    ddl_scope_types = {
-        value.strip().strip("'")
-        for value in scope_values_check.group(1).split(",")
-    }
+    ddl_scope_types = {value.strip().strip("'") for value in scope_values_check.group(1).split(",")}
 
     assert ddl_scope_types == {scope.value for scope in ScopeType}
 
@@ -94,10 +88,7 @@ def test_schema_adds_ask_ledger_search_indexes_and_embeddings_projection() -> No
         in sql
     )
     assert "CHECK (item_type IN ('decision_version', 'source_span'))" in sql
-    assert (
-        "CHECK (embedding_dimension > 0 AND embedding_dimension = vector_dims(embedding))"
-        in sql
-    )
+    assert "CHECK (embedding_dimension > 0 AND embedding_dimension = vector_dims(embedding))" in sql
     assert "DROP CONSTRAINT embeddings_item_id_fkey" in sql
     assert "DROP CONSTRAINT embeddings_item_type_check" in sql
     assert "DROP CONSTRAINT IF EXISTS embeddings_dimension_check" in sql
@@ -149,8 +140,8 @@ def test_schema_models_citable_source_spans() -> None:
 def test_schema_records_version() -> None:
     sql = create_schema_sql()
 
-    # v10 (cortex#575): the staged-traffic registry.
-    assert HOSTED_SCHEMA_VERSION == 10
+    # v11 (cortex#397): the per-repo review rollout event stream.
+    assert HOSTED_SCHEMA_VERSION == 11
     assert f"VALUES ({HOSTED_SCHEMA_VERSION})" in sql
 
 
@@ -169,6 +160,21 @@ def test_schema_models_staged_traffic_registry() -> None:
     # The version stamp lands only after the staged registry exists.
     assert sql.rfind(f"VALUES ({HOSTED_SCHEMA_VERSION})") > sql.rfind(
         "CREATE TABLE IF NOT EXISTS cortex_hosted.review_staged_prs"
+    )
+
+
+def test_schema_models_review_rollout_events() -> None:
+    sql = create_schema_sql()
+
+    assert "CREATE TABLE IF NOT EXISTS cortex_hosted.review_rollout_events" in sql
+    assert "CONSTRAINT review_rollout_events_idempotency_key_unique UNIQUE" in sql
+    assert "review_rollout_events_repo_time_idx" in sql
+    assert "prevent_review_rollout_mutation" in sql
+    assert "BEFORE UPDATE ON cortex_hosted.review_rollout_events" in sql
+    assert "BEFORE DELETE ON cortex_hosted.review_rollout_events" in sql
+    assert "No row for a repo means disabled" in sql
+    assert sql.rfind(f"VALUES ({HOSTED_SCHEMA_VERSION})") > sql.rfind(
+        "CREATE TABLE IF NOT EXISTS cortex_hosted.review_rollout_events"
     )
 
 

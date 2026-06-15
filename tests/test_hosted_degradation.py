@@ -38,6 +38,7 @@ from cortex.hosted.ledger_events import LedgerEventValidationError
 from cortex.hosted.migrations import HostedMigrationError
 from cortex.hosted.model_registry import RegistryValidationError
 from cortex.hosted.provenance import ProvenanceValidationError
+from cortex.hosted.review_rollout import ReviewRolloutError
 from cortex.hosted.scopes import ScopeValidationError
 from cortex.hosted.stateless_review import StatelessReviewError
 from cortex.hosted.storage import StoreBoundaryError
@@ -59,6 +60,7 @@ EXPECTED_CLASSIFICATIONS: tuple[tuple[type[Exception], DegradationMode], ...] = 
     (LedgerEventValidationError, DegradationMode.INVALID_INPUT_REJECTED),
     (ProvenanceValidationError, DegradationMode.INVALID_INPUT_REJECTED),
     (RegistryValidationError, DegradationMode.DRIFT_DETECTED),
+    (ReviewRolloutError, DegradationMode.INVALID_INPUT_REJECTED),
     (ScopeValidationError, DegradationMode.INVALID_INPUT_REJECTED),
     (StatelessReviewError, DegradationMode.INVALID_INPUT_REJECTED),
     (StoreBoundaryError, DegradationMode.FAIL_CLOSED_REFUSAL),
@@ -121,9 +123,7 @@ def test_model_interface_validation_error_classifies_when_module_ships() -> None
 
 
 def test_optional_sources_bookkeeping_is_consistent() -> None:
-    registered_names = {
-        failure_type.__qualname__ for failure_type in classified_failure_types()
-    }
+    registered_names = {failure_type.__qualname__ for failure_type in classified_failure_types()}
     for module_name, class_name, _ in OPTIONAL_FAILURE_SOURCES:
         if importlib.util.find_spec(module_name) is None:
             assert (module_name, class_name) in unregistered_optional_failure_sources()

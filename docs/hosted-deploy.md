@@ -59,6 +59,8 @@ types register a handler; no schema change.
 | `CORTEX_API_HOST` | API | no (default `0.0.0.0`) | Bind address. |
 | `CORTEX_TENANT_ID` / `CORTEX_SOURCE_ID` | worker | optional, paired | Static tenant/source mapping for recording raw webhook arrivals as `source.event_received` ledger events. Unset: jobs are still handled; the result names the unrecorded arrival. Dogfood-only: real installation-based resolution is #572 (#386 shipped the installation-auth half; this static mapping is the residual). |
 | `CORTEX_WORKER_POLL_SECONDS` | worker | no (default 2.0) | Idle poll interval. |
+| `CORTEX_REVIEW_DRY_RUN` | worker | no (default dry-run/on) | Set to `0`/`false`/`no`/`off` to allow enabled repos to receive PR comments. Per-repo rollout still gates before any fetch/model spend. |
+| `CORTEX_REVIEW_TOKEN_BUDGET` | worker | no (default 32000) | Per-review decision-pack token budget. Malformed or non-positive values refuse startup. |
 | `CORTEX_REACTION_POLL_SECONDS` | worker | no (default 900) | Seconds between scheduled reaction sweeps over recently-reviewed PRs (cortex#393 — reactions have no webhook). `0` disables the sweep. Requires App credentials + tenant mapping; each missing precondition is logged. |
 | `CORTEX_STALE_CLAIM_SECONDS` | worker | no (default 1800) | Age after which a `running` claim is presumed crashed and recovered. |
 | `CORTEX_APPLY_SCHEMA_ON_START` | worker | no (default false) | When `1`/`true`, the worker runs the migration runner before polling. |
@@ -69,11 +71,13 @@ Config parsing is fail-closed (`ServiceConfig.from_env`): malformed values
 tenant/source) refuse startup with the variable named. No secret is ever
 committed; values live as Railway service variables (policy: #475).
 
-## Schema migration (v7 — historical; live schema is v9 as of 2026-06-11)
+## Schema migration (v7 — historical; live schema is v11 as of 2026-06-15)
 
 The same append-only migration path later applied v8 (`review_cost_records`
 cost ledger, PR #559) and v9 (`review_feedback_events` ground-truth corpus,
-PR #566); compass runs v9. The v7 step is kept below as the worked example.
+PR #566), v10 (`review_staged_prs` staged-traffic registry), and v11
+(`review_rollout_events` per-repo comment rollout); compass runs v11. The v7
+step is kept below as the worked example.
 
 Schema v7 adds the `cortex_hosted.jobs` table and refreshes the
 `ledger_events.event_type` CHECK for the new `source.event_received` event
@@ -98,7 +102,7 @@ redeploying the previous build; the v7 objects are inert under v6 code.
 
 1. `curl -s https://<domain>/healthz` → `"status": "ok"` and
    `"schema_version"` equal to the deployed build's `HOSTED_SCHEMA_VERSION`
-   (`src/cortex/hosted/schema.py` — 10 as of 2026-06-12).
+   (`src/cortex/hosted/schema.py` — 11 as of 2026-06-15).
 2. `curl -s https://<domain>/version` → expected package version + commit.
 3. Send a test delivery (GitHub App → Advanced → Redeliver, once the
    webhook is flipped active per
@@ -111,6 +115,43 @@ Worker log lines are single-line JSON (`worker.started`, `job.claimed`,
 `job.succeeded`, `job.retry_scheduled`, `job.dead_lettered`,
 `job.stale_claim_recovered`, `worker.stopped`) — greppable by `event` key
 without exposing payload secrets.
+
+## Per-repo review rollout (cortex#397)
+
+The GitHub App may be installed on all organization repos, but hosted PR
+comments are **off by default per repo**. A repo receives comments only after an
+operator appends an enable event to `cortex_hosted.review_rollout_events`.
+Disabled repos are still acknowledged: the worker completes the
+`github.pull_request` job with `reason=review_rollout_disabled`, posts no
+comment, and does not construct a GitHub client, fetch decision files, fetch a
+diff, or resolve a model.
+
+The worker queries the latest rollout event on every pull-request delivery, so
+config changes take effect without redeploy:
+
+```bash
+DATABASE_URL='postgresql://...' uv run --extra hosted cortex review-rollout \
+  set autumngarage/cortex enabled \
+  --actor henry \
+  --reason 'dogfood advisory comments'
+
+DATABASE_URL='postgresql://...' uv run --extra hosted cortex review-rollout \
+  status autumngarage/cortex
+```
+
+To pause a repo:
+
+```bash
+DATABASE_URL='postgresql://...' uv run --extra hosted cortex review-rollout \
+  set autumngarage/cortex disabled \
+  --actor henry \
+  --reason 'pause rollout while investigating reviewer behavior'
+```
+
+No SQL `UPDATE`/`DELETE` is valid for rollout config. Corrections append later
+events; the append-only trigger rejects mutation. `CORTEX_REVIEW_DRY_RUN=false`
+only controls posting after a repo is enabled, so a fresh install with no
+rollout event remains no-spend/no-comment even when posting is globally allowed.
 
 ## Staged demo traffic (cortex#575)
 

@@ -185,7 +185,11 @@ class FakeInstallationClient:
     ) -> Mapping[str, Any]:
         comment_id = self._next_comment_id
         self._next_comment_id += 1
-        record = {"id": comment_id, "html_url": f"https://github.com/{owner}/{repo}/pull/{issue_number}#c{comment_id}", "body": body}
+        record = {
+            "id": comment_id,
+            "html_url": f"https://github.com/{owner}/{repo}/pull/{issue_number}#c{comment_id}",
+            "body": body,
+        }
         self.comments.append(record)
         self.posted.append(record)
         return {"id": record["id"], "html_url": record["html_url"]}
@@ -209,9 +213,7 @@ def _full_repo_client(diff: str = CONTRADICTION_DIFF) -> FakeInstallationClient:
             (doctrine_path, _BASE_SHA): DOCTRINE_MD,
         },
         directories={
-            (".cortex/doctrine", _BASE_SHA): (
-                DirectoryEntry(path=doctrine_path, type="file"),
-            ),
+            (".cortex/doctrine", _BASE_SHA): (DirectoryEntry(path=doctrine_path, type="file"),),
             (".cortex/plans", _BASE_SHA): (),
         },
         diff=diff,
@@ -255,9 +257,7 @@ class _CapturingEvaluateModel:
 
 def _contradiction_findings(request: EvaluateRequest) -> tuple[FindingDraft, ...]:
     candidate = next(
-        item
-        for item in request.candidate_pack.candidates
-        if "file contract" in item.decision_text
+        item for item in request.candidate_pack.candidates if "file contract" in item.decision_text
     )
     return (
         FindingDraft(
@@ -340,9 +340,7 @@ def _generate_recordings_json() -> str:
     """
 
     results: list[EvaluateResult] = []
-    scripted: tuple[
-        tuple[str, Callable[[EvaluateRequest], tuple[FindingDraft, ...]]], ...
-    ] = (
+    scripted: tuple[tuple[str, Callable[[EvaluateRequest], tuple[FindingDraft, ...]]], ...] = (
         (CONTRADICTION_DIFF, _contradiction_findings),
         (BENIGN_DIFF, _no_findings),
         (UNRELATED_DIFF, _no_findings),
@@ -520,7 +518,11 @@ def test_post_creates_then_updates_on_rerun_same_head_sha() -> None:
     client = _full_repo_client(CONTRADICTION_DIFF)
     config = ReviewHandlerConfig(dry_run=False)
     first = run_stateless_review(
-        _payload(), client=client, model=_RoutedRecordedModel(), config=config, now=lambda: _FIXED_TIME
+        _payload(),
+        client=client,
+        model=_RoutedRecordedModel(),
+        config=config,
+        now=lambda: _FIXED_TIME,
     )
     assert first.posted is True
     assert first.comment_id is not None
@@ -529,7 +531,11 @@ def test_post_creates_then_updates_on_rerun_same_head_sha() -> None:
     # A re-delivery on the same head SHA finds the marker and UPDATES — never
     # a second comment (idempotent: one comment per (PR, head SHA)).
     second = run_stateless_review(
-        _payload(), client=client, model=_RoutedRecordedModel(), config=config, now=lambda: _FIXED_TIME
+        _payload(),
+        client=client,
+        model=_RoutedRecordedModel(),
+        config=config,
+        now=lambda: _FIXED_TIME,
     )
     assert second.posted is True
     assert second.comment_id == first.comment_id
@@ -659,9 +665,7 @@ def test_decision_sources_are_fetched_at_base_sha_only() -> None:
             ("CLAUDE.md", _HEAD_SHA): "# head only\n",
         },
         directories={
-            (".cortex/doctrine", _BASE_SHA): (
-                DirectoryEntry(path=doctrine_path, type="file"),
-            ),
+            (".cortex/doctrine", _BASE_SHA): (DirectoryEntry(path=doctrine_path, type="file"),),
             (".cortex/plans", _BASE_SHA): (),
         },
         diff=CONTRADICTION_DIFF,
@@ -719,6 +723,41 @@ def test_build_review_handler_passes_installation_id_to_factory() -> None:
     )
     handler(_claimed_job(_payload()))
     assert seen == [_INSTALLATION_ID]
+
+
+def test_build_review_handler_skips_disabled_repo_before_client_or_model() -> None:
+    checked: list[PullRequestEvent] = []
+
+    def disabled(event: PullRequestEvent) -> bool:
+        checked.append(event)
+        return False
+
+    def client_factory(_installation_id: str) -> FakeInstallationClient:
+        raise AssertionError("disabled rollout must not construct a GitHub client")
+
+    def model_resolver() -> _RoutedRecordedModel:
+        raise AssertionError("disabled rollout must not resolve a model")
+
+    handler = build_review_handler(
+        client_factory=client_factory,
+        model_resolver=model_resolver,
+        config=ReviewHandlerConfig(dry_run=False),
+        rollout_checker=disabled,
+    )
+    result = handler(_claimed_job(_payload()))
+    assert checked and checked[0].owner == _OWNER
+    assert result == {
+        "handled": True,
+        "job_type": "github.pull_request",
+        "review_skipped": True,
+        "reason": "review_rollout_disabled",
+        "repo_full_name": "acme/widgets",
+        "pr_number": _PR_NUMBER,
+        "head_sha": _HEAD_SHA,
+        "posted": False,
+        "dry_run": False,
+    }
+    assert "review_mode" not in result
 
 
 def test_build_review_registry_registers_pull_request_handler() -> None:
@@ -882,13 +921,28 @@ def test_duplicated_constants_match_cortex_review() -> None:
 
 def test_repo_scoped_ids_are_deterministic_and_repo_specific() -> None:
     a = PullRequestEvent(
-        installation_id="1", owner="acme", repo="widgets", pr_number=1, base_sha="a" * 7, head_sha="b" * 7
+        installation_id="1",
+        owner="acme",
+        repo="widgets",
+        pr_number=1,
+        base_sha="a" * 7,
+        head_sha="b" * 7,
     )
     a_again = PullRequestEvent(
-        installation_id="9", owner="acme", repo="widgets", pr_number=2, base_sha="c" * 7, head_sha="d" * 7
+        installation_id="9",
+        owner="acme",
+        repo="widgets",
+        pr_number=2,
+        base_sha="c" * 7,
+        head_sha="d" * 7,
     )
     b = PullRequestEvent(
-        installation_id="1", owner="acme", repo="gadgets", pr_number=1, base_sha="a" * 7, head_sha="b" * 7
+        installation_id="1",
+        owner="acme",
+        repo="gadgets",
+        pr_number=1,
+        base_sha="a" * 7,
+        head_sha="b" * 7,
     )
     # Same repo -> same tenant/source UUID regardless of PR/installation.
     assert a.tenant_id == a_again.tenant_id

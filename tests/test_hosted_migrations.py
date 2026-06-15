@@ -24,9 +24,9 @@ from cortex.hosted.migrations import (
 )
 from cortex.hosted.schema import HOSTED_SCHEMA_VERSION
 
-# Base tables in the shipped v6 DDL; the fake reports this after a
+# Base tables in the shipped hosted DDL; the fake reports this after a
 # successful apply so status assertions have a concrete shape.
-EXPECTED_TABLE_COUNT = 14
+EXPECTED_TABLE_COUNT = 15
 
 
 class FakeResult:

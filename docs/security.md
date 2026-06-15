@@ -33,6 +33,12 @@ review path touches no database at all: a regression test booby-traps the
 database connection and asserts a full review still produces its cited
 comment.
 
+The deployed worker does read one operator-internal rollout gate before
+entering that stateless path: a content-free `owner/repo` enable/disable event
+stream that controls which installed repositories may receive PR comments. A
+repo with no rollout event is disabled, acknowledged, and skipped before any
+GitHub fetch or model call.
+
 This is possible because **your repository is the source of truth.** Git
 and `.cortex/` already hold the canonical record; Cortex is a reader, not
 a store.
