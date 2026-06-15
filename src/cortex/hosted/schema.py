@@ -7,7 +7,7 @@ import re
 from cortex.hosted.ledger_events import LedgerEventType
 from cortex.hosted.scopes import ScopeType
 
-HOSTED_SCHEMA_VERSION = 10
+HOSTED_SCHEMA_VERSION = 11
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -777,6 +777,35 @@ CREATE INDEX IF NOT EXISTS review_staged_prs_repo_pr_idx
 COMMENT ON TABLE {schema}.review_staged_prs IS
     'OPERATOR-INTERNAL staged-traffic registry. Append-only; one row per demo/fixture PR, keyed by (tenant, repo, pr_number). Precision metrics and quality gates exclude member PRs by JOIN; a mis-tag is corrected by a future supersede mechanism, never UPDATE/DELETE.';
 
+-- v11 (cortex#397): OPERATOR-INTERNAL per-repo review rollout. The GitHub
+-- App may be installed on many repos, but PR review comments are opt-in per
+-- repo. No row for a repo means disabled, so fresh installs are off. Config
+-- changes append events and the worker derives current state from the latest
+-- event on every webhook delivery (no redeploy and no in-process cache).
+-- Repo names are normalized lower-case owner/repo to match GitHub's
+-- case-insensitive identity.
+CREATE TABLE IF NOT EXISTS {schema}.review_rollout_events (
+    review_rollout_event_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    repo_full_name text NOT NULL,
+    enabled boolean NOT NULL,
+    actor text NOT NULL,
+    reason text NOT NULL,
+    occurred_at timestamptz NOT NULL,
+    recorded_at timestamptz NOT NULL DEFAULT now(),
+    idempotency_key text NOT NULL,
+    CONSTRAINT review_rollout_events_idempotency_key_unique UNIQUE (idempotency_key),
+    CHECK (repo_full_name ~ '^[a-z0-9_.-]+/[a-z0-9_.-]+$'),
+    CHECK (actor <> ''),
+    CHECK (reason <> ''),
+    CHECK (idempotency_key <> '')
+);
+
+CREATE INDEX IF NOT EXISTS review_rollout_events_repo_time_idx
+    ON {schema}.review_rollout_events (repo_full_name, occurred_at DESC, recorded_at DESC);
+
+COMMENT ON TABLE {schema}.review_rollout_events IS
+    'OPERATOR-INTERNAL PR review rollout events. Append-only; latest event per lower-case repo controls whether hosted review comments may run. Absence means disabled.';
+
 CREATE INDEX IF NOT EXISTS ledger_events_tenant_time_idx
     ON {schema}.ledger_events (tenant_id, occurred_at, event_id);
 
@@ -1016,6 +1045,28 @@ DROP TRIGGER IF EXISTS review_staged_prs_no_delete ON {schema}.review_staged_prs
 CREATE TRIGGER review_staged_prs_no_delete
     BEFORE DELETE ON {schema}.review_staged_prs
     FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_staged_pr_mutation();
+
+-- v11 (cortex#397): rollout config is an event stream. Operators correct a
+-- mistake by appending a later event, never rewriting history.
+CREATE OR REPLACE FUNCTION {schema}.prevent_review_rollout_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    RAISE EXCEPTION 'review_rollout_events is append-only; attempted %', TG_OP
+        USING ERRCODE = '55000';
+END;
+$$;
+
+DROP TRIGGER IF EXISTS review_rollout_events_no_update ON {schema}.review_rollout_events;
+CREATE TRIGGER review_rollout_events_no_update
+    BEFORE UPDATE ON {schema}.review_rollout_events
+    FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_review_rollout_mutation();
+
+DROP TRIGGER IF EXISTS review_rollout_events_no_delete ON {schema}.review_rollout_events;
+CREATE TRIGGER review_rollout_events_no_delete
+    BEFORE DELETE ON {schema}.review_rollout_events
+    FOR EACH ROW EXECUTE FUNCTION {schema}.prevent_review_rollout_mutation();
 
 COMMENT ON TABLE {schema}.ledger_events IS
     'Canonical append-only hosted Cortex ledger. Mutations are forbidden; corrections append new events.';

@@ -91,6 +91,7 @@ from cortex.hosted.recorded_responses import RecordedResponseError
 from cortex.hosted.replay_runner import ReplayError
 from cortex.hosted.review_cost import ReviewCostError
 from cortex.hosted.review_feedback import ReviewFeedbackError
+from cortex.hosted.review_rollout import ReviewRolloutError
 from cortex.hosted.route_comparison import RouteComparisonValidationError
 from cortex.hosted.routing import (
     ClaudeCliOutputError,
@@ -281,6 +282,11 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # validation errors. This keeps the absence-is-never-approval and
     # human-ground-truth-only invariants enforceable at construction.
     ReviewFeedbackError: DegradationMode.INVALID_INPUT_REJECTED,
+    # A malformed operator-internal rollout event (bad repo name, blank actor
+    # or reason, naive timestamp) is rejected before any config row is appended
+    # (cortex#397). Missing rollout state is not an error; it is the explicit
+    # default-off path checked by the worker.
+    ReviewRolloutError: DegradationMode.INVALID_INPUT_REJECTED,
     ScopeValidationError: DegradationMode.INVALID_INPUT_REJECTED,
     # A malformed staged-PR registry record (bad reason, non-positive PR
     # number, naive timestamp) is rejected before any row enters the staged
@@ -422,9 +428,7 @@ REMEDIATION_BY_REASON: Mapping[str, str] = MappingProxyType(
         # `cortex derive` invoked outside a Cortex project.
         "cortex_dir_missing": "run `cortex init` to scaffold `.cortex/` first",
         # `cortex derive` found none of its default sources.
-        "derive_no_sources": (
-            "pass `--source FILE` to point cortex derive at decision sources"
-        ),
+        "derive_no_sources": ("pass `--source FILE` to point cortex derive at decision sources"),
         # The api-http transport's configured API-key env var is unset or
         # blank in the service environment (cortex#517). The canonical hint
         # string lives next to the adapter so the refusal message and this
@@ -490,9 +494,7 @@ class DegradationReport:
         try:
             mode = DegradationMode(self.mode)
         except ValueError as exc:
-            raise DegradationTaxonomyError(
-                f"unknown degradation mode: {self.mode!r}"
-            ) from exc
+            raise DegradationTaxonomyError(f"unknown degradation mode: {self.mode!r}") from exc
         object.__setattr__(self, "mode", mode)
         _require_non_empty("reason_code", self.reason_code)
         _require_non_empty("source", self.source)

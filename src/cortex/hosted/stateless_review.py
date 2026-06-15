@@ -98,9 +98,7 @@ class GithubReviewClient(Protocol):
 
     def get_pull_request_diff(self, owner: str, repo: str, pr_number: int) -> str: ...
 
-    def get_file_contents(
-        self, owner: str, repo: str, path: str, ref: str
-    ) -> bytes | None: ...
+    def get_file_contents(self, owner: str, repo: str, path: str, ref: str) -> bytes | None: ...
 
     def list_directory(
         self, owner: str, repo: str, path: str, ref: str
@@ -233,6 +231,9 @@ class PullRequestEvent:
         return str(uuid5(_REPO_UUID_NAMESPACE, f"source:{self.owner}/{self.repo}"))
 
 
+ReviewRolloutChecker = Callable[[PullRequestEvent], bool]
+
+
 @dataclass(frozen=True)
 class ReviewHandlerConfig:
     """Per-installation stateless-review configuration (default: dry-run).
@@ -309,11 +310,7 @@ class ReviewCost:
         ):
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
                 raise StatelessReviewError(f"ReviewCost.{name} must be a non-negative integer")
-        if (
-            isinstance(self.usd, bool)
-            or not isinstance(self.usd, int | float)
-            or self.usd < 0
-        ):
+        if isinstance(self.usd, bool) or not isinstance(self.usd, int | float) or self.usd < 0:
             raise StatelessReviewError("ReviewCost.usd must be a non-negative number")
 
     def as_payload(self) -> dict[str, Any]:
@@ -486,9 +483,7 @@ def _list_markdown_files(
     entries = client.list_directory(event.owner, event.repo, directory, event.base_sha)
     return tuple(
         sorted(
-            entry.path
-            for entry in entries
-            if entry.type == "file" and entry.path.endswith(".md")
+            entry.path for entry in entries if entry.type == "file" and entry.path.endswith(".md")
         )
     )
 
@@ -884,9 +879,7 @@ def _upsert_comment(
             continue
         comment_id = comment.get("id")
         if isinstance(comment_id, int) and not isinstance(comment_id, bool):
-            return client.update_issue_comment(
-                event.owner, event.repo, comment_id, body
-            )
+            return client.update_issue_comment(event.owner, event.repo, comment_id, body)
     return client.post_issue_comment(event.owner, event.repo, event.pr_number, body)
 
 
@@ -900,6 +893,7 @@ def build_review_handler(
     client_factory: Callable[[str], GithubReviewClient],
     model_resolver: Callable[[], EvaluateModel],
     config: ReviewHandlerConfig | None = None,
+    rollout_checker: ReviewRolloutChecker | None = None,
 ) -> JobHandler:
     """Build the ``github.pull_request`` handler over injected dependencies.
 
@@ -908,17 +902,32 @@ def build_review_handler(
     injected so tests pass fakes and the offline proof runs without network or
     a model provider. The handler is advisory: a finding never fails the job,
     and the result mapping is content-free per the stateless tier.
+
+    ``rollout_checker`` is the production per-repo gate (cortex#397). When it
+    returns false, the webhook is acknowledged as a handled no-op before any
+    GitHub client, retrieval, or model route is constructed. A checker failure
+    propagates and retries the job visibly; it never falls through to spending.
     """
 
     review_config = config or ReviewHandlerConfig()
 
     def handle(job: ClaimedJob) -> Mapping[str, Any]:
         event = parse_pull_request_payload(job.payload)
+        if rollout_checker is not None and not rollout_checker(event):
+            return {
+                "handled": True,
+                "job_type": job.job_type,
+                "review_skipped": True,
+                "reason": "review_rollout_disabled",
+                "repo_full_name": f"{event.owner}/{event.repo}".lower(),
+                "pr_number": event.pr_number,
+                "head_sha": event.head_sha,
+                "posted": False,
+                "dry_run": review_config.dry_run,
+            }
         client = client_factory(event.installation_id)
         model = model_resolver()
-        result = run_stateless_review(
-            job.payload, client=client, model=model, config=review_config
-        )
+        result = run_stateless_review(job.payload, client=client, model=model, config=review_config)
         return result.as_result_mapping()
 
     return handle
@@ -930,6 +939,7 @@ def build_review_registry(
     model_resolver: Callable[[], EvaluateModel],
     config: ReviewHandlerConfig | None = None,
     issue_comment_handler: JobHandler | None = None,
+    rollout_checker: ReviewRolloutChecker | None = None,
 ) -> HandlerRegistry:
     """The Stage 2 registry: the stateless review handler for pull_request.
 
@@ -947,6 +957,7 @@ def build_review_registry(
             client_factory=client_factory,
             model_resolver=model_resolver,
             config=config,
+            rollout_checker=rollout_checker,
         ),
     )
     if issue_comment_handler is not None:

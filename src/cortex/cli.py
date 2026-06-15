@@ -38,6 +38,7 @@ from cortex.commands.refresh_index import refresh_index_command
 from cortex.commands.refresh_state import refresh_state_command
 from cortex.commands.retrieve import retrieve_command
 from cortex.commands.review import review_command
+from cortex.commands.review_rollout import review_rollout_group
 from cortex.commands.status import run_status, status_command
 from cortex.commands.sync import sync_command, update_command
 from cortex.commands.usage import usage_command
@@ -63,7 +64,9 @@ def _detect_install_method() -> str:
     context_settings={"help_option_names": ["-h", "--help"]},
     invoke_without_command=True,
 )
-@click.version_option(__version__, "-V", "--version", prog_name="cortex", message="%(prog)s %(version)s")
+@click.version_option(
+    __version__, "-V", "--version", prog_name="cortex", message="%(prog)s %(version)s"
+)
 @click.option(
     "--status-only",
     is_flag=True,
@@ -180,6 +183,7 @@ cli.add_command(usage_command)
 cli.add_command(cost_report_command)
 cli.add_command(ops_report_command)
 cli.add_command(precision_report_command)
+cli.add_command(review_rollout_group)
 
 
 if __name__ == "__main__":
