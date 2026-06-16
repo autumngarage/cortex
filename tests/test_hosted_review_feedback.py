@@ -251,6 +251,7 @@ def test_classify_sql_updates_only_one_pending_reply_sentiment() -> None:
     assert "review_feedback_event_id = %(review_feedback_event_id)s" in sql
     assert "feedback_kind = 'reply'" in sql
     assert "sentiment = 'unclassified'" in sql
+    assert "%(sentiment)s IN ('positive', 'negative', 'neutral')" in sql
     assert "RETURNING review_feedback_event_id" in sql
 
 
@@ -292,6 +293,9 @@ def test_schema_enforces_kind_shape_invariant_in_the_db() -> None:
     assert "feedback_kind = 'reply' AND raw_excerpt IS NOT NULL" in sql
     assert "DROP CONSTRAINT %I" in sql
     assert "feedback_kind <> 'reply' AND raw_excerpt IS NULL AND sentiment <> 'unclassified'" in sql
+    assert "require_review_feedback_reply_capture_pending" in sql
+    assert "BEFORE INSERT ON cortex_hosted.review_feedback_events" in sql
+    assert "NEW.feedback_kind = 'reply' AND NEW.sentiment <> 'unclassified'" in sql
 
 
 # ---------------------------------------------------------------------------
@@ -353,6 +357,14 @@ def test_migration_applies_idempotently_and_binds_to_replay_identity() -> None:
             review_feedback_insert_sql(), reply.as_insert_parameters()
         ).fetchone()
         assert inserted_reply is not None
+        still_pending = conn.execute(
+            review_feedback_classify_sql(),
+            {
+                "review_feedback_event_id": inserted_reply[0],
+                "sentiment": FeedbackSentiment.UNCLASSIFIED.value,
+            },
+        ).fetchone()
+        assert still_pending is None
         classified = conn.execute(
             review_feedback_classify_sql(),
             {
