@@ -66,6 +66,11 @@ TOUCHSTONE_MERGE_FAILURE_REASON="nonzero-exit"
 PREFLIGHT_REQUIRED=true
 COMMENT_ON_CLEAN=true
 COMMENT_FINDINGS_HISTORY=true
+MERGE_REVIEW_ENABLED=true
+PR_TRIGGERED_REVIEW_REQUIRED=false
+PR_TRIGGERED_REVIEW_TRUSTED_REVIEW_AUTHORS=""
+PR_TRIGGERED_REVIEW_TRUSTED_COMMENT_AUTHORS=""
+PR_TRIGGERED_REVIEW_TRUSTED_CHECK_NAMES=""
 REVIEW_SUMMARY_FILE=""
 PREFLIGHT_CACHE_KEY=""
 PREFLIGHT_CACHE_FILE=""
@@ -308,18 +313,52 @@ normalize_bool() {
   esac
 }
 
+trusted_merge_review_config_file() {
+  local repo_root="$1"
+  local default_ref="origin/$DEFAULT_BRANCH"
+  local rel tmp
+
+  # Review policy that can disable the local LLM gate must come from the
+  # trusted base ref. Otherwise a PR could turn off the gate that reviews it.
+  git -C "$repo_root" fetch origin "+refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH" --quiet 2>/dev/null || true
+  for rel in .touchstone-review.toml .codex-review.toml; do
+    if git -C "$repo_root" cat-file -e "$default_ref:$rel" 2>/dev/null; then
+      tmp="$(mktemp -t touchstone-merge-review-config.XXXXXX)" || return 0
+      if git -C "$repo_root" show "$default_ref:$rel" >"$tmp" 2>/dev/null; then
+        printf '%s\n' "$tmp"
+        return 0
+      fi
+      rm -f "$tmp" 2>/dev/null || true
+    fi
+  done
+}
+
 load_merge_review_config() {
   local config_file
+  local trusted_config_file=""
   local repo_root
   repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   [ -n "$repo_root" ] || return 0
-  if [ -f "$repo_root/.touchstone-review.toml" ]; then
+  trusted_config_file="$(trusted_merge_review_config_file "$repo_root")"
+  if [ -n "$trusted_config_file" ]; then
+    config_file="$trusted_config_file"
+  elif [ -f "$repo_root/.touchstone-review.toml" ]; then
     config_file="$repo_root/.touchstone-review.toml"
   else
     config_file="$repo_root/.codex-review.toml"
   fi
-  [ -f "$config_file" ] || return 0
-  [ -f "$SCRIPT_DIR/../lib/toml.sh" ] || return 0
+  if [ ! -f "$config_file" ]; then
+    if [ -n "$trusted_config_file" ]; then
+      rm -f "$trusted_config_file" 2>/dev/null || true
+    fi
+    return 0
+  fi
+  if [ ! -f "$SCRIPT_DIR/../lib/toml.sh" ]; then
+    if [ -n "$trusted_config_file" ]; then
+      rm -f "$trusted_config_file" 2>/dev/null || true
+    fi
+    return 0
+  fi
 
   # shellcheck source=../lib/toml.sh
   source "$SCRIPT_DIR/../lib/toml.sh"
@@ -329,16 +368,29 @@ load_merge_review_config() {
     local key="$2"
     local value="$3"
 
-    if [ "$section" = "review" ] && [ "$key" = "preflight_required" ]; then
+    if [ "$section" = "review" ] && [ "$key" = "enabled" ]; then
+      MERGE_REVIEW_ENABLED="$(normalize_bool "$value")"
+    elif [ "$section" = "review" ] && [ "$key" = "preflight_required" ]; then
       PREFLIGHT_REQUIRED="$(normalize_bool "$value")"
     elif [ "$section" = "review" ] && [ "$key" = "comment_on_clean" ]; then
       COMMENT_ON_CLEAN="$(normalize_bool "$value")"
     elif [ "$section" = "review" ] && [ "$key" = "comment_findings_history" ]; then
       COMMENT_FINDINGS_HISTORY="$(normalize_bool "$value")"
+    elif [ "$section" = "review.pr_triggered" ] && [ "$key" = "required" ]; then
+      PR_TRIGGERED_REVIEW_REQUIRED="$(normalize_bool "$value")"
+    elif [ "$section" = "review.pr_triggered" ] && [ "$key" = "trusted_review_authors" ]; then
+      PR_TRIGGERED_REVIEW_TRUSTED_REVIEW_AUTHORS="$(toml_normalize_array "$value")"
+    elif [ "$section" = "review.pr_triggered" ] && [ "$key" = "trusted_comment_authors" ]; then
+      PR_TRIGGERED_REVIEW_TRUSTED_COMMENT_AUTHORS="$(toml_normalize_array "$value")"
+    elif [ "$section" = "review.pr_triggered" ] && [ "$key" = "trusted_check_names" ]; then
+      PR_TRIGGERED_REVIEW_TRUSTED_CHECK_NAMES="$(toml_normalize_array "$value")"
     fi
   }
 
   toml_parse "$config_file" merge_pr_toml_callback
+  if [ -n "$trusted_config_file" ]; then
+    rm -f "$trusted_config_file" 2>/dev/null || true
+  fi
 }
 
 review_clean_marker_key() {
@@ -1198,6 +1250,200 @@ post_findings_history_comment() {
   return 0
 }
 
+pr_triggered_review_gate() {
+  local expected_head="$1"
+  local repo_full_name owner repo payload payload_file output rc
+
+  if ! truthy "$PR_TRIGGERED_REVIEW_REQUIRED"; then
+    echo "ERROR: Merge-gate LLM review is disabled by trusted config, but no replacement PR-triggered review gate is required." >&2
+    echo "       Set [review.pr_triggered].required=true and configure trusted review authors/comments/checks." >&2
+    TOUCHSTONE_MERGE_FAILURE_REASON="pr-triggered-review-not-configured"
+    return 1
+  fi
+
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "ERROR: python3 is required to evaluate the PR-triggered review gate." >&2
+    TOUCHSTONE_MERGE_FAILURE_REASON="pr-triggered-review-gate-error"
+    return 1
+  fi
+
+  repo_full_name="$(gh repo view --json nameWithOwner --jq '.nameWithOwner' 2>/dev/null || echo "")"
+  if [ -z "$repo_full_name" ] || [ "$repo_full_name" = "null" ] || [[ "$repo_full_name" != */* ]]; then
+    echo "ERROR: Could not resolve repository name for PR-triggered review gate." >&2
+    TOUCHSTONE_MERGE_FAILURE_REASON="pr-triggered-review-gate-error"
+    return 1
+  fi
+  owner="${repo_full_name%%/*}"
+  repo="${repo_full_name#*/}"
+
+  # shellcheck disable=SC2016 # GraphQL variables are expanded by gh, not the shell.
+  payload="$(gh api graphql \
+    -F owner="$owner" \
+    -F name="$repo" \
+    -F number="$PR_NUMBER" \
+    -f query='query($owner:String!, $name:String!, $number:Int!) { repository(owner:$owner, name:$name) { pullRequest(number:$number) { headRefOid reviewDecision reviews(last:50) { nodes { author { login } state submittedAt body url commit { oid } } } reviewThreads(first:100) { nodes { id isResolved isOutdated comments(last:1) { nodes { url } } } } comments(last:100) { nodes { author { login } body url createdAt } } commits(last:1) { nodes { commit { oid statusCheckRollup { contexts(first:100) { nodes { __typename ... on CheckRun { name status conclusion detailsUrl } ... on StatusContext { context state targetUrl } } } } } } } } } } }' \
+    2>/dev/null)" || {
+    echo "ERROR: Failed to read PR #$PR_NUMBER review state from GitHub." >&2
+    TOUCHSTONE_MERGE_FAILURE_REASON="pr-triggered-review-gate-error"
+    return 1
+  }
+
+  payload_file="$(mktemp -t touchstone-pr-review-gate.XXXXXX.json)" || {
+    echo "ERROR: Failed to allocate PR-triggered review gate payload file." >&2
+    TOUCHSTONE_MERGE_FAILURE_REASON="pr-triggered-review-gate-error"
+    return 1
+  }
+  printf '%s\n' "$payload" >"$payload_file"
+
+  set +e
+  output="$(
+    PR_TRIGGERED_REVIEW_TRUSTED_REVIEW_AUTHORS="$PR_TRIGGERED_REVIEW_TRUSTED_REVIEW_AUTHORS" \
+      PR_TRIGGERED_REVIEW_TRUSTED_COMMENT_AUTHORS="$PR_TRIGGERED_REVIEW_TRUSTED_COMMENT_AUTHORS" \
+      PR_TRIGGERED_REVIEW_TRUSTED_CHECK_NAMES="$PR_TRIGGERED_REVIEW_TRUSTED_CHECK_NAMES" \
+      python3 - "$payload_file" "$PR_NUMBER" "$expected_head" <<'PY'
+import json
+import os
+import sys
+
+payload_path, pr_number, expected_head = sys.argv[1:4]
+
+
+def csv_env(name: str) -> set[str]:
+    return {item.strip() for item in os.environ.get(name, "").split(",") if item.strip()}
+
+
+trusted_review_authors = csv_env("PR_TRIGGERED_REVIEW_TRUSTED_REVIEW_AUTHORS")
+trusted_comment_authors = csv_env("PR_TRIGGERED_REVIEW_TRUSTED_COMMENT_AUTHORS")
+trusted_check_names = csv_env("PR_TRIGGERED_REVIEW_TRUSTED_CHECK_NAMES")
+
+if not (trusted_review_authors or trusted_comment_authors or trusted_check_names):
+    print("no trusted PR-triggered review authors or checks are configured")
+    sys.exit(1)
+
+with open(payload_path, encoding="utf-8") as fh:
+    payload = json.load(fh)
+
+pr = (((payload.get("data") or {}).get("repository") or {}).get("pullRequest") or {})
+head = pr.get("headRefOid") or ""
+if head != expected_head:
+    print(f"GitHub PR head {head or 'unknown'} does not match expected {expected_head}")
+    sys.exit(1)
+
+blockers: list[str] = []
+passes: list[str] = []
+
+if pr.get("reviewDecision") == "CHANGES_REQUESTED":
+    blockers.append("GitHub reviewDecision is CHANGES_REQUESTED")
+
+for thread in ((pr.get("reviewThreads") or {}).get("nodes") or []):
+    if thread.get("isResolved") or thread.get("isOutdated"):
+        continue
+    comments = (((thread.get("comments") or {}).get("nodes")) or [])
+    url = (comments[-1] or {}).get("url") if comments else ""
+    detail = f"unresolved review thread {thread.get('id') or ''}".strip()
+    if url:
+        detail = f"{detail}: {url}"
+    blockers.append(detail)
+
+latest_review_by_author: dict[str, dict] = {}
+for review in ((pr.get("reviews") or {}).get("nodes") or []):
+    author = ((review.get("author") or {}).get("login") or "").strip()
+    if author not in trusted_review_authors:
+        continue
+    if ((review.get("commit") or {}).get("oid") or "") != head:
+        continue
+    latest_review_by_author[author] = review
+
+for author, review in latest_review_by_author.items():
+    state = review.get("state") or ""
+    body = review.get("body") or ""
+    url = review.get("url") or ""
+    if state == "CHANGES_REQUESTED":
+        blockers.append(f"trusted review by {author} requested changes: {url}")
+    elif state == "APPROVED":
+        passes.append(f"approved review by {author}: {url}")
+    elif state == "COMMENTED" and "CODEX_REVIEW_CLEAN" in body:
+        passes.append(f"clean review comment by {author}: {url}")
+    elif state == "COMMENTED" and "CODEX_REVIEW_BLOCKED" in body:
+        blockers.append(f"trusted review by {author} reported blockers: {url}")
+
+marker = f"cortex-review:pr={pr_number}:head={head}"
+latest_comment_by_author: dict[str, dict] = {}
+for comment in ((pr.get("comments") or {}).get("nodes") or []):
+    author = ((comment.get("author") or {}).get("login") or "").strip()
+    if author not in trusted_comment_authors:
+        continue
+    body = comment.get("body") or ""
+    if marker in body or "CODEX_REVIEW_CLEAN" in body or "CODEX_REVIEW_BLOCKED" in body:
+        latest_comment_by_author[author] = comment
+
+for author, comment in latest_comment_by_author.items():
+    body = comment.get("body") or ""
+    url = comment.get("url") or ""
+    if marker in body:
+        if "Cortex flagged **" in body:
+            blockers.append(f"trusted Cortex review by {author} reported findings: {url}")
+        elif "#### No contradictions found" in body:
+            if "could not fit the review budget" in body or "Degraded:" in body:
+                blockers.append(f"trusted Cortex review by {author} was incomplete: {url}")
+            else:
+                passes.append(f"clean Cortex review by {author}: {url}")
+        else:
+            blockers.append(f"trusted Cortex review by {author} was not classifiable as clean: {url}")
+    elif "CODEX_REVIEW_BLOCKED" in body:
+        blockers.append(f"trusted review comment by {author} reported blockers: {url}")
+    elif "CODEX_REVIEW_CLEAN" in body:
+        passes.append(f"clean review comment by {author}: {url}")
+
+contexts = (((((pr.get("commits") or {}).get("nodes") or [{}])[-1]).get("commit") or {}).get("statusCheckRollup") or {}).get("contexts") or {}
+for context in contexts.get("nodes") or []:
+    kind = context.get("__typename")
+    name = context.get("name") if kind == "CheckRun" else context.get("context")
+    if name not in trusted_check_names:
+        continue
+    url = context.get("detailsUrl") if kind == "CheckRun" else context.get("targetUrl")
+    if kind == "CheckRun":
+        status = context.get("status")
+        conclusion = context.get("conclusion")
+        if status == "COMPLETED" and conclusion == "SUCCESS":
+            passes.append(f"trusted check {name} passed: {url or ''}".strip())
+        else:
+            blockers.append(f"trusted check {name} is {status}/{conclusion}: {url or ''}".strip())
+    else:
+        state = context.get("state")
+        if state == "SUCCESS":
+            passes.append(f"trusted status {name} passed: {url or ''}".strip())
+        else:
+            blockers.append(f"trusted status {name} is {state}: {url or ''}".strip())
+
+if blockers:
+    print("\n".join(f"- {item}" for item in blockers))
+    sys.exit(1)
+if passes:
+    print(passes[-1])
+    sys.exit(0)
+
+print("no trusted current-head PR-triggered review artifact was found")
+sys.exit(1)
+PY
+  )"
+  rc=$?
+  set -e
+  rm -f "$payload_file" 2>/dev/null || true
+
+  if [ "$rc" -eq 0 ]; then
+    echo "==> PR-triggered review gate passed: $output"
+    return 0
+  fi
+
+  echo "ERROR: PR-triggered review gate failed for PR #$PR_NUMBER at $expected_head." >&2
+  if [ -n "$output" ]; then
+    printf '%s\n' "$output" >&2
+  fi
+  TOUCHSTONE_MERGE_FAILURE_REASON="pr-triggered-review-blocked"
+  return 1
+}
+
 failed_checks() {
   gh pr checks "$PR_NUMBER" \
     --json name,bucket,state,link \
@@ -1516,6 +1762,13 @@ run_merge_review() {
 
   run_preflight_gate "$default_base_ref" "before merge review" "merge" || return $?
 
+  if ! truthy "$MERGE_REVIEW_ENABLED"; then
+    pr_triggered_review_gate "$pr_head_oid" || return $?
+    echo "==> Merge-gate LLM review disabled by trusted [review].enabled=false; using PR-triggered review gate."
+    REVIEWED_HEAD_OID="$pr_head_oid"
+    return 0
+  fi
+
   echo "==> Running merge review ..."
   local review_rc=0
   local review_output_file
@@ -1587,6 +1840,14 @@ run_merge_review() {
   TOUCHSTONE_MERGE_FAILURE_REASON="review-blocked"
   return "$review_rc"
 }
+
+if truthy "${TOUCHSTONE_MERGE_PR_SOURCE_ONLY:-false}"; then
+  trap - EXIT
+  if ! return 0 2>/dev/null; then
+    # shellcheck disable=SC2317 # Reached only when executed with SOURCE_ONLY.
+    exit 0
+  fi
+fi
 
 load_merge_review_config
 

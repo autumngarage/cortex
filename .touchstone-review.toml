@@ -34,6 +34,19 @@ enabled = false
 comment_on_clean = false
 reviewer = "conductor"
 
+[review.pr_triggered]
+required = true
+trusted_review_authors = [
+  "codex",
+  "codex[bot]",
+  "github-copilot[bot]",
+]
+trusted_comment_authors = [
+  "compass-review",
+  "compass-review[bot]",
+]
+trusted_check_names = []
+
 [review.conductor]
 prefer = "best"
 effort = "high"

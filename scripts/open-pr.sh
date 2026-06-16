@@ -79,6 +79,8 @@ ORPHAN_PR_NUMBER=""
 BODY_FILE=""
 ADVISORY_AT_PR_OPEN=false
 PREFLIGHT_REQUIRED=true
+MERGE_REVIEW_ENABLED=true
+PR_TRIGGERED_REVIEW_REQUIRED=false
 REPO_FULL_NAME=""
 
 on_exit() {
@@ -303,8 +305,12 @@ load_open_pr_review_config() {
 
     if [ "$section" = "review" ] && [ "$key" = "advisory_at_pr_open" ]; then
       ADVISORY_AT_PR_OPEN="$(normalize_bool "$value")"
+    elif [ "$section" = "review" ] && [ "$key" = "enabled" ]; then
+      MERGE_REVIEW_ENABLED="$(normalize_bool "$value")"
     elif [ "$section" = "review" ] && [ "$key" = "preflight_required" ]; then
       PREFLIGHT_REQUIRED="$(normalize_bool "$value")"
+    elif [ "$section" = "review.pr_triggered" ] && [ "$key" = "required" ]; then
+      PR_TRIGGERED_REVIEW_REQUIRED="$(normalize_bool "$value")"
     fi
   }
 
@@ -318,7 +324,13 @@ run_advisory_review_at_pr_open() {
   local advisory_preflight_passed=false
 
   if ! truthy "$ADVISORY_AT_PR_OPEN"; then
-    echo "==> Advisory review at PR open disabled; merge-gate review still runs during auto-merge."
+    if ! truthy "$MERGE_REVIEW_ENABLED" && truthy "$PR_TRIGGERED_REVIEW_REQUIRED"; then
+      echo "==> Advisory review at PR open disabled; auto-merge will use the PR-triggered review gate."
+    elif ! truthy "$MERGE_REVIEW_ENABLED"; then
+      echo "==> Advisory review at PR open disabled; merge-gate LLM review disabled by config."
+    else
+      echo "==> Advisory review at PR open disabled; merge-gate review still runs during auto-merge."
+    fi
     return 0
   fi
 
