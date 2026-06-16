@@ -29,9 +29,11 @@ operational bookkeeping (which installation, which jobs ran) and
 **content-free feedback labels** — a decision *hash* plus whether a
 reviewer found a comment useful, never the decision text. Your decisions
 and your code are never persisted on our infrastructure. The stateless
-review path touches no database at all: a regression test booby-traps the
-database connection and asserts a full review still produces its cited
-comment.
+review path touches no customer-decision database at all: a regression test
+booby-traps the database connection and asserts a full review still produces
+its cited comment. The durable job result stores only content-free review
+shape (counts, ids, reason codes, and operator-internal cost telemetry), not
+the rendered PR comment body.
 
 The deployed worker does read one operator-internal rollout gate before
 entering that stateless path: a content-free `owner/repo` enable/disable event
@@ -71,7 +73,7 @@ graph.
   real one (your repo); it does not replace it.
 - **We never store more than the tier you chose requires.** Source file
   contents are fetched on demand and not retained; webhook payloads are
-  reduced to content-free skeletons after processing.
+  reduced to content-free skeletons after the terminal-job debug window.
 
 ## Protections
 
@@ -86,7 +88,9 @@ graph.
   secrets, administration, or other repositories.
 - **Secrets:** credentials live in the deployment platform's secret store
   and a password manager — never in the repository, never in logs, never
-  in a stored row. Logs are content-free by contract.
+  in a stored row. Logs are content-free by contract and fail closed on
+  content-bearing field names (`payload`, `body`, `comment_body`, `diff`,
+  `decision_text`, secret/token/key fields).
 - **Portability & deletion:** your decision graph exports in full as open,
   replayable JSON at any time; on offboarding, your data is deleted with
   an audited procedure leaving only a tombstone recording that the

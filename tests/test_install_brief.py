@@ -139,16 +139,15 @@ def test_ecosystem_unknown_when_no_manifest(tmp_path: Path) -> None:
 # ── PaaS detection ─────────────────────────────────────────────────────────
 
 
-def test_paas_nixpacks_uses_github_repos_fallback(tmp_path: Path) -> None:
-    target = _make_git_repo(tmp_path / "myapp",
-                            remote="git@github.com:acme/myapp.git")
+def test_paas_nixpacks_uses_paas_repos(tmp_path: Path) -> None:
+    target = _make_git_repo(tmp_path / "myapp", remote="git@github.com:acme/myapp.git")
     (target / "nixpacks.toml").touch()
 
     result = CliRunner().invoke(cli, ["install-brief", str(target)])
     assert result.exit_code == 0, result.output
-    assert "github_repos" in result.output
-    # Must include TODO comment about cortex#161
-    assert "cortex#161" in result.output
+    assert 'paas_repos = ["acme/myapp"]' in result.output
+    assert "github_repos" not in result.output
+    assert "cortex#161" not in result.output
 
 
 def test_paas_procfile_detected(tmp_path: Path) -> None:
@@ -157,7 +156,8 @@ def test_paas_procfile_detected(tmp_path: Path) -> None:
 
     result = CliRunner().invoke(cli, ["install-brief", str(target)])
     assert result.exit_code == 0, result.output
-    assert "cortex#161" in result.output
+    assert "paas_repos" in result.output
+    assert "cortex#161" not in result.output
 
 
 # ── Output flag ────────────────────────────────────────────────────────────

@@ -25,7 +25,9 @@ from cortex.hosted.api.config import ServiceConfigError
 from cortex.hosted.degradation import DegradationMode, classify_failure
 from cortex.hosted.jobs import HostedJobError, JobRequest
 from cortex.hosted.ledger_events import LedgerEventType
+from cortex.hosted.logging import HostedLogError, log_event
 from cortex.hosted.worker import (
+    UNSUPPORTED_GITHUB_REVIEW_JOB_TYPES,
     ArrivalRecorder,
     HandlerRegistry,
     Worker,
@@ -76,6 +78,7 @@ class FakeQueueDb:
             "next_attempt_at": datetime.now(UTC),
             "claimed_at": None,
             "claimed_by": None,
+            "finished_at": None,
             "last_error": None,
             "result": None,
         }
@@ -124,6 +127,7 @@ class FakeQueueDb:
             if found is None or found["status"] != "running":
                 return FakeCursor([])
             found["status"] = "succeeded"
+            found["finished_at"] = datetime.now(UTC)
             found["last_error"] = None
             found["result"] = json.loads(str(p["result"]))
             return FakeCursor([(found["job_id"],)])
@@ -144,7 +148,32 @@ class FakeQueueDb:
             if found is None or found["status"] != "running":
                 return FakeCursor([])
             found["status"] = "dead"
+            found["finished_at"] = datetime.now(UTC)
             found["last_error"] = str(p["error"])
+            return FakeCursor([(found["job_id"],)])
+        if q.startswith("SELECT job_id, payload") and "payload->>'minimized'" in q:
+            cutoff = datetime.now(UTC) - timedelta(seconds=float(p["grace_seconds"]))
+            limit = int(p["limit"])
+            rows: list[tuple[Any, ...]] = []
+            for job in sorted(
+                self.jobs.values(),
+                key=lambda item: item["finished_at"] or datetime.max.replace(tzinfo=UTC),
+            ):
+                if (
+                    job["status"] in {"succeeded", "dead"}
+                    and job["finished_at"] is not None
+                    and job["finished_at"] <= cutoff
+                    and job["payload"].get("minimized") is not True
+                ):
+                    rows.append((job["job_id"], json.dumps(job["payload"])))
+                if len(rows) >= limit:
+                    break
+            return FakeCursor(rows)
+        if q.startswith("UPDATE cortex_hosted.jobs") and "SET payload = %(payload)s::jsonb" in q:
+            found = self._by_id(str(p["job_id"]))
+            if found is None or found["status"] not in {"succeeded", "dead"}:
+                return FakeCursor([])
+            found["payload"] = json.loads(str(p["payload"]))
             return FakeCursor([(found["job_id"],)])
         if "claimed_at < now() - make_interval" in q:
             cutoff = datetime.now(UTC) - timedelta(seconds=float(p["stale_after_seconds"]))
@@ -155,7 +184,10 @@ class FakeQueueDb:
                     and job["claimed_at"] is not None
                     and job["claimed_at"] < cutoff
                 ):
-                    job["status"] = "dead" if job["attempts"] >= job["max_attempts"] else "queued"
+                    exhausted = job["attempts"] >= job["max_attempts"]
+                    job["status"] = "dead" if exhausted else "queued"
+                    if exhausted:
+                        job["finished_at"] = datetime.now(UTC)
                     job["last_error"] = str(p["error"])
                     job["claimed_at"] = None
                     job["claimed_by"] = None
@@ -277,6 +309,50 @@ def test_successful_job_round_trips_with_structured_logs(
     assert job["attempts"] == 1
     events = [json.loads(record.message)["event"] for record in caplog.records]
     assert events == ["job.claimed", "job.succeeded"]
+
+
+def test_successful_job_omits_comment_body_from_result_and_logs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    db = FakeQueueDb()
+    registry = HandlerRegistry()
+    registry.register(
+        "github.pull_request",
+        lambda job: {
+            "handled": True,
+            "review_mode": "stateless",
+            "comment_body": "rendered customer-facing review body",
+            "finding_count": 2,
+            "decision_count": 10,
+            "cost": {
+                "model": "anthropic/claude-sonnet-4-6",
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "usd": 0.01,
+                "call_count": 1,
+            },
+        },
+    )
+    db.enqueue(_webhook_job_request())
+    with caplog.at_level(logging.INFO, logger="cortex.hosted.worker"):
+        assert _worker(db, registry).run_once() is True
+    job = db.job("github-delivery:guid-1")
+    assert "comment_body" not in job["result"]
+    assert job["result"]["finding_count"] == 2
+    succeeded = json.loads(caplog.records[-1].message)
+    assert succeeded["event"] == "job.succeeded"
+    assert succeeded["finding_count"] == 2
+    assert succeeded["cost_model"] == "anthropic/claude-sonnet-4-6"
+    assert "comment_body" not in succeeded
+    assert "rendered customer-facing review body" not in caplog.text
+
+
+def test_hosted_log_guard_rejects_content_bearing_fields() -> None:
+    logger = logging.getLogger("cortex.hosted.worker")
+    with pytest.raises(HostedLogError, match="comment_body"):
+        log_event(logger, "probe", comment_body="rendered comment")
+    with pytest.raises(HostedLogError, match=r"nested\.payload"):
+        log_event(logger, "probe", nested={"payload": {"body": "raw webhook"}})
 
 
 def test_failed_job_is_requeued_with_capped_backoff(
@@ -402,6 +478,69 @@ def test_fresh_running_claim_is_left_alone() -> None:
     assert job["status"] == "running"
 
 
+def test_prune_terminal_payloads_replaces_old_raw_payloads_only(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    db = FakeQueueDb()
+    registry = HandlerRegistry()
+    registry.register("github.pull_request", lambda job: {"handled": True})
+    db.enqueue(_webhook_job_request(delivery="done"))
+    db.job("github-delivery:done")["payload"]["body"]["title"] = "private PR title"
+    assert _worker(db, registry).run_once() is True
+
+    db.enqueue(_webhook_job_request(delivery="live"))
+    db.job("github-delivery:live")["payload"]["body"]["title"] = "live PR title"
+    db.enqueue(
+        JobRequest(
+            job_type="github.pull_request",
+            idempotency_key="github-delivery:minimized",
+            payload={"minimized": True, "delivery": "minimized"},
+        )
+    )
+    minimized = db.job("github-delivery:minimized")
+    minimized["status"] = "succeeded"
+    minimized["finished_at"] = datetime.now(UTC) - timedelta(days=30)
+
+    worker = _worker(
+        db,
+        HandlerRegistry(),
+        payload_prune_grace_seconds=0,
+        payload_prune_batch_size=10,
+    )
+    with caplog.at_level(logging.INFO, logger="cortex.hosted.worker"):
+        assert worker.prune_terminal_payloads() == 1
+
+    done_payload = db.job("github-delivery:done")["payload"]
+    assert done_payload["minimized"] is True
+    assert done_payload["body_sha256"]
+    assert "private PR title" not in str(done_payload)
+    assert db.job("github-delivery:live")["payload"]["body"]["title"] == "live PR title"
+    assert db.job("github-delivery:minimized")["payload"] == {
+        "minimized": True,
+        "delivery": "minimized",
+    }
+    assert json.loads(caplog.records[-1].message) == {"count": 1, "event": "job.payloads_pruned"}
+
+
+def test_prune_terminal_payloads_fails_visibly_when_update_loses_row() -> None:
+    class RacingQueueDb(FakeQueueDb):
+        def execute(self, query: str, params: Mapping[str, Any] | None = None) -> FakeCursor:
+            cursor = super().execute(query, params)
+            if query.strip().startswith("SELECT job_id, payload"):
+                self.job("github-delivery:done")["status"] = "queued"
+            return cursor
+
+    db = RacingQueueDb()
+    registry = HandlerRegistry()
+    registry.register("github.pull_request", lambda job: {"handled": True})
+    db.enqueue(_webhook_job_request(delivery="done"))
+    assert _worker(db, registry).run_once() is True
+
+    worker = _worker(db, HandlerRegistry(), payload_prune_grace_seconds=0)
+    with pytest.raises(HostedJobError, match="was not terminal"):
+        worker.prune_terminal_payloads()
+
+
 # ---------------------------------------------------------------------------
 # Graceful shutdown
 # ---------------------------------------------------------------------------
@@ -451,7 +590,47 @@ def test_signal_handler_sets_the_stop_event() -> None:
 def test_default_registry_registers_the_stage1_stubs() -> None:
     recorder = ArrivalRecorder(conn=FakeQueueDb(), tenant_id=None, source_id=None)
     registry = build_default_registry(recorder)
-    assert registry.job_types() == ("github.issue_comment", "github.pull_request")
+    assert registry.job_types() == (
+        "github.issue_comment",
+        "github.pull_request",
+        "github.pull_request_review",
+        "github.pull_request_review_comment",
+    )
+
+
+@pytest.mark.parametrize("job_type", UNSUPPORTED_GITHUB_REVIEW_JOB_TYPES)
+def test_default_registry_acknowledges_unsupported_review_webhooks(job_type: str) -> None:
+    db = FakeQueueDb()
+    recorder = ArrivalRecorder(conn=db, tenant_id=None, source_id=None)
+    event = job_type.removeprefix("github.")
+    db.enqueue(
+        JobRequest(
+            job_type=job_type,
+            idempotency_key=f"github-delivery:{event}",
+            payload={
+                "event": event,
+                "delivery": event,
+                "body": {
+                    "action": "submitted",
+                    "repository": {"full_name": "autumngarage/cortex"},
+                    "pull_request": {"number": 588},
+                },
+            },
+        )
+    )
+    assert _worker(db, build_default_registry(recorder)).run_once() is True
+    job = db.job(f"github-delivery:{event}")
+    assert job["status"] == "succeeded"
+    assert job["result"] == {
+        "handled": True,
+        "job_type": job_type,
+        "unsupported_event": True,
+        "reason": "unsupported_github_review_event",
+        "github_event": event,
+        "action": "submitted",
+        "repository": "autumngarage/cortex",
+        "pr_number": 588,
+    }
 
 
 def test_review_dry_run_env_defaults_to_safe_dry_run() -> None:

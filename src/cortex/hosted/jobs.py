@@ -27,6 +27,7 @@ connections in the API shell (enqueue side, cortex#470) and the worker loop
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections.abc import Mapping
@@ -46,6 +47,7 @@ _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 DEFAULT_MAX_ATTEMPTS = 5
 DEFAULT_RETRY_BASE_SECONDS = 30.0
 DEFAULT_RETRY_CAP_SECONDS = 3600.0
+JOB_PAYLOAD_SKELETON_VERSION = 1
 
 
 class HostedJobError(ValueError):
@@ -244,6 +246,35 @@ RETURNING job_id;
 """.strip()
 
 
+def select_prunable_terminal_jobs_sql(schema: str = "cortex_hosted") -> str:
+    """Select terminal jobs whose raw payload has outlived the debug window."""
+
+    _validate_sql_identifier(schema)
+    return f"""
+SELECT job_id, payload
+FROM {schema}.jobs
+WHERE status IN ('{JobStatus.SUCCEEDED.value}', '{JobStatus.DEAD.value}')
+  AND finished_at IS NOT NULL
+  AND finished_at <= now() - make_interval(secs => %(grace_seconds)s)
+  AND payload->>'minimized' IS DISTINCT FROM 'true'
+ORDER BY finished_at
+LIMIT %(limit)s;
+""".strip()
+
+
+def update_job_payload_sql(schema: str = "cortex_hosted") -> str:
+    """Replace a job payload with a content-free skeleton."""
+
+    _validate_sql_identifier(schema)
+    return f"""
+UPDATE {schema}.jobs
+SET payload = %(payload)s::jsonb
+WHERE job_id = %(job_id)s
+  AND status IN ('{JobStatus.SUCCEEDED.value}', '{JobStatus.DEAD.value}')
+RETURNING job_id;
+""".strip()
+
+
 def retry_job_sql(schema: str = "cortex_hosted") -> str:
     """Requeue a failed running job with explicit backoff and visible error."""
 
@@ -302,6 +333,47 @@ RETURNING job_id, status;
 """.strip()
 
 
+def terminal_job_payload_skeleton(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Build the content-free retained shape for a terminal webhook job.
+
+    The skeleton keeps routing/audit identifiers and a hash of the original
+    webhook body, but drops title/body/comment/user text. It is idempotent so
+    the housekeeping pass can safely retry.
+    """
+
+    _validate_json_object("payload", payload)
+    if payload.get("minimized") is True:
+        return dict(payload)
+    body = payload.get("body")
+    body_map: Mapping[str, Any] = body if isinstance(body, Mapping) else {}
+    repo = body_map.get("repository")
+    repo_map: Mapping[str, Any] = repo if isinstance(repo, Mapping) else {}
+    installation = body_map.get("installation")
+    installation_map: Mapping[str, Any] = (
+        installation if isinstance(installation, Mapping) else {}
+    )
+    pull_request = body_map.get("pull_request")
+    pr_map: Mapping[str, Any] = pull_request if isinstance(pull_request, Mapping) else {}
+    base = pr_map.get("base")
+    base_map: Mapping[str, Any] = base if isinstance(base, Mapping) else {}
+    head = pr_map.get("head")
+    head_map: Mapping[str, Any] = head if isinstance(head, Mapping) else {}
+    return {
+        "schema_version": JOB_PAYLOAD_SKELETON_VERSION,
+        "minimized": True,
+        "event": _string_or_none(payload.get("event")),
+        "delivery": _string_or_none(payload.get("delivery")),
+        "received_at": _string_or_none(payload.get("received_at")),
+        "action": _string_or_none(body_map.get("action")),
+        "repository": _string_or_none(repo_map.get("full_name")),
+        "installation_id": _string_or_none(installation_map.get("id")),
+        "pull_request_number": _int_or_none(pr_map.get("number")),
+        "base_sha": _string_or_none(base_map.get("sha")),
+        "head_sha": _string_or_none(head_map.get("sha")),
+        "body_sha256": _sha256_json(body_map) if body_map else None,
+    }
+
+
 def _require_non_empty(name: str, value: str) -> None:
     if not value.strip():
         raise HostedJobError(f"{name} must not be empty")
@@ -319,3 +391,24 @@ def _validate_json_object(name: str, value: Mapping[str, Any]) -> None:
 def _validate_sql_identifier(name: str) -> None:
     if not _IDENTIFIER_RE.match(name):
         raise HostedJobError(f"invalid SQL identifier: {name!r}")
+
+
+def _string_or_none(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _int_or_none(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _sha256_json(value: Mapping[str, Any]) -> str:
+    body = json.dumps(value, sort_keys=True, default=str, separators=(",", ":"))
+    return hashlib.sha256(body.encode("utf-8")).hexdigest()

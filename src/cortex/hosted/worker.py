@@ -50,6 +50,9 @@ from cortex.hosted.jobs import (
     dead_letter_job_sql,
     recover_stale_claims_sql,
     retry_job_sql,
+    select_prunable_terminal_jobs_sql,
+    terminal_job_payload_skeleton,
+    update_job_payload_sql,
 )
 from cortex.hosted.ledger_events import (
     ActorRef,
@@ -58,6 +61,7 @@ from cortex.hosted.ledger_events import (
     derive_idempotency_key,
     ledger_event_insert_sql,
 )
+from cortex.hosted.logging import exception_for_log, log_event, validate_log_fields
 from cortex.hosted.migrations import apply_schema
 
 logger = logging.getLogger("cortex.hosted.worker")
@@ -88,6 +92,22 @@ DEFAULT_HOSTED_REVIEW_TOKEN_BUDGET = 32000
 # hour a human reacts.
 REACTION_POLL_SECONDS_ENV = "CORTEX_REACTION_POLL_SECONDS"
 DEFAULT_REACTION_POLL_SECONDS = 900.0
+
+# Terminal webhook payload minimization (cortex#533). Raw webhook bodies stay
+# available for a short debug window, then a housekeeping pass replaces them
+# with a content-free skeleton plus a body hash. The default is the documented
+# 7-day grace window; tests can set it to 0, but dogfood should keep it above
+# the reaction-sweep window so feedback polling can still derive PR targets.
+JOB_PAYLOAD_PRUNE_GRACE_SECONDS_ENV = "CORTEX_JOB_PAYLOAD_PRUNE_GRACE_SECONDS"
+DEFAULT_JOB_PAYLOAD_PRUNE_GRACE_SECONDS = 7 * 24 * 60 * 60.0
+DEFAULT_JOB_PAYLOAD_PRUNE_BATCH_SIZE = 100
+
+UNSUPPORTED_GITHUB_REVIEW_JOB_TYPES = (
+    "github.pull_request_review",
+    "github.pull_request_review_comment",
+)
+
+_RESULT_OMIT_KEYS = frozenset({"comment_body"})
 
 JobHandler = Callable[[ClaimedJob], Mapping[str, Any]]
 
@@ -121,10 +141,72 @@ def _env_positive_int(raw: str | None, *, default: int) -> int:
     return value
 
 
+def _env_nonnegative_float(raw: str | None, *, default: float, name: str) -> float:
+    """Parse a non-negative float env value; unset/blank -> ``default``."""
+
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = float(raw.strip())
+    except ValueError as exc:
+        raise ServiceConfigError(f"{name} must be a non-negative number; got {raw.strip()!r}") from exc
+    if value < 0:
+        raise ServiceConfigError(f"{name} must be >= 0; got {value}")
+    return value
+
+
 def _log(event: str, **fields: Any) -> None:
     """One structured JSON log line per worker transition."""
 
-    logger.info(json.dumps({"event": event, **fields}, sort_keys=True, default=str))
+    log_event(logger, event, **fields)
+
+
+def content_free_job_result(result: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the durable job result after dropping known content fields."""
+
+    cleaned = {
+        str(key): value for key, value in result.items() if str(key).lower() not in _RESULT_OMIT_KEYS
+    }
+    validate_log_fields(cleaned)
+    return cleaned
+
+
+def result_log_fields(result: Mapping[str, Any]) -> dict[str, Any]:
+    """Summarize a content-free result for the ``job.succeeded`` log line."""
+
+    fields: dict[str, Any] = {}
+    for key in (
+        "handled",
+        "review_mode",
+        "dry_run",
+        "posted",
+        "review_skipped",
+        "reason",
+        "repo_full_name",
+        "pr_number",
+        "head_sha",
+        "comment_id",
+        "comment_url",
+        "finding_count",
+        "decision_count",
+        "no_decisions",
+        "feedback_recorded",
+        "feedback_kind",
+        "unsupported_event",
+        "github_event",
+        "action",
+        "repository",
+        "ledger_recorded",
+    ):
+        if key in result:
+            fields[key] = result[key]
+    cost = result.get("cost")
+    if isinstance(cost, Mapping):
+        for key in ("model", "input_tokens", "output_tokens", "usd", "call_count"):
+            if key in cost:
+                fields[f"cost_{key}"] = cost[key]
+    validate_log_fields(fields)
+    return fields
 
 
 class HandlerRegistry:
@@ -230,12 +312,35 @@ def _stub_github_handler(recorder: ArrivalRecorder) -> JobHandler:
     return handle
 
 
+def unsupported_github_review_event_handler(job: ClaimedJob) -> Mapping[str, Any]:
+    """Acknowledge expected GitHub review webhooks that Cortex does not use yet."""
+
+    body = job.payload.get("body")
+    body_map: Mapping[str, Any] = body if isinstance(body, Mapping) else {}
+    repository = body_map.get("repository")
+    repository_map: Mapping[str, Any] = repository if isinstance(repository, Mapping) else {}
+    pull_request = body_map.get("pull_request")
+    pr_map: Mapping[str, Any] = pull_request if isinstance(pull_request, Mapping) else {}
+    return {
+        "handled": True,
+        "job_type": job.job_type,
+        "unsupported_event": True,
+        "reason": "unsupported_github_review_event",
+        "github_event": job.payload.get("event"),
+        "action": body_map.get("action"),
+        "repository": repository_map.get("full_name"),
+        "pr_number": pr_map.get("number"),
+    }
+
+
 def build_default_registry(recorder: ArrivalRecorder) -> HandlerRegistry:
     """The Stage 1 registry: stub GitHub handlers over one shared recorder."""
 
     registry = HandlerRegistry()
     registry.register("github.pull_request", _stub_github_handler(recorder))
     registry.register("github.issue_comment", _stub_github_handler(recorder))
+    for job_type in UNSUPPORTED_GITHUB_REVIEW_JOB_TYPES:
+        registry.register(job_type, unsupported_github_review_event_handler)
     return registry
 
 
@@ -255,6 +360,8 @@ class Worker:
         sleep: Callable[[float], None] | None = None,
         reaction_sweep: Callable[[], Mapping[str, Any]] | None = None,
         reaction_sweep_seconds: float = 900.0,
+        payload_prune_grace_seconds: float = DEFAULT_JOB_PAYLOAD_PRUNE_GRACE_SECONDS,
+        payload_prune_batch_size: int = DEFAULT_JOB_PAYLOAD_PRUNE_BATCH_SIZE,
         monotonic: Callable[[], float] | None = None,
     ) -> None:
         if poll_interval_seconds <= 0:
@@ -266,6 +373,15 @@ class Worker:
         if reaction_sweep is not None and reaction_sweep_seconds <= 0:
             raise HostedJobError(
                 f"reaction_sweep_seconds must be positive, got {reaction_sweep_seconds}"
+            )
+        if payload_prune_grace_seconds < 0:
+            raise HostedJobError(
+                "payload_prune_grace_seconds must be non-negative, "
+                f"got {payload_prune_grace_seconds}"
+            )
+        if payload_prune_batch_size < 1:
+            raise HostedJobError(
+                f"payload_prune_batch_size must be >= 1, got {payload_prune_batch_size}"
             )
         # Validate the backoff parameters once, up front, instead of on the
         # first failed job.
@@ -280,6 +396,8 @@ class Worker:
         self._sleep = sleep if sleep is not None else threading.Event().wait
         self._reaction_sweep = reaction_sweep
         self._reaction_sweep_seconds = reaction_sweep_seconds
+        self._payload_prune_grace_seconds = payload_prune_grace_seconds
+        self._payload_prune_batch_size = payload_prune_batch_size
         self._monotonic = monotonic if monotonic is not None else time.monotonic
         self._last_reaction_sweep: float | None = None
 
@@ -300,6 +418,38 @@ class Worker:
         for job_id, status in rows:
             _log("job.stale_claim_recovered", job_id=str(job_id), status=str(status))
         return len(rows)
+
+    def prune_terminal_payloads(self) -> int:
+        """Replace old terminal raw webhook payloads with content-free skeletons."""
+
+        rows = self._conn.execute(
+            select_prunable_terminal_jobs_sql(),
+            {
+                "grace_seconds": self._payload_prune_grace_seconds,
+                "limit": self._payload_prune_batch_size,
+            },
+        ).fetchall()
+        pruned = 0
+        for job_id, payload in rows:
+            if isinstance(payload, str):
+                payload = json.loads(payload)
+            if not isinstance(payload, Mapping):
+                raise HostedJobError(f"job {job_id} payload is not a JSON object")
+            skeleton = terminal_job_payload_skeleton(payload)
+            updated = self._conn.execute(
+                update_job_payload_sql(),
+                {
+                    "job_id": str(job_id),
+                    "payload": json.dumps(skeleton, sort_keys=True, separators=(",", ":")),
+                },
+            ).fetchone()
+            if updated is None:
+                raise HostedJobError(f"job {job_id} was not terminal when payload prune ran")
+            pruned += 1
+        self._conn.commit()
+        if pruned:
+            _log("job.payloads_pruned", count=pruned)
+        return pruned
 
     def run_once(self) -> bool:
         """Claim and process at most one job. Returns whether one was claimed."""
@@ -335,7 +485,7 @@ class Worker:
             result = handler(job)
         except Exception as exc:
             self._conn.rollback()
-            self._fail(job, error=f"{type(exc).__name__}: {exc}")
+            self._fail(job, error=exception_for_log(exc))
             return True
         # Operator-internal review cost (cortex#547): persist one append-only
         # row and emit one structured log line for a successful review, in the
@@ -349,15 +499,21 @@ class Worker:
         # ever rewriting the append-only feedback corpus. Same transaction as
         # job completion, same atomicity argument as the cost row.
         self._record_staged_pr(job, result)
+        stored_result = content_free_job_result(result)
         self._conn.execute(
             complete_job_sql(),
             {
                 "job_id": job.job_id,
-                "result": json.dumps(dict(result), sort_keys=True, default=str),
+                "result": json.dumps(stored_result, sort_keys=True, default=str),
             },
         )
         self._conn.commit()
-        _log("job.succeeded", job_id=job.job_id, job_type=job.job_type, result=dict(result))
+        _log(
+            "job.succeeded",
+            job_id=job.job_id,
+            job_type=job.job_type,
+            **result_log_fields(stored_result),
+        )
         return True
 
     def _record_review_cost(self, job: ClaimedJob, result: Mapping[str, Any]) -> None:
@@ -417,7 +573,7 @@ class Worker:
                 "review.cost_skipped",
                 job_id=job.job_id,
                 reason="unrecordable_cost",
-                error=f"{type(exc).__name__}: {exc}",
+                error=exception_for_log(exc),
             )
             return
 
@@ -482,7 +638,7 @@ class Worker:
                 "review.staged_pr_skipped",
                 job_id=job.job_id,
                 reason="unrecordable_identity",
-                error=f"{type(exc).__name__}: {exc}",
+                error=exception_for_log(exc),
             )
             return
 
@@ -508,6 +664,7 @@ class Worker:
         )
         while not stop.is_set():
             self.recover_stale_claims()
+            self.prune_terminal_payloads()
             processed = True
             while processed and not stop.is_set():
                 processed = self.run_once()
@@ -544,7 +701,7 @@ class Worker:
             _log(
                 "feedback.reaction_sweep_failed",
                 worker=self._worker_id,
-                error=f"{type(exc).__name__}: {exc}",
+                error=exception_for_log(exc),
             )
         return True
 
@@ -799,6 +956,11 @@ def main() -> None:
         registry=build_worker_registry(recorder=recorder),
         poll_interval_seconds=config.poll_interval_seconds,
         stale_claim_seconds=config.stale_claim_seconds,
+        payload_prune_grace_seconds=_env_nonnegative_float(
+            os.environ.get(JOB_PAYLOAD_PRUNE_GRACE_SECONDS_ENV),
+            default=DEFAULT_JOB_PAYLOAD_PRUNE_GRACE_SECONDS,
+            name=JOB_PAYLOAD_PRUNE_GRACE_SECONDS_ENV,
+        ),
         reaction_sweep=sweep_config[0] if sweep_config else None,
         reaction_sweep_seconds=sweep_config[1] if sweep_config else 900.0,
     )
