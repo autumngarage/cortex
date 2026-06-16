@@ -20,6 +20,7 @@ import pytest
 
 from cortex.hosted.github_app_auth import CommentReaction
 from cortex.hosted.github_comment import make_marker, make_replay_marker
+from cortex.hosted.github_installations import GithubInstallationIdentity
 from cortex.hosted.reaction_sweep import (
     ReactionSweepError,
     discover_sweep_targets,
@@ -242,6 +243,36 @@ def test_sweep_records_reactions_and_is_idempotent_on_resweep() -> None:
     assert resweep["duplicates"] == 2  # idempotency keys collapsed the re-poll
 
 
+def test_sweep_resolves_tenant_per_target_and_counts_missing_identity(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    db = _SweepDb([_job_payload(pr=7), _job_payload(owner="other", repo="api", pr=8)])
+    client = _SweepClient(
+        comments=(_cortex_comment(pr=7),),
+        reactions=(CommentReaction(content="+1", user_login="alice"),),
+    )
+
+    def resolve(target: Any) -> GithubInstallationIdentity | None:
+        if target.repo_full_name == "acme/widgets":
+            return GithubInstallationIdentity(
+                installation_id=target.installation_id,
+                tenant_id=_TENANT,
+                source_id=str(uuid4()),
+                repo_full_name=target.repo_full_name,
+            )
+        return None
+
+    with caplog.at_level(logging.INFO, logger="cortex.hosted.reaction_sweep"):
+        summary = run_reaction_sweep(
+            db, lambda _installation: client, identity_resolver=resolve, now=datetime.now(UTC)
+        )
+
+    assert summary["recorded"] == 1
+    assert summary["identity_missing"] == 1
+    events = [json.loads(rec.message).get("event") for rec in caplog.records]
+    assert "feedback.reaction_sweep_identity_missing" in events
+
+
 def test_sweep_counts_prs_without_a_cortex_comment() -> None:
     db = _SweepDb([_job_payload(pr=7)])
     client = _SweepClient(comments=())  # no Compass comment on the PR
@@ -381,26 +412,25 @@ def test_build_reaction_sweep_names_every_disabled_precondition(
     recorder = ArrivalRecorder(conn=_idle_worker_db(), tenant_id=_TENANT, source_id=str(uuid4()))
     with caplog.at_level(logging.INFO, logger="cortex.hosted.worker"):
         assert (
-            build_reaction_sweep(
-                recorder=recorder, environ={"CORTEX_REACTION_POLL_SECONDS": "0"}
-            )
+            build_reaction_sweep(recorder=recorder, environ={"CORTEX_REACTION_POLL_SECONDS": "0"})
             is None
         )
         assert build_reaction_sweep(recorder=recorder, environ={}) is None  # no app creds
         no_tenant = ArrivalRecorder(conn=_idle_worker_db(), tenant_id=None, source_id=None)
+        fake_pem = "-----BEGIN " + "PLACEHOLDER TEST KEY-----\nnot-a-real-key\n"
         assert (
             build_reaction_sweep(
                 recorder=no_tenant,
-                environ={"GITHUB_APP_ID": "1", "GITHUB_APP_PRIVATE_KEY": "x"},
+                environ={"GITHUB_APP_ID": "1", "GITHUB_APP_PRIVATE_KEY": fake_pem},
             )
-            is None
+            is not None
         )
     reasons = [
         json.loads(rec.message).get("reason")
         for rec in caplog.records
         if json.loads(rec.message).get("event") == "worker.reaction_sweep_disabled"
     ]
-    assert reasons == ["interval_zero", "github_app_unconfigured", "tenant_unconfigured"]
+    assert reasons == ["interval_zero", "github_app_unconfigured"]
 
 
 def test_build_reaction_sweep_rejects_malformed_interval() -> None:
@@ -409,6 +439,4 @@ def test_build_reaction_sweep_rejects_malformed_interval() -> None:
 
     recorder = ArrivalRecorder(conn=_idle_worker_db(), tenant_id=_TENANT, source_id=str(uuid4()))
     with pytest.raises(ServiceConfigError, match="CORTEX_REACTION_POLL_SECONDS"):
-        build_reaction_sweep(
-            recorder=recorder, environ={"CORTEX_REACTION_POLL_SECONDS": "soon"}
-        )
+        build_reaction_sweep(recorder=recorder, environ={"CORTEX_REACTION_POLL_SECONDS": "soon"})

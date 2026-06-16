@@ -272,13 +272,12 @@ def feedback_query_sql(
     flags.
 
     The join deliberately matches on ``(repo_full_name, pr_number)`` and NOT
-    on ``tenant_id``: today the feedback writer keys events to the static
-    env-mapped tenant while the worker's staged/cost writes key to the
-    deterministic per-repo tenant (the cortex#572 unification gap), so a
-    tenant-conditioned join silently never matches on live data and staged
-    exclusion fails open. A GitHub ``repo_full_name`` is globally unique, so
-    repo+PR is unambiguous; re-tighten to tenant-scoped once #572 unifies
-    tenant identity across the three tables.
+    on ``tenant_id`` for backwards-compatible reporting: pre-cortex#572 dogfood
+    rows can have feedback and staged records under different tenant ids. New
+    worker writes resolve both through GitHub installation bindings, but a
+    tenant-conditioned report would silently fail open for the historical rows.
+    A GitHub ``repo_full_name`` is globally unique, so repo+PR remains
+    unambiguous while the corpus spans both regimes.
     """
 
     from cortex.hosted.schema import _validate_sql_identifier
@@ -305,9 +304,7 @@ def feedback_query_sql(
     ).strip()
 
 
-@click.command(
-    "precision-report", context_settings={"help_option_names": ["-h", "--help"]}
-)
+@click.command("precision-report", context_settings={"help_option_names": ["-h", "--help"]})
 @click.option(
     "--since",
     "since",

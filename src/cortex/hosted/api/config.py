@@ -13,8 +13,10 @@ Missing *optional* pieces do not raise — they degrade visibly per endpoint:
   endpoint refuses persistence with 503 (cortex#470's contract);
 - no ``GITHUB_WEBHOOK_SECRET``: the webhook endpoint refuses all deliveries
   with 503 — verification cannot be skipped;
-- no ``CORTEX_TENANT_ID``/``CORTEX_SOURCE_ID``: worker stub handlers mark
-  jobs handled but report that no ledger arrival event was recorded.
+- no stored GitHub installation binding: worker handlers fail or skip visibly
+  instead of guessing a tenant. ``CORTEX_TENANT_ID``/``CORTEX_SOURCE_ID`` are
+  a dev-only fallback and are ignored unless ``CORTEX_STATIC_TENANT_FALLBACK``
+  is explicitly enabled.
 """
 
 from __future__ import annotations
@@ -52,6 +54,7 @@ class ServiceConfig:
     commit_sha: str | None = None
     tenant_id: str | None = None
     source_id: str | None = None
+    static_tenant_fallback: bool = False
     poll_interval_seconds: float = DEFAULT_POLL_INTERVAL_SECONDS
     stale_claim_seconds: float = DEFAULT_STALE_CLAIM_SECONDS
     apply_schema_on_start: bool = False
@@ -70,7 +73,10 @@ class ServiceConfig:
             raise ServiceConfigError(f"PORT must be in 0..65535, got {self.port}")
         if not self.host.strip():
             raise ServiceConfigError("host must not be empty")
-        for name, value in (("CORTEX_TENANT_ID", self.tenant_id), ("CORTEX_SOURCE_ID", self.source_id)):
+        for name, value in (
+            ("CORTEX_TENANT_ID", self.tenant_id),
+            ("CORTEX_SOURCE_ID", self.source_id),
+        ):
             if value is not None:
                 try:
                     UUID(value)
@@ -80,6 +86,11 @@ class ServiceConfig:
             raise ServiceConfigError(
                 "CORTEX_TENANT_ID and CORTEX_SOURCE_ID must be set together; a ledger "
                 "arrival event needs both the tenant and the source row"
+            )
+        if self.static_tenant_fallback and self.tenant_id is None:
+            raise ServiceConfigError(
+                "CORTEX_STATIC_TENANT_FALLBACK requires CORTEX_TENANT_ID and "
+                "CORTEX_SOURCE_ID; leave all three unset to use installation-based resolution"
             )
         if self.poll_interval_seconds <= 0:
             raise ServiceConfigError(
@@ -103,6 +114,7 @@ class ServiceConfig:
             commit_sha=_optional(env, "RAILWAY_GIT_COMMIT_SHA"),
             tenant_id=_optional(env, "CORTEX_TENANT_ID"),
             source_id=_optional(env, "CORTEX_SOURCE_ID"),
+            static_tenant_fallback=_parse_bool(env, "CORTEX_STATIC_TENANT_FALLBACK", False),
             poll_interval_seconds=_parse_float(
                 env, "CORTEX_WORKER_POLL_SECONDS", DEFAULT_POLL_INTERVAL_SECONDS
             ),
@@ -151,6 +163,4 @@ def _parse_bool(env: Mapping[str, str], name: str, default: bool) -> bool:
         return True
     if lowered in _FALSE_TOKENS:
         return False
-    raise ServiceConfigError(
-        f"{name} must be one of 1/0/true/false/yes/no, got {raw!r}"
-    )
+    raise ServiceConfigError(f"{name} must be one of 1/0/true/false/yes/no, got {raw!r}")

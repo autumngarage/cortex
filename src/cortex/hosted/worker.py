@@ -16,12 +16,11 @@ failure is finite and visible, never a lock held by a ghost.
 
 Stage 1 handlers are deliberately stubs: ``github.pull_request`` and
 ``github.issue_comment`` mark the delivery handled and record its arrival
-in the hosted ledger as a ``source.event_received`` event when a
-tenant/source mapping is configured (``CORTEX_TENANT_ID`` /
-``CORTEX_SOURCE_ID``). Without a mapping the result names the gap instead
-of pretending — Stage 2 (#386) replaces the static mapping with
-installation-based tenant resolution and real PR-evaluation jobs (#388)
-registered on this same registry.
+in the hosted ledger as a ``source.event_received`` event when the webhook's
+installation/repo resolves to stored tenant/source rows. Without a binding the
+result names the gap instead of pretending. ``CORTEX_TENANT_ID`` /
+``CORTEX_SOURCE_ID`` are an explicit dev fallback only, gated by
+``CORTEX_STATIC_TENANT_FALLBACK`` and logged whenever used.
 """
 
 from __future__ import annotations
@@ -35,7 +34,7 @@ import threading
 import time
 import types
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -149,7 +148,9 @@ def _env_nonnegative_float(raw: str | None, *, default: float, name: str) -> flo
     try:
         value = float(raw.strip())
     except ValueError as exc:
-        raise ServiceConfigError(f"{name} must be a non-negative number; got {raw.strip()!r}") from exc
+        raise ServiceConfigError(
+            f"{name} must be a non-negative number; got {raw.strip()!r}"
+        ) from exc
     if value < 0:
         raise ServiceConfigError(f"{name} must be >= 0; got {value}")
     return value
@@ -165,7 +166,9 @@ def content_free_job_result(result: Mapping[str, Any]) -> dict[str, Any]:
     """Return the durable job result after dropping known content fields."""
 
     cleaned = {
-        str(key): value for key, value in result.items() if str(key).lower() not in _RESULT_OMIT_KEYS
+        str(key): value
+        for key, value in result.items()
+        if str(key).lower() not in _RESULT_OMIT_KEYS
     }
     validate_log_fields(cleaned)
     return cleaned
@@ -196,7 +199,15 @@ def result_log_fields(result: Mapping[str, Any]) -> dict[str, Any]:
         "github_event",
         "action",
         "repository",
+        "installation_id",
+        "tenant_id",
+        "source_id",
         "ledger_recorded",
+        "repos_recorded",
+        "repos_deactivated",
+        "repos_added",
+        "repos_removed",
+        "installation_action",
     ):
         if key in result:
             fields[key] = result[key]
@@ -207,6 +218,15 @@ def result_log_fields(result: Mapping[str, Any]) -> dict[str, Any]:
                 fields[f"cost_{key}"] = cost[key]
     validate_log_fields(fields)
     return fields
+
+
+def _tenant_id_from_result(result: Mapping[str, Any], *, fallback: str) -> str:
+    """Read resolved tenant identity from a handler result when present."""
+
+    tenant_id = result.get("tenant_id")
+    if isinstance(tenant_id, str) and tenant_id.strip():
+        return tenant_id
+    return fallback
 
 
 class HandlerRegistry:
@@ -236,22 +256,56 @@ class HandlerRegistry:
 class ArrivalRecorder:
     """Records raw webhook arrival in the hosted ledger (cortex#471).
 
-    When no tenant/source mapping is configured the recorder reports the
-    gap in the job result instead of writing nothing silently; Stage 2's
-    installation-based tenant resolution (#386) replaces the static
-    mapping.
+    Production resolution is installation-based: ``identity_resolver`` maps the
+    webhook's installation/repo to stored tenant/source rows (cortex#572).
+    ``tenant_id``/``source_id`` remain only as an explicit dev fallback; using
+    them requires ``static_tenant_fallback_enabled`` and emits a structured log
+    line, so static mapping can never masquerade as normal telemetry.
     """
 
     conn: HostedConnection
     tenant_id: str | None
     source_id: str | None
+    identity_resolver: Callable[[ClaimedJob], Any | None] | None = None
+    static_tenant_fallback_enabled: bool = False
 
     def record(self, job: ClaimedJob) -> dict[str, Any]:
-        if self.tenant_id is None or self.source_id is None:
+        tenant_id: str | None = None
+        source_id: str | None = None
+        if self.identity_resolver is not None:
+            identity = self.identity_resolver(job)
+            if identity is not None:
+                tenant_id = str(identity.tenant_id)
+                source_id = str(identity.source_id)
+        if tenant_id is None or source_id is None:
+            if (
+                self.static_tenant_fallback_enabled
+                and self.tenant_id is not None
+                and self.source_id is not None
+            ):
+                tenant_id = self.tenant_id
+                source_id = self.source_id
+                _log(
+                    "worker.static_tenant_fallback_used",
+                    job_id=job.job_id,
+                    job_type=job.job_type,
+                    reason="installation_identity_unresolved",
+                )
+            else:
+                return {
+                    "ledger_recorded": False,
+                    "reason": "installation_identity_unresolved",
+                    "remediation": (
+                        "record GitHub installation lifecycle webhooks before review "
+                        "traffic; for local development only, set "
+                        "CORTEX_STATIC_TENANT_FALLBACK=1 with CORTEX_TENANT_ID and "
+                        "CORTEX_SOURCE_ID"
+                    ),
+                }
+        if tenant_id is None or source_id is None:
             return {
                 "ledger_recorded": False,
-                "reason": "tenant_mapping_unconfigured",
-                "remediation": "set CORTEX_TENANT_ID and CORTEX_SOURCE_ID on the worker service",
+                "reason": "installation_identity_unresolved",
             }
         delivery = str(job.payload.get("delivery", "")).strip()
         if not delivery:
@@ -276,13 +330,13 @@ class ArrivalRecorder:
             repository.get("full_name") if isinstance(repository, Mapping) else None
         )
         event = LedgerEvent(
-            tenant_id=self.tenant_id,
-            source_id=self.source_id,
+            tenant_id=tenant_id,
+            source_id=source_id,
             event_type=LedgerEventType.SOURCE_EVENT_RECEIVED,
             actor=ActorRef(actor_type="github-webhook", actor_id=delivery),
             occurred_at=occurred_at,
             idempotency_key=derive_idempotency_key(
-                source_id=self.source_id,
+                source_id=source_id,
                 event_type=LedgerEventType.SOURCE_EVENT_RECEIVED,
                 source_event_external_id=delivery,
             ),
@@ -299,8 +353,20 @@ class ArrivalRecorder:
         if row is None:
             # Redelivery: the arrival is already on the ledger. Visible, not
             # an error — the idempotency idiom held.
-            return {"ledger_recorded": False, "reason": "already_recorded", "delivery": delivery}
-        return {"ledger_recorded": True, "ledger_event_id": str(row[0]), "delivery": delivery}
+            return {
+                "ledger_recorded": False,
+                "reason": "already_recorded",
+                "delivery": delivery,
+                "tenant_id": tenant_id,
+                "source_id": source_id,
+            }
+        return {
+            "ledger_recorded": True,
+            "ledger_event_id": str(row[0]),
+            "delivery": delivery,
+            "tenant_id": tenant_id,
+            "source_id": source_id,
+        }
 
 
 def _stub_github_handler(recorder: ArrivalRecorder) -> JobHandler:
@@ -557,8 +623,9 @@ class Worker:
 
         try:
             event = parse_pull_request_payload(job.payload)
+            tenant_id = _tenant_id_from_result(result, fallback=event.tenant_id)
             record = ReviewCostRecord(
-                tenant_id=event.tenant_id,
+                tenant_id=tenant_id,
                 repo_full_name=f"{event.owner}/{event.repo}",
                 pr_number=event.pr_number,
                 head_sha=event.head_sha,
@@ -626,8 +693,9 @@ class Worker:
             return
         try:
             event = parse_pull_request_payload(job.payload)
+            tenant_id = _tenant_id_from_result(result, fallback=event.tenant_id)
             record = StagedPrRecord(
-                tenant_id=event.tenant_id,
+                tenant_id=tenant_id,
                 repo_full_name=f"{event.owner}/{event.repo}",
                 pr_number=event.pr_number,
                 reason=reason,
@@ -760,7 +828,11 @@ def github_app_credentials_present(environ: Mapping[str, str] | None = None) -> 
 
 
 def build_worker_registry(
-    *, recorder: ArrivalRecorder, environ: Mapping[str, str] | None = None
+    *,
+    recorder: ArrivalRecorder,
+    environ: Mapping[str, str] | None = None,
+    client_factory: Callable[[str], Any] | None = None,
+    model_resolver: Callable[[], Any] | None = None,
 ) -> HandlerRegistry:
     """Choose the worker's handler registry from the environment.
 
@@ -774,9 +846,19 @@ def build_worker_registry(
     worker module stays free of the command-layer import graph it pulls in.
     """
 
-    if not github_app_credentials_present(environ):
+    from cortex.hosted.github_installations import GithubInstallationStore
+
+    installation_store = GithubInstallationStore(recorder.conn)
+    resolving_recorder = replace(
+        recorder,
+        identity_resolver=lambda job: _resolve_job_installation_identity(installation_store, job),
+    )
+
+    if not github_app_credentials_present(environ) and client_factory is None:
         _log("worker.registry_selected", registry="default", reason="github_app_unconfigured")
-        return build_default_registry(recorder)
+        registry = build_default_registry(resolving_recorder)
+        _register_installation_handlers(registry, installation_store)
+        return registry
 
     from cortex.hosted.github_app_auth import (
         GithubAppConfig,
@@ -791,18 +873,29 @@ def build_worker_registry(
     )
 
     env = environ if environ is not None else os.environ
-    config = GithubAppConfig.from_env(env)
-    token_source = InstallationTokenSource(config)
+    if client_factory is None:
+        config = GithubAppConfig.from_env(env)
+        token_source = InstallationTokenSource(config)
 
-    def client_factory(installation_id: str) -> GithubInstallationClient:
-        return GithubInstallationClient(token_source, installation_id)
+        def resolved_client_factory(installation_id: str) -> GithubInstallationClient:
+            return GithubInstallationClient(token_source, installation_id)
+
+        selected_client_factory: Callable[[str], Any] = resolved_client_factory
+    else:
+        selected_client_factory = client_factory
 
     from cortex.hosted.review_rollout import ReviewRolloutStore
 
-    rollout_store = ReviewRolloutStore(recorder.conn)
+    rollout_store = ReviewRolloutStore(resolving_recorder.conn)
 
     def rollout_enabled(event: PullRequestEvent) -> bool:
         return rollout_store.is_enabled(f"{event.owner}/{event.repo}")
+
+    def identity_for_event(event: PullRequestEvent) -> Any | None:
+        return installation_store.resolve(
+            installation_id=event.installation_id,
+            repo_full_name=f"{event.owner}/{event.repo}",
+        )
 
     # Posting is opt-in and OFF by default: the worker dry-runs (evaluates and
     # logs the comment it would post) until CORTEX_REVIEW_DRY_RUN is explicitly
@@ -813,12 +906,13 @@ def build_worker_registry(
         env.get(REVIEW_TOKEN_BUDGET_ENV), default=DEFAULT_HOSTED_REVIEW_TOKEN_BUDGET
     )
     # Reply feedback capture (cortex#393/#394) is wired when a tenant is
-    # configured: the issue_comment handler writes ground-truth reply events to
-    # the same connection the worker uses. Without a tenant mapping the
-    # handler cannot key feedback to a tenant, so the issue_comment slot stays
-    # the Stage 1 stub — the gap is named in the log, never silent.
+    # resolvable from the issue_comment payload's installation/repo pair. A
+    # missing binding fails that job visibly instead of recording feedback
+    # under a static or deterministic stand-in tenant.
     issue_comment_handler = _maybe_build_feedback_handler(
-        recorder=recorder, client_factory=client_factory
+        recorder=resolving_recorder,
+        client_factory=selected_client_factory,
+        installation_store=installation_store,
     )
     _log(
         "worker.registry_selected",
@@ -828,39 +922,89 @@ def build_worker_registry(
         token_budget=token_budget,
         feedback_capture=issue_comment_handler is not None,
     )
-    return build_review_registry(
-        client_factory=client_factory,
-        model_resolver=default_model_resolver(),
+    registry = build_review_registry(
+        client_factory=selected_client_factory,
+        model_resolver=model_resolver or default_model_resolver(),
         config=ReviewHandlerConfig(dry_run=dry_run, token_budget=token_budget),
         issue_comment_handler=issue_comment_handler,
         rollout_checker=rollout_enabled,
+        identity_resolver=identity_for_event,
     )
+    _register_installation_handlers(registry, installation_store)
+    return registry
+
+
+def _register_installation_handlers(registry: HandlerRegistry, installation_store: Any) -> None:
+    from cortex.hosted.github_installations import (
+        record_installation_event,
+        record_installation_repositories_event,
+    )
+
+    def handle_installation(job: ClaimedJob) -> Mapping[str, Any]:
+        result = {"job_type": job.job_type}
+        result.update(record_installation_event(installation_store, job.payload))
+        return result
+
+    def handle_installation_repositories(job: ClaimedJob) -> Mapping[str, Any]:
+        result = {"job_type": job.job_type}
+        result.update(record_installation_repositories_event(installation_store, job.payload))
+        return result
+
+    registry.register("github.installation", handle_installation)
+    registry.register("github.installation_repositories", handle_installation_repositories)
+
+
+def _resolve_job_installation_identity(installation_store: Any, job: ClaimedJob) -> Any | None:
+    body = job.payload.get("body")
+    event_body: Mapping[str, Any] = body if isinstance(body, Mapping) else job.payload
+    installation = event_body.get("installation")
+    repository = event_body.get("repository")
+    if not isinstance(installation, Mapping) or not isinstance(repository, Mapping):
+        return None
+    installation_id = installation.get("id")
+    repo_full_name = _repo_full_name_from_payload(repository)
+    if installation_id is None or repo_full_name is None:
+        return None
+    return installation_store.resolve(
+        installation_id=str(installation_id),
+        repo_full_name=repo_full_name,
+    )
+
+
+def _repo_full_name_from_payload(repository: Mapping[str, Any]) -> str | None:
+    full_name = repository.get("full_name")
+    if isinstance(full_name, str) and full_name.strip():
+        return full_name
+    owner = repository.get("owner")
+    name = repository.get("name")
+    if isinstance(owner, Mapping):
+        owner_login = owner.get("login")
+        if isinstance(owner_login, str) and owner_login.strip() and isinstance(name, str):
+            return f"{owner_login}/{name}"
+    return None
 
 
 def _maybe_build_feedback_handler(
     *,
     recorder: ArrivalRecorder,
     client_factory: Callable[[str], Any],
+    installation_store: Any,
 ) -> JobHandler | None:
-    """Build the issue_comment reply-feedback handler when a tenant is mapped.
-
-    Returns ``None`` (leaving the Stage 1 stub) when no tenant id is configured
-    — feedback must key to a tenant, and a handler that cannot is worse than the
-    honest stub. The handler shares the worker's connection so a reply event and
-    the job completion commit together.
-    """
-
-    if recorder.tenant_id is None:
-        return None
+    """Build the issue_comment reply-feedback handler over installation identity."""
 
     from cortex.hosted.review_feedback_capture import handle_issue_comment_feedback
 
-    tenant_id = recorder.tenant_id
     conn = recorder.conn
 
     def handle(job: ClaimedJob) -> Mapping[str, Any]:
         return handle_issue_comment_feedback(
-            job, conn=conn, client_factory=client_factory, tenant_id=tenant_id
+            job,
+            conn=conn,
+            client_factory=client_factory,
+            identity_resolver=lambda event: installation_store.resolve(
+                installation_id=event.installation_id,
+                repo_full_name=f"{event.owner}/{event.repo}",
+            ),
         )
 
     return handle
@@ -873,11 +1017,10 @@ def build_reaction_sweep(
 ) -> tuple[Callable[[], Mapping[str, Any]], float] | None:
     """Build the scheduled reaction sweep when its preconditions hold.
 
-    Needs the same two things the reply-feedback handler needs — GitHub App
-    credentials (to read comments/reactions) and a configured tenant (to key
-    corpus rows) — plus a non-zero ``CORTEX_REACTION_POLL_SECONDS``. Every
-    missing precondition is named in a log line; ``None`` means "no sweep",
-    visibly, never silently.
+    Needs GitHub App credentials (to read comments/reactions) plus a non-zero
+    ``CORTEX_REACTION_POLL_SECONDS``. Tenant identity is resolved per target
+    from stored installation bindings, so one sweep can cover multiple tenants
+    without a shared env tenant.
     """
 
     env = environ if environ is not None else os.environ
@@ -896,26 +1039,27 @@ def build_reaction_sweep(
     if not github_app_credentials_present(env):
         _log("worker.reaction_sweep_disabled", reason="github_app_unconfigured")
         return None
-    if recorder.tenant_id is None:
-        _log("worker.reaction_sweep_disabled", reason="tenant_unconfigured")
-        return None
 
     from cortex.hosted.github_app_auth import (
         GithubAppConfig,
         GithubInstallationClient,
         InstallationTokenSource,
     )
+    from cortex.hosted.github_installations import GithubInstallationStore
     from cortex.hosted.reaction_sweep import run_reaction_sweep
 
     token_source = InstallationTokenSource(GithubAppConfig.from_env(env))
-    tenant_id = recorder.tenant_id
     conn = recorder.conn
+    installation_store = GithubInstallationStore(conn)
 
     def sweep() -> Mapping[str, Any]:
         return run_reaction_sweep(
             conn,
             lambda installation_id: GithubInstallationClient(token_source, installation_id),
-            tenant_id=tenant_id,
+            identity_resolver=lambda target: installation_store.resolve(
+                installation_id=target.installation_id,
+                repo_full_name=target.repo_full_name,
+            ),
         )
 
     _log("worker.reaction_sweep_enabled", interval_seconds=interval)
@@ -949,7 +1093,12 @@ def main() -> None:
     if config.apply_schema_on_start:
         result = apply_schema(conn)
         _log("worker.schema_applied", detail=result.describe())
-    recorder = ArrivalRecorder(conn=conn, tenant_id=config.tenant_id, source_id=config.source_id)
+    recorder = ArrivalRecorder(
+        conn=conn,
+        tenant_id=config.tenant_id,
+        source_id=config.source_id,
+        static_tenant_fallback_enabled=config.static_tenant_fallback,
+    )
     sweep_config = build_reaction_sweep(recorder=recorder)
     worker = Worker(
         conn=conn,

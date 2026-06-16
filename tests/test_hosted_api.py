@@ -139,11 +139,13 @@ def test_config_from_env_parses_a_full_environment() -> None:
             "PORT": "9000",
             "CORTEX_TENANT_ID": tenant,
             "CORTEX_SOURCE_ID": source,
+            "CORTEX_STATIC_TENANT_FALLBACK": "true",
             "CORTEX_APPLY_SCHEMA_ON_START": "true",
         }
     )
     assert config.port == 9000
     assert config.tenant_id == tenant
+    assert config.static_tenant_fallback is True
     assert config.apply_schema_on_start is True
 
 
@@ -169,14 +171,17 @@ def test_config_rejects_blank_but_set_database_url() -> None:
 
 def test_config_rejects_non_uuid_tenant_id() -> None:
     with pytest.raises(ServiceConfigError, match="CORTEX_TENANT_ID must be a UUID"):
-        ServiceConfig.from_env(
-            {"CORTEX_TENANT_ID": "not-a-uuid", "CORTEX_SOURCE_ID": str(uuid4())}
-        )
+        ServiceConfig.from_env({"CORTEX_TENANT_ID": "not-a-uuid", "CORTEX_SOURCE_ID": str(uuid4())})
 
 
 def test_config_rejects_unpaired_tenant_mapping() -> None:
     with pytest.raises(ServiceConfigError, match="must be set together"):
         ServiceConfig.from_env({"CORTEX_TENANT_ID": str(uuid4())})
+
+
+def test_config_static_tenant_fallback_requires_the_static_pair() -> None:
+    with pytest.raises(ServiceConfigError, match="CORTEX_STATIC_TENANT_FALLBACK requires"):
+        ServiceConfig.from_env({"CORTEX_STATIC_TENANT_FALLBACK": "1"})
 
 
 def test_config_rejects_unrecognized_boolean_token() -> None:
@@ -361,9 +366,7 @@ def test_webhook_redelivery_is_idempotent() -> None:
 def test_webhook_bad_signature_is_401_and_persists_nothing() -> None:
     db = FakeJobDb()
     body = b'{"action":"opened"}'
-    response = _post_webhook(
-        _config(), _deps(db), body, signature=_sign(body, secret="wrong")
-    )
+    response = _post_webhook(_config(), _deps(db), body, signature=_sign(body, secret="wrong"))
     assert response.status == 401
     assert db.jobs == {}
 
@@ -387,9 +390,7 @@ def test_webhook_without_configured_secret_refuses_visibly() -> None:
 
 def test_webhook_missing_event_headers_is_400() -> None:
     body = b"{}"
-    response = _post_webhook(
-        _config(), _deps(FakeJobDb()), body, signature=_sign(body), event=None
-    )
+    response = _post_webhook(_config(), _deps(FakeJobDb()), body, signature=_sign(body), event=None)
     assert response.status == 400
 
 
@@ -416,9 +417,7 @@ def test_webhook_headers_are_case_insensitive() -> None:
         "X-GITHUB-EVENT": "issue_comment",
         "x-github-delivery": "guid-ci",
     }
-    response = handle_request(
-        _config(), _deps(db), "POST", "/webhooks/github", headers, body
-    )
+    response = handle_request(_config(), _deps(db), "POST", "/webhooks/github", headers, body)
     assert response.status == 202
     assert db.jobs["github-delivery:guid-ci"]["job_type"] == "github.issue_comment"
 

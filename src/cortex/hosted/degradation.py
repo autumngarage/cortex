@@ -71,6 +71,7 @@ from cortex.hosted.github_app_auth import (
     GithubAuthConfigError,
 )
 from cortex.hosted.github_comment import GitHubCommentRenderError
+from cortex.hosted.github_installations import GithubInstallationError
 from cortex.hosted.graph_rebuild import GraphRebuildError
 from cortex.hosted.graph_snapshot import GraphSnapshotValidationError
 from cortex.hosted.graph_writes import GraphWriteValidationError
@@ -243,6 +244,10 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # blank-but-set secret) refuses startup before any request is served —
     # a half-understood environment never serves traffic (cortex#470).
     ServiceConfigError: DegradationMode.INVALID_INPUT_REJECTED,
+    # A malformed or missing GitHub installation binding is rejected before
+    # review, feedback, cost, or source-arrival telemetry can be written under
+    # the wrong tenant (cortex#572).
+    GithubInstallationError: DegradationMode.INVALID_INPUT_REJECTED,
     # A structurally malformed webhook delivery (bad event-name header,
     # oversized delivery GUID, non-object JSON body) is rejected before any
     # job row exists; signature mismatches are answered 401 without raising

@@ -7,7 +7,7 @@ import re
 from cortex.hosted.ledger_events import LedgerEventType
 from cortex.hosted.scopes import ScopeType
 
-HOSTED_SCHEMA_VERSION = 12
+HOSTED_SCHEMA_VERSION = 13
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -70,6 +70,41 @@ CREATE TABLE IF NOT EXISTS {schema}.sources (
     CHECK (source_type <> ''),
     CHECK (external_id <> ''),
     CHECK (jsonb_typeof(visibility) = 'object')
+);
+
+-- v13 (cortex#572): GitHub App installation identity. The App's webhook
+-- payload names installation.id + repository.full_name; every tenant-scoped
+-- durable write (review cost, feedback, staged traffic, source arrivals)
+-- resolves that pair through these stored bindings instead of through the old
+-- dogfood-only CORTEX_TENANT_ID/CORTEX_SOURCE_ID environment mapping. These
+-- rows are operator configuration / authorization state, not customer memory:
+-- installation lifecycle webhooks maintain the active flags in place, while
+-- the review, feedback, cost, and ledger event streams remain append-only.
+CREATE TABLE IF NOT EXISTS {schema}.github_installations (
+    installation_id text PRIMARY KEY,
+    tenant_id uuid NOT NULL REFERENCES {schema}.tenants (tenant_id),
+    account_login text NOT NULL,
+    account_type text NOT NULL,
+    active boolean NOT NULL DEFAULT true,
+    installed_at timestamptz NOT NULL,
+    deleted_at timestamptz,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    CHECK (installation_id <> ''),
+    CHECK (account_login <> ''),
+    CHECK (account_type <> '')
+);
+
+CREATE TABLE IF NOT EXISTS {schema}.github_installation_repositories (
+    installation_id text NOT NULL REFERENCES {schema}.github_installations (installation_id),
+    repo_full_name text NOT NULL,
+    tenant_id uuid NOT NULL REFERENCES {schema}.tenants (tenant_id),
+    source_id uuid NOT NULL REFERENCES {schema}.sources (source_id),
+    active boolean NOT NULL DEFAULT true,
+    added_at timestamptz NOT NULL,
+    removed_at timestamptz,
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (installation_id, repo_full_name),
+    CHECK (repo_full_name ~ '^[a-z0-9_.-]+/[a-z0-9_.-]+$')
 );
 
 CREATE TABLE IF NOT EXISTS {schema}.source_documents (
@@ -888,6 +923,15 @@ CREATE INDEX IF NOT EXISTS decision_scopes_config_key_idx
 CREATE INDEX IF NOT EXISTS source_spans_hash_idx
     ON {schema}.source_spans (tenant_id, span_hash);
 
+CREATE INDEX IF NOT EXISTS github_installations_tenant_active_idx
+    ON {schema}.github_installations (tenant_id, active);
+
+CREATE INDEX IF NOT EXISTS github_installation_repositories_tenant_repo_idx
+    ON {schema}.github_installation_repositories (tenant_id, repo_full_name, active);
+
+CREATE INDEX IF NOT EXISTS github_installation_repositories_source_idx
+    ON {schema}.github_installation_repositories (source_id);
+
 CREATE INDEX IF NOT EXISTS sources_tenant_repo_visibility_idx
     ON {schema}.sources (tenant_id, repo_id, source_id);
 
@@ -1153,6 +1197,12 @@ COMMENT ON TABLE {schema}.sources IS
 
 COMMENT ON COLUMN {schema}.sources.visibility IS
     'JSON visibility flags for source authorization, including deleted, revoked, slack_channel_excluded, and repo_installation_revoked.';
+
+COMMENT ON TABLE {schema}.github_installations IS
+    'GitHub App installation to hosted tenant binding. Maintained by installation lifecycle webhooks; review traffic must resolve through this table before writing tenant-scoped telemetry.';
+
+COMMENT ON TABLE {schema}.github_installation_repositories IS
+    'GitHub App installation repository bindings. Active rows map installation_id + repo_full_name to tenant_id + source_id; removed repos are retained inactive for audit and visibility revocation.';
 
 COMMENT ON TABLE {schema}.source_documents IS
     'Immutable source snapshots keyed by content hash so source drift does not overwrite citations.';

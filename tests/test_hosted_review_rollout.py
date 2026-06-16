@@ -173,7 +173,7 @@ def test_rollout_sql_shapes_are_safe_and_default_off_by_caller_contract() -> Non
 
 def test_schema_defines_append_only_rollout_events() -> None:
     sql = create_schema_sql()
-    assert HOSTED_SCHEMA_VERSION == 12
+    assert HOSTED_SCHEMA_VERSION == 13
     assert "CREATE TABLE IF NOT EXISTS cortex_hosted.review_rollout_events" in sql
     assert "CONSTRAINT review_rollout_events_idempotency_key_unique UNIQUE" in sql
     assert "CHECK (repo_full_name ~ '^[a-z0-9_.-]+/[a-z0-9_.-]+$')" in sql

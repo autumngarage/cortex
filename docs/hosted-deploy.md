@@ -57,11 +57,12 @@ types register a handler; no schema change.
 | `GITHUB_WEBHOOK_SECRET` | API | optional (webhook 503s without it) | HMAC-SHA256 secret from the App registration. |
 | `PORT` | API | provided by Railway | Listen port (default 8080). |
 | `CORTEX_API_HOST` | API | no (default `0.0.0.0`) | Bind address. |
-| `CORTEX_TENANT_ID` / `CORTEX_SOURCE_ID` | worker | optional, paired | Static tenant/source mapping for recording raw webhook arrivals as `source.event_received` ledger events. Unset: jobs are still handled; the result names the unrecorded arrival. Dogfood-only: real installation-based resolution is #572 (#386 shipped the installation-auth half; this static mapping is the residual). |
+| `CORTEX_TENANT_ID` / `CORTEX_SOURCE_ID` | worker | dev-only fallback, paired | Static tenant/source fallback for local recovery only. Ignored unless `CORTEX_STATIC_TENANT_FALLBACK=1`; every use logs `worker.static_tenant_fallback_used`. Production review, feedback, staged, and cost telemetry resolves tenant/source from stored GitHub installation bindings. |
+| `CORTEX_STATIC_TENANT_FALLBACK` | worker | no (default false) | Explicitly enables the static tenant/source fallback above. Leave unset in hosted dogfood; missing installation bindings should fail or skip visibly instead of sharing a tenant. |
 | `CORTEX_WORKER_POLL_SECONDS` | worker | no (default 2.0) | Idle poll interval. |
 | `CORTEX_REVIEW_DRY_RUN` | worker | no (default dry-run/on) | Set to `0`/`false`/`no`/`off` to allow enabled repos to receive PR comments. Per-repo rollout still gates before any fetch/model spend. |
 | `CORTEX_REVIEW_TOKEN_BUDGET` | worker | no (default 32000) | Per-review decision-pack token budget. Malformed or non-positive values refuse startup. |
-| `CORTEX_REACTION_POLL_SECONDS` | worker | no (default 900) | Seconds between scheduled reaction sweeps over recently-reviewed PRs (cortex#393 — reactions have no webhook). `0` disables the sweep. Requires App credentials + tenant mapping; each missing precondition is logged. |
+| `CORTEX_REACTION_POLL_SECONDS` | worker | no (default 900) | Seconds between scheduled reaction sweeps over recently-reviewed PRs (cortex#393 — reactions have no webhook). `0` disables the sweep. Requires App credentials; each target resolves tenant identity from installation bindings and missing bindings are counted/logged. |
 | `CORTEX_STALE_CLAIM_SECONDS` | worker | no (default 1800) | Age after which a `running` claim is presumed crashed and recovered. |
 | `CORTEX_JOB_PAYLOAD_PRUNE_GRACE_SECONDS` | worker | no (default 604800) | Grace window before terminal job webhook payloads are replaced by a content-free skeleton plus `body_sha256`. Keep this above the reaction sweep window (48h default) so feedback polling can still derive PR targets; set to `0` only in tests. |
 | `CORTEX_APPLY_SCHEMA_ON_START` | worker | no (default false) | When `1`/`true`, the worker runs the migration runner before polling. |
@@ -72,7 +73,7 @@ Config parsing is fail-closed (`ServiceConfig.from_env`): malformed values
 tenant/source) refuse startup with the variable named. No secret is ever
 committed; values live as Railway service variables (policy: #475).
 
-## Schema migration (v7 — historical; live schema is v12 as of 2026-06-16)
+## Schema migration (v7 — historical; live schema is v13 as of 2026-06-16)
 
 The same append-only migration path later applied v8 (`review_cost_records`
 cost ledger, PR #559) and v9 (`review_feedback_events` ground-truth corpus,

@@ -81,6 +81,7 @@ from cortex.hosted.extractors import (
 from cortex.hosted.finding_render import build_span_index
 from cortex.hosted.github_app_auth import DirectoryEntry
 from cortex.hosted.github_comment import ReviewAccounting, extract_marker, render_pr_comment
+from cortex.hosted.github_installations import GithubInstallationIdentity
 from cortex.hosted.jobs import ClaimedJob
 from cortex.hosted.model_interfaces import EvaluateModel
 from cortex.hosted.provenance import SourceDocument
@@ -238,6 +239,7 @@ class PullRequestEvent:
 
 
 ReviewRolloutChecker = Callable[[PullRequestEvent], bool]
+ReviewIdentityResolver = Callable[[PullRequestEvent], GithubInstallationIdentity | None]
 
 
 @dataclass(frozen=True)
@@ -899,6 +901,7 @@ def build_review_handler(
     model_resolver: Callable[[], EvaluateModel],
     config: ReviewHandlerConfig | None = None,
     rollout_checker: ReviewRolloutChecker | None = None,
+    identity_resolver: ReviewIdentityResolver | None = None,
 ) -> JobHandler:
     """Build the ``github.pull_request`` handler over injected dependencies.
 
@@ -907,6 +910,11 @@ def build_review_handler(
     injected so tests pass fakes and the offline proof runs without network or
     a model provider. The handler is advisory: a finding never fails the job,
     and the result mapping is content-free per the stateless tier.
+
+    ``identity_resolver`` is the production installation->tenant boundary
+    (cortex#572). When supplied, a missing binding is a retryable visible
+    failure before any GitHub fetch/model call; writing telemetry under a fake
+    tenant would corrupt the dogfood feedback loop.
 
     ``rollout_checker`` is the production per-repo gate (cortex#397). When it
     returns false, the webhook is acknowledged as a handled no-op before any
@@ -918,6 +926,13 @@ def build_review_handler(
 
     def handle(job: ClaimedJob) -> Mapping[str, Any]:
         event = parse_pull_request_payload(job.payload)
+        identity = identity_resolver(event) if identity_resolver is not None else None
+        if identity_resolver is not None and identity is None:
+            raise StatelessReviewError(
+                "github installation tenant mapping missing for "
+                f"{event.installation_id}:{event.owner}/{event.repo}; "
+                "record the installation lifecycle webhook before reviewing this PR"
+            )
         if rollout_checker is not None and not rollout_checker(event):
             return {
                 "handled": True,
@@ -929,11 +944,17 @@ def build_review_handler(
                 "head_sha": event.head_sha,
                 "posted": False,
                 "dry_run": review_config.dry_run,
+                "installation_id": event.installation_id,
+                **({} if identity is None else _identity_result_fields(identity)),
             }
         client = client_factory(event.installation_id)
         model = model_resolver()
         result = run_stateless_review(job.payload, client=client, model=model, config=review_config)
-        return result.as_result_mapping()
+        mapped = result.as_result_mapping()
+        mapped["installation_id"] = event.installation_id
+        if identity is not None:
+            mapped.update(_identity_result_fields(identity))
+        return mapped
 
     return handle
 
@@ -945,6 +966,7 @@ def build_review_registry(
     config: ReviewHandlerConfig | None = None,
     issue_comment_handler: JobHandler | None = None,
     rollout_checker: ReviewRolloutChecker | None = None,
+    identity_resolver: ReviewIdentityResolver | None = None,
 ) -> HandlerRegistry:
     """The Stage 2 registry: the stateless review handler for pull_request.
 
@@ -963,6 +985,7 @@ def build_review_registry(
             model_resolver=model_resolver,
             config=config,
             rollout_checker=rollout_checker,
+            identity_resolver=identity_resolver,
         ),
     )
     if issue_comment_handler is not None:
@@ -970,6 +993,14 @@ def build_review_registry(
     for job_type in UNSUPPORTED_GITHUB_REVIEW_JOB_TYPES:
         registry.register(job_type, unsupported_github_review_event_handler)
     return registry
+
+
+def _identity_result_fields(identity: GithubInstallationIdentity) -> dict[str, str]:
+    return {
+        "tenant_id": identity.tenant_id,
+        "source_id": identity.source_id,
+        "repo_full_name": identity.repo_full_name,
+    }
 
 
 # ---------------------------------------------------------------------------

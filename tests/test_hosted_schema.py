@@ -140,9 +140,23 @@ def test_schema_models_citable_source_spans() -> None:
 def test_schema_records_version() -> None:
     sql = create_schema_sql()
 
-    # v12 (cortex#380): replies can be sentiment-classified after capture.
-    assert HOSTED_SCHEMA_VERSION == 12
+    # v13 (cortex#572): GitHub installation -> tenant/source bindings.
+    assert HOSTED_SCHEMA_VERSION == 13
     assert f"VALUES ({HOSTED_SCHEMA_VERSION})" in sql
+
+
+def test_schema_models_github_installation_identity_bindings() -> None:
+    sql = create_schema_sql()
+
+    assert "CREATE TABLE IF NOT EXISTS cortex_hosted.github_installations" in sql
+    assert "CREATE TABLE IF NOT EXISTS cortex_hosted.github_installation_repositories" in sql
+    assert "PRIMARY KEY (installation_id, repo_full_name)" in sql
+    assert "github_installations_tenant_active_idx" in sql
+    assert "github_installation_repositories_tenant_repo_idx" in sql
+    assert "installation_id + repo_full_name to tenant_id + source_id" in sql
+    assert sql.rfind(f"VALUES ({HOSTED_SCHEMA_VERSION})") > sql.rfind(
+        "CREATE TABLE IF NOT EXISTS cortex_hosted.github_installation_repositories"
+    )
 
 
 def test_schema_models_staged_traffic_registry() -> None:

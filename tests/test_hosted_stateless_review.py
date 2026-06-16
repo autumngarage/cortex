@@ -756,6 +756,7 @@ def test_build_review_handler_skips_disabled_repo_before_client_or_model() -> No
         "head_sha": _HEAD_SHA,
         "posted": False,
         "dry_run": False,
+        "installation_id": _INSTALLATION_ID,
     }
     assert "review_mode" not in result
 
@@ -826,6 +827,9 @@ def test_build_worker_registry_chooses_by_github_app_credentials() -> None:
         environ={"GITHUB_APP_ID": "123", "GITHUB_APP_PRIVATE_KEY": fake_pem},
     )
     assert review.job_types() == (
+        "github.installation",
+        "github.installation_repositories",
+        "github.issue_comment",
         "github.pull_request",
         "github.pull_request_review",
         "github.pull_request_review_comment",
