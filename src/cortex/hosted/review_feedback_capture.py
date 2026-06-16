@@ -49,6 +49,7 @@ from cortex.hosted.github_comment import (
     extract_marker,
     extract_replay_marker,
 )
+from cortex.hosted.github_installations import GithubInstallationIdentity
 from cortex.hosted.jobs import ClaimedJob, HostedJobError
 from cortex.hosted.review_feedback import (
     MAX_REPLY_EXCERPT_CHARS,
@@ -169,7 +170,9 @@ def handle_issue_comment_feedback(
     *,
     conn: HostedConnection,
     client_factory: Callable[[str], FeedbackGithubClient],
-    tenant_id: str,
+    tenant_id: str | None = None,
+    identity_resolver: Callable[[IssueCommentEvent], GithubInstallationIdentity | None]
+    | None = None,
 ) -> Mapping[str, Any]:
     """Capture a PR comment as reply feedback on a Cortex review, if it is one.
 
@@ -182,7 +185,10 @@ def handle_issue_comment_feedback(
        visible no-op (``feedback_recorded=False, reason=no_cortex_review``).
     3. Recursion guard: a comment authored by our own App login is ignored
        (``reason=self_authored``) — we never treat our own output as feedback.
-    4. Write one ``feedback_kind=reply`` event bound to the review's replay
+    4. Resolve installation/repo to a stored tenant binding (cortex#572) only
+       once a row will be written; missing binding is a retryable worker
+       failure, never a shared fallback.
+    5. Write one ``feedback_kind=reply`` event bound to the review's replay
        identity, idempotent on ``(cortex_comment_id, feedback_comment_id)``.
 
     A no-op (no review, our own comment) returns a result naming why — it is
@@ -212,9 +218,7 @@ def handle_issue_comment_feedback(
             "reason": "no_cortex_review",
             "pr_number": parsed.pr_number,
         }
-    if parsed.comment_id == review.comment_id or _same_login(
-        parsed.actor_login, review.app_login
-    ):
+    if parsed.comment_id == review.comment_id or _same_login(parsed.actor_login, review.app_login):
         # Recursion guard: the comment is our own review comment, or authored by
         # our own App. We never record feedback on ourselves.
         return {
@@ -235,8 +239,19 @@ def handle_issue_comment_feedback(
             "comment_id": parsed.comment_id,
         }
 
+    identity = identity_resolver(parsed) if identity_resolver is not None else None
+    resolved_tenant_id = None if identity is None else identity.tenant_id
+    if resolved_tenant_id is None:
+        resolved_tenant_id = tenant_id
+    if resolved_tenant_id is None:
+        raise HostedJobError(
+            "github issue_comment tenant mapping missing for "
+            f"{parsed.installation_id}:{parsed.owner}/{parsed.repo}; "
+            "record the installation lifecycle webhook before capturing feedback"
+        )
+
     event = ReviewFeedbackEvent(
-        tenant_id=tenant_id,
+        tenant_id=resolved_tenant_id,
         repo_full_name=f"{parsed.owner}/{parsed.repo}",
         pr_number=parsed.pr_number,
         head_sha=review.head_sha,
@@ -269,6 +284,8 @@ def handle_issue_comment_feedback(
         "feedback_kind": FeedbackKind.REPLY.value,
         "cortex_comment_id": review.comment_id,
         "feedback_comment_id": parsed.comment_id,
+        "tenant_id": resolved_tenant_id,
+        **({} if identity is None else {"source_id": identity.source_id}),
     }
 
 
@@ -296,9 +313,7 @@ def poll_comment_reactions(
     duplicates, skipped-self, and skipped-unmapped.
     """
 
-    reactions = client.list_comment_reactions(
-        *_split_repo(repo_full_name), review.comment_id
-    )
+    reactions = client.list_comment_reactions(*_split_repo(repo_full_name), review.comment_id)
     seen = 0
     recorded = 0
     duplicates = 0
@@ -447,9 +462,7 @@ def _bound_excerpt(text: str) -> str | None:
 def _split_repo(repo_full_name: str) -> tuple[str, str]:
     owner, sep, repo = repo_full_name.partition("/")
     if not sep or not owner.strip() or not repo.strip():
-        raise ReviewFeedbackError(
-            f"repo_full_name must be 'owner/repo', got {repo_full_name!r}"
-        )
+        raise ReviewFeedbackError(f"repo_full_name must be 'owner/repo', got {repo_full_name!r}")
     return owner, repo
 
 
@@ -479,9 +492,7 @@ def _comment_author_login(comment: Mapping[str, Any]) -> str | None:
 def _require_mapping(payload: Mapping[str, Any], key: str) -> Mapping[str, Any]:
     value = payload.get(key)
     if not isinstance(value, Mapping):
-        raise HostedJobError(
-            f"github.issue_comment payload field {key!r} must be a JSON object"
-        )
+        raise HostedJobError(f"github.issue_comment payload field {key!r} must be a JSON object")
     return value
 
 
@@ -507,9 +518,7 @@ def _require_scalar_str(payload: Mapping[str, Any], key: str) -> str:
         return str(value)
     if isinstance(value, str) and value.strip():
         return value
-    raise HostedJobError(
-        f"github.issue_comment payload field {key!r} must be a string or integer"
-    )
+    raise HostedJobError(f"github.issue_comment payload field {key!r} must be a string or integer")
 
 
 def _require_int(payload: Mapping[str, Any], key: str) -> int:

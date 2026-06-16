@@ -11,10 +11,10 @@ a security review.
 
 ## Target default posture: stateless review
 
-For the GitHub reviewer, the default mode is **stateless**. The review
-*handler* is built (`cortex.hosted.stateless_review`); enabling it for
-external tenants is the remaining work tracked in the active hosted
-reviewer plan. The path is:
+For the GitHub reviewer, the default mode is **stateless**. The worker resolves
+the webhook's GitHub App installation/repository to stored tenant/source
+bindings, checks the per-repo rollout gate, then runs
+`cortex.hosted.stateless_review`. The path is:
 
 1. A pull request opens.
 2. Cortex fetches your `.cortex/` decision files at the relevant commit

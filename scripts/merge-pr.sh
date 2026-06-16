@@ -1281,7 +1281,7 @@ pr_triggered_review_gate() {
     -F owner="$owner" \
     -F name="$repo" \
     -F number="$PR_NUMBER" \
-    -f query='query($owner:String!, $name:String!, $number:Int!) { repository(owner:$owner, name:$name) { pullRequest(number:$number) { headRefOid reviewDecision reviews(last:50) { nodes { author { login } state submittedAt body url commit { oid } } } reviewThreads(first:100) { nodes { id isResolved isOutdated comments(last:1) { nodes { url } } } } comments(last:100) { nodes { author { login } body url createdAt } } commits(last:1) { nodes { commit { oid statusCheckRollup { contexts(first:100) { nodes { __typename ... on CheckRun { name status conclusion detailsUrl } ... on StatusContext { context state targetUrl } } } } } } } } } } }' \
+    -f query='query($owner:String!, $name:String!, $number:Int!) { repository(owner:$owner, name:$name) { pullRequest(number:$number) { headRefOid reviewDecision reviews(last:50) { nodes { author { login } state submittedAt body url commit { oid } } } reviewThreads(first:100) { nodes { id isResolved isOutdated comments(last:1) { nodes { url } } } } comments(last:100) { nodes { author { login } body url createdAt } } commits(last:1) { nodes { commit { oid statusCheckRollup { contexts(first:100) { nodes { __typename ... on CheckRun { name status conclusion detailsUrl } ... on StatusContext { context state targetUrl } } } } } } } } } }' \
     2>/dev/null)" || {
     echo "ERROR: Failed to read PR #$PR_NUMBER review state from GitHub." >&2
     TOUCHSTONE_MERGE_FAILURE_REASON="pr-triggered-review-gate-error"

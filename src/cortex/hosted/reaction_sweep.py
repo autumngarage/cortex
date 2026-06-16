@@ -18,9 +18,9 @@ The sweep is deliberately bounded and derived from what already exists:
   Compass comment by marker (:func:`find_cortex_review_comment`) and feeds
   :func:`poll_comment_reactions`, which is idempotent per
   ``(comment_id, actor, content)`` — re-sweeping never double-counts.
-- **Tenant follows the feedback corpus convention** (the env-mapped tenant
-  the reply path uses), NOT the per-repo deterministic tenant — the corpus
-  must stay internally consistent until cortex#572 unifies tenant identity.
+- **Tenant resolves per target** through the stored GitHub installation binding
+  (cortex#572), matching reply feedback and review telemetry. A missing binding
+  is counted and logged; the sweep never falls back to a shared tenant.
 
 One target failing (API error, missing comment) never aborts the sweep:
 each outcome is counted and the summary is one structured log line.
@@ -37,6 +37,7 @@ from typing import Any
 
 from cortex.hosted.db import HostedConnection
 from cortex.hosted.github_app_auth import GithubAppAuthError
+from cortex.hosted.github_installations import GithubInstallationIdentity
 from cortex.hosted.review_feedback_capture import (
     FeedbackGithubClient,
     find_cortex_review_comment,
@@ -162,7 +163,8 @@ def run_reaction_sweep(
     conn: HostedConnection,
     client_factory: Callable[[str], FeedbackGithubClient],
     *,
-    tenant_id: str,
+    tenant_id: str | None = None,
+    identity_resolver: Callable[[SweepTarget], GithubInstallationIdentity | None] | None = None,
     window_hours: int = DEFAULT_SWEEP_WINDOW_HOURS,
     cap: int = DEFAULT_SWEEP_TARGET_CAP,
     now: datetime | None = None,
@@ -176,8 +178,10 @@ def run_reaction_sweep(
     propagate so the worker can roll back the shared transaction and retry.
     """
 
-    if not tenant_id.strip():
+    if tenant_id is not None and not tenant_id.strip():
         raise ReactionSweepError("tenant_id must be a non-empty string")
+    if tenant_id is None and identity_resolver is None:
+        raise ReactionSweepError("tenant_id or identity_resolver is required")
     targets = discover_sweep_targets(conn, window_hours=window_hours, cap=cap, now=now)
     summary: dict[str, Any] = {
         "targets": len(targets),
@@ -185,9 +189,16 @@ def run_reaction_sweep(
         "recorded": 0,
         "duplicates": 0,
         "no_comment": 0,
+        "identity_missing": 0,
         "errors": 0,
     }
     for target in targets:
+        identity = identity_resolver(target) if identity_resolver is not None else None
+        resolved_tenant_id = identity.tenant_id if identity is not None else tenant_id
+        if resolved_tenant_id is None:
+            summary["identity_missing"] += 1
+            _log_target_identity_missing(target)
+            continue
         try:
             client = client_factory(target.installation_id)
             review = find_cortex_review_comment(
@@ -207,7 +218,7 @@ def run_reaction_sweep(
             outcome = poll_comment_reactions(
                 client,
                 conn=conn,
-                tenant_id=tenant_id,
+                tenant_id=resolved_tenant_id,
                 review=review,
                 repo_full_name=target.repo_full_name,
                 occurred_at=now,
@@ -229,4 +240,13 @@ def _log_target_failure(target: SweepTarget, exc: Exception) -> None:
         repo=target.repo_full_name,
         pr=target.pr_number,
         error=f"{type(exc).__name__}: {exc}",
+    )
+
+
+def _log_target_identity_missing(target: SweepTarget) -> None:
+    _log(
+        "feedback.reaction_sweep_identity_missing",
+        repo=target.repo_full_name,
+        pr=target.pr_number,
+        installation_id=target.installation_id,
     )

@@ -56,9 +56,7 @@ class FakeFeedbackDb:
         self.commits = 0
         self.rollbacks = 0
 
-    def execute(
-        self, query: str, params: Mapping[str, Any] | None = None
-    ) -> FakeFeedbackResult:
+    def execute(self, query: str, params: Mapping[str, Any] | None = None) -> FakeFeedbackResult:
         q = query.strip()
         p = dict(params or {})
         if q.startswith("INSERT INTO cortex_hosted.review_feedback_events"):
@@ -125,7 +123,10 @@ def _cortex_review_comment(comment_id: int = CORTEX_COMMENT_ID) -> Mapping[str, 
 
 
 def _human_comment(
-    *, comment_id: int = 9001, login: str = HUMAN_LOGIN, body: str = "I disagree, that was superseded."
+    *,
+    comment_id: int = 9001,
+    login: str = HUMAN_LOGIN,
+    body: str = "I disagree, that was superseded.",
 ) -> Mapping[str, Any]:
     return {"id": comment_id, "body": body, "user": {"login": login}}
 
@@ -337,6 +338,23 @@ def test_deleted_comment_is_a_visible_noop() -> None:
     assert result["feedback_recorded"] is False
     assert result["reason"] == "comment_deleted"
     assert db.rows == {}
+
+
+def test_deleted_comment_does_not_require_tenant_resolution() -> None:
+    def explode_client(_installation_id: str) -> Any:
+        raise AssertionError("deleted comments should not fetch GitHub comments")
+
+    def explode_identity(_event: Any) -> Any:
+        raise AssertionError("deleted comments should not resolve tenant identity")
+
+    result = handle_issue_comment_feedback(
+        _issue_comment_job(action="deleted"),
+        conn=FakeFeedbackDb(),
+        client_factory=explode_client,
+        identity_resolver=explode_identity,
+    )
+    assert result["feedback_recorded"] is False
+    assert result["reason"] == "comment_deleted"
 
 
 # ---------------------------------------------------------------------------

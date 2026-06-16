@@ -23,10 +23,16 @@ import pytest
 
 from cortex.hosted.api.config import ServiceConfigError
 from cortex.hosted.degradation import DegradationMode, classify_failure
+from cortex.hosted.github_installations import (
+    GithubInstallationIdentity,
+    normalize_repo_full_name,
+    tenant_id_for_installation,
+)
 from cortex.hosted.jobs import HostedJobError, JobRequest
 from cortex.hosted.ledger_events import LedgerEventType
 from cortex.hosted.logging import HostedLogError, log_event
 from cortex.hosted.worker import (
+    REVIEW_DRY_RUN_ENV,
     UNSUPPORTED_GITHUB_REVIEW_JOB_TYPES,
     ArrivalRecorder,
     HandlerRegistry,
@@ -59,6 +65,8 @@ class FakeQueueDb:
         # (tenant_id, idempotency_key) -> event_id, mirroring the ledger
         # UNIQUE (tenant_id, idempotency_key) + ON CONFLICT DO NOTHING.
         self.ledger: dict[tuple[str, str], str] = {}
+        self.installation_bindings: dict[tuple[str, str], GithubInstallationIdentity] = {}
+        self.rollout_enabled_repos: set[str] = set()
         self.commits = 0
         self.rollbacks = 0
 
@@ -200,7 +208,100 @@ class FakeQueueDb:
             event_id = str(uuid4())
             self.ledger[key] = event_id
             return FakeCursor([(event_id, str(p["event_hash"]))])
+        if q.startswith("WITH tenant_row AS"):
+            return FakeCursor([(str(p["tenant_id"]),)])
+        if q.startswith("WITH source_row AS"):
+            identity = GithubInstallationIdentity(
+                installation_id=str(p["installation_id"]),
+                tenant_id=str(p["tenant_id"]),
+                source_id=str(p["source_id"]),
+                repo_full_name=str(p["repo_full_name"]),
+            )
+            self.installation_bindings[(identity.installation_id, identity.repo_full_name)] = (
+                identity
+            )
+            return FakeCursor(
+                [
+                    (
+                        identity.installation_id,
+                        identity.tenant_id,
+                        identity.source_id,
+                        identity.repo_full_name,
+                    )
+                ]
+            )
+        if q.startswith("SELECT") and "FROM cortex_hosted.github_installation_repositories" in q:
+            found_identity = self.installation_bindings.get(
+                (str(p["installation_id"]), normalize_repo_full_name(str(p["repo_full_name"])))
+            )
+            if found_identity is None:
+                return FakeCursor([])
+            return FakeCursor(
+                [
+                    (
+                        found_identity.installation_id,
+                        found_identity.tenant_id,
+                        found_identity.source_id,
+                        found_identity.repo_full_name,
+                    )
+                ]
+            )
+        if q.startswith("UPDATE cortex_hosted.github_installation_repositories") and (
+            "repo_full_name = %(repo_full_name)s" in q
+        ):
+            key = (
+                str(p["installation_id"]),
+                normalize_repo_full_name(str(p["repo_full_name"])),
+            )
+            found_identity = self.installation_bindings.get(key)
+            if found_identity is None:
+                return FakeCursor([])
+            del self.installation_bindings[key]
+            return FakeCursor(
+                [
+                    (
+                        found_identity.installation_id,
+                        found_identity.tenant_id,
+                        found_identity.source_id,
+                        found_identity.repo_full_name,
+                    )
+                ]
+            )
+        if q.startswith("UPDATE cortex_hosted.github_installation_repositories"):
+            deactivated_rows: list[tuple[Any, ...]] = []
+            for key, identity in list(self.installation_bindings.items()):
+                if key[0] == str(p["installation_id"]):
+                    deactivated_rows.append(
+                        (
+                            identity.installation_id,
+                            identity.tenant_id,
+                            identity.source_id,
+                            identity.repo_full_name,
+                        )
+                    )
+                    del self.installation_bindings[key]
+            return FakeCursor(deactivated_rows)
+        if q.startswith("UPDATE cortex_hosted.github_installations"):
+            return FakeCursor([(tenant_id_for_installation(str(p["installation_id"])),)])
+        if q.startswith("UPDATE cortex_hosted.sources"):
+            return FakeCursor([(str(p["source_id"]),)])
         if q.startswith("SELECT") and "FROM cortex_hosted.review_rollout_events" in q:
+            repo = normalize_repo_full_name(str(p["repo_full_name"]))
+            if repo in self.rollout_enabled_repos:
+                now = datetime.now(UTC)
+                return FakeCursor(
+                    [
+                        (
+                            str(uuid4()),
+                            repo,
+                            True,
+                            "test",
+                            "enabled for test",
+                            now,
+                            now,
+                        )
+                    ]
+                )
             return FakeCursor([])
         raise AssertionError(f"FakeQueueDb saw unexpected SQL: {q[:80]}")
 
@@ -248,9 +349,30 @@ def _review_webhook_job_request(delivery: str = "guid-review") -> JobRequest:
                 },
                 "pull_request": {
                     "number": 397,
-                    "base": {"sha": "base-sha"},
-                    "head": {"sha": "head-sha"},
+                    "base": {"sha": "1" * 40},
+                    "head": {"sha": "2" * 40},
                 },
+            },
+        },
+        max_attempts=3,
+    )
+
+
+def _installation_created_job_request(delivery: str = "guid-install") -> JobRequest:
+    return JobRequest(
+        job_type="github.installation",
+        idempotency_key=f"github-delivery:{delivery}",
+        payload={
+            "event": "installation",
+            "delivery": delivery,
+            "received_at": "2026-06-10T11:00:00+00:00",
+            "body": {
+                "action": "created",
+                "installation": {
+                    "id": 424242,
+                    "account": {"login": "AutumnGarage", "type": "Organization"},
+                },
+                "repositories": [{"id": 123456, "full_name": "AutumnGarage/Cortex"}],
             },
         },
         max_attempts=3,
@@ -259,6 +381,38 @@ def _review_webhook_job_request(delivery: str = "guid-review") -> JobRequest:
 
 def _worker(db: FakeQueueDb, registry: HandlerRegistry, **kwargs: Any) -> Worker:
     return Worker(conn=db, registry=registry, worker_id="w-test", **kwargs)
+
+
+class _NoDecisionReviewClient:
+    def __init__(self) -> None:
+        self.posted: list[tuple[str, str, int, str]] = []
+
+    def get_pull_request_diff(self, owner: str, repo: str, pr_number: int) -> str:
+        return "diff --git a/README.md b/README.md\n+hello\n"
+
+    def get_file_contents(self, owner: str, repo: str, path: str, ref: str) -> bytes | None:
+        return None
+
+    def list_directory(self, owner: str, repo: str, path: str, ref: str) -> tuple[Any, ...]:
+        return ()
+
+    def list_issue_comments(self, owner: str, repo: str, issue_number: int) -> tuple[Any, ...]:
+        return ()
+
+    def post_issue_comment(
+        self, owner: str, repo: str, issue_number: int, body: str
+    ) -> Mapping[str, Any]:
+        self.posted.append((owner, repo, issue_number, body))
+        return {
+            "id": 9001,
+            "html_url": f"https://github.com/{owner}/{repo}/issues/{issue_number}#x",
+        }
+
+    def update_issue_comment(
+        self, owner: str, repo: str, comment_id: int, body: str
+    ) -> Mapping[str, Any]:
+        self.posted.append((owner, repo, comment_id, body))
+        return {"id": comment_id, "html_url": f"https://github.com/{owner}/{repo}/issues/x"}
 
 
 # ---------------------------------------------------------------------------
@@ -649,6 +803,9 @@ def test_review_dry_run_env_defaults_to_safe_dry_run() -> None:
 
 def test_stateless_worker_defaults_fresh_repo_to_rollout_disabled() -> None:
     db = FakeQueueDb()
+    db.enqueue(_installation_created_job_request())
+    recorder = ArrivalRecorder(conn=db, tenant_id=None, source_id=None)
+    assert _worker(db, build_worker_registry(recorder=recorder, environ={})).run_once() is True
     recorder = ArrivalRecorder(conn=db, tenant_id=None, source_id=None)
     fake_pem = "-----BEGIN " + "PLACEHOLDER TEST KEY-----\nnot-a-real-key\n"
     registry = build_worker_registry(
@@ -664,6 +821,34 @@ def test_stateless_worker_defaults_fresh_repo_to_rollout_disabled() -> None:
     assert "review_mode" not in job["result"]
 
 
+def test_installation_webhook_then_pr_review_resolves_second_tenant_without_static_env() -> None:
+    db = FakeQueueDb()
+    recorder = ArrivalRecorder(conn=db, tenant_id=None, source_id=None)
+    db.enqueue(_installation_created_job_request())
+
+    assert _worker(db, build_worker_registry(recorder=recorder, environ={})).run_once() is True
+    identity = db.installation_bindings[("424242", "autumngarage/cortex")]
+    assert identity.tenant_id == tenant_id_for_installation("424242")
+
+    db.rollout_enabled_repos.add("autumngarage/cortex")
+    client = _NoDecisionReviewClient()
+    db.enqueue(_review_webhook_job_request(delivery="guid-review-second-tenant"))
+    review_registry = build_worker_registry(
+        recorder=recorder,
+        environ={REVIEW_DRY_RUN_ENV: "0"},
+        client_factory=lambda _installation_id: client,
+        model_resolver=lambda: object(),
+    )
+
+    assert _worker(db, review_registry).run_once() is True
+    job = db.job("github-delivery:guid-review-second-tenant")
+    assert job["status"] == "succeeded"
+    assert job["result"]["posted"] is True
+    assert job["result"]["tenant_id"] == identity.tenant_id
+    assert job["result"]["source_id"] == identity.source_id
+    assert client.posted
+
+
 def test_stub_handler_without_mapping_reports_the_gap_visibly() -> None:
     db = FakeQueueDb()
     recorder = ArrivalRecorder(conn=db, tenant_id=None, source_id=None)
@@ -673,25 +858,39 @@ def test_stub_handler_without_mapping_reports_the_gap_visibly() -> None:
     assert job["status"] == "succeeded"
     assert job["result"]["handled"] is True
     assert job["result"]["ledger_recorded"] is False
-    assert job["result"]["reason"] == "tenant_mapping_unconfigured"
+    assert job["result"]["reason"] == "installation_identity_unresolved"
     assert db.ledger == {}
 
 
-def test_stub_handler_records_arrival_as_a_raw_ledger_event() -> None:
+def test_stub_handler_static_mapping_requires_explicit_dev_fallback(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     db = FakeQueueDb()
-    recorder = ArrivalRecorder(conn=db, tenant_id=TENANT_ID, source_id=SOURCE_ID)
+    recorder = ArrivalRecorder(
+        conn=db,
+        tenant_id=TENANT_ID,
+        source_id=SOURCE_ID,
+        static_tenant_fallback_enabled=True,
+    )
     db.enqueue(_webhook_job_request())
-    assert _worker(db, build_default_registry(recorder)).run_once() is True
+    with caplog.at_level(logging.INFO, logger="cortex.hosted.worker"):
+        assert _worker(db, build_default_registry(recorder)).run_once() is True
     job = db.job("github-delivery:guid-1")
     assert job["result"]["ledger_recorded"] is True
     assert len(db.ledger) == 1
     ((tenant_id, _key),) = db.ledger.keys()
     assert tenant_id == TENANT_ID
+    assert "worker.static_tenant_fallback_used" in caplog.text
 
 
 def test_arrival_record_is_idempotent_across_redelivered_jobs() -> None:
     db = FakeQueueDb()
-    recorder = ArrivalRecorder(conn=db, tenant_id=TENANT_ID, source_id=SOURCE_ID)
+    recorder = ArrivalRecorder(
+        conn=db,
+        tenant_id=TENANT_ID,
+        source_id=SOURCE_ID,
+        static_tenant_fallback_enabled=True,
+    )
     registry = build_default_registry(recorder)
     db.enqueue(_webhook_job_request(delivery="same-guid"))
     assert _worker(db, registry).run_once() is True
@@ -713,6 +912,8 @@ def test_arrival_record_is_idempotent_across_redelivered_jobs() -> None:
         "ledger_recorded": False,
         "reason": "already_recorded",
         "delivery": "same-guid",
+        "tenant_id": TENANT_ID,
+        "source_id": SOURCE_ID,
     }
     assert len(db.ledger) == 1
 
@@ -722,7 +923,12 @@ def test_arrival_record_uses_the_source_event_received_type() -> None:
 
 
 def test_recorder_refuses_a_job_without_delivery_guid() -> None:
-    recorder = ArrivalRecorder(conn=FakeQueueDb(), tenant_id=TENANT_ID, source_id=SOURCE_ID)
+    recorder = ArrivalRecorder(
+        conn=FakeQueueDb(),
+        tenant_id=TENANT_ID,
+        source_id=SOURCE_ID,
+        static_tenant_fallback_enabled=True,
+    )
     from cortex.hosted.jobs import ClaimedJob
 
     job = ClaimedJob(

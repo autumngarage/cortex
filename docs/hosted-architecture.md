@@ -58,18 +58,21 @@ The substrate is one event log plus rebuildable projections, exactly as
   ───────────────────────────────────────────────────────────
    tenancy + authorization:
      tenants / repos / sources(.visibility)                (deny-by-default)
+     github_installations / github_installation_repositories
+                                                            (installation identity)
 ```
 
 ### 1.2 Module map
 
 | Module | Role | Load-bearing exports |
 |---|---|---|
-| `schema.py` | Versioned Postgres DDL (`HOSTED_SCHEMA_VERSION = 6` at writing; 9 as of 2026-06-11), in-DDL migration blocks, append-only + provenance-immutability triggers, all indexes | `create_schema_sql()` |
+| `schema.py` | Versioned Postgres DDL (`HOSTED_SCHEMA_VERSION = 13` as of 2026-06-16), in-DDL migration blocks, append-only + provenance-immutability triggers, all indexes | `create_schema_sql()` |
 | `storage.py` | Storage-boundary guardrail: Postgres is the only canonical store; SQLite allowed only under approved roles (`local-replay-export`, `retrieve-index-cache`) | `validate_canonical_store`, `validate_rebuildable_cache_store`, `HOSTED_STORAGE_DECISION` |
 | `ledger_events.py` | The one write envelope: `LedgerEvent` (frozen, validated), 8 event types, per-type required fields, deterministic `event_hash` over `as_immutable_payload()`, retry-safe `derive_idempotency_key` | `LedgerEvent`, `LedgerEventType`, `ledger_event_insert_sql()` |
 | `provenance.py` | Immutable source snapshots + citable spans: `document_hash` keyed by content (re-ingest with drift ⇒ new snapshot), `span_hash` over offsets + excerpt hash so citations survive re-derivation | `SourceDocument`, `SourceSpan`, idempotent insert SQL |
 | `scopes.py` | 9-type structural scope vocabulary (`path, glob, symbol, package, config_key, owner, service, issue_ref, channel_ref`), normalization, per-type structural weights, `ChangedSurface` (diff → query scopes) | `DecisionScope`, `QueryScope`, `ChangedSurface`, `decisions_for_diff_scope_sql()` |
 | `visibility.py` | Fail-closed retrieval authorization: non-empty `visible_source_ids` required before any SQL, deny flags (`deleted, revoked, slack_channel_excluded, repo_installation_revoked`), shared CTEs every retrieval query starts from, citation-visibility guard | `SourceVisibilityScope`, `visible_source_documents_ctes()`, `visible_decision_version_exists_sql()` |
+| `github_installations.py` | GitHub App installation/repository identity: lifecycle webhooks maintain active tenant/source bindings; review, feedback, and reaction telemetry resolve installation id + repo before writing tenant-scoped rows | `GithubInstallationStore`, `record_installation_event()`, `github_installation_resolve_sql()` |
 | `ask_ledger.py` | Cited read path: hybrid retrieval (exact 120 / scope 100 / full-text 70 / trigram 55 / vector 50 / graph 35, RRF k=60), `CitedContextPack` that is structurally fail-closed (`AnswerState.NO_ANSWER` / `no_cited_support`), `as_trace()` to `retrieval_traces` | `AskLedgerQuery`, `CitedContextPack`, `ASK_LEDGER_RETRIEVAL_CONFIG_VERSION` |
 | `decisions_for_diff.py` | Diff-scoped candidate gating: `from_diff_metadata(...)` entry point, structural scope candidates first, bounded hybrid top-K capped at 30 with `omitted_counts`, candidate-pack hashing for replay | `DecisionsForDiffQuery`, `DecisionsForDiffCandidatePack` |
 | `embeddings.py` | Rebuildable vector projection keyed by `(item, model, dimension, epoch)`, HNSW config with versioned `config_version`, recall checks (`VectorRecallSample`, floor 0.95) | `EmbeddingProjectionRow`, `VectorIndexConfig`, `HOSTED_VECTOR_INDEX_CONFIG_VERSION` |

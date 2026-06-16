@@ -184,11 +184,13 @@ def test_query_joins_staged_registry_and_binds_filters() -> None:
 
 
 def test_staged_join_does_not_condition_on_tenant_id() -> None:
-    """Regression (cortex#572 gap): feedback rows carry the static env-mapped
-    tenant while staged/cost rows carry the per-repo deterministic tenant, so
-    a tenant-conditioned join silently never matches on live data and staged
-    exclusion fails open. The join must key on (repo_full_name, pr_number)
-    only until #572 unifies tenant identity."""
+    """Compatibility: pre-#572 dogfood rows can have mismatched tenants.
+
+    New feedback/staged writes resolve through GitHub installation bindings,
+    but historical rows used different tenant conventions. The report keeps
+    the join on (repo_full_name, pr_number) so staged exclusions do not fail
+    open on that legacy data.
+    """
 
     sql = feedback_query_sql()
     assert "s.tenant_id" not in sql
@@ -244,7 +246,9 @@ def test_precision_round_trip_excludes_staged_pr_by_default() -> None:
     repo = f"test/{uuid4().hex[:8]}"
     snapshot = "a" * 64
 
-    def _event(*, pr_number: int, comment_id: int, kind: FeedbackKind, sentiment: FeedbackSentiment) -> ReviewFeedbackEvent:
+    def _event(
+        *, pr_number: int, comment_id: int, kind: FeedbackKind, sentiment: FeedbackSentiment
+    ) -> ReviewFeedbackEvent:
         return ReviewFeedbackEvent(
             tenant_id=tenant,
             repo_full_name=repo,
@@ -267,9 +271,9 @@ def test_precision_round_trip_excludes_staged_pr_by_default() -> None:
     try:
         apply_schema(connection)
         # PR 1 is staged (the demo fixture); PR 2 is organic. The registry row
-        # deliberately carries a DIFFERENT tenant than the feedback events —
-        # the live shape (static env tenant vs per-repo deterministic tenant,
-        # the #572 gap). Exclusion must still hold via (repo, pr_number).
+        # deliberately carries a DIFFERENT tenant than the feedback events to
+        # model historical pre-#572 dogfood rows. Exclusion must still hold via
+        # (repo, pr_number).
         for _ in range(2):
             connection.execute(
                 staged_pr_insert_sql(),
@@ -282,8 +286,18 @@ def test_precision_round_trip_excludes_staged_pr_by_default() -> None:
                 ).as_insert_parameters(),
             )
         for event in (
-            _event(pr_number=1, comment_id=101, kind=FeedbackKind.REACTION_UP, sentiment=FeedbackSentiment.POSITIVE),
-            _event(pr_number=2, comment_id=202, kind=FeedbackKind.REACTION_UP, sentiment=FeedbackSentiment.POSITIVE),
+            _event(
+                pr_number=1,
+                comment_id=101,
+                kind=FeedbackKind.REACTION_UP,
+                sentiment=FeedbackSentiment.POSITIVE,
+            ),
+            _event(
+                pr_number=2,
+                comment_id=202,
+                kind=FeedbackKind.REACTION_UP,
+                sentiment=FeedbackSentiment.POSITIVE,
+            ),
         ):
             connection.execute(review_feedback_insert_sql(), event.as_insert_parameters())
 
