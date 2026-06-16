@@ -1366,6 +1366,8 @@ for author, review in latest_review_by_author.items():
         passes.append(f"clean review comment by {author}: {url}")
     elif state == "COMMENTED" and "CODEX_REVIEW_BLOCKED" in body:
         blockers.append(f"trusted review by {author} reported blockers: {url}")
+    elif state == "COMMENTED" and "Codex Review" in body:
+        passes.append(f"Codex review by {author} completed: {url}")
 
 marker = f"cortex-review:pr={pr_number}:head={head}"
 latest_comment_by_author: dict[str, dict] = {}

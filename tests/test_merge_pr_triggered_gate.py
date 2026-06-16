@@ -86,7 +86,7 @@ def _run_gate(tmp_path: Path, payload: dict[str, Any], *, head: str = "abc123") 
         PR_NUMBER=7
         PR_TRIGGERED_REVIEW_REQUIRED=true
         PR_TRIGGERED_REVIEW_TRUSTED_COMMENT_AUTHORS="compass-review,compass-review[bot]"
-        PR_TRIGGERED_REVIEW_TRUSTED_REVIEW_AUTHORS="codex,codex[bot]"
+        PR_TRIGGERED_REVIEW_TRUSTED_REVIEW_AUTHORS="chatgpt-codex-connector,codex,codex[bot]"
         PR_TRIGGERED_REVIEW_TRUSTED_CHECK_NAMES="codex-review"
         pr_triggered_review_gate {head}
         """
@@ -145,6 +145,20 @@ def test_trusted_approved_review_passes(tmp_path: Path) -> None:
     result = _run_gate(tmp_path, _payload(reviews=[review]))
     assert result.returncode == 0, result.stderr + result.stdout
     assert "approved review by codex" in result.stdout
+
+
+def test_current_head_codex_commented_review_passes_without_threads(tmp_path: Path) -> None:
+    review = {
+        "author": {"login": "chatgpt-codex-connector"},
+        "state": "COMMENTED",
+        "submittedAt": "2026-06-16T00:00:00Z",
+        "body": "### Codex Review\n\nNo inline suggestions.",
+        "url": "https://github.example/pr/7#review",
+        "commit": {"oid": "abc123"},
+    }
+    result = _run_gate(tmp_path, _payload(reviews=[review]))
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert "Codex review by chatgpt-codex-connector completed" in result.stdout
 
 
 def test_unresolved_review_thread_blocks_even_with_clean_comment(tmp_path: Path) -> None:

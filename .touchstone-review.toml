@@ -37,6 +37,7 @@ reviewer = "conductor"
 [review.pr_triggered]
 required = true
 trusted_review_authors = [
+  "chatgpt-codex-connector",
   "codex",
   "codex[bot]",
   "github-copilot[bot]",
