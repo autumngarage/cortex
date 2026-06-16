@@ -8,12 +8,13 @@ max_iterations = 3
 max_diff_lines = 5000
 cache_clean_reviews = true
 
-# Allow Conductor auto-fix on merge gate for paths not listed in unsafe_paths.
-# merge-pr.sh overrides mode to fix for the merge review; safe_by_default=true
-# lets good fixes land without a manual commit treadmill.
+# PR-triggered GitHub/Codex reviews are the review surface for Cortex.
+# Keep Touchstone's merge path deterministic-only: merge-pr.sh still runs
+# preflight and blocks requested changes / unresolved review threads, but the
+# Conductor/Codex LLM pass below is disabled to avoid duplicate review spend.
 safe_by_default = true
 
-# Feature-branch pushes stay review-only; merge gate sets CODEX_REVIEW_MODE=fix.
+# Retained for easy rollback if Touchstone review is re-enabled later.
 mode = "review-only"
 
 unsafe_paths = [
@@ -29,7 +30,8 @@ unsafe_paths = [
 ]
 
 [review]
-enabled = true
+enabled = false
+comment_on_clean = false
 reviewer = "conductor"
 
 [review.conductor]
