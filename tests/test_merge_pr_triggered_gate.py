@@ -72,6 +72,30 @@ def _run_gate(tmp_path: Path, payload: dict[str, Any], *, head: str = "abc123") 
               printf '%s\\n' acme/widgets
               ;;
             api\\ graphql*)
+              query=""
+              for arg in "$@"; do
+                case "$arg" in
+                  query=*)
+                    query="${{arg#query=}}"
+                    ;;
+                esac
+              done
+              python3 - "$query" <<'PY' || return 1
+import sys
+
+query = sys.argv[1]
+depth = 0
+for char in query:
+    if char == "{{":
+        depth += 1
+    elif char == "}}":
+        depth -= 1
+    if depth < 0:
+        sys.exit(1)
+
+if depth != 0:
+    sys.exit(1)
+PY
               cat {payload_path!s}
               ;;
             *)
