@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 
@@ -296,6 +297,9 @@ def test_schema_enforces_kind_shape_invariant_in_the_db() -> None:
     assert "require_review_feedback_reply_capture_pending" in sql
     assert "BEFORE INSERT ON cortex_hosted.review_feedback_events" in sql
     assert "NEW.feedback_kind = 'reply' AND NEW.sentiment <> 'unclassified'" in sql
+    assert "OLD.feedback_kind IS DISTINCT FROM 'reply'" in sql
+    assert "OLD.sentiment IS DISTINCT FROM 'unclassified'" in sql
+    assert "NEW.sentiment NOT IN ('positive', 'negative', 'neutral')" in sql
 
 
 # ---------------------------------------------------------------------------
@@ -313,6 +317,14 @@ DATABASE_URL = os.environ.get("DATABASE_URL", "")
 def test_migration_applies_idempotently_and_binds_to_replay_identity() -> None:
     from cortex.hosted.db import connect
     from cortex.hosted.migrations import apply_schema
+
+    def assert_direct_update_rejected(conn: Any, sql: str, params: dict[str, object]) -> None:
+        conn.execute("SAVEPOINT feedback_mutation_probe")
+        try:
+            with pytest.raises(Exception, match="append-only"):
+                conn.execute(sql, params)
+        finally:
+            conn.execute("ROLLBACK TO SAVEPOINT feedback_mutation_probe")
 
     conn = connect(DATABASE_URL)
     try:
@@ -348,6 +360,12 @@ def test_migration_applies_idempotently_and_binds_to_replay_identity() -> None:
         assert row[2] == SNAPSHOT
         assert row[3] == "reaction_up"
         assert row[4] == "positive"
+        assert_direct_update_rejected(
+            conn,
+            "UPDATE cortex_hosted.review_feedback_events "
+            "SET sentiment = 'negative' WHERE idempotency_key = %(k)s",
+            {"k": key},
+        )
 
         reply = _reply_event(
             cortex_comment_id=5002,
@@ -373,6 +391,18 @@ def test_migration_applies_idempotently_and_binds_to_replay_identity() -> None:
             },
         ).fetchone()
         assert classified == inserted_reply
+        assert_direct_update_rejected(
+            conn,
+            "UPDATE cortex_hosted.review_feedback_events "
+            "SET sentiment = 'positive' WHERE review_feedback_event_id = %(id)s",
+            {"id": inserted_reply[0]},
+        )
+        assert_direct_update_rejected(
+            conn,
+            "UPDATE cortex_hosted.review_feedback_events "
+            "SET sentiment = 'unclassified' WHERE review_feedback_event_id = %(id)s",
+            {"id": inserted_reply[0]},
+        )
     finally:
         # Roll back the probe so the integration DB keeps no test rows; the
         # append-only trigger forbids DELETE, so rollback is the only clean exit.
