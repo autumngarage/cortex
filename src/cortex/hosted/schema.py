@@ -1017,10 +1017,11 @@ CREATE TRIGGER review_cost_records_no_delete
 -- A human's reaction or reply, once recorded, is never rewritten or deleted —
 -- a corrected sentiment is the cortex#549 classifier's UPDATE of the sentiment
 -- column on the SAME row, which the trigger must permit while still blocking
--- any other mutation. So the guard allows an UPDATE that touches only
--- sentiment (the classify-later seam) and forbids DELETE and every other
--- UPDATE. This keeps the raw human action immutable while leaving the one
--- documented late-classification write path open.
+-- any other mutation. So the guard allows exactly one UPDATE shape: a pending
+-- reply (sentiment='unclassified') may be classified once to a resolved
+-- positive/negative/neutral sentiment. This keeps the raw human action
+-- immutable while leaving the one documented late-classification write path
+-- open.
 CREATE OR REPLACE FUNCTION {schema}.prevent_review_feedback_mutation()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -1046,6 +1047,14 @@ BEGIN
         THEN
             RAISE EXCEPTION
                 'review_feedback_events is append-only; only sentiment may be classified later (cortex#549)'
+                USING ERRCODE = '55000';
+        END IF;
+        IF OLD.feedback_kind IS DISTINCT FROM 'reply'
+            OR OLD.sentiment IS DISTINCT FROM 'unclassified'
+            OR NEW.sentiment NOT IN ('positive', 'negative', 'neutral')
+        THEN
+            RAISE EXCEPTION
+                'review_feedback_events is append-only; only pending replies may be classified once (cortex#549)'
                 USING ERRCODE = '55000';
         END IF;
         RETURN NEW;
