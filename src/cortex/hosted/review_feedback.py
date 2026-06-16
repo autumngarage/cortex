@@ -408,6 +408,7 @@ SET sentiment = %(sentiment)s
 WHERE review_feedback_event_id = %(review_feedback_event_id)s
   AND feedback_kind = 'reply'
   AND sentiment = 'unclassified'
+  AND %(sentiment)s IN ('positive', 'negative', 'neutral')
 RETURNING review_feedback_event_id;
 """.strip()
 

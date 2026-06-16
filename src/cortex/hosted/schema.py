@@ -1055,6 +1055,25 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION {schema}.require_review_feedback_reply_capture_pending()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.feedback_kind = 'reply' AND NEW.sentiment <> 'unclassified' THEN
+        RAISE EXCEPTION
+            'review_feedback_events replies must be inserted with sentiment=unclassified before classification'
+            USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS review_feedback_events_reply_capture_pending ON {schema}.review_feedback_events;
+CREATE TRIGGER review_feedback_events_reply_capture_pending
+    BEFORE INSERT ON {schema}.review_feedback_events
+    FOR EACH ROW EXECUTE FUNCTION {schema}.require_review_feedback_reply_capture_pending();
+
 DROP TRIGGER IF EXISTS review_feedback_events_no_mutation ON {schema}.review_feedback_events;
 CREATE TRIGGER review_feedback_events_no_mutation
     BEFORE UPDATE ON {schema}.review_feedback_events
