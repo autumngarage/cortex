@@ -126,6 +126,17 @@ def _make_cortex_shim(
             if [ "$1" = "refresh-state" ]; then
               exit 0
             fi
+            if [ "$1" = "journal" ] && [ "$2" = "verify" ] && [ "${{3:-}}" = "--help" ]; then
+              exit 0
+            fi
+            if [ "$1" = "journal" ] && [ "$2" = "verify" ]; then
+              if [ -f {journal_path!s} ]; then
+                printf '%s\\n' {journal_path!s}
+                exit 0
+              fi
+              printf 'missing staged entry\\n' >&2
+              exit 1
+            fi
             if [ "$1" = "journal" ] && [ "$2" = "post-merge" ] && [ "${{3:-}}" = "--help" ]; then
               exit 0
             fi
@@ -148,6 +159,77 @@ def _make_cortex_shim(
             mkdir -p {journal_path.parent!s}
             printf 'placeholder\\n' > {journal_path!s}
             printf '%s\\n' {journal_path!s}
+            """
+        ),
+        encoding="utf-8",
+    )
+    shim.chmod(0o755)
+    return log_file
+
+
+def _make_uv_cortex_shim(
+    bin_dir: Path,
+    journal_path: Path,
+    *,
+    check_triggers_ndjson: str = _DEFAULT_CHECK_TRIGGERS_NDJSON,
+) -> Path:
+    """Write a ``uv`` shim that exposes ``uv run cortex ...``.
+
+    This mirrors the project-local source fallback used when PATH has a stale
+    installed ``cortex`` binary but the checked-out project can run the current
+    CLI through ``uv run cortex``.
+    """
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    log_file = bin_dir / "uv.calls.log"
+    log_file.write_text("", encoding="utf-8")
+    shim = bin_dir / "uv"
+    ndjson_escaped = check_triggers_ndjson.replace("'", "'\\''")
+    shim.write_text(
+        textwrap.dedent(
+            f"""\
+            #!/usr/bin/env bash
+            printf '%s\\n' "$*" >> {log_file!s}
+            if [ "${{1:-}}" != "run" ] || [ "${{2:-}}" != "cortex" ]; then
+              printf 'unexpected uv invocation: %s\\n' "$*" >&2
+              exit 7
+            fi
+            shift 2
+            if [ "${{1:-}}" = "--no-auto-sync" ]; then
+              shift
+            fi
+            if [ "$1" = "check-triggers" ]; then
+              printf '%s\\n' '{ndjson_escaped}'
+              exit 0
+            fi
+            if [ "$1" = "refresh-state" ]; then
+              exit 0
+            fi
+            if [ "$1" = "journal" ] && [ "$2" = "verify" ] && [ "${{3:-}}" = "--help" ]; then
+              exit 0
+            fi
+            if [ "$1" = "journal" ] && [ "$2" = "verify" ]; then
+              if [ -f {journal_path!s} ]; then
+                printf '%s\\n' {journal_path!s}
+                exit 0
+              fi
+              printf 'missing staged entry\\n' >&2
+              exit 1
+            fi
+            if [ "$1" = "journal" ] && [ "$2" = "post-merge" ] && [ "${{3:-}}" = "--help" ]; then
+              exit 0
+            fi
+            if [ "$1" = "journal" ] && [ "$2" = "post-merge" ]; then
+              if [ -f {journal_path!s} ]; then
+                printf '%s\\n' {journal_path!s}
+                exit 0
+              fi
+              mkdir -p {journal_path.parent!s}
+              printf 'placeholder\\n' > {journal_path!s}
+              printf '%s\\n' {journal_path!s}
+              exit 0
+            fi
+            printf 'unexpected cortex invocation via uv: %s\\n' "$*" >&2
+            exit 7
             """
         ),
         encoding="utf-8",
@@ -565,7 +647,7 @@ def test_hook_stage_mode_skips_follow_up_journal_pr(
     assert journal_path.read_text(encoding="utf-8") == journal_body
     branches = _git("branch", "--list", "docs/journal-pr-55", cwd=project).stdout
     assert "docs/journal-pr-55" not in branches
-    assert "journal post-merge --type pr-merged --no-edit --pr 55" in log_file.read_text(
+    assert "journal verify --type pr-merged --pr 55" in log_file.read_text(
         encoding="utf-8"
     )
 
@@ -607,10 +689,72 @@ def test_hook_exits_clean_when_post_merge_subcommand_missing(
     result = _run_hook(project, bin_dir, extra_env={"TOUCHSTONE_MERGED_PR": "99"})
 
     assert result.returncode == 0, result.stderr
-    assert "lacks 'journal post-merge'" in result.stderr
+    assert "resolved cortex lacks 'journal post-merge'" in result.stderr
     assert not journal_path.exists()
     assert _git("rev-parse", "main", cwd=project).stdout.strip() == head_before
     assert "journal post-merge --type pr-merged" not in log_file.read_text(encoding="utf-8")
+
+
+def test_hook_uses_uv_run_cortex_when_path_cortex_lacks_post_merge(
+    project_repo: tuple[Path, Path],
+) -> None:
+    """Dogfood regression for #499: Homebrew/PATH cortex can lag the source
+    tree. In a Cortex source checkout, the hook should use ``uv run cortex``
+    when it proves that command supports the post-merge contract."""
+    project, bin_dir = project_repo
+    (project / "pyproject.toml").write_text(
+        "[project]\nname = 'cortex-fixture'\nversion = '0.0.0'\n",
+        encoding="utf-8",
+    )
+    (project / ".cortex" / "config.toml").write_text(
+        '[journal.t1_9]\nmode = "stage"\n',
+        encoding="utf-8",
+    )
+    journal_path = project / ".cortex" / "journal" / "uv-auto.md"
+    journal_body = (
+        "# PR #499 merged\n\n"
+        "**Staged-for-pr:** 499\n"
+        "**Type:** pr-merged\n\n"
+        "Already staged body.\n"
+    )
+    journal_path.write_text(journal_body, encoding="utf-8")
+    _git("add", "pyproject.toml", ".cortex/config.toml", ".cortex/journal/uv-auto.md", cwd=project)
+    _git("commit", "-q", "-m", "add staged journal metadata", cwd=project)
+
+    stale_log = bin_dir / "cortex.calls.log"
+    stale_log.write_text("", encoding="utf-8")
+    stale = bin_dir / "cortex"
+    stale.write_text(
+        textwrap.dedent(
+            f"""\
+            #!/usr/bin/env bash
+            printf '%s\\n' "$*" >> {stale_log!s}
+            if [ "$1" = "journal" ] && [ "$2" = "post-merge" ] && [ "${{3:-}}" = "--help" ]; then
+              echo "unknown command" >&2
+              exit 2
+            fi
+            exit 1
+            """
+        ),
+        encoding="utf-8",
+    )
+    stale.chmod(0o755)
+    uv_log = _make_uv_cortex_shim(bin_dir, journal_path)
+
+    result = _run_hook(project, bin_dir, extra_env={"TOUCHSTONE_MERGED_PR": "499"})
+
+    assert result.returncode == 0, result.stderr
+    assert "resolved cortex lacks" not in result.stderr
+    branches = _git("branch", "--list", "docs/journal-pr-499", cwd=project).stdout
+    assert "docs/journal-pr-499" not in branches
+    assert journal_path.read_text(encoding="utf-8") == journal_body
+    uv_calls = uv_log.read_text(encoding="utf-8")
+    assert "run cortex journal verify --help" in uv_calls
+    assert "run cortex --no-auto-sync check-triggers --since HEAD~1" in uv_calls
+    assert "run cortex journal verify --type pr-merged --pr 499" in uv_calls
+    assert "journal post-merge --type pr-merged" not in stale_log.read_text(
+        encoding="utf-8"
+    )
 
 
 def test_hook_creates_feature_branch_before_journal_draft(
