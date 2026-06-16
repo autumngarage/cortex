@@ -17,7 +17,7 @@ def _quality(fp: float | None, graded: int = 10) -> QualitySeriesPoint:
     if fp is None:
         return QualitySeriesPoint(
             graded_emitted_count=0, incorrect_precision_count=0,
-            tone_flagged_count=0, missed_expected_count=0,
+            tone_flagged_count=0, missed_expected_count=0, override_context_count=0,
             false_positive_rate=None,
             false_positive_rate_unavailable_reason="ungraded route",
             tone_rate=None, tone_rate_unavailable_reason="ungraded route",
@@ -25,7 +25,7 @@ def _quality(fp: float | None, graded: int = 10) -> QualitySeriesPoint:
     incorrect = round(fp * graded)
     return QualitySeriesPoint(
         graded_emitted_count=graded, incorrect_precision_count=incorrect,
-        tone_flagged_count=0, missed_expected_count=0,
+        tone_flagged_count=0, missed_expected_count=0, override_context_count=0,
         false_positive_rate=incorrect / graded,
         false_positive_rate_unavailable_reason=None,
         tone_rate=0.0, tone_rate_unavailable_reason=None,

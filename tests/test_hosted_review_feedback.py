@@ -23,6 +23,7 @@ from cortex.hosted.review_feedback import (
     reaction_kind_for_content,
     reply_idempotency_key,
     review_feedback_classify_pending_sql,
+    review_feedback_classify_sql,
     review_feedback_insert_sql,
     sentiment_for_reaction_kind,
 )
@@ -243,9 +244,21 @@ def test_classify_pending_sql_selects_only_unclassified_replies() -> None:
     assert "model_id" in sql and "prompt_version" in sql and "snapshot_hash" in sql
 
 
+def test_classify_sql_updates_only_one_pending_reply_sentiment() -> None:
+    sql = review_feedback_classify_sql()
+    assert "UPDATE cortex_hosted.review_feedback_events" in sql
+    assert "SET sentiment = %(sentiment)s" in sql
+    assert "review_feedback_event_id = %(review_feedback_event_id)s" in sql
+    assert "feedback_kind = 'reply'" in sql
+    assert "sentiment = 'unclassified'" in sql
+    assert "RETURNING review_feedback_event_id" in sql
+
+
 def test_insert_sql_rejects_unsafe_schema_identifier() -> None:
     with pytest.raises(ReviewFeedbackError, match="invalid SQL identifier"):
         review_feedback_insert_sql("cortex; DROP TABLE x")
+    with pytest.raises(ReviewFeedbackError, match="invalid SQL identifier"):
+        review_feedback_classify_sql("cortex; DROP TABLE x")
 
 
 # ---------------------------------------------------------------------------
@@ -273,9 +286,11 @@ def test_schema_enforces_kind_shape_invariant_in_the_db() -> None:
     from cortex.hosted.schema import create_schema_sql
 
     sql = create_schema_sql()
-    # A reply must carry text and stay unclassified; a reaction must not carry
-    # text and must carry a resolved sentiment — the DB mirrors the dataclass.
-    assert "feedback_kind = 'reply' AND raw_excerpt IS NOT NULL AND sentiment = 'unclassified'" in sql
+    # A reply must carry text and may later classify sentiment; a reaction must
+    # not carry text and must carry a resolved sentiment.
+    assert "review_feedback_events_kind_shape_check" in sql
+    assert "feedback_kind = 'reply' AND raw_excerpt IS NOT NULL" in sql
+    assert "DROP CONSTRAINT %I" in sql
     assert "feedback_kind <> 'reply' AND raw_excerpt IS NULL AND sentiment <> 'unclassified'" in sql
 
 
@@ -329,6 +344,23 @@ def test_migration_applies_idempotently_and_binds_to_replay_identity() -> None:
         assert row[2] == SNAPSHOT
         assert row[3] == "reaction_up"
         assert row[4] == "positive"
+
+        reply = _reply_event(
+            cortex_comment_id=5002,
+            idempotency_key="reply:int-test:5002:9002",
+        )
+        inserted_reply = conn.execute(
+            review_feedback_insert_sql(), reply.as_insert_parameters()
+        ).fetchone()
+        assert inserted_reply is not None
+        classified = conn.execute(
+            review_feedback_classify_sql(),
+            {
+                "review_feedback_event_id": inserted_reply[0],
+                "sentiment": FeedbackSentiment.NEUTRAL.value,
+            },
+        ).fetchone()
+        assert classified == inserted_reply
     finally:
         # Roll back the probe so the integration DB keeps no test rows; the
         # append-only trigger forbids DELETE, so rollback is the only clean exit.

@@ -18,10 +18,10 @@ The partitions:
   finding was *right* but a reviewer wouldn't act on it).
 
 Stage 2 (cortex#380) extends this taxonomy with live-override context
-classes (changed-decision, emergency-exception) on top of the same
-partition rule; it must import these partitions rather than minting new
-ones — that requirement is the third acceptance criterion of #342 and is
-asserted in the partition-disjointness test.
+classes on top of the same partition rule. Override context is counted
+visibly but never moves precision or tone gates by itself — a human must
+classify the finding as precision-wrong or not-useful before it affects
+those series.
 """
 
 from __future__ import annotations
@@ -40,6 +40,13 @@ TONE_SERIES_CLASSES = frozenset({LabelClass.CORRECT_NOT_USEFUL})
 
 RECALL_CLASSES = frozenset({LabelClass.MISSED_EXPECTED})
 
+OVERRIDE_CONTEXT_CLASSES = frozenset(
+    {
+        LabelClass.OVERRIDE_CHANGED_DECISION,
+        LabelClass.OVERRIDE_EMERGENCY_EXCEPTION,
+    }
+)
+
 
 class QualitySeriesValidationError(ValueError):
     """Raised when series material cannot support gate-grade reporting."""
@@ -53,6 +60,7 @@ class QualitySeriesPoint:
     incorrect_precision_count: int
     tone_flagged_count: int
     missed_expected_count: int
+    override_context_count: int
     false_positive_rate: float | None
     false_positive_rate_unavailable_reason: str | None
     tone_rate: float | None
@@ -64,6 +72,7 @@ class QualitySeriesPoint:
             "incorrect_precision_count",
             "tone_flagged_count",
             "missed_expected_count",
+            "override_context_count",
         ):
             value = getattr(self, name)
             if not isinstance(value, int) or isinstance(value, bool) or value < 0:
@@ -89,6 +98,7 @@ class QualitySeriesPoint:
             "graded_emitted_count": self.graded_emitted_count,
             "incorrect_precision_count": self.incorrect_precision_count,
             "missed_expected_count": self.missed_expected_count,
+            "override_context_count": self.override_context_count,
             "tone_flagged_count": self.tone_flagged_count,
             "tone_rate": self.tone_rate,
             "tone_rate_unavailable_reason": self.tone_rate_unavailable_reason,
@@ -113,6 +123,7 @@ def quality_series_point(fixtures: tuple[EvalFixture, ...]) -> QualitySeriesPoin
     precision_correct = 0
     tone_flagged = 0
     missed = 0
+    override_context = 0
     for fixture in fixtures:
         for label in fixture.labels:
             if label.label in PRECISION_FAILURE_CLASSES:
@@ -123,6 +134,8 @@ def quality_series_point(fixtures: tuple[EvalFixture, ...]) -> QualitySeriesPoin
                     tone_flagged += 1
             elif label.label in RECALL_CLASSES:
                 missed += 1
+            elif label.label in OVERRIDE_CONTEXT_CLASSES:
+                override_context += 1
 
     graded = precision_failures + precision_correct
     if graded == 0:
@@ -131,6 +144,7 @@ def quality_series_point(fixtures: tuple[EvalFixture, ...]) -> QualitySeriesPoin
             incorrect_precision_count=0,
             tone_flagged_count=tone_flagged,
             missed_expected_count=missed,
+            override_context_count=override_context,
             false_positive_rate=None,
             false_positive_rate_unavailable_reason="no graded emitted findings in input",
             tone_rate=None,
@@ -141,6 +155,7 @@ def quality_series_point(fixtures: tuple[EvalFixture, ...]) -> QualitySeriesPoin
         incorrect_precision_count=precision_failures,
         tone_flagged_count=tone_flagged,
         missed_expected_count=missed,
+        override_context_count=override_context,
         false_positive_rate=precision_failures / graded,
         false_positive_rate_unavailable_reason=None,
         tone_rate=tone_flagged / graded,

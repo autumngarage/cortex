@@ -49,8 +49,9 @@ class LabelClass(StrEnum):
     metric (#342) from being polluted by tone/preference feedback — training
     on conflated labels drives the system toward silence.
 
-    Stage 2 (#380) extends this taxonomy with override-context classes
-    (changed-decision, emergency-exception) without redefining these.
+    Stage 2 (#380) extends this taxonomy with override-context classes.
+    Those classes record why a human overrode an advisory finding without
+    treating the override as proof that the evaluator was imprecise or noisy.
     """
 
     CORRECT_USEFUL = "correct_useful"
@@ -67,6 +68,14 @@ class LabelClass(StrEnum):
     MISSED_EXPECTED = "missed_expected"
     """An expected finding the evaluator failed to emit (false negative,
     assessed during replay against ``expected_findings``)."""
+
+    OVERRIDE_CHANGED_DECISION = "override_changed_decision"
+    """A human override because the cited decision changed or went stale after
+    the review context was produced; visible context, not a quality-gate label."""
+
+    OVERRIDE_EMERGENCY_EXCEPTION = "override_emergency_exception"
+    """A human override because an explicitly accepted emergency/one-off
+    exception applies; visible context, not a quality-gate label."""
 
 
 class FindingClass(StrEnum):

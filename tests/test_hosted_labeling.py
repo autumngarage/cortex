@@ -22,6 +22,7 @@ from cortex.hosted.eval_fixtures import (
 )
 from cortex.hosted.labeling import (
     GRADED_EMITTED_CLASSES,
+    OVERRIDE_CONTEXT_CLASSES,
     SPOT_CHECK_FRACTION_DENOMINATOR,
     SPOT_CHECK_MINIMUM_ITEMS,
     DisagreementReport,
@@ -428,6 +429,8 @@ def test_label_tally_counts_every_class() -> None:
         LabelClass.CORRECT_NOT_USEFUL: 1,
         LabelClass.INCORRECT_PRECISION: 1,
         LabelClass.MISSED_EXPECTED: 2,
+        LabelClass.OVERRIDE_CHANGED_DECISION: 0,
+        LabelClass.OVERRIDE_EMERGENCY_EXCEPTION: 0,
     }
 
 
@@ -449,6 +452,37 @@ def test_missed_expected_is_a_separate_recall_signal() -> None:
     assert tally.missed_expected_count == 2
     # Denominators exclude the recall signal entirely.
     assert tally.graded_emitted_count == 5
+
+
+def test_override_context_labels_are_visible_but_do_not_move_quality_gates() -> None:
+    fixture = _fixture("fixture-override")
+    fixture = apply_label(
+        fixture,
+        finding_id="finding-fixed-retry",
+        label_class=LabelClass.OVERRIDE_CHANGED_DECISION,
+        grader="henry",
+        graded_at="2026-06-16",
+        note="The cited decision was superseded after the PR was opened.",
+    )
+    fixture = apply_label(
+        fixture,
+        finding_id="finding-missing-jitter",
+        label_class=LabelClass.OVERRIDE_EMERGENCY_EXCEPTION,
+        grader="sam",
+        graded_at="2026-06-16",
+        note="Incident commander approved a one-off exception.",
+    )
+
+    tally = label_tally([fixture])
+
+    assert set(OVERRIDE_CONTEXT_CLASSES) == {
+        LabelClass.OVERRIDE_CHANGED_DECISION,
+        LabelClass.OVERRIDE_EMERGENCY_EXCEPTION,
+    }
+    assert tally.override_context_count == 2
+    assert tally.graded_emitted_count == 0
+    assert tally.precision_correct is None
+    assert tally.useful_rate is None
 
 
 def test_label_tally_zero_division_returns_none_with_visible_reason() -> None:

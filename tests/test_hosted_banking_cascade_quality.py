@@ -41,6 +41,7 @@ from cortex.hosted.model_interfaces import (
 from cortex.hosted.model_registry import RegisteredPrompt
 from cortex.hosted.provenance import SourceDocument
 from cortex.hosted.quality_series import (
+    OVERRIDE_CONTEXT_CLASSES,
     PRECISION_SERIES_CLASSES,
     RECALL_CLASSES,
     TONE_SERIES_CLASSES,
@@ -252,6 +253,9 @@ def _label(label: LabelClass, grader: str = "henry") -> FixtureLabel:
 def test_partitions_are_disjoint_by_construction() -> None:
     assert not TONE_SERIES_CLASSES - PRECISION_SERIES_CLASSES  # tone ⊂ precision-graded
     assert not RECALL_CLASSES & PRECISION_SERIES_CLASSES
+    assert not OVERRIDE_CONTEXT_CLASSES & PRECISION_SERIES_CLASSES
+    assert not OVERRIDE_CONTEXT_CLASSES & TONE_SERIES_CLASSES
+    assert not OVERRIDE_CONTEXT_CLASSES & RECALL_CLASSES
     assert LabelClass.INCORRECT_PRECISION not in TONE_SERIES_CLASSES
 
 
@@ -283,6 +287,22 @@ def test_missed_expected_is_recall_material_not_a_rate_input() -> None:
     assert "no graded emitted findings" in (point.false_positive_rate_unavailable_reason or "")
 
 
+def test_override_context_is_visible_but_not_a_rate_input() -> None:
+    point = quality_series_point(
+        (
+            _fixture("f1", (_label(LabelClass.CORRECT_USEFUL),)),
+            _fixture("f2", (_label(LabelClass.INCORRECT_PRECISION),)),
+            _fixture("f3", (_label(LabelClass.OVERRIDE_CHANGED_DECISION),)),
+            _fixture("f4", (_label(LabelClass.OVERRIDE_EMERGENCY_EXCEPTION),)),
+        )
+    )
+
+    assert point.override_context_count == 2
+    assert point.graded_emitted_count == 2
+    assert point.false_positive_rate == pytest.approx(0.5)
+    assert point.tone_rate == pytest.approx(0.0)
+
+
 def test_zero_denominator_is_reasoned_not_zero() -> None:
     point = quality_series_point(())
     assert point.false_positive_rate is None
@@ -295,14 +315,14 @@ def test_zero_denominator_is_reasoned_not_zero() -> None:
     with pytest.raises(QualitySeriesValidationError, match=r"never a silent 0\.0"):
         type(point)(
             graded_emitted_count=0, incorrect_precision_count=0,
-            tone_flagged_count=0, missed_expected_count=0,
+            tone_flagged_count=0, missed_expected_count=0, override_context_count=0,
             false_positive_rate=0.0, false_positive_rate_unavailable_reason="both set",
             tone_rate=None, tone_rate_unavailable_reason="x",
         )
     with pytest.raises(QualitySeriesValidationError, match=r"never a silent 0\.0"):
         type(point)(
             graded_emitted_count=0, incorrect_precision_count=0,
-            tone_flagged_count=0, missed_expected_count=0,
+            tone_flagged_count=0, missed_expected_count=0, override_context_count=0,
             false_positive_rate=None, false_positive_rate_unavailable_reason=None,
             tone_rate=None, tone_rate_unavailable_reason="x",
         )

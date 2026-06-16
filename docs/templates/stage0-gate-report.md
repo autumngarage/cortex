@@ -35,6 +35,8 @@
 | `correct_not_useful` count | | `src/cortex/hosted/labeling.py::label_tally` → `LabelTally.counts` |
 | `incorrect_precision` count | | `src/cortex/hosted/labeling.py::label_tally` → `LabelTally.counts` |
 | `missed_expected` count (recall signal, reported separately) | | `src/cortex/hosted/labeling.py::label_tally` → `LabelTally.missed_expected_count` |
+| `override_changed_decision` count (override context, excluded from gates) | | `src/cortex/hosted/labeling.py::label_tally` → `LabelTally.counts` / `LabelTally.override_context_count` |
+| `override_emergency_exception` count (override context, excluded from gates) | | `src/cortex/hosted/labeling.py::label_tally` → `LabelTally.counts` / `LabelTally.override_context_count` |
 | Unlabeled expected findings (must be 0 before grading closes) | | `src/cortex/hosted/labeling.py::load_unlabeled_findings` |
 | Spot-check sample size (at least 10 items or 10% of the batch, whichever is larger) | | `src/cortex/hosted/labeling.py::spot_check_sample_size` |
 | Inter-rater agreement rate | | `src/cortex/hosted/labeling.py::disagreement_report` → `DisagreementReport.agreement_rate` |
@@ -64,6 +66,7 @@ hand-graded sample".
 | `useful_rate` = `correct_useful` / all graded emitted findings | | `src/cortex/hosted/labeling.py::label_tally` → `LabelTally.useful_rate` |
 | `useful_rate` vs the >=70% bar (pass requires `useful_rate >= 0.70`) | | comparison against the bar above; rate from `LabelTally.useful_rate` |
 | `precision_correct` = correct / (correct + `incorrect_precision`), correct = `correct_useful` + `correct_not_useful` | | `LabelTally.precision_correct` (`src/cortex/hosted/labeling.py`) |
+| Override contexts excluded before gates move (`override_changed_decision`, `override_emergency_exception`) | | `LabelTally.override_context_count`; these rows require a separate human quality label before changing `useful_rate` or `precision_correct` |
 | Zero-division visibility: any metric reported as None must carry its reason verbatim | | `LabelTally.useful_rate_unavailable_reason` / `LabelTally.precision_correct_unavailable_reason` (`src/cortex/hosted/labeling.py`) |
 
 ## Citation quality
