@@ -530,6 +530,8 @@ def test_pr_merged_no_edit_strips_all_template_placeholders(
     assert "- Filled the lede from PR metadata" in body
     assert "- Extracted shipped bullets from the PR body" in body
     assert "- Removed the bogus deferred follow-up checkbox" in body
+    assert body.endswith("\n")
+    assert not body.endswith("\n\n")
     followups = body.split("## Follow-ups (deferred to future work)", 1)[1].split(
         "(Per SPEC", 1
     )[0]

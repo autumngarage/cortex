@@ -37,11 +37,45 @@ else:
 PY
 }
 
+cortex_journal_wire_candidate_ready() {
+  local project_dir="$1"
+  shift
+  (cd "$project_dir" \
+    && "$@" journal stage --help >/dev/null 2>&1 \
+    && "$@" journal verify --help >/dev/null 2>&1)
+}
+
 cortex_journal_wire_cli_ready() {
-  command -v cortex >/dev/null 2>&1 \
-    && cortex journal post-merge --help >/dev/null 2>&1 \
-    && cortex journal stage --help >/dev/null 2>&1 \
-    && cortex journal verify --help >/dev/null 2>&1
+  local project_dir="$1"
+
+  if command -v cortex >/dev/null 2>&1 \
+    && cortex_journal_wire_candidate_ready "$project_dir" cortex; then
+    return 0
+  fi
+  if command -v uv >/dev/null 2>&1 \
+    && [ -f "$project_dir/pyproject.toml" ] \
+    && cortex_journal_wire_candidate_ready "$project_dir" uv run cortex; then
+    return 0
+  fi
+  return 1
+}
+
+cortex_journal_wire_run() {
+  local project_dir="$1"
+  shift
+
+  if command -v cortex >/dev/null 2>&1 \
+    && cortex_journal_wire_candidate_ready "$project_dir" cortex; then
+    (cd "$project_dir" && cortex "$@")
+    return $?
+  fi
+  if command -v uv >/dev/null 2>&1 \
+    && [ -f "$project_dir/pyproject.toml" ] \
+    && cortex_journal_wire_candidate_ready "$project_dir" uv run cortex; then
+    (cd "$project_dir" && uv run cortex "$@")
+    return $?
+  fi
+  return 127
 }
 
 # Return 0 when open-pr should auto-stage a pr-merged journal entry.
@@ -54,7 +88,7 @@ cortex_journal_wire_should_stage() {
   [ "$no_stage_journal" -eq 0 ] || return 1
   [ "$base_branch" = "$default_branch" ] || return 1
   [ -d "$project_dir/.cortex" ] || return 1
-  cortex_journal_wire_cli_ready || return 1
+  cortex_journal_wire_cli_ready "$project_dir" || return 1
   [ "$(cortex_journal_wire_resolve_t19_mode "$project_dir")" = "stage" ] || return 1
   return 0
 }
@@ -67,7 +101,7 @@ cortex_journal_wire_should_verify() {
 
   [ "$base_branch" = "$default_branch" ] || return 1
   [ -d "$project_dir/.cortex" ] || return 1
-  cortex_journal_wire_cli_ready || return 1
+  cortex_journal_wire_cli_ready "$project_dir" || return 1
   [ "$(cortex_journal_wire_resolve_t19_mode "$project_dir")" = "stage" ] || return 1
   return 0
 }
@@ -79,7 +113,7 @@ cortex_journal_wire_stage_for_pr() {
 
   local staged_path=""
   local stage_status=0
-  staged_path="$(cd "$project_dir" && cortex journal stage --type pr-merged --pr "$pr_number")" \
+  staged_path="$(cortex_journal_wire_run "$project_dir" journal stage --type pr-merged --pr "$pr_number")" \
     || stage_status=$?
   if [ "$stage_status" -ne 0 ]; then
     echo "ERROR: cortex journal stage --type pr-merged --pr $pr_number failed (exit $stage_status)." >&2
@@ -126,7 +160,7 @@ cortex_journal_wire_verify_before_merge() {
   fi
 
   echo "==> Verifying staged pr-merged journal entry for PR #$pr_number ..."
-  if ! (cd "$project_dir" && cortex journal verify --type pr-merged --pr "$pr_number"); then
+  if ! cortex_journal_wire_run "$project_dir" journal verify --type pr-merged --pr "$pr_number"; then
     echo "ERROR: merge blocked — staged pr-merged journal entry missing or incomplete for PR #$pr_number." >&2
     echo "       Run: cortex journal stage --type pr-merged --pr $pr_number" >&2
     echo "       Or open the PR with: bash scripts/open-pr.sh --no-stage-journal (audit will flag later)" >&2

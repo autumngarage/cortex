@@ -920,6 +920,7 @@ class _DraftWriteOutcome:
 
 def _write_journal_entry(*, target: Path, body: str, project_root: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
+    body = body.rstrip() + "\n"
     try:
         # Exclusive-create closes the TOCTOU race between the early
         # existence check and this write — Journal is append-only
@@ -1393,23 +1394,7 @@ def draft_command(
             _assert_no_unresolved_markers(
                 body, journal_type=journal_type, target=target
             )
-        target.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            # Exclusive-create closes the TOCTOU race between the early
-            # existence check above and this write — Journal is append-only
-            # (SPEC § 3.5 / Protocol § 4.1), so silently overwriting an
-            # entry that appeared in the meantime is a spec violation.
-            with target.open("x") as f:
-                f.write(body)
-        except FileExistsError:
-            click.echo(
-                f"error: {target} appeared between the existence check and "
-                f"the write (race or duplicate run); not overwriting "
-                f"(Journal is append-only).",
-                err=True,
-            )
-            sys.exit(2)
-        _refresh_index_after_write(project_root)
+        _write_journal_entry(target=target, body=body, project_root=project_root)
         click.echo(str(target))
         return
 

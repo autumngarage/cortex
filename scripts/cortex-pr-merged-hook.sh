@@ -18,7 +18,8 @@
 #   1. Push target is the default branch (main or master). Resolved by
 #      asking `gh repo view`.
 #   2. The repo has a `.cortex/` directory at the same level as `.git/`.
-#   3. The `cortex` CLI is on $PATH.
+#   3. A compatible `cortex` CLI is available, either on $PATH or through
+#      the project-local `uv run cortex` command.
 #   4. `.touchstone-config` has `cortex_pr_merged_hook=auto`, `=on`, or
 #      `=force`. Default for newly-bootstrapped projects: `auto`. Value
 #      `off` disables. Missing key is treated as `auto` (so projects that
@@ -183,6 +184,53 @@ resolve_default_branch() {
   printf '%s' "${resolved:-main}"
 }
 
+CORTEX_CMD=()
+
+candidate_has_post_merge_command() {
+  (cd "$PROJECT_DIR" && "$@" journal post-merge --help >/dev/null 2>&1)
+}
+
+candidate_has_stage_verify_command() {
+  (cd "$PROJECT_DIR" && "$@" journal verify --help >/dev/null 2>&1)
+}
+
+resolve_cortex_command() {
+  local journal_t1_mode="${1:-post-merge-writer}"
+
+  CORTEX_CMD=()
+
+  if command -v cortex >/dev/null 2>&1; then
+    if [ "$journal_t1_mode" = "stage" ] \
+      && candidate_has_stage_verify_command cortex; then
+      CORTEX_CMD=(cortex)
+      return 0
+    fi
+    if [ "$journal_t1_mode" != "stage" ] \
+      && candidate_has_post_merge_command cortex; then
+      CORTEX_CMD=(cortex)
+      return 0
+    fi
+    # Keep the stale PATH candidate so callers can distinguish "no CLI" from
+    # "CLI present but hook/CLI contract is stale."
+    CORTEX_CMD=(cortex)
+  fi
+
+  if [ "$journal_t1_mode" = "stage" ] \
+    && command -v uv >/dev/null 2>&1 \
+    && [ -f "$PROJECT_DIR/pyproject.toml" ] \
+    && candidate_has_stage_verify_command uv run cortex; then
+    CORTEX_CMD=(uv run cortex)
+    return 0
+  fi
+
+  return 1
+}
+
+run_cortex() {
+  env CORTEX_PR_MERGED_FIRED_TRIGGERS="${CORTEX_PR_MERGED_FIRED_TRIGGERS:-}" \
+    "${CORTEX_CMD[@]}" "$@"
+}
+
 # 1. Detection — silent skip if any precondition fails.
 PROJECT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 if [ -z "$PROJECT_DIR" ]; then
@@ -235,18 +283,18 @@ if [ ! -f "$PROJECT_DIR/.cortex/SPEC_VERSION" ]; then
   exit 0
 fi
 
-if ! command -v cortex >/dev/null 2>&1; then
-  # Detection passed (`.cortex/` exists, config is auto/on) but the CLI
-  # is missing. The brief calls this a graceful-degrade case — don't
-  # fail the merge over a missing optional tool.
-  exit 0
-fi
-
-if ! cortex journal post-merge --help >/dev/null 2>&1; then
-  # Stale PATH cortex (pre-#303) lacks `journal post-merge`. Degrade
-  # gracefully so the merge itself still succeeds; the operator upgrades
-  # cortex and re-runs verification manually if needed.
-  log "cortex-pr-merged-hook: installed cortex lacks 'journal post-merge'; upgrade cortex and re-run if T1.9 verification is required."
+journal_t1_mode="$(resolve_journal_t1_mode "$PROJECT_DIR/.cortex/config.toml")"
+if ! resolve_cortex_command "$journal_t1_mode"; then
+  # Detection passed (`.cortex/` exists, config is auto/on) but no compatible
+  # CLI can run the post-merge contract. If there is no Cortex binary at all,
+  # degrade silently like the historical optional-integration path.
+  if [ "${#CORTEX_CMD[@]}" -eq 0 ]; then
+    exit 0
+  fi
+  # A stale PATH cortex is visible so operators do not keep retrying a command
+  # that this binary cannot serve. Project-local `uv run cortex` is attempted
+  # before this message, which keeps Cortex's own dogfood path on source.
+  log "cortex-pr-merged-hook: resolved cortex lacks 'journal post-merge'; install a compatible cortex or run from a project-local source checkout with 'uv run cortex'."
   exit 0
 fi
 
@@ -265,7 +313,7 @@ if [ "$force_journal" -eq 0 ]; then
     check_triggers_status=0
     ct_stderr_file="$(mktemp -t cortex-pr-merged-hook.XXXXXX 2>/dev/null || mktemp)"
     trap 'rm -f "$ct_stderr_file"' EXIT
-    check_triggers_stdout="$(cd "$PROJECT_DIR" && cortex --no-auto-sync check-triggers --since HEAD~1 2>"$ct_stderr_file")" \
+    check_triggers_stdout="$(cd "$PROJECT_DIR" && run_cortex --no-auto-sync check-triggers --since HEAD~1 2>"$ct_stderr_file")" \
       || check_triggers_status=$?
     check_triggers_stderr="$(cat "$ct_stderr_file" 2>/dev/null || true)"
     rm -f "$ct_stderr_file"
@@ -293,6 +341,35 @@ fi
 if [ -n "$(git -C "$PROJECT_DIR" status --porcelain)" ]; then
   log "cortex-pr-merged-hook: working tree has uncommitted changes after merge; refusing to auto-draft (would fold user changes into the auto-commit)."
   exit 1
+fi
+
+if [ "$journal_t1_mode" = "stage" ]; then
+  if [ -z "${TOUCHSTONE_MERGED_PR:-}" ]; then
+    log "cortex-pr-merged-hook: TOUCHSTONE_MERGED_PR is required in journal.t1_9 stage mode; cannot verify staged pr-merged entry."
+    exit 1
+  fi
+
+  verify_stdout=""
+  verify_status=0
+  verify_stdout="$(cd "$PROJECT_DIR" \
+    && CORTEX_PR_MERGED_FIRED_TRIGGERS="$fired_triggers_ndjson" \
+      run_cortex journal verify --type pr-merged --pr "${TOUCHSTONE_MERGED_PR}")" \
+    || verify_status=$?
+  if [ "$verify_status" -ne 0 ]; then
+    log "cortex-pr-merged-hook: cortex journal verify exited $verify_status."
+    exit 1
+  fi
+
+  candidate="$(printf '%s\n' "$verify_stdout" | awk 'NF{p=$0} END{print p}')"
+  if [ -z "$candidate" ]; then
+    log "cortex-pr-merged-hook: cortex journal verify returned no path on stdout."
+    exit 1
+  fi
+  if [ ! -f "$candidate" ]; then
+    log "cortex-pr-merged-hook: returned path '$candidate' is not a regular file."
+    exit 1
+  fi
+  exit 0
 fi
 
 publish_direct=false
@@ -325,12 +402,12 @@ post_merge_status=0
 if [ -n "${TOUCHSTONE_MERGED_PR:-}" ]; then
   post_merge_stdout="$(cd "$PROJECT_DIR" \
     && CORTEX_PR_MERGED_FIRED_TRIGGERS="$fired_triggers_ndjson" \
-      cortex journal post-merge --type pr-merged --no-edit --pr "${TOUCHSTONE_MERGED_PR}")" \
+      run_cortex journal post-merge --type pr-merged --no-edit --pr "${TOUCHSTONE_MERGED_PR}")" \
     || post_merge_status=$?
 else
   post_merge_stdout="$(cd "$PROJECT_DIR" \
     && CORTEX_PR_MERGED_FIRED_TRIGGERS="$fired_triggers_ndjson" \
-      cortex journal post-merge --type pr-merged --no-edit)" \
+      run_cortex journal post-merge --type pr-merged --no-edit)" \
     || post_merge_status=$?
 fi
 if [ "$post_merge_status" -ne 0 ]; then
@@ -362,17 +439,6 @@ if [ ! -f "$candidate" ]; then
   exit 1
 fi
 
-journal_t1_mode="$(resolve_journal_t1_mode "$PROJECT_DIR/.cortex/config.toml")"
-if [ "$journal_t1_mode" = "stage" ]; then
-  # Verifier path: the pr-merged entry arrived via the source PR squash.
-  # Do not append trigger metadata or open a follow-up journal PR.
-  if [ -n "$journal_branch" ]; then
-    git -C "$PROJECT_DIR" checkout "$default_branch" >/dev/null 2>&1 || true
-    git -C "$PROJECT_DIR" branch -D "$journal_branch" >/dev/null 2>&1 || true
-  fi
-  exit 0
-fi
-
 if [ -n "$fired_triggers_ndjson" ]; then
   {
     printf '\n## Triggers fired\n\n'
@@ -400,7 +466,7 @@ fi
 # integration; if an older CLI lacks the command, the merge follow-up
 # still records the journal entry and tells the operator how to repair it.
 refresh_status=0
-(cd "$PROJECT_DIR" && cortex refresh-state --path "$PROJECT_DIR") \
+(cd "$PROJECT_DIR" && run_cortex refresh-state --path "$PROJECT_DIR") \
   || refresh_status=$?
 if [ "$refresh_status" -ne 0 ]; then
   log "cortex-pr-merged-hook: cortex refresh-state --path '$PROJECT_DIR' exited $refresh_status; .cortex/state.md was not refreshed for this hook commit."
