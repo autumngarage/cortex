@@ -25,8 +25,10 @@ Workflow contract:
 4. ``label_tally`` aggregates counts per ``LabelClass`` plus the two derived
    metrics the master plan names: ``precision_correct`` and ``useful_rate``.
    ``missed_expected`` is a recall signal counted separately and excluded
-   from both denominators. Zero denominators yield ``None`` with a visible
-   reason — never a silent ``0.0``.
+   from both denominators. Override-context labels are counted visibly but do
+   not move quality gates; they must be classified before a human converts
+   them into a precision or usefulness label. Zero denominators yield
+   ``None`` with a visible reason — never a silent ``0.0``.
 
 Model output is never ground truth; labels come from human graders.
 """
@@ -57,6 +59,16 @@ GRADED_EMITTED_CLASSES = (
     LabelClass.CORRECT_USEFUL,
     LabelClass.CORRECT_NOT_USEFUL,
     LabelClass.INCORRECT_PRECISION,
+)
+
+# Human overrides are not quality labels by themselves. They explain why a
+# finding was overridden (for example, the cited decision changed or an
+# emergency exception was accepted) and must stay out of the Stage 0
+# quality-gate denominators until a human intentionally grades the finding as
+# precision-wrong or not useful.
+OVERRIDE_CONTEXT_CLASSES = (
+    LabelClass.OVERRIDE_CHANGED_DECISION,
+    LabelClass.OVERRIDE_EMERGENCY_EXCEPTION,
 )
 
 
@@ -330,6 +342,12 @@ class LabelTally:
         """Recall signal, reported separately from the two derived metrics."""
 
         return self.counts[LabelClass.MISSED_EXPECTED]
+
+    @property
+    def override_context_count(self) -> int:
+        """Override context, reported separately and excluded from gate metrics."""
+
+        return sum(self.counts[label_class] for label_class in OVERRIDE_CONTEXT_CLASSES)
 
     @property
     def precision_correct(self) -> float | None:

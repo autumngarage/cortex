@@ -71,12 +71,13 @@ Config parsing is fail-closed (`ServiceConfig.from_env`): malformed values
 tenant/source) refuse startup with the variable named. No secret is ever
 committed; values live as Railway service variables (policy: #475).
 
-## Schema migration (v7 — historical; live schema is v11 as of 2026-06-15)
+## Schema migration (v7 — historical; live schema is v12 as of 2026-06-16)
 
 The same append-only migration path later applied v8 (`review_cost_records`
 cost ledger, PR #559) and v9 (`review_feedback_events` ground-truth corpus,
-PR #566), v10 (`review_staged_prs` staged-traffic registry), and v11
-(`review_rollout_events` per-repo comment rollout); compass runs v11. The v7
+PR #566), v10 (`review_staged_prs` staged-traffic registry), v11
+(`review_rollout_events` per-repo comment rollout), and v12 (reply sentiment
+classification can update pending feedback rows); compass runs v12. The v7
 step is kept below as the worked example.
 
 Schema v7 adds the `cortex_hosted.jobs` table and refreshes the

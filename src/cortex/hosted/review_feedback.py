@@ -36,7 +36,7 @@ decision ledger. It is INTERNAL ground-truth, never a customer surface.
 
 The matching DDL lives in ``cortex.hosted.schema.create_schema_sql`` (schema
 ``v9``); this module owns the row dataclass, the feedback-kind / sentiment
-vocabularies, and the idempotent insert + classify-pending SQL.
+vocabularies, and the idempotent insert + classify-pending/classify SQL.
 """
 
 from __future__ import annotations
@@ -387,6 +387,29 @@ WHERE feedback_kind = 'reply'
   AND sentiment = 'unclassified'
 ORDER BY occurred_at ASC
 LIMIT %(limit)s;
+""".strip()
+
+
+def review_feedback_classify_sql(schema: str = "cortex_hosted") -> str:
+    """Return the narrow sentiment update for one pending reply.
+
+    The raw human action remains immutable: the trigger permits only sentiment
+    to change, and this statement targets only a reply still waiting at
+    ``sentiment = 'unclassified'``. Classifiers should map override context to
+    ``neutral`` until a human separately labels the finding as precision-wrong
+    or not useful; negative feedback is therefore reserved for precision-moving
+    disagreement.
+    """
+
+    _validate_sql_identifier(schema)
+    return f"""
+UPDATE {schema}.review_feedback_events
+SET sentiment = %(sentiment)s
+WHERE review_feedback_event_id = %(review_feedback_event_id)s
+  AND feedback_kind = 'reply'
+  AND sentiment = 'unclassified'
+  AND %(sentiment)s IN ('positive', 'negative', 'neutral')
+RETURNING review_feedback_event_id;
 """.strip()
 
 

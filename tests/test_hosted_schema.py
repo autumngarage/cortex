@@ -140,8 +140,8 @@ def test_schema_models_citable_source_spans() -> None:
 def test_schema_records_version() -> None:
     sql = create_schema_sql()
 
-    # v11 (cortex#397): the per-repo review rollout event stream.
-    assert HOSTED_SCHEMA_VERSION == 11
+    # v12 (cortex#380): replies can be sentiment-classified after capture.
+    assert HOSTED_SCHEMA_VERSION == 12
     assert f"VALUES ({HOSTED_SCHEMA_VERSION})" in sql
 
 
@@ -175,6 +175,21 @@ def test_schema_models_review_rollout_events() -> None:
     assert "No row for a repo means disabled" in sql
     assert sql.rfind(f"VALUES ({HOSTED_SCHEMA_VERSION})") > sql.rfind(
         "CREATE TABLE IF NOT EXISTS cortex_hosted.review_rollout_events"
+    )
+
+
+def test_schema_migrates_feedback_reply_classification_check() -> None:
+    sql = create_schema_sql()
+
+    assert "review_feedback_events_kind_shape_check" in sql
+    assert "DROP CONSTRAINT %I" in sql
+    assert "feedback_kind = 'reply' AND raw_excerpt IS NOT NULL" in sql
+    assert "sentiment = 'unclassified'" in sql
+    assert "require_review_feedback_reply_capture_pending" in sql
+    assert "BEFORE INSERT ON cortex_hosted.review_feedback_events" in sql
+    assert "NEW.feedback_kind = 'reply' AND NEW.sentiment <> 'unclassified'" in sql
+    assert sql.rfind(f"VALUES ({HOSTED_SCHEMA_VERSION})") > sql.rfind(
+        "review_feedback_events_kind_shape_check"
     )
 
 

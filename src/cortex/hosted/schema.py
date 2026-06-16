@@ -7,7 +7,7 @@ import re
 from cortex.hosted.ledger_events import LedgerEventType
 from cortex.hosted.scopes import ScopeType
 
-HOSTED_SCHEMA_VERSION = 11
+HOSTED_SCHEMA_VERSION = 12
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -688,8 +688,9 @@ COMMENT ON TABLE {schema}.review_cost_records IS
 -- reaction targets the whole comment, a thread reply may target the whole
 -- review. raw_excerpt holds a reply's verbatim, content-bounded text and is
 -- NULL for reactions. sentiment defaults to 'unclassified'; the cortex#549
--- converse-role classifier fills it for replies in a follow-up — no model is
--- called here.
+-- converse-role classifier fills it for replies in a follow-up, and cortex#380
+-- keeps neutral override context out of precision gates before those labels
+-- move reporting — no model is called here.
 CREATE TABLE IF NOT EXISTS {schema}.review_feedback_events (
     review_feedback_event_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id uuid NOT NULL,
@@ -722,15 +723,57 @@ CREATE TABLE IF NOT EXISTS {schema}.review_feedback_events (
     CHECK (finding_class IS NULL OR finding_class <> ''),
     CHECK (feedback_kind IN ('reaction_up', 'reaction_down', 'reply')),
     CHECK (sentiment IN ('positive', 'negative', 'neutral', 'unclassified')),
-    -- A reply carries verbatim text and is classified later (unclassified
-    -- here); a reaction has no text and carries a resolved sentiment. The DB
-    -- enforces the same kind<->shape invariant the dataclass does so a writer
-    -- that bypasses the dataclass cannot corrupt the corpus.
-    CHECK (
-        (feedback_kind = 'reply' AND raw_excerpt IS NOT NULL AND sentiment = 'unclassified')
+    -- A reply carries verbatim text and may be classified later by updating
+    -- only sentiment; a reaction has no text and carries a resolved sentiment.
+    -- The DB keeps the kind<->shape invariant without freezing replies at
+    -- unclassified, otherwise the documented classify-later seam cannot run.
+    CONSTRAINT review_feedback_events_kind_shape_check CHECK (
+        (feedback_kind = 'reply' AND raw_excerpt IS NOT NULL)
         OR (feedback_kind <> 'reply' AND raw_excerpt IS NULL AND sentiment <> 'unclassified')
     )
 );
+
+-- v12 (cortex#380): v9's initial CHECK accidentally froze replies at
+-- sentiment='unclassified', contradicting the documented late-classification
+-- seam and the mutation trigger that permits sentiment-only updates. Existing
+-- v11 databases may have an auto-named old CHECK, so find it by definition,
+-- drop only that stale shape, then install the named v12 invariant.
+DO $$
+DECLARE
+    constraint_name text;
+BEGIN
+    FOR constraint_name IN
+        SELECT conname
+        FROM pg_constraint
+        WHERE conrelid = '{schema}.review_feedback_events'::regclass
+          AND contype = 'c'
+          AND pg_get_constraintdef(oid) LIKE '%feedback_kind = ''reply''%'
+          AND pg_get_constraintdef(oid) LIKE '%sentiment = ''unclassified''%'
+    LOOP
+        EXECUTE format(
+            'ALTER TABLE {schema}.review_feedback_events DROP CONSTRAINT %I',
+            constraint_name
+        );
+    END LOOP;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = '{schema}.review_feedback_events'::regclass
+          AND conname = 'review_feedback_events_kind_shape_check'
+    ) THEN
+        ALTER TABLE {schema}.review_feedback_events
+            ADD CONSTRAINT review_feedback_events_kind_shape_check
+            CHECK (
+                (feedback_kind = 'reply' AND raw_excerpt IS NOT NULL)
+                OR (
+                    feedback_kind <> 'reply'
+                    AND raw_excerpt IS NULL
+                    AND sentiment <> 'unclassified'
+                )
+            );
+    END IF;
+END $$;
 
 CREATE INDEX IF NOT EXISTS review_feedback_events_replay_idx
     ON {schema}.review_feedback_events (model_id, prompt_version, snapshot_hash);
@@ -974,10 +1017,11 @@ CREATE TRIGGER review_cost_records_no_delete
 -- A human's reaction or reply, once recorded, is never rewritten or deleted —
 -- a corrected sentiment is the cortex#549 classifier's UPDATE of the sentiment
 -- column on the SAME row, which the trigger must permit while still blocking
--- any other mutation. So the guard allows an UPDATE that touches only
--- sentiment (the classify-later seam) and forbids DELETE and every other
--- UPDATE. This keeps the raw human action immutable while leaving the one
--- documented late-classification write path open.
+-- any other mutation. So the guard allows exactly one UPDATE shape: a pending
+-- reply (sentiment='unclassified') may be classified once to a resolved
+-- positive/negative/neutral sentiment. This keeps the raw human action
+-- immutable while leaving the one documented late-classification write path
+-- open.
 CREATE OR REPLACE FUNCTION {schema}.prevent_review_feedback_mutation()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -1005,12 +1049,39 @@ BEGIN
                 'review_feedback_events is append-only; only sentiment may be classified later (cortex#549)'
                 USING ERRCODE = '55000';
         END IF;
+        IF OLD.feedback_kind IS DISTINCT FROM 'reply'
+            OR OLD.sentiment IS DISTINCT FROM 'unclassified'
+            OR NEW.sentiment NOT IN ('positive', 'negative', 'neutral')
+        THEN
+            RAISE EXCEPTION
+                'review_feedback_events is append-only; only pending replies may be classified once (cortex#549)'
+                USING ERRCODE = '55000';
+        END IF;
         RETURN NEW;
     END IF;
     RAISE EXCEPTION 'review_feedback_events is append-only; attempted %', TG_OP
         USING ERRCODE = '55000';
 END;
 $$;
+
+CREATE OR REPLACE FUNCTION {schema}.require_review_feedback_reply_capture_pending()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    IF NEW.feedback_kind = 'reply' AND NEW.sentiment <> 'unclassified' THEN
+        RAISE EXCEPTION
+            'review_feedback_events replies must be inserted with sentiment=unclassified before classification'
+            USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS review_feedback_events_reply_capture_pending ON {schema}.review_feedback_events;
+CREATE TRIGGER review_feedback_events_reply_capture_pending
+    BEFORE INSERT ON {schema}.review_feedback_events
+    FOR EACH ROW EXECUTE FUNCTION {schema}.require_review_feedback_reply_capture_pending();
 
 DROP TRIGGER IF EXISTS review_feedback_events_no_mutation ON {schema}.review_feedback_events;
 CREATE TRIGGER review_feedback_events_no_mutation

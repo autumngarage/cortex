@@ -130,12 +130,14 @@ def test_missing_schema_version_fails_visibly() -> None:
         EvalFixture.from_payload(payload)
 
 
-def test_label_taxonomy_is_the_owned_four_class_set() -> None:
+def test_label_taxonomy_is_the_owned_gate_and_override_context_set() -> None:
     assert {label.value for label in LabelClass} == {
         "correct_useful",
         "correct_not_useful",
         "incorrect_precision",
         "missed_expected",
+        "override_changed_decision",
+        "override_emergency_exception",
     }
     # The FP-vs-tone split #342 reports on: tone problems are correctness-true,
     # so the two classes must remain distinct labels.
