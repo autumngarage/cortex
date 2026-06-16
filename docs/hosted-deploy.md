@@ -63,6 +63,7 @@ types register a handler; no schema change.
 | `CORTEX_REVIEW_TOKEN_BUDGET` | worker | no (default 32000) | Per-review decision-pack token budget. Malformed or non-positive values refuse startup. |
 | `CORTEX_REACTION_POLL_SECONDS` | worker | no (default 900) | Seconds between scheduled reaction sweeps over recently-reviewed PRs (cortex#393 — reactions have no webhook). `0` disables the sweep. Requires App credentials + tenant mapping; each missing precondition is logged. |
 | `CORTEX_STALE_CLAIM_SECONDS` | worker | no (default 1800) | Age after which a `running` claim is presumed crashed and recovered. |
+| `CORTEX_JOB_PAYLOAD_PRUNE_GRACE_SECONDS` | worker | no (default 604800) | Grace window before terminal job webhook payloads are replaced by a content-free skeleton plus `body_sha256`. Keep this above the reaction sweep window (48h default) so feedback polling can still derive PR targets; set to `0` only in tests. |
 | `CORTEX_APPLY_SCHEMA_ON_START` | worker | no (default false) | When `1`/`true`, the worker runs the migration runner before polling. |
 | `RAILWAY_GIT_COMMIT_SHA` | API | provided by Railway | Surfaced by `/version`. |
 
@@ -114,8 +115,20 @@ redeploying the previous build; the v7 objects are inert under v6 code.
 
 Worker log lines are single-line JSON (`worker.started`, `job.claimed`,
 `job.succeeded`, `job.retry_scheduled`, `job.dead_lettered`,
-`job.stale_claim_recovered`, `worker.stopped`) — greppable by `event` key
-without exposing payload secrets.
+`job.stale_claim_recovered`, `job.payloads_pruned`, `worker.stopped`) —
+greppable by `event` key without exposing payload secrets. Hosted logging
+fails closed on content-bearing field names such as `payload`, `body`,
+`comment_body`, `diff`, `decision_text`, and secret/token/key fields. A
+successful stateless review stores counts, ids, rollout/reason codes, and
+operator-internal cost telemetry in the job result; it does not persist the
+rendered Compass PR comment body.
+
+Terminal job rows keep the raw webhook payload only for the debug grace
+window. The worker housekeeping pass then replaces `jobs.payload` with a
+content-free skeleton (`event`, delivery GUID, repository full name, PR
+number, base/head SHAs, installation id, and `body_sha256`). Queued/running
+jobs are never minimized, so retries still have the raw webhook material they
+need.
 
 ## Per-repo review rollout (cortex#397)
 

@@ -23,6 +23,9 @@ from cortex.hosted.jobs import (
     enqueue_job_sql,
     recover_stale_claims_sql,
     retry_job_sql,
+    select_prunable_terminal_jobs_sql,
+    terminal_job_payload_skeleton,
+    update_job_payload_sql,
 )
 from cortex.hosted.schema import create_schema_sql
 
@@ -177,11 +180,72 @@ def test_stale_claim_recovery_requeues_or_dead_letters() -> None:
     assert f"ELSE '{JobStatus.QUEUED.value}'" in sql
 
 
+def test_terminal_payload_prune_sql_selects_old_terminal_unminimized_jobs() -> None:
+    sql = select_prunable_terminal_jobs_sql()
+    assert "status IN ('succeeded', 'dead')" in sql
+    assert "finished_at <= now() - make_interval(secs => %(grace_seconds)s)" in sql
+    assert "payload->>'minimized' IS DISTINCT FROM 'true'" in sql
+    assert "LIMIT %(limit)s" in sql
+
+
+def test_update_payload_sql_only_updates_terminal_jobs() -> None:
+    sql = update_job_payload_sql()
+    assert "SET payload = %(payload)s::jsonb" in sql
+    assert "status IN ('succeeded', 'dead')" in sql
+    assert "RETURNING job_id" in sql
+
+
+def test_terminal_job_payload_skeleton_drops_text_and_keeps_hash() -> None:
+    skeleton = terminal_job_payload_skeleton(
+        {
+            "event": "pull_request",
+            "delivery": "guid-1",
+            "received_at": "2026-06-10T12:00:00+00:00",
+            "body": {
+                "action": "opened",
+                "title": "secret title",
+                "body": "secret body",
+                "repository": {"full_name": "autumngarage/cortex"},
+                "installation": {"id": 123},
+                "pull_request": {
+                    "number": 42,
+                    "base": {"sha": "base-sha"},
+                    "head": {"sha": "head-sha"},
+                },
+            },
+        }
+    )
+    assert skeleton == {
+        "schema_version": 1,
+        "minimized": True,
+        "event": "pull_request",
+        "delivery": "guid-1",
+        "received_at": "2026-06-10T12:00:00+00:00",
+        "action": "opened",
+        "repository": "autumngarage/cortex",
+        "installation_id": "123",
+        "pull_request_number": 42,
+        "base_sha": "base-sha",
+        "head_sha": "head-sha",
+        "body_sha256": skeleton["body_sha256"],
+    }
+    assert isinstance(skeleton["body_sha256"], str)
+    assert "secret title" not in str(skeleton)
+    assert "secret body" not in str(skeleton)
+
+
+def test_terminal_job_payload_skeleton_is_idempotent() -> None:
+    payload = {"schema_version": 1, "minimized": True, "delivery": "guid-1"}
+    assert terminal_job_payload_skeleton(payload) == payload
+
+
 def test_sql_builders_reject_unsafe_schema_identifier() -> None:
     for builder in (
         enqueue_job_sql,
         claim_job_sql,
         complete_job_sql,
+        select_prunable_terminal_jobs_sql,
+        update_job_payload_sql,
         retry_job_sql,
         dead_letter_job_sql,
         recover_stale_claims_sql,

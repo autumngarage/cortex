@@ -281,12 +281,11 @@ def _build_brief(
     # Distribution shape
     if paas_marker is not None:
         distrib_lines = [
-            "# TODO: swap to paas_repos when cortex#161 lands",
-            f"# PaaS signal detected ({paas_marker}); using github_repos fallback for now.",
-            f'github_repos = ["{github_slug}"]',
+            f"# PaaS signal detected ({paas_marker}); deploy-on-merge, no release tags expected.",
+            f'paas_repos = ["{github_slug}"]',
         ]
         distrib_block = "\n".join(distrib_lines)
-        distrib_label = f"github_repos (PaaS/{paas_marker} detected — paas_repos pending cortex#161)"
+        distrib_label = f'paas_repos = ["{github_slug}"] (PaaS/{paas_marker})'
     elif homebrew_tap is not None:
         distrib_lines = [f'homebrew_tap = "{homebrew_tap}"']
         distrib_block = "\n".join(distrib_lines)

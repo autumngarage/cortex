@@ -38,10 +38,11 @@ Pipeline (every heavy stage is reused, never reimplemented):
 6. Render the advisory comment with ``github_comment.render_pr_comment`` (the
    stable hidden marker + cited findings + disclosure).
 7. Post — dry-run gated. ``ReviewHandlerConfig.dry_run`` defaults **True**:
-   the rendered body is returned in the handler result and **nothing** is
-   posted. With ``dry_run=False`` the prior Cortex comment is found by marker
-   and updated, else created — idempotent: one comment per (PR, head SHA).
-   A finding never fails the job; the review is always advisory.
+   nothing is posted. With ``dry_run=False`` the prior Cortex comment is found
+   by marker and updated, else created — idempotent: one comment per (PR, head
+   SHA). The durable handler result is content-free; local proof code can opt
+   into printing the rendered body. A finding never fails the job; the review
+   is always advisory.
 
 Importable dogfood entry: :func:`run_stateless_review` runs the whole pipeline
 against an injected client + model + config, so an orchestrator can call it
@@ -83,7 +84,12 @@ from cortex.hosted.github_comment import ReviewAccounting, extract_marker, rende
 from cortex.hosted.jobs import ClaimedJob
 from cortex.hosted.model_interfaces import EvaluateModel
 from cortex.hosted.provenance import SourceDocument
-from cortex.hosted.worker import HandlerRegistry, JobHandler
+from cortex.hosted.worker import (
+    UNSUPPORTED_GITHUB_REVIEW_JOB_TYPES,
+    HandlerRegistry,
+    JobHandler,
+    unsupported_github_review_event_handler,
+)
 from cortex.manifest import DEFAULT_BUDGET_TOKENS
 
 
@@ -347,19 +353,16 @@ class StatelessReviewResult:
     comment_url: str | None = None
     cost: ReviewCost | None = None
 
-    def as_result_mapping(self) -> dict[str, Any]:
+    def as_result_mapping(self, *, include_comment_body: bool = False) -> dict[str, Any]:
         """The JSON-serializable handler result (the worker stores this).
 
-        The comment *body* is included so the local proof can print it; in a
-        deployed worker the result row is operational bookkeeping (job result),
-        which docs/security.md names as the only durable stateless write. The
-        body is the rendered advisory comment — derived from the customer's
-        public decision files, never their private decision graph. The ``cost``
-        key carries the operator-internal model cost (cortex#547) — provider
-        dollars for our pricing analysis, not a customer-visible figure.
+        The durable worker result is content-free by default: counts, routing
+        ids, post ids, and operator-internal cost telemetry only. The local
+        proof path can opt into the rendered comment body for printing without
+        changing the hosted storage contract.
         """
 
-        return {
+        result: dict[str, Any] = {
             "handled": True,
             "review_mode": "stateless",
             "dry_run": self.dry_run,
@@ -369,9 +372,11 @@ class StatelessReviewResult:
             "no_decisions": self.no_decisions,
             "comment_id": self.comment_id,
             "comment_url": self.comment_url,
-            "comment_body": self.comment_body,
             "cost": None if self.cost is None else self.cost.as_payload(),
         }
+        if include_comment_body:
+            result["comment_body"] = self.comment_body
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -962,6 +967,8 @@ def build_review_registry(
     )
     if issue_comment_handler is not None:
         registry.register("github.issue_comment", issue_comment_handler)
+    for job_type in UNSUPPORTED_GITHUB_REVIEW_JOB_TYPES:
+        registry.register(job_type, unsupported_github_review_event_handler)
     return registry
 
 

@@ -628,7 +628,7 @@ def test_review_path_imports_no_database_connection(monkeypatch: pytest.MonkeyPa
 
 
 def test_result_mapping_is_content_free_of_decision_graph() -> None:
-    """The handler result names a mode and counts, never a stored graph row."""
+    """The handler result names a mode and counts, never durable review text."""
 
     client = _full_repo_client(CONTRADICTION_DIFF)
     result = run_stateless_review(
@@ -643,9 +643,9 @@ def test_result_mapping_is_content_free_of_decision_graph() -> None:
     assert mapping["handled"] is True
     assert mapping["dry_run"] is True
     assert mapping["finding_count"] == 1
-    # The comment body is the rendered advisory comment (derived from the
-    # repo's own public files), not a decision-graph export.
-    assert "Contradicts a prior decision" in mapping["comment_body"]
+    assert "comment_body" not in mapping
+    printable = result.as_result_mapping(include_comment_body=True)
+    assert "Contradicts a prior decision" in printable["comment_body"]
 
 
 # ---------------------------------------------------------------------------
@@ -767,7 +767,11 @@ def test_build_review_registry_registers_pull_request_handler() -> None:
         model_resolver=lambda: _RoutedRecordedModel(),
         config=ReviewHandlerConfig(dry_run=True),
     )
-    assert registry.job_types() == ("github.pull_request",)
+    assert registry.job_types() == (
+        "github.pull_request",
+        "github.pull_request_review",
+        "github.pull_request_review_comment",
+    )
     handler = registry.resolve("github.pull_request")
     assert handler is not None
     result = handler(_claimed_job(_payload()))
@@ -783,7 +787,12 @@ def test_build_review_registry_optionally_registers_issue_comment() -> None:
         model_resolver=lambda: _RoutedRecordedModel(),
         issue_comment_handler=stub,
     )
-    assert registry.job_types() == ("github.issue_comment", "github.pull_request")
+    assert registry.job_types() == (
+        "github.issue_comment",
+        "github.pull_request",
+        "github.pull_request_review",
+        "github.pull_request_review_comment",
+    )
 
 
 def test_default_registry_still_builds_alongside_review_registry() -> None:
@@ -793,7 +802,12 @@ def test_default_registry_still_builds_alongside_review_registry() -> None:
 
     recorder = ArrivalRecorder(conn=object(), tenant_id=None, source_id=None)  # type: ignore[arg-type]
     registry = build_default_registry(recorder)
-    assert registry.job_types() == ("github.issue_comment", "github.pull_request")
+    assert registry.job_types() == (
+        "github.issue_comment",
+        "github.pull_request",
+        "github.pull_request_review",
+        "github.pull_request_review_comment",
+    )
 
 
 def test_build_worker_registry_chooses_by_github_app_credentials() -> None:
@@ -811,7 +825,11 @@ def test_build_worker_registry_chooses_by_github_app_credentials() -> None:
         recorder=recorder,
         environ={"GITHUB_APP_ID": "123", "GITHUB_APP_PRIVATE_KEY": fake_pem},
     )
-    assert review.job_types() == ("github.pull_request",)
+    assert review.job_types() == (
+        "github.pull_request",
+        "github.pull_request_review",
+        "github.pull_request_review_comment",
+    )
 
 
 # ---------------------------------------------------------------------------

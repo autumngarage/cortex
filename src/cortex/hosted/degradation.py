@@ -79,6 +79,7 @@ from cortex.hosted.labeling import LabelingError
 from cortex.hosted.lane_assignment import LaneAssignmentError
 from cortex.hosted.lanes import LanePolicyValidationError
 from cortex.hosted.ledger_events import LedgerEventValidationError
+from cortex.hosted.logging import HostedLogError
 from cortex.hosted.migrations import HostedMigrationError
 from cortex.hosted.model_registry import RegistryValidationError
 from cortex.hosted.ops_metrics import OpsMetricsError
@@ -222,6 +223,9 @@ _FAILURE_MODE_BY_TYPE: dict[type[BaseException], DegradationMode] = {
     # any partial state exists — refusal, boundary held.
     HostedDbError: DegradationMode.FAIL_CLOSED_REFUSAL,
     HostedEmbeddingValidationError: DegradationMode.INVALID_INPUT_REJECTED,
+    # A content-bearing hosted log field is refused before the line is
+    # written, preserving the logging boundary (cortex#534).
+    HostedLogError: DegradationMode.FAIL_CLOSED_REFUSAL,
     # HostedPushError's marquee failure is drift: a derive-export row whose
     # recomputed event hash, or a working-tree file whose content-keyed
     # document hash, disagrees with what the export recorded — the push
